@@ -206,6 +206,13 @@ mod tests {
         }
 
         #[test]
+        fn atomic_set_and_get_wrapped_atomic_rw() {
+            traits_tests::concurrency::atomic_set_and_get_wrapped_atomic_rw(
+                &gen_concurrency_test_vec(),
+            );
+        }
+
+        #[test]
         fn atomic_setmany_and_getmany() {
             traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
         }

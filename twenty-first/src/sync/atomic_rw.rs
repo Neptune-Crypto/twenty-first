@@ -53,9 +53,9 @@ impl<T> From<AtomicRw<T>> for Arc<RwLock<T>> {
 // note: we impl the Atomic trait methods here also so they
 // can be used without caller having to use the trait.
 impl<T> AtomicRw<T> {
-    /// Immutably access the data of type `T` in a closure
+    /// Immutably access the data of type `T` in a closure and possibly return a result of type `R`
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// # use twenty_first::sync::{AtomicRw, traits::*};
     /// struct Car {
@@ -63,31 +63,31 @@ impl<T> AtomicRw<T> {
     /// };
     /// let atomic_car = AtomicRw::from(Car{year: 2016});
     /// atomic_car.with(|c| println!("year: {}", c.year));
+    /// let year = atomic_car.with(|c| c.year);
     /// ```
-    #[inline]
-    pub fn with<F>(&self, f: F)
+    pub fn with<R, F>(&self, mut f: F) -> R
     where
-        F: Fn(&T),
+        F: FnMut(&T) -> R,
     {
-        let lock = self.0.read().expect("Read lock should succeed");
-        f(&lock)
+        let mut lock = self.0.write().expect("Write lock should succeed");
+        f(&mut lock)
     }
 
-    /// Mutably access the data of type `T` in a closure
+    /// Mutably access the data of type `T` in a closure and possibly return a result of type `R`
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// # use twenty_first::sync::{AtomicRw, traits::*};
     /// struct Car {
     ///     year: u16,
     /// };
     /// let atomic_car = AtomicRw::from(Car{year: 2016});
-    /// atomic_car.with_mut(|mut c| c.year = 2023);
+    /// atomic_car.with_mut(|mut c| {c.year = 2022});
+    /// let year = atomic_car.with_mut(|mut c| {c.year = 2023; c.year});
     /// ```
-    #[inline]
-    pub fn with_mut<F>(&self, f: F)
+    pub fn with_mut<R, F>(&self, mut f: F) -> R
     where
-        F: Fn(&mut T),
+        F: FnMut(&mut T) -> R,
     {
         let mut lock = self.0.write().expect("Write lock should succeed");
         f(&mut lock)
@@ -96,18 +96,33 @@ impl<T> AtomicRw<T> {
 
 impl<T> Atomic<T> for AtomicRw<T> {
     #[inline]
-    fn with<F>(&self, f: F)
+    fn with<R, F>(&self, f: F) -> R
     where
-        F: Fn(&T),
+        F: FnMut(&T) -> R,
     {
         AtomicRw::<T>::with(self, f)
     }
 
     #[inline]
-    fn with_mut<F>(&self, f: F)
+    fn with_mut<R, F>(&self, f: F) -> R
     where
-        F: Fn(&mut T),
+        F: FnMut(&mut T) -> R,
     {
         AtomicRw::<T>::with_mut(self, f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    // Verify (compile-time) that AtomicRw::with() and ::with_mut() accept mutable values.  (FnMut)
+    fn mutable_assignment() {
+        let name = "Jim".to_string();
+        let atomic_name = AtomicRw::from(name);
+
+        let mut new_name: String = Default::default();
+        atomic_name.with(|n| new_name = n.to_string());
+        atomic_name.with_mut(|n| new_name = n.to_string());
     }
 }

@@ -986,31 +986,15 @@ mod tests {
 
     pub mod concurrency {
         use super::*;
+        use crate::sync::AtomicRw;
         use std::thread;
 
         type TestVec = DbtVec<RustyKey, RustyValue, Index, u64>;
+        type TestSingleton = DbtSingleton<RustyKey, RustyValue, u64>;
 
         // pub fn prepare_concurrency_test_singleton(singleton: &impl StorageSingleton<u64>) {
         //     singleton.set(42);
         // }
-
-        fn gen_concurrency_test_vecs(num: u8) -> Vec<TestVec> {
-            // open new DB that will be removed on close.
-            let db = DB::open_new_test_database(true, None, None, None).unwrap();
-            let mut rusty_storage = SimpleRustyStorage::new(db);
-
-            (0..num)
-                .map(|i| {
-                    let vec = rusty_storage
-                        .schema
-                        .new_vec::<Index, u64>(&format!("atomicity-test-vector #{}", i));
-                    for j in 0u64..300 {
-                        vec.push(j);
-                    }
-                    vec
-                })
-                .collect()
-        }
 
         pub fn iter_all_eq<T: PartialEq>(iter: impl IntoIterator<Item = T>) -> bool {
             let mut iter = iter.into_iter();
@@ -1021,107 +1005,480 @@ mod tests {
             iter.all(|elem| elem == first)
         }
 
-        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
-        // todo, see same test in storage_vec::rusty_leveldb_vec::tests::concurrency
-        #[test]
-        pub fn non_atomic_set_and_get() {
-            unimplemented!();
+        mod storage_vec {
+            use super::*;
+            use crate::storage::storage_vec::traits::tests as traits_tests;
+
+            fn gen_concurrency_test_vec() -> TestVec {
+                // open new DB that will be removed on close.
+                let db = DB::open_new_test_database(true, None, None, None).unwrap();
+                let mut rusty_storage = SimpleRustyStorage::new(db);
+                rusty_storage
+                    .schema
+                    .new_vec::<Index, u64>(&format!("atomicity-test-vector"))
+            }
+
+            #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+            #[test]
+            fn non_atomic_set_and_get() {
+                traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
+            }
+
+            #[test]
+            fn atomic_set_and_get_wrapped_atomic_rw() {
+                traits_tests::concurrency::atomic_set_and_get_wrapped_atomic_rw(
+                    &gen_concurrency_test_vec(),
+                );
+            }
+
+            #[test]
+            fn atomic_setmany_and_getmany() {
+                traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
+            }
+
+            #[test]
+            fn atomic_setall_and_getall() {
+                traits_tests::concurrency::atomic_setall_and_getall(&gen_concurrency_test_vec());
+            }
+
+            #[test]
+            fn atomic_iter_mut_and_iter() {
+                traits_tests::concurrency::atomic_iter_mut_and_iter(&gen_concurrency_test_vec());
+            }
         }
 
-        // todo, see same test in storage_vec::rusty_leveldb_vec::tests::concurrency
-        // note: the multi-table test should make this unnecessary.
-        #[test]
-        fn atomic_setmany_and_getmany() {
-            unimplemented!();
-        }
+        mod storage_singleton {
+            use super::*;
 
-        // todo, see same test in storage_vec::rusty_leveldb_vec::tests::concurrency
-        // note: the multi-table test should make this unnecessary.
-        #[test]
-        pub fn atomic_setall_and_getall() {
-            unimplemented!();
-        }
+            fn gen_atomic_rw_test_singleton(num: u8) -> AtomicRw<Vec<TestSingleton>> {
+                // open new DB that will be removed on close.
+                let db = DB::open_new_test_database(true, None, None, None).unwrap();
+                let mut storage = SimpleRustyStorage::new(db);
 
-        // todo, see same test in storage_vec::rusty_leveldb_vec::tests::concurrency
-        // note: the multi-table test should make this unnecessary.
-        #[test]
-        pub fn atomic_iter_mut_and_iter() {
-            unimplemented!();
-        }
+                storage.schema.create_tables_rw(|schema| {
+                    (0..num)
+                        .map(|_i| {
+                            let singleton = schema.new_singleton::<u64>(12u64.into());
+                            singleton.set(25);
+                            singleton
+                        })
+                        .collect()
+                })
+            }
 
-        // TODO: Improve DbtSchema API.
-        //   This test fails an assertion because it uses a non-atomic
-        //   construction for sharing the multiple tables between threads.
-        //
-        // The failing test highlights that the present `DbtSchema`
-        //   a) does not prevent creation of non-atomic multi-table construction
-        //   b) does not assist with creating an atomic multi-table construction
-        //   c) does not document about atomic vs non-atomic multi-table
-        //
-        // TODO: adapt the improvements from
-        // https://github.com/dan-da/twenty-first/blob/088f12d6c46c3a15c8d826f8e20839ad7131f915/twenty-first/src/util_types/storage_schema.rs#L1671
-        //
-        // TODO: uncomment the #[should_panic] once the API is improved to provide
-        //       atomic multi-table construction.  For now we want to see the error output.
-        // #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
-        #[test]
-        pub fn non_atomic_multi_table_setmany_and_getmany() {
-            let vecs = gen_concurrency_test_vecs(2);
-            let orig = vecs[0].get_all();
-            let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+            fn gen_non_atomic_test_singleton(num: u8) -> Vec<TestSingleton> {
+                // open new DB that will be removed on close.
+                let db = DB::open_new_test_database(true, None, None, None).unwrap();
+                let mut storage = SimpleRustyStorage::new(db);
 
-            // note: all vecs have the same length and same values.
-            let indices: Vec<_> = (0..orig.len() as u64).collect();
+                (0..num)
+                    .map(|_i| {
+                        let singleton = storage.schema.new_singleton::<u64>(12u64.into());
+                        singleton.set(25);
+                        singleton
+                    })
+                    .collect()
+            }
 
-            thread::scope(|s| {
-                for _i in 0..100 {
-                    let gets = s.spawn(|| {
-                        let mut copies = vec![];
-                        for vec in vecs.iter() {
-                            let copy = vec.get_many(&indices);
-                            thread::sleep(std::time::Duration::from_millis(1));
+            // This test verifies that concurrent reads and writes
+            // to multiple DbtSingleton in a `DbtSchema` are atomic when
+            // using a correct construction with an RwLock placed around a
+            // collection holding all the `DbtSingleton`.
+            //
+            // It tests two things:
+            //  1. That individual tables are atomic within themselves.
+            //  2. That the entire set of tables is atomic.
+            //
+            // The construction shared between threads is:
+            //    AtomicRw< Arc<RwLock< Vec< DbtSingleton<Arc<RwLock<DbtSingletonPrivate<u64>>>> > >> >
+            //    --------------------- ++++ ********************************************+++**** + ----
+            //
+            // * = provided by DbtSingleton
+            // * = provided by AtomicRw
+            // + = supplied by application
+            //
+            // The test passes and demonstrates it is important to always use a
+            // correct atomic construction, such as provided by
+            // `DbtSchema::create_tables_rw()`
+            //
+            // note: similar tests exist for pre refactored code at:
+            // https://github.com/dan-da/twenty-first/blob/088f12d6c46c3a15c8d826f8e20839ad7131f915/twenty-first/src/util_types/storage_schema.rs#L1671
+            #[test]
+            pub fn multi_table_atomic_rw_setmany_and_getmany() {
+                let table_singletons = gen_atomic_rw_test_singleton(2);
 
+                // performs single-line read lock on table_singletons to copy original state.
+                let orig = table_singletons.with(|ts| ts[0].get());
+
+                // make a modified state template equal to twice original value.
+                let modified = orig * 2;
+
+                // this test should never fail.  we only loop 100 times to keep
+                // the test fast.  Bump it up to 10000+ temporarily to be extra certain.
+                for i in 0..100 {
+                    thread::scope(|s| {
+                        // This is our reader thread
+                        let gets = s.spawn(|| {
+                            let mut copies = vec![];
+
+                            // start locked read operations
+                            table_singletons.with(|tables| {
+                                for singleton in tables.iter() {
+                                    let copy = singleton.get();
+
+                                    // Verify that the table is self-consistent.
+                                    // It must match either the orig template or the modified template.
+                                    assert!(
+                                        copy == orig || copy == modified,
+                                        "in test iteration #{}: encountered inconsistent table read. data: {:?}",
+                                        i,
+                                        copy
+                                    );
+
+                                    copies.push(copy);
+                                }
+                            }); // <--- end locked read operations
+
+                            // Verify that copies are equal. If not, the tables are different from eachother.
                             assert!(
-                                copy == orig || copy == modified,
-                                "encountered inconsistent table read. data: {:?}",
-                                copy
+                                iter_all_eq(copies.clone()),
+                                "in test iteration #{}: encountered inconsistent read across tables:\n  data: {:?}",
+                                i,
+                                copies
                             );
+                        });
 
-                            copies.push(copy);
-                        }
+                        // This is our writer thread
+                        let sets = s.spawn(|| {
+                            // start locked write ops
+                            table_singletons.with_mut(|tables| {
+                                // iterate tables backwards from reader to find inconsistencies faster.
+                                for singleton in tables.iter().rev() {
+                                    singleton.set(modified);
+                                }
+                            }); // <--- end locked write ops
+                        });
+                        gets.join().unwrap();
+                        sets.join().unwrap();
 
-                        let sums: Vec<u64> = copies.iter().map(|f| f.iter().sum()).collect();
-                        assert!(
-                            iter_all_eq(sums.clone()),
-                            "encountered inconsistent read across tables:\n  sums: {:?}\n  data: {:?}",
-                            sums,
-                            copies
-                        );
-                        println!("sums: {:?}", sums);
+                        println!("--- Both threads (reader, writer) finished. restart. ---");
+
+                        // start locked write ops
+                        table_singletons.with_mut(|tables| {
+                            for singleton in tables.iter_mut() {
+                                singleton.set(orig);
+                            }
+                        }) // <--- end locked write ops
                     });
-
-                    let sets = s.spawn(|| {
-                        for vec in vecs.iter() {
-                            vec.set_many(orig.iter().enumerate().map(|(k, _v)| (k as u64, 50u64)));
-                        }
-                    });
-                    gets.join().unwrap();
-                    sets.join().unwrap();
-
-                    println!("--- threads finished. restart. ---");
-
-                    for vec in vecs.iter() {
-                        vec.set_all(orig.clone());
-                    }
                 }
-            });
+            }
+
+            // This test panics thus proving that concurrent reads and writes
+            // to multiple DbtSingleton in a `DbtSchema` are not atomic when the
+            // DbtSingleton are individually shared between threads.
+            //
+            // This failure is expected (correct), but somewhat subtle and not
+            // immediately obvious if one is expecting atomic read/write guarantee
+            // across all `Tables` created by a single `DbtSchema` instance in all cases.
+            //
+            // This test fails a consistency assertion that all tables should hold the
+            // same values. The failure is caused by a non-atomic construction
+            // for sharing multiple tables between threads.
+            //
+            // The construction shared between threads is:
+            //   Vec< DbtSingleton<Arc<RwLock<u64>>> >
+            //
+            // The failing test demonstrates that:
+            //   a) a collection of "naked" `DbtSingleton` "tables" is not atomic.
+            //   b) `DbtSchema` does not prevent creation of non-atomic multi-table construction
+            //   c) It is important to always use a correct atomic construction, such as provided
+            //      by `DbtSchema::create_tables_rw()`
+            //
+            // note: similar tests exist for pre refactored code at:
+            // https://github.com/dan-da/twenty-first/blob/088f12d6c46c3a15c8d826f8e20839ad7131f915/twenty-first/src/util_types/storage_schema.rs#L1671
+            #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+            #[test]
+            pub fn non_atomic_multi_table_set_and_get() {
+                let singletons = gen_non_atomic_test_singleton(2);
+                let orig = singletons[0].get();
+                let modified = orig * 2;
+
+                for i in 0..1000 {
+                    thread::scope(|s| {
+                        let gets = s.spawn(|| {
+                            let mut copies = vec![];
+                            for singleton in singletons.iter() {
+                                let copy = singleton.get();
+
+                                // Verify that the table is self-consistent.
+                                // It must match either the orig template or the modified template.
+                                assert!(
+                                    copy == orig || copy == modified,
+                                    "in test iteration #{}: encountered inconsistent table read. data: {:?}",
+                                    i,
+                                    copy
+                                );
+
+                                copies.push(copy);
+
+                                // this sleep helps find an inconsistency in fewer iterations.
+                                std::thread::sleep(std::time::Duration::from_nanos(50));
+                            }
+
+                            // Verify that copies are equal. If not, the tables are different from eachother.
+                            assert!(
+                                iter_all_eq(copies.clone()),
+                                "in test iteration #{}: encountered inconsistent read across tables:\n  data: {:?}",
+                                i,
+                                copies
+                            );
+                        });
+
+                        let sets = s.spawn(|| {
+                            // iterate tables backwards from reader to find inconsistencies faster.
+                            for singleton in singletons.iter().rev() {
+                                singleton.set(modified);
+                            }
+                        });
+                        gets.join().unwrap();
+                        sets.join().unwrap();
+
+                        println!("--- threads finished. restart. ---");
+
+                        for singleton in singletons.iter() {
+                            singleton.set(orig);
+                        }
+                    });
+                }
+            }
         }
 
-        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
-        // this will verify that the atomic construction of multiple tables passes atomicity test.
-        #[test]
-        pub fn atomic_multi_table_setmany_and_getmany() {
-            unimplemented!();
+        mod multi_table_storage_vec {
+            use super::*;
+
+            fn gen_atomic_rw_test_vecs(num: u8) -> AtomicRw<Vec<TestVec>> {
+                // open new DB that will be removed on close.
+                let db = DB::open_new_test_database(true, None, None, None).unwrap();
+                let mut storage = SimpleRustyStorage::new(db);
+
+                storage.schema.create_tables_rw(|schema| {
+                    (0..num)
+                        .map(|i| {
+                            let vec = schema
+                                .new_vec::<Index, u64>(&format!("atomicity-test-vector #{}", i));
+                            for j in 0u64..300 {
+                                vec.push(j);
+                            }
+                            vec
+                        })
+                        .collect()
+                })
+            }
+
+            fn gen_non_atomic_test_vecs(num: u8) -> Vec<TestVec> {
+                // open new DB that will be removed on close.
+                let db = DB::open_new_test_database(true, None, None, None).unwrap();
+                let mut rusty_storage = SimpleRustyStorage::new(db);
+
+                (0..num)
+                    .map(|i| {
+                        let vec = rusty_storage
+                            .schema
+                            .new_vec::<Index, u64>(&format!("atomicity-test-vector #{}", i));
+                        for j in 0u64..300 {
+                            vec.push(j);
+                        }
+                        vec
+                    })
+                    .collect()
+            }
+
+            // This test verifies that concurrent reads and writes
+            // to multiple DbtVec in a `DbtSchema` are atomic when
+            // using a correct construction with an RwLock placed around a
+            // collection holding all the `DbtVec`.
+            //
+            // It tests two things:
+            //  1. That individual tables are atomic within themselves.
+            //  2. That the entire set of tables is atomic.
+            //
+            // The construction shared between threads is:
+            //    AtomicRw< Arc<RwLock< Vec< DbtVec<Arc<RwLock<DbtVecPrivate<u64>>>> > >> >
+            //    --------------------- ++++ ********************************+++**** + ----
+            //
+            // * = provided by DbtVec
+            // * = provided by AtomicRw
+            // + = supplied by application
+            //
+            // The test passes and demonstrates it is important to always use a
+            // correct atomic construction, such as provided by
+            // `DbtSchema::create_tables_rw()`
+            //
+            // note: similar tests exist for pre refactored code at:
+            // https://github.com/dan-da/twenty-first/blob/088f12d6c46c3a15c8d826f8e20839ad7131f915/twenty-first/src/util_types/storage_schema.rs#L1671
+            #[test]
+            pub fn multi_table_atomic_rw_setmany_and_getmany() {
+                let table_vecs = gen_atomic_rw_test_vecs(2);
+
+                // performs single-line read lock on table_vecs to copy original state.
+                let orig = table_vecs.with(|tv| tv[0].get_all());
+
+                // make a modified state template setting all values to 50 in all tables.
+                let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+
+                // note: all table vecs have the same length and same values.
+                let indices: Vec<_> = (0..orig.len() as u64).collect();
+
+                // this test should never fail.  we only loop 100 times to keep
+                // the test fast.  Bump it up to 10000+ temporarily to be extra certain.
+                for i in 0..100 {
+                    thread::scope(|s| {
+                        // This is our reader thread
+                        let gets = s.spawn(|| {
+                            let mut copies = vec![];
+
+                            // start locked read operations
+                            table_vecs.with(|tables| {
+                                for vec in tables.iter() {
+                                    let copy = vec.get_many(&indices);
+
+                                    // Verify that the table is self-consistent.
+                                    // It must match either the orig template or the modified template.
+                                    assert!(
+                                        copy == orig || copy == modified,
+                                        "in test iteration #{}: encountered inconsistent table read. data: {:?}",
+                                        i,
+                                        copy
+                                    );
+
+                                    copies.push(copy);
+                                }
+                            }); // <--- end locked read operations
+
+                            let sums: Vec<u64> = copies.iter().map(|f| f.iter().sum()).collect();
+
+                            // Verify that sums are equal. If not, the tables are different from eachother.
+                            assert!(
+                                iter_all_eq(sums.clone()),
+                                "in test iteration #{}: encountered inconsistent read across tables:\n  sums: {:?}\n  data: {:?}",
+                                i,
+                                sums,
+                                copies
+                            );
+                            println!("sums: {:?}", sums);
+                        });
+
+                        // This is our writer thread
+                        let sets = s.spawn(|| {
+                            // start locked write ops
+                            table_vecs.with_mut(|tables| {
+                                // iterate tables backwards from reader to find inconsistencies faster.
+                                for vec in tables.iter().rev() {
+                                    vec.set_many(
+                                        orig.iter().enumerate().map(|(k, _v)| (k as u64, 50u64)),
+                                    );
+                                }
+                            }); // <--- end locked write ops
+                        });
+                        gets.join().unwrap();
+                        sets.join().unwrap();
+
+                        println!("--- Both threads (reader, writer) finished. restart. ---");
+
+                        // start locked write ops
+                        table_vecs.with_mut(|tables| {
+                            for vec in tables.iter_mut() {
+                                vec.set_all(orig.clone());
+                            }
+                        }) // <--- end locked write ops
+                    });
+                }
+            }
+
+            // This test panics thus proving that concurrent reads and writes
+            // to multiple DbtVec in a `DbtSchema` are not atomic when the DbtVec are
+            // individually shared between threads.
+            //
+            // This failure is expected (correct), but somewhat subtle and not
+            // immediately obvious if one is expecting atomic read/write guarantee
+            // across all `Tables` created by a single `DbtSchema` instance in all cases.
+            //
+            // This test fails a consistency assertion that all tables should hold the
+            // same values. The failure is caused by a non-atomic construction
+            // for sharing multiple tables between threads.
+            //
+            // The construction shared between threads is:
+            //   Vec< DbtVec<Arc<RwLock<u64>>> >
+            //
+            // The failing test demonstrates that:
+            //   a) a collection of "naked" `DbtVec` "tables" is not atomic.
+            //   b) `DbtSchema` does not prevent creation of non-atomic multi-table construction
+            //   c) It is important to always use a correct atomic construction, such as provided
+            //      by `DbtSchema::create_tables_rw()`
+            //
+            // note: similar tests exist for pre refactored code at:
+            // https://github.com/dan-da/twenty-first/blob/088f12d6c46c3a15c8d826f8e20839ad7131f915/twenty-first/src/util_types/storage_schema.rs#L1671
+            #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+            #[test]
+            pub fn non_atomic_multi_table_setmany_and_getmany() {
+                let vecs = gen_non_atomic_test_vecs(2);
+                let orig = vecs[0].get_all();
+                let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+
+                // note: all vecs have the same length and same values.
+                let indices: Vec<_> = (0..orig.len() as u64).collect();
+
+                for i in 0..100 {
+                    thread::scope(|s| {
+                        let gets = s.spawn(|| {
+                            let mut copies = vec![];
+                            for vec in vecs.iter() {
+                                let copy = vec.get_many(&indices);
+
+                                // Verify that the table is self-consistent.
+                                // It must match either the orig template or the modified template.
+                                assert!(
+                                    copy == orig || copy == modified,
+                                    "in test iteration #{}: encountered inconsistent table read. data: {:?}",
+                                    i,
+                                    copy
+                                );
+
+                                copies.push(copy);
+                            }
+
+                            let sums: Vec<u64> = copies.iter().map(|f| f.iter().sum()).collect();
+
+                            // Verify that sums are equal. If not, the tables are different from eachother.
+                            assert!(
+                                iter_all_eq(sums.clone()),
+                                "in test iteration #{}: encountered inconsistent read across tables:\n  sums: {:?}\n  data: {:?}",
+                                i,
+                                sums,
+                                copies
+                            );
+                            println!("sums: {:?}", sums);
+                        });
+
+                        let sets = s.spawn(|| {
+                            // iterate tables backwards from reader to find inconsistencies faster.
+                            for vec in vecs.iter().rev() {
+                                vec.set_many(
+                                    orig.iter().enumerate().map(|(k, _v)| (k as u64, 50u64)),
+                                );
+                            }
+                        });
+                        gets.join().unwrap();
+                        sets.join().unwrap();
+
+                        println!("--- threads finished. restart. ---");
+
+                        for vec in vecs.iter() {
+                            vec.set_all(orig.clone());
+                        }
+                    });
+                }
+            }
         }
     }
 }

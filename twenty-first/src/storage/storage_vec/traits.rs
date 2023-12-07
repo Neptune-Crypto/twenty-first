@@ -520,6 +520,50 @@ pub(in crate::storage) mod tests {
             });
         }
 
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        pub fn atomic_set_and_get_wrapped_atomic_rw(vec: &(impl StorageVec<u64> + Send + Sync)) {
+            prepare_concurrency_test_vec(vec);
+            let orig = vec.get_all();
+            let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+
+            let atomic_vec = crate::sync::AtomicRw::from(vec);
+
+            // note: this test is expected to fail/assert within 1000 iterations
+            //       though that can depend on machine load, etc.
+            thread::scope(|s| {
+                for _i in 0..1000 {
+                    let gets = s.spawn(|| {
+                        atomic_vec.with(|v| {
+                            // read values one by one.
+                            let mut copy = vec![];
+                            for z in 0..v.len() {
+                                copy.push(v.get(z));
+                            }
+
+                            assert!(
+                                copy == orig || copy == modified,
+                                "encountered inconsistent read: {:?}",
+                                copy
+                            );
+                        });
+                    });
+
+                    let sets = s.spawn(|| {
+                        atomic_vec.with_mut(|v| {
+                            // set values one by one.
+                            for j in 0..v.len() {
+                                v.set(j, 50);
+                            }
+                        });
+                    });
+                    gets.join().unwrap();
+                    sets.join().unwrap();
+
+                    atomic_vec.with_mut(|v| v.set_all(orig.clone()));
+                }
+            });
+        }
+
         pub fn atomic_setmany_and_getmany(vec: &(impl StorageVec<u64> + Send + Sync)) {
             prepare_concurrency_test_vec(vec);
             let orig = vec.get_all();
