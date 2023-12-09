@@ -93,7 +93,7 @@ pub struct DbtSchema<Reader: StorageReader + Send + Sync> {
     /// Implementor(s) of [`StorageWriter`] will iterate over these
     /// tables, collect the pending operations, and write them
     /// atomically to the DB.
-    pub tables: Vec<Box<dyn DbTable + Send + Sync>>,
+    pub tables: AtomicRw<Vec<Box<dyn DbTable + Send + Sync>>>,
 
     /// Database Reader
     pub reader: Arc<Reader>,
@@ -114,13 +114,15 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
         RustyValue: From<V>,
         DbtVec<V>: DbTable + Send + Sync,
     {
-        assert!(self.tables.len() < 255);
-        let reader = self.reader.clone();
-        let key_prefix = self.tables.len() as u8;
-        let vector = DbtVec::<V>::new(reader, key_prefix, name);
+        self.tables.with_mut(|tables| {
+            assert!(tables.len() < 255);
+            let reader = self.reader.clone();
+            let key_prefix = tables.len() as u8;
+            let vector = DbtVec::<V>::new(reader, key_prefix, name);
 
-        self.tables.push(Box::new(vector.clone()));
-        vector
+            tables.push(Box::new(vector.clone()));
+            vector
+        })
     }
 
     // possible future extension
@@ -141,7 +143,8 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
         DbtSingleton<V>: DbTable + Send + Sync,
     {
         let singleton = DbtSingleton::<V>::new(key, self.reader.clone());
-        self.tables.push(Box::new(singleton.clone()));
+        self.tables
+            .with_mut(|t| t.push(Box::new(singleton.clone())));
         singleton
     }
 

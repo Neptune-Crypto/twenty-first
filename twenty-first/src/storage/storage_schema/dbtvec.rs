@@ -20,6 +20,7 @@ use std::{
 /// `DbtSingleton` is a NewType around Arc<RwLock<..>>.  Thus it
 /// can be cheaply cloned to create a reference as if it were an
 /// Arc.
+#[derive(Debug)]
 pub struct DbtVec<V> {
     inner: Arc<RwLock<DbtVecPrivate<V>>>,
 }

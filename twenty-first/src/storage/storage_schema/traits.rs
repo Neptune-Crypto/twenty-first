@@ -61,7 +61,7 @@ pub trait StorageReader {
 /// Defines storage writer interface
 pub trait StorageWriter {
     /// Write data to storage
-    fn persist(&self);
+    fn persist(&mut self);
     /// restore, or new
-    fn restore_or_new(&self);
+    fn restore_or_new(&mut self);
 }

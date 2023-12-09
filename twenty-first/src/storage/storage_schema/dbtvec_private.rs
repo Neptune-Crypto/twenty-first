@@ -3,9 +3,9 @@ use super::super::storage_vec::Index;
 use super::{traits::StorageReader, VecWriteOperation};
 use super::{RustyKey, RustyValue};
 use itertools::Itertools;
+use std::fmt::{Debug, Formatter};
 use std::{
     collections::{HashMap, VecDeque},
-    fmt::Debug,
     sync::Arc,
 };
 
@@ -20,11 +20,27 @@ pub struct DbtVecPrivate<V> {
     pub(super) name: String,
 }
 
+impl<V> Debug for DbtVecPrivate<V>
+where
+    V: Debug,
+{
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.debug_struct("DbtVecPrivate")
+            .field("reader", &"Arc<dyn StorageReader + Send + Sync>")
+            .field("current_length", &self.current_length)
+            .field("key_prefix", &self.key_prefix)
+            .field("write_queue", &self.write_queue)
+            .field("cache", &self.cache)
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
 impl<V> DbtVecPrivate<V>
 where
     V: Clone,
 {
-    // Return the key of K type used to store the length of the vector
+    // Return the key used to store the length of the vector
     #[inline]
     pub(super) fn get_length_key(key_prefix: u8) -> RustyKey {
         let const_length_key: RustyKey = 0u8.into();

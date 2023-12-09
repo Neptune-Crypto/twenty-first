@@ -507,8 +507,8 @@ pub(in crate::storage) mod tests {
                     });
 
                     let sets = s.spawn(|| {
-                        // set values one by one.
-                        for j in 0..vec.len() {
+                        // set values one by one, in reverse order than the reader.
+                        for j in (0..vec.len()).rev() {
                             vec.set(j, 50);
                         }
                     });

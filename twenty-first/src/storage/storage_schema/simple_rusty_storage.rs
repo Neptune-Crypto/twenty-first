@@ -1,6 +1,7 @@
 use super::super::level_db::DB;
 use super::enums::WriteOperation;
 use super::{traits::StorageWriter, DbtSchema, SimpleRustyReader};
+use crate::sync::AtomicRw;
 use leveldb::batch::WriteBatch;
 use std::sync::Arc;
 
@@ -15,17 +16,19 @@ pub struct SimpleRustyStorage {
 
 impl StorageWriter for SimpleRustyStorage {
     #[inline]
-    fn persist(&self) {
+    fn persist(&mut self) {
         let write_batch = WriteBatch::new();
-        for table in self.schema.tables.iter() {
-            let operations = table.pull_queue();
-            for op in operations {
-                match op {
-                    WriteOperation::Write(key, value) => write_batch.put(&key.0, &value.0),
-                    WriteOperation::Delete(key) => write_batch.delete(&key.0),
+        self.schema.tables.with(|tables| {
+            for table in tables.iter() {
+                let operations = table.pull_queue();
+                for op in operations {
+                    match op {
+                        WriteOperation::Write(key, value) => write_batch.put(&key.0, &value.0),
+                        WriteOperation::Delete(key) => write_batch.delete(&key.0),
+                    }
                 }
             }
-        }
+        });
 
         self.db()
             .write(&write_batch, true)
@@ -33,10 +36,12 @@ impl StorageWriter for SimpleRustyStorage {
     }
 
     #[inline]
-    fn restore_or_new(&self) {
-        for table in self.schema.tables.iter() {
-            table.restore_or_new();
-        }
+    fn restore_or_new(&mut self) {
+        self.schema.tables.with(|tables| {
+            for table in tables.iter() {
+                table.restore_or_new();
+            }
+        });
     }
 }
 
@@ -45,7 +50,7 @@ impl SimpleRustyStorage {
     #[inline]
     pub fn new(db: DB) -> Self {
         let schema = DbtSchema::<SimpleRustyReader> {
-            tables: Vec::new(),
+            tables: AtomicRw::from(Vec::new()),
             reader: Arc::new(SimpleRustyReader { db }),
         };
         Self { schema }

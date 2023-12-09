@@ -283,6 +283,7 @@ mod tests {
 
         // modify
         new_vector.set(2, S([3u8].to_vec()));
+        println!("vec: {:?}", new_vector);
         let last_again = new_vector.pop().unwrap();
         assert_eq!(last_again, S([8u8].to_vec()));
 

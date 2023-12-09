@@ -20,6 +20,7 @@ use super::{
 /// `DbtSingleton` is a NewType around Arc<RwLock<..>>.  Thus it
 /// can be cheaply cloned to create a reference as if it were an
 /// Arc.
+#[derive(Debug)]
 pub struct DbtSingleton<V> {
     // note: Arc is not needed, because we never hand out inner to anyone.
     inner: Arc<RwLock<DbtSingletonPrivate<V>>>,
