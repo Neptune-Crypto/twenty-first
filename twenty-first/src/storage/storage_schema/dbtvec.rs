@@ -88,13 +88,6 @@ where
         self.inner.with(|inner| inner.get(index))
     }
 
-    // this fn is here to satisfy the trait but is actually
-    // implemented by DbtVec
-    // todo
-    // fn iter_keys<'a>(&'a self) -> Box<dyn Iterator<Item = K> + '_> {
-    //     unreachable!()
-    // }
-
     #[inline]
     fn many_iter<'a>(
         &'a self,
