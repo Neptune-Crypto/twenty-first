@@ -13,7 +13,7 @@ pub trait Atomic<T> {
     /// ```
     fn with<R, F>(&self, f: F) -> R
     where
-        F: FnMut(&T) -> R;
+        F: FnOnce(&T) -> R;
 
     /// Mutably access the data of type `T` in a closure and possibly return a result of type `R`
     ///
@@ -29,5 +29,5 @@ pub trait Atomic<T> {
     /// ```
     fn with_mut<R, F>(&self, f: F) -> R
     where
-        F: FnMut(&mut T) -> R;
+        F: FnOnce(&mut T) -> R;
 }

@@ -1,16 +1,17 @@
 use super::super::level_db::DB;
 use super::rusty_leveldb_vec_private::RustyLevelDbVecPrivate;
 use super::{traits::*, Index};
+use crate::sync::AtomicRw;
 use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{RwLockReadGuard, RwLockWriteGuard};
 
 /// RustyLevelDbVec is a concurrency safe database-backed
 /// Vec with in memory read/write caching for all operations.
 #[derive(Debug, Clone)]
 pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
-    inner: Arc<RwLock<RustyLevelDbVecPrivate<T>>>,
+    inner: AtomicRw<RustyLevelDbVecPrivate<T>>,
 }
 
 impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelDbVec<T> {
@@ -135,16 +136,12 @@ impl<T: Serialize + DeserializeOwned> StorageVecRwLock<T> for RustyLevelDbVec<T>
 
     #[inline]
     fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
-        self.inner
-            .write()
-            .expect("should have acquired RustyLevelDbVec write lock")
+        self.inner.guard_mut()
     }
 
     #[inline]
     fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
-        self.inner
-            .read()
-            .expect("should have acquired RustyLevelDbVec read lock")
+        self.inner.guard()
     }
 }
 
@@ -172,9 +169,7 @@ impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVec<T> {
     #[inline]
     pub fn new(db: Arc<DB>, key_prefix: u8, name: &str) -> Self {
         Self {
-            inner: Arc::new(RwLock::new(RustyLevelDbVecPrivate::<T>::new(
-                db, key_prefix, name,
-            ))),
+            inner: AtomicRw::from(RustyLevelDbVecPrivate::<T>::new(db, key_prefix, name)),
         }
     }
 

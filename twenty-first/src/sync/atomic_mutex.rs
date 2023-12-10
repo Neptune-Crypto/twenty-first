@@ -1,5 +1,5 @@
 use super::traits::Atomic;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// An `Arc<Mutex<T>>` wrapper to make data thread-safe and easy to work with.
 ///
@@ -55,6 +55,21 @@ impl<T> From<AtomicMutex<T>> for Arc<Mutex<T>> {
 // note: we impl the Atomic trait methods here also so they
 // can be used without caller having to use the trait.
 impl<T> AtomicMutex<T> {
+    /// Acquire lock and return a `MutexGuard`
+    ///
+    /// # Examples
+    /// ```
+    /// # use twenty_first::sync::{AtomicMutex, traits::*};
+    /// struct Car {
+    ///     year: u16,
+    /// };
+    /// let atomic_car = AtomicMutex::from(Car{year: 2016});
+    /// atomic_car.guard_mut().year = 2022;
+    /// ```
+    pub fn guard_mut(&self) -> MutexGuard<T> {
+        self.0.lock().expect("Mutex lock should succeed")
+    }
+
     /// Immutably access the data of type `T` in a closure and return a result
     ///
     /// # Example
@@ -67,9 +82,9 @@ impl<T> AtomicMutex<T> {
     /// atomic_car.with(|c| println!("year: {}", c.year));
     /// let year = atomic_car.with(|c| c.year);
     /// ```
-    pub fn with<R, F>(&self, mut f: F) -> R
+    pub fn with<R, F>(&self, f: F) -> R
     where
-        F: FnMut(&T) -> R,
+        F: FnOnce(&T) -> R,
     {
         let mut lock = self.0.lock().expect("Write lock should succeed");
         f(&mut lock)
@@ -87,9 +102,9 @@ impl<T> AtomicMutex<T> {
     /// atomic_car.with_mut(|mut c| c.year = 2022);
     /// let year = atomic_car.with_mut(|mut c| {c.year = 2023; c.year});
     /// ```
-    pub fn with_mut<R, F>(&self, mut f: F) -> R
+    pub fn with_mut<R, F>(&self, f: F) -> R
     where
-        F: FnMut(&mut T) -> R,
+        F: FnOnce(&mut T) -> R,
     {
         let mut lock = self.0.lock().expect("Write lock should succeed");
         f(&mut lock)
@@ -99,14 +114,14 @@ impl<T> AtomicMutex<T> {
 impl<T> Atomic<T> for AtomicMutex<T> {
     fn with<R, F>(&self, f: F) -> R
     where
-        F: FnMut(&T) -> R,
+        F: FnOnce(&T) -> R,
     {
         AtomicMutex::<T>::with(self, f)
     }
 
     fn with_mut<R, F>(&self, f: F) -> R
     where
-        F: FnMut(&mut T) -> R,
+        F: FnOnce(&mut T) -> R,
     {
         AtomicMutex::<T>::with_mut(self, f)
     }
@@ -117,7 +132,7 @@ mod tests {
     use super::*;
 
     #[test]
-    // Verify (compile-time) that AtomicRw::with() and ::with_mut() accept mutable values.  (FnMut)
+    // Verify (compile-time) that AtomicRw::with() and ::with_mut() accept mutable values.  (FnOnce)
     fn mutable_assignment() {
         let name = "Jim".to_string();
         let atomic_name = AtomicMutex::from(name);

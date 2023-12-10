@@ -2,9 +2,10 @@ use super::super::storage_vec::traits::*;
 use super::super::storage_vec::Index;
 use super::dbtvec_private::DbtVecPrivate;
 use super::{traits::*, RustyValue, VecWriteOperation, WriteOperation};
+use crate::sync::AtomicRw;
 use std::{
     fmt::Debug,
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{Arc, RwLockReadGuard, RwLockWriteGuard},
 };
 
 /// A DB-backed Vec for use with DBSchema
@@ -22,7 +23,7 @@ use std::{
 /// Arc.
 #[derive(Debug)]
 pub struct DbtVec<V> {
-    inner: Arc<RwLock<DbtVecPrivate<V>>>,
+    inner: AtomicRw<DbtVecPrivate<V>>,
 }
 
 impl<V> Clone for DbtVec<V> {
@@ -47,7 +48,7 @@ where
         let vec = DbtVecPrivate::<V>::new(reader, key_prefix, name);
 
         Self {
-            inner: Arc::new(RwLock::new(vec)),
+            inner: AtomicRw::from(vec),
         }
     }
 }
@@ -57,15 +58,13 @@ impl<V> StorageVecRwLock<V> for DbtVec<V> {
 
     #[inline]
     fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
-        self.inner
-            .write()
-            .expect("should have acquired DbtVec write lock")
+        self.inner.guard_mut()
     }
 
     // This is a private method, but we allow unit tests in super to use it.
     #[inline]
     fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
-        self.inner.read().expect("should acquire DbtVec read lock")
+        self.inner.guard()
     }
 }
 
@@ -76,17 +75,17 @@ where
 {
     #[inline]
     fn is_empty(&self) -> bool {
-        self.read_lock().is_empty()
+        self.inner.with(|inner| inner.is_empty())
     }
 
     #[inline]
     fn len(&self) -> Index {
-        self.read_lock().len()
+        self.inner.with(|inner| inner.len())
     }
 
     #[inline]
     fn get(&self, index: Index) -> V {
-        self.read_lock().get(index)
+        self.inner.with(|inner| inner.get(index))
     }
 
     // this fn is here to satisfy the trait but is actually
@@ -101,8 +100,7 @@ where
         &'a self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, V)> + '_> {
-        let inner = self.read_lock();
-
+        let inner = self.inner.guard();
         Box::new(indices.into_iter().map(move |i| {
             assert!(
                 i < inner.len(),
@@ -127,8 +125,7 @@ where
         &'a self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = V> + '_> {
-        let inner = self.read_lock();
-
+        let inner = self.inner.guard();
         Box::new(indices.into_iter().map(move |i| {
             assert!(
                 i < inner.len(),
@@ -150,12 +147,12 @@ where
 
     #[inline]
     fn get_many(&self, indices: &[Index]) -> Vec<V> {
-        self.read_lock().get_many(indices)
+        self.inner.with(|inner| inner.get_many(indices))
     }
 
     #[inline]
     fn get_all(&self) -> Vec<V> {
-        self.read_lock().get_all()
+        self.inner.with(|inner| inner.get_all())
     }
 }
 
@@ -167,27 +164,27 @@ where
 
     #[inline]
     fn set(&self, index: Index, value: V) {
-        self.write_lock().set(index, value)
+        self.inner.with_mut(|inner| inner.set(index, value));
     }
 
     #[inline]
     fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, V)>) {
-        self.write_lock().set_many(key_vals)
+        self.inner.with_mut(|inner| inner.set_many(key_vals));
     }
 
     #[inline]
     fn pop(&self) -> Option<V> {
-        self.write_lock().pop()
+        self.inner.with_mut(|inner| inner.pop())
     }
 
     #[inline]
     fn push(&self, value: V) {
-        self.write_lock().push(value)
+        self.inner.with_mut(|inner| inner.push(value));
     }
 
     #[inline]
     fn clear(&self) {
-        self.write_lock().clear()
+        self.inner.with_mut(|inner| inner.clear());
     }
 }
 
@@ -201,56 +198,56 @@ where
 {
     /// Collect all added elements that have not yet been persisted
     fn pull_queue(&self) -> Vec<WriteOperation> {
-        let mut lock = self.write_lock();
+        self.inner.with_mut(|inner| {
+            let maybe_original_length = inner.persisted_length();
+            // necessary because we need maybe_original_length.is_none() later
+            let original_length = maybe_original_length.unwrap_or(0);
+            let mut length = original_length;
+            let mut queue = vec![];
+            while let Some(write_element) = inner.write_queue.pop_front() {
+                match write_element {
+                    VecWriteOperation::OverWrite((i, t)) => {
+                        let key = inner.get_index_key(i);
+                        queue.push(WriteOperation::Write(key, t.into()));
+                    }
+                    VecWriteOperation::Push(t) => {
+                        let key = inner.get_index_key(length);
+                        length += 1;
+                        queue.push(WriteOperation::Write(key, t.into()));
+                    }
+                    VecWriteOperation::Pop => {
+                        let key = inner.get_index_key(length - 1);
+                        length -= 1;
+                        queue.push(WriteOperation::Delete(key));
+                    }
+                };
+            }
 
-        let maybe_original_length = lock.persisted_length();
-        // necessary because we need maybe_original_length.is_none() later
-        let original_length = maybe_original_length.unwrap_or(0);
-        let mut length = original_length;
-        let mut queue = vec![];
-        while let Some(write_element) = lock.write_queue.pop_front() {
-            match write_element {
-                VecWriteOperation::OverWrite((i, t)) => {
-                    let key = lock.get_index_key(i);
-                    queue.push(WriteOperation::Write(key, t.into()));
-                }
-                VecWriteOperation::Push(t) => {
-                    let key = lock.get_index_key(length);
-                    length += 1;
-                    queue.push(WriteOperation::Write(key, t.into()));
-                }
-                VecWriteOperation::Pop => {
-                    let key = lock.get_index_key(length - 1);
-                    length -= 1;
-                    queue.push(WriteOperation::Delete(key));
-                }
-            };
-        }
+            if original_length != length || maybe_original_length.is_none() {
+                let key = DbtVecPrivate::<V>::get_length_key(inner.key_prefix);
+                queue.push(WriteOperation::Write(key, length.into()));
+            }
 
-        if original_length != length || maybe_original_length.is_none() {
-            let key = DbtVecPrivate::<V>::get_length_key(lock.key_prefix);
-            queue.push(WriteOperation::Write(key, length.into()));
-        }
+            inner.cache.clear();
 
-        lock.cache.clear();
-
-        queue
+            queue
+        })
     }
 
     #[inline]
     fn restore_or_new(&self) {
-        let mut lock = self.write_lock();
-
-        if let Some(length) = lock
-            .reader
-            .get(DbtVecPrivate::<V>::get_length_key(lock.key_prefix))
-        {
-            lock.current_length = Some(length.into());
-        } else {
-            lock.current_length = Some(0);
-        }
-        lock.cache.clear();
-        lock.write_queue.clear();
+        self.inner.with_mut(|inner| {
+            if let Some(length) = inner
+                .reader
+                .get(DbtVecPrivate::<V>::get_length_key(inner.key_prefix))
+            {
+                inner.current_length = Some(length.into());
+            } else {
+                inner.current_length = Some(0);
+            }
+            inner.cache.clear();
+            inner.write_queue.clear();
+        });
     }
 }
 

@@ -1,11 +1,9 @@
-use std::{
-    fmt::Debug,
-    sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
-};
+use std::{fmt::Debug, sync::Arc};
 
 use super::{
     dbtsingleton_private::DbtSingletonPrivate, traits::*, RustyKey, RustyValue, WriteOperation,
 };
+use crate::sync::AtomicRw;
 
 /// Singleton type created by [`super::DbtSchema`]
 ///
@@ -23,7 +21,7 @@ use super::{
 #[derive(Debug)]
 pub struct DbtSingleton<V> {
     // note: Arc is not needed, because we never hand out inner to anyone.
-    inner: Arc<RwLock<DbtSingletonPrivate<V>>>,
+    inner: AtomicRw<DbtSingletonPrivate<V>>,
 }
 
 // We manually impl Clone so that callers can make reference clones.
@@ -49,24 +47,8 @@ where
             reader,
         };
         Self {
-            inner: Arc::new(RwLock::new(singleton)),
+            inner: AtomicRw::from(singleton),
         }
-    }
-
-    // This is a private method, but we allow unit tests in super to use it.
-    #[inline]
-    pub(super) fn read_lock(&self) -> RwLockReadGuard<'_, DbtSingletonPrivate<V>> {
-        self.inner
-            .read()
-            .expect("should have acquired read lock for DbtSingletonPrivate")
-    }
-
-    // This is a private method, but we allow unit tests in super to use it.
-    #[inline]
-    pub(super) fn write_lock(&self) -> RwLockWriteGuard<'_, DbtSingletonPrivate<V>> {
-        self.inner
-            .write()
-            .expect("should have acquired write lock for DbtSingletonPrivate")
     }
 }
 
@@ -76,7 +58,7 @@ where
 {
     #[inline]
     fn get(&self) -> V {
-        self.read_lock().current_value.clone()
+        self.inner.with(|inner| inner.current_value.clone())
     }
 }
 
@@ -87,7 +69,7 @@ where
 {
     #[inline]
     fn set(&self, t: V) {
-        self.write_lock().current_value = t;
+        self.inner.with_mut(|inner| inner.current_value = t);
     }
 }
 
@@ -102,25 +84,26 @@ where
 {
     #[inline]
     fn pull_queue(&self) -> Vec<WriteOperation> {
-        let mut lock = self.write_lock();
-
-        if lock.current_value == lock.old_value {
-            vec![]
-        } else {
-            lock.old_value = lock.current_value.clone();
-            vec![WriteOperation::Write(
-                lock.key.clone(),
-                lock.current_value.clone().into(),
-            )]
-        }
+        self.inner.with_mut(|inner| {
+            if inner.current_value == inner.old_value {
+                vec![]
+            } else {
+                inner.old_value = inner.current_value.clone();
+                vec![WriteOperation::Write(
+                    inner.key.clone(),
+                    inner.current_value.clone().into(),
+                )]
+            }
+        })
     }
 
     #[inline]
     fn restore_or_new(&self) {
-        let mut lock = self.write_lock();
-        lock.current_value = match lock.reader.get(lock.key.clone()) {
-            Some(value) => value.into(),
-            None => V::default(),
-        }
+        self.inner.with_mut(|inner| {
+            inner.current_value = match inner.reader.get(inner.key.clone()) {
+                Some(value) => value.into(),
+                None => V::default(),
+            }
+        });
     }
 }

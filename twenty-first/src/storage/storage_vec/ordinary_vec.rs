@@ -1,15 +1,16 @@
 use super::ordinary_vec_private::OrdinaryVecPrivate;
 use super::{traits::*, Index};
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use crate::sync::AtomicRw;
+use std::sync::{RwLockReadGuard, RwLockWriteGuard};
 
 /// OrdinaryVec is a wrapper that adds RwLock and atomic snapshot
 /// guarantees around all accesses to an ordinary `Vec<T>`
 #[derive(Debug, Clone, Default)]
-pub struct OrdinaryVec<T>(Arc<RwLock<OrdinaryVecPrivate<T>>>);
+pub struct OrdinaryVec<T>(AtomicRw<OrdinaryVecPrivate<T>>);
 
 impl<T> From<Vec<T>> for OrdinaryVec<T> {
     fn from(v: Vec<T>) -> Self {
-        Self(Arc::new(RwLock::new(OrdinaryVecPrivate(v))))
+        Self(AtomicRw::from(OrdinaryVecPrivate(v)))
     }
 }
 
@@ -101,16 +102,12 @@ impl<T> StorageVecRwLock<T> for OrdinaryVec<T> {
 
     #[inline]
     fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
-        self.0
-            .write()
-            .expect("should have acquired OrdinaryVec write lock")
+        self.0.guard_mut()
     }
 
     #[inline]
     fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
-        self.0
-            .read()
-            .expect("should have acquired OrdinaryVec read lock")
+        self.0.guard()
     }
 }
 

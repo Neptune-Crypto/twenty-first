@@ -1,5 +1,5 @@
 use super::traits::Atomic;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// An `Arc<RwLock<T>>` wrapper to make data thread-safe and easy to work with.
 ///
@@ -13,12 +13,18 @@ use std::sync::{Arc, RwLock};
 /// atomic_car.with(|c| println!("year: {}", c.year));
 /// atomic_car.with_mut(|mut c| c.year = 2023);
 /// ```
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct AtomicRw<T>(Arc<RwLock<T>>);
 impl<T> From<T> for AtomicRw<T> {
     #[inline]
     fn from(t: T) -> Self {
         Self(Arc::new(RwLock::new(t)))
+    }
+}
+
+impl<T> Clone for AtomicRw<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
     }
 }
 
@@ -53,6 +59,36 @@ impl<T> From<AtomicRw<T>> for Arc<RwLock<T>> {
 // note: we impl the Atomic trait methods here also so they
 // can be used without caller having to use the trait.
 impl<T> AtomicRw<T> {
+    /// Acquire read lock and return an `RwLockReadGuard`
+    ///
+    /// # Examples
+    /// ```
+    /// # use twenty_first::sync::{AtomicRw, traits::*};
+    /// struct Car {
+    ///     year: u16,
+    /// };
+    /// let atomic_car = AtomicRw::from(Car{year: 2016});
+    /// let year = atomic_car.guard().year;
+    /// ```
+    pub fn guard(&self) -> RwLockReadGuard<T> {
+        self.0.read().expect("Read lock should succeed")
+    }
+
+    /// Acquire write lock and return an `RwLockWriteGuard`
+    ///
+    /// # Examples
+    /// ```
+    /// # use twenty_first::sync::{AtomicRw, traits::*};
+    /// struct Car {
+    ///     year: u16,
+    /// };
+    /// let atomic_car = AtomicRw::from(Car{year: 2016});
+    /// atomic_car.guard_mut().year = 2022;
+    /// ```
+    pub fn guard_mut(&self) -> RwLockWriteGuard<T> {
+        self.0.write().expect("Write lock should succeed")
+    }
+
     /// Immutably access the data of type `T` in a closure and possibly return a result of type `R`
     ///
     /// # Examples
@@ -65,12 +101,12 @@ impl<T> AtomicRw<T> {
     /// atomic_car.with(|c| println!("year: {}", c.year));
     /// let year = atomic_car.with(|c| c.year);
     /// ```
-    pub fn with<R, F>(&self, mut f: F) -> R
+    pub fn with<R, F>(&self, f: F) -> R
     where
-        F: FnMut(&T) -> R,
+        F: FnOnce(&T) -> R,
     {
-        let mut lock = self.0.write().expect("Write lock should succeed");
-        f(&mut lock)
+        let lock = self.0.read().expect("Read lock should succeed");
+        f(&lock)
     }
 
     /// Mutably access the data of type `T` in a closure and possibly return a result of type `R`
@@ -85,9 +121,9 @@ impl<T> AtomicRw<T> {
     /// atomic_car.with_mut(|mut c| {c.year = 2022});
     /// let year = atomic_car.with_mut(|mut c| {c.year = 2023; c.year});
     /// ```
-    pub fn with_mut<R, F>(&self, mut f: F) -> R
+    pub fn with_mut<R, F>(&self, f: F) -> R
     where
-        F: FnMut(&mut T) -> R,
+        F: FnOnce(&mut T) -> R,
     {
         let mut lock = self.0.write().expect("Write lock should succeed");
         f(&mut lock)
@@ -98,7 +134,7 @@ impl<T> Atomic<T> for AtomicRw<T> {
     #[inline]
     fn with<R, F>(&self, f: F) -> R
     where
-        F: FnMut(&T) -> R,
+        F: FnOnce(&T) -> R,
     {
         AtomicRw::<T>::with(self, f)
     }
@@ -106,7 +142,7 @@ impl<T> Atomic<T> for AtomicRw<T> {
     #[inline]
     fn with_mut<R, F>(&self, f: F) -> R
     where
-        F: FnMut(&mut T) -> R,
+        F: FnOnce(&mut T) -> R,
     {
         AtomicRw::<T>::with_mut(self, f)
     }
