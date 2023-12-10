@@ -13,6 +13,41 @@
 //!    and non-atomic writes.
 //!  - [`level_db::DB`] provides direct access to the LevelDB API.
 
+// For anyone reading this code and trying to understand the StorageVec trait and the DbSchema
+// in particular, especially with regards to locks, mutability, and concurrency, the following
+// may help speed understanding.  This explains the "Why" of present design.
+//
+//  0. DbtSchema::tables holds an Arc::clone() reference to each instance of a `DbTable`
+//     implementor such as DbtVec.  This is done so that DbtSchema can iterate over these
+//     tables, collect pending Write operations into a database WriteBatch, then send
+//     all writes to DB at once, atomically.
+//  1. To have a reference in DbtSchema::tables, a `DBTable` implementor such as DbtVec
+//     must include Arc, to impl cheap reference clone.
+//  2. For mutability of its contents, Arc must include either RwLock or Mutex.
+//  3. Without Arc<Mutex<..>> wrapper around DbtVecPrivate, DbtVec cannot modify
+//     anything, unless it's methods are &mut self.
+//  4. StorageVec methods are presently &self, not &mut self.
+//  5. StorageVec methods are &self because that allows eg DbtVec to be shared between
+//     threads directly.  Rust does not allow mutable method calls on an item that
+//     is shared between threads.
+//  6. An alternative could be to make StorageVec methods take &mut self, remove Arc<RwLock<..>>
+//     from within DbtVec, and then wrap DbtVec with Arc<Mutex<..>> and clone before returning
+//     from `DbtSchema::new_vec()`.  This requires callers to see and deal with locks, rather than
+//     keeping them encapsulated inside DbtVec.
+//  7. For multi-table read/write atomicity, it is also necessary to have locks over all related
+//     `dyn DbTable` items created by `DbtSchema`. Given this, the locks over individual tables,
+//     such as DbtVec are redundant, and it would be desirable to eliminate them.  However, then
+//     refer back to point 1 above.  If we wish to continue with this DbtSchema model of references,
+//     the individual tables must have locks around them, somehow.
+//  8. So with these points in mind, we have settled on the present design/impl, for now.
+//  9. An alternative design might get rid of the DbtSchema::tables entirely and just create a
+//     collection/struct of `dyn DbTable` types.  There would be a lock around the collection
+//     but no inner lock for each table, and no Arc reference for each.  When it is time to write
+//     to database, the collection would be iterated to obtain the Write operations, instead of
+//     iterating over DbtSchema::tables.  (I *think* this should work, but may be overlooking
+//     something.  The primary advantage here is getting rid of the inner locks, which may not
+//     be any performance issue anyway, as there is only one lock acquisition per operation.
+
 pub mod database_array;
 pub mod database_vector;
 pub mod level_db;
