@@ -44,9 +44,10 @@
 //     collection/struct of `dyn DbTable` types.  There would be a lock around the collection
 //     but no inner lock for each table, and no Arc reference for each.  When it is time to write
 //     to database, the collection would be iterated to obtain the Write operations, instead of
-//     iterating over DbtSchema::tables.  (I *think* this should work, but may be overlooking
-//     something.  The primary advantage here is getting rid of the inner locks, which may not
-//     be any performance issue anyway, as there is only one lock acquisition per operation.
+//     iterating over DbtSchema::tables.  The primary advantage here is getting rid of the inner
+//     locks, which may not be any performance issue anyway, as there is only one lock acquisition
+//     per operation.  The disadvantage is that caller must keep track of the created tables
+//     and pass them to StorageWriter::persist() as Vec<&type as &dyn DbTable>, which is ugly.
 
 pub mod database_array;
 pub mod database_vector;
