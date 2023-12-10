@@ -1,19 +1,12 @@
 use crate::leveldb::database::key::IntoLevelDBKey;
 use crate::leveldb::error::Error;
 
+// Todo: consider making RustyKey a newtype for RustyValue and auto derive all its From impls
+//       using either `derive_more` or `newtype_derive` crate
+
 /// Represents a database key as bytes
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RustyKey(pub Vec<u8>);
-impl From<&dyn IntoLevelDBKey> for RustyKey {
-    #[inline]
-    fn from(value: &dyn IntoLevelDBKey) -> Self {
-        let vec_u8 = value
-            .as_u8_slice_for_get(&|k| Ok(Some(k.to_vec())))
-            .unwrap()
-            .unwrap();
-        Self(vec_u8)
-    }
-}
 
 impl From<u8> for RustyKey {
     #[inline]
@@ -46,5 +39,16 @@ impl IntoLevelDBKey for RustyKey {
         f: &dyn Fn(&[u8]) -> Result<Option<Vec<u8>>, Error>,
     ) -> Result<Option<Vec<u8>>, Error> {
         f(&self.0)
+    }
+}
+
+impl From<&dyn IntoLevelDBKey> for RustyKey {
+    #[inline]
+    fn from(value: &dyn IntoLevelDBKey) -> Self {
+        let vec_u8 = value
+            .as_u8_slice_for_get(&|k| Ok(Some(k.to_vec())))
+            .unwrap()
+            .unwrap();
+        Self(vec_u8)
     }
 }
