@@ -15,38 +15,15 @@ pub trait DbTable {
 }
 
 /// Defines storage singleton for types created by [`super::DbtSchema`]
-pub trait StorageSingletonReads<T>
+pub trait StorageSingleton<T>
 where
     T: Clone,
 {
     /// Retrieve value
     fn get(&self) -> T;
-}
 
-/// Defines storage singleton mutable write ops for types created by [`super::DbtSchema`]
-pub(super) trait StorageSingletonMutableWrites<T>
-where
-    T: Clone,
-{
-    /// Set value
-    fn set(&mut self, t: T);
-}
-
-/// Defines storage singleton immutable write ops for types created by [`super::DbtSchema`]
-pub trait StorageSingletonImmutableWrites<T>
-where
-    T: Clone,
-{
     /// Set value
     fn set(&self, t: T);
-}
-
-/// Defines storage singleton read ops for types created by [`super::DbtSchema`]
-pub trait StorageSingleton<T>:
-    StorageSingletonReads<T> + StorageSingletonImmutableWrites<T>
-where
-    T: Clone,
-{
 }
 
 /// Defines storage reader interface

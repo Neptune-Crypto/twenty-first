@@ -52,29 +52,21 @@ where
     }
 }
 
-impl<V> StorageSingletonReads<V> for DbtSingleton<V>
-where
-    V: Clone + From<V> + Default,
-{
-    #[inline]
-    fn get(&self) -> V {
-        self.inner.with(|inner| inner.current_value.clone())
-    }
-}
-
-impl<V> StorageSingletonImmutableWrites<V> for DbtSingleton<V>
+impl<V> StorageSingleton<V> for DbtSingleton<V>
 where
     V: Clone + From<V> + Default,
     V: From<RustyValue>,
 {
     #[inline]
+    fn get(&self) -> V {
+        self.inner.with(|inner| inner.get())
+    }
+
+    #[inline]
     fn set(&self, t: V) {
-        self.inner.with_mut(|inner| inner.current_value = t);
+        self.inner.with_mut(|inner| inner.set(t));
     }
 }
-
-impl<V> StorageSingleton<V> for DbtSingleton<V> where V: Clone + From<V> + Default + From<RustyValue>
-{}
 
 impl<V> DbTable for DbtSingleton<V>
 where

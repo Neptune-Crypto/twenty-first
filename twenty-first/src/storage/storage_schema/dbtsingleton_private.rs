@@ -26,20 +26,12 @@ where
     }
 }
 
-impl<V> StorageSingletonReads<V> for DbtSingletonPrivate<V>
-where
-    V: Clone + From<V>,
-{
-    fn get(&self) -> V {
+impl<V: Clone> DbtSingletonPrivate<V> {
+    pub(super) fn get(&self) -> V {
         self.current_value.clone()
     }
-}
 
-impl<V> StorageSingletonMutableWrites<V> for DbtSingletonPrivate<V>
-where
-    V: Clone + From<V>,
-{
-    fn set(&mut self, v: V) {
+    pub(super) fn set(&mut self, v: V) {
         self.current_value = v;
     }
 }
