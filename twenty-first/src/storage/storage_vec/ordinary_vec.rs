@@ -14,7 +14,7 @@ impl<T> From<Vec<T>> for OrdinaryVec<T> {
     }
 }
 
-impl<T: Clone> StorageVecReads<T> for OrdinaryVec<T> {
+impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
     #[inline]
     fn is_empty(&self) -> bool {
         self.read_lock().is_empty()
@@ -67,9 +67,7 @@ impl<T: Clone> StorageVecReads<T> for OrdinaryVec<T> {
             inner.get(i)
         }))
     }
-}
 
-impl<T: Clone> StorageVecImmutableWrites<T> for OrdinaryVec<T> {
     #[inline]
     fn set(&self, index: Index, value: T) {
         // note: on 32 bit systems, this could panic.
@@ -110,8 +108,6 @@ impl<T> StorageVecRwLock<T> for OrdinaryVec<T> {
         self.0.guard()
     }
 }
-
-impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {}
 
 #[cfg(test)]
 mod tests {

@@ -36,6 +36,53 @@ where
     }
 }
 
+impl<V: Clone + From<RustyValue>> StorageVecLockedData<V> for DbtVecPrivate<V> {
+    #[inline]
+    fn get(&self, index: Index) -> V {
+        // Disallow getting values out-of-bounds
+
+        assert!(
+            index < self.len(),
+            "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
+            self.len(),
+            self.name
+        );
+
+        // try cache first
+        if self.cache.contains_key(&index) {
+            return self
+                .cache
+                .get(&index)
+                .expect("there should be some value")
+                .clone();
+        }
+
+        // then try persistent storage
+        let key: RustyKey = self.get_index_key(index);
+        let val = self.reader.get(key).unwrap_or_else(|| {
+            panic!(
+                "Element with index {index} does not exist in {}. This should not happen",
+                self.name
+            )
+        });
+        val.into()
+    }
+
+    #[inline]
+    fn set(&mut self, index: Index, value: V) {
+        // Disallow setting values out-of-bounds
+
+        assert!(
+            index < self.len(),
+            "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
+            self.len(),
+            self.name
+        );
+
+        self.write_op_overwrite(index, value);
+    }
+}
+
 impl<V> DbtVecPrivate<V>
 where
     V: Clone,
@@ -113,81 +160,24 @@ where
     }
 }
 
-impl<V> StorageVecReads<V> for DbtVecPrivate<V>
+impl<V> DbtVecPrivate<V>
 where
-    V: Clone + Debug,
-    V: From<RustyValue>,
+    V: Clone + From<RustyValue>,
 {
     #[inline]
-    fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     #[inline]
-    fn len(&self) -> Index {
+    pub(super) fn len(&self) -> Index {
         self.current_length
             .unwrap_or_else(|| self.persisted_length().unwrap_or(0))
     }
 
-    #[inline]
-    fn get(&self, index: Index) -> V {
-        // Disallow getting values out-of-bounds
-
-        assert!(
-            index < self.len(),
-            "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
-            self.len(),
-            self.name
-        );
-
-        // try cache first
-        if self.cache.contains_key(&index) {
-            return self
-                .cache
-                .get(&index)
-                .expect("there should be some value")
-                .clone();
-        }
-
-        // then try persistent storage
-        let key: RustyKey = self.get_index_key(index);
-        let val = self.reader.get(key).unwrap_or_else(|| {
-            panic!(
-                "Element with index {index} does not exist in {}. This should not happen",
-                self.name
-            )
-        });
-        val.into()
-    }
-
-    // this fn is here to satisfy the trait but is actually
-    // implemented by DbtVec
-    // todo
-    // fn iter_keys<'a>(&'a self) -> Box<dyn Iterator<Item = K> + '_> {
-    //     unreachable!()
-    // }
-
-    // this fn is here to satisfy the trait but is actually
-    // implemented by DbtVec
-    fn many_iter<'a>(
-        &'a self,
-        _indices: impl IntoIterator<Item = Index> + 'static,
-    ) -> Box<dyn Iterator<Item = (Index, V)> + '_> {
-        unreachable!()
-    }
-
-    // this fn is here to satisfy the trait but is actually
-    // implemented by DbtVec
-    fn many_iter_values<'a>(
-        &'a self,
-        _indices: impl IntoIterator<Item = Index> + 'static,
-    ) -> Box<dyn Iterator<Item = V> + '_> {
-        unreachable!()
-    }
-
     /// Fetch multiple elements from a `DbtVec` and return the elements matching the order
     /// of the input indices.
-    fn get_many(&self, indices: &[Index]) -> Vec<V> {
+    pub(super) fn get_many(&self, indices: &[Index]) -> Vec<V> {
         fn sort_to_match_requested_index_order<V>(indexed_elements: HashMap<usize, V>) -> Vec<V> {
             let mut elements = indexed_elements.into_iter().collect_vec();
             elements.sort_unstable_by_key(|&(index_position, _)| index_position);
@@ -249,7 +239,7 @@ where
 
     /// Return all stored elements in a vector, whose index matches the StorageVec's.
     /// It's the caller's responsibility that there is enough memory to store all elements.
-    fn get_all(&self) -> Vec<V> {
+    pub(super) fn get_all(&self) -> Vec<V> {
         let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
             (0..self.len()).partition(|index| self.cache.contains_key(index));
 
@@ -288,26 +278,6 @@ where
             .map(|x| x.expect("there should be some value"))
             .collect_vec()
     }
-}
-
-impl<V> StorageVecMutableWrites<V> for DbtVecPrivate<V>
-where
-    V: Clone + Debug,
-    V: From<RustyValue>,
-{
-    #[inline]
-    fn set(&mut self, index: Index, value: V) {
-        // Disallow setting values out-of-bounds
-
-        assert!(
-            index < self.len(),
-            "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
-            self.len(),
-            self.name
-        );
-
-        self.write_op_overwrite(index, value);
-    }
 
     /// set multiple elements.
     ///
@@ -316,7 +286,7 @@ where
     /// It is the caller's responsibility to ensure that index values are
     /// unique.  If not, the last value with the same index will win.
     /// For unordered collections such as HashMap, the behavior is undefined.
-    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, V)>) {
+    pub(super) fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, V)>) {
         let self_len = self.len();
 
         for (index, value) in key_vals.into_iter() {
@@ -332,7 +302,7 @@ where
     }
 
     #[inline]
-    fn pop(&mut self) -> Option<V> {
+    pub(super) fn pop(&mut self) -> Option<V> {
         // If vector is empty, return None
         if self.is_empty() {
             return None;
@@ -359,7 +329,7 @@ where
     }
 
     #[inline]
-    fn push(&mut self, value: V) {
+    pub(super) fn push(&mut self, value: V) {
         // add to write queue
         self.write_queue
             .push_back(VecWriteOperation::Push(value.clone()));
@@ -377,7 +347,7 @@ where
     }
 
     #[inline]
-    fn clear(&mut self) {
+    pub(super) fn clear(&mut self) {
         while !self.is_empty() {
             self.pop();
         }

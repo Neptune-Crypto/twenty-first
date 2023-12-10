@@ -68,7 +68,7 @@ impl<V> StorageVecRwLock<V> for DbtVec<V> {
     }
 }
 
-impl<V> StorageVecReads<V> for DbtVec<V>
+impl<V> StorageVec<V> for DbtVec<V>
 where
     V: Clone + Debug,
     V: From<RustyValue>,
@@ -154,13 +154,6 @@ where
     fn get_all(&self) -> Vec<V> {
         self.inner.with(|inner| inner.get_all())
     }
-}
-
-impl<V> StorageVecImmutableWrites<V> for DbtVec<V>
-where
-    V: Clone + Debug + From<RustyValue>,
-{
-    // type LockedData = DbtVecPrivate<V>;
 
     #[inline]
     fn set(&self, index: Index, value: V) {
@@ -187,8 +180,6 @@ where
         self.inner.with_mut(|inner| inner.clear());
     }
 }
-
-impl<V> StorageVec<V> for DbtVec<V> where V: Clone + Debug + From<RustyValue> {}
 
 impl<V> DbTable for DbtVec<V>
 where

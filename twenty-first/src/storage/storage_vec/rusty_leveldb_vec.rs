@@ -14,7 +14,7 @@ pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
     inner: AtomicRw<RustyLevelDbVecPrivate<T>>,
 }
 
-impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelDbVec<T> {
+impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<T> {
     #[inline]
     fn is_empty(&self) -> bool {
         self.read_lock().is_empty()
@@ -93,10 +93,6 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelD
     fn get_all(&self) -> Vec<T> {
         self.read_lock().get_all()
     }
-}
-
-impl<T: Serialize + DeserializeOwned + Clone> StorageVecImmutableWrites<T> for RustyLevelDbVec<T> {
-    // type LockedData = RustyLevelDbVecPrivate<T>;
 
     #[inline]
     fn set(&self, index: Index, value: T) {
@@ -144,8 +140,6 @@ impl<T: Serialize + DeserializeOwned> StorageVecRwLock<T> for RustyLevelDbVec<T>
         self.inner.guard()
     }
 }
-
-impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<T> {}
 
 impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVec<T> {
     // Return the key used to store the length of the persisted vector

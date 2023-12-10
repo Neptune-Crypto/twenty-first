@@ -1,9 +1,6 @@
 use super::super::level_db::DB;
 use super::super::utils;
-use super::{
-    traits::{StorageVecMutableWrites, StorageVecReads},
-    Index,
-};
+use super::{traits::*, Index};
 use itertools::Itertools;
 use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
@@ -30,17 +27,9 @@ pub struct RustyLevelDbVecPrivate<T: Serialize + DeserializeOwned> {
     pub(super) name: String,
 }
 
-impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelDbVecPrivate<T> {
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.length == 0
-    }
-
-    #[inline]
-    fn len(&self) -> Index {
-        self.length
-    }
-
+impl<T: Serialize + DeserializeOwned + Clone> StorageVecLockedData<T>
+    for RustyLevelDbVecPrivate<T>
+{
     #[inline]
     fn get(&self, index: Index) -> T {
         // Disallow getting values out-of-bounds
@@ -61,25 +50,51 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelD
         self.get_u8(&db_key)
     }
 
-    // this fn is here to satisfy the trait, but is implemented
-    // by RustyLevelDbVec
-    fn many_iter(
-        &self,
-        _indices: impl IntoIterator<Item = Index> + 'static,
-    ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
-        unreachable!()
+    #[inline]
+    fn set(&mut self, index: Index, value: T) {
+        // Disallow setting values out-of-bounds
+        assert!(
+            index < self.len(),
+            "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
+            self.length,
+            self.name
+        );
+
+        self.cache.insert(index, value.clone());
+
+        // note: benchmarks have revealed this code to slow down
+        //       set operations by about 7x, eg 10us to 70us.
+        //       Disabling for now.
+        //
+        // if let Some(_old_val) = self.cache.insert(index, value.clone()) {
+        //     // If cache entry exists, we remove any corresponding
+        //     // OverWrite ops in the `write_queue` to reduce disk IO.
+
+        //     // logic: retain all ops that are not overwrite, and
+        //     // overwrite ops that do not have an index matching cache_index.
+        //     self.write_queue.retain(|op| match op {
+        //         WriteElement::OverWrite((i, _)) => *i != index,
+        //         _ => true,
+        //     })
+        // }
+
+        self.write_queue
+            .push_back(WriteElement::OverWrite((index, value)));
+    }
+}
+
+impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVecPrivate<T> {
+    #[inline]
+    pub(super) fn is_empty(&self) -> bool {
+        self.length == 0
     }
 
-    // this fn is here to satisfy the trait, but is implemented
-    // by RustyLevelDbVec
-    fn many_iter_values(
-        &self,
-        _indices: impl IntoIterator<Item = Index> + 'static,
-    ) -> Box<dyn Iterator<Item = T> + '_> {
-        unreachable!()
+    #[inline]
+    pub(super) fn len(&self) -> Index {
+        self.length
     }
 
-    fn get_many(&self, indices: &[Index]) -> Vec<T> {
+    pub(super) fn get_many(&self, indices: &[Index]) -> Vec<T> {
         fn sort_to_match_requested_index_order<T>(indexed_elements: HashMap<usize, T>) -> Vec<T> {
             let mut elements = indexed_elements.into_iter().collect_vec();
             elements.sort_unstable_by_key(|&(index_position, _)| index_position);
@@ -134,7 +149,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelD
 
     /// Return all stored elements in a vector, whose index matches the StorageVec's.
     /// It's the caller's responsibility that there is enough memory to store all elements.
-    fn get_all(&self) -> Vec<T> {
+    pub(super) fn get_all(&self) -> Vec<T> {
         let length = self.len();
 
         let (indices_of_elements_in_cache, indices_of_elements_not_in_cache): (Vec<_>, Vec<_>) =
@@ -166,42 +181,6 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecReads<T> for RustyLevelD
             .map(|x| x.expect("should get some element"))
             .collect_vec()
     }
-}
-
-impl<T: Serialize + DeserializeOwned + Clone> StorageVecMutableWrites<T>
-    for RustyLevelDbVecPrivate<T>
-{
-    #[inline]
-    fn set(&mut self, index: Index, value: T) {
-        // Disallow setting values out-of-bounds
-        assert!(
-            index < self.len(),
-            "Out-of-bounds. Got {index} but length was {}. persisted vector name: {}",
-            self.length,
-            self.name
-        );
-
-        self.cache.insert(index, value.clone());
-
-        // note: benchmarks have revealed this code to slow down
-        //       set operations by about 7x, eg 10us to 70us.
-        //       Disabling for now.
-        //
-        // if let Some(_old_val) = self.cache.insert(index, value.clone()) {
-        //     // If cache entry exists, we remove any corresponding
-        //     // OverWrite ops in the `write_queue` to reduce disk IO.
-
-        //     // logic: retain all ops that are not overwrite, and
-        //     // overwrite ops that do not have an index matching cache_index.
-        //     self.write_queue.retain(|op| match op {
-        //         WriteElement::OverWrite((i, _)) => *i != index,
-        //         _ => true,
-        //     })
-        // }
-
-        self.write_queue
-            .push_back(WriteElement::OverWrite((index, value)));
-    }
 
     /// set multiple elements.
     ///
@@ -211,14 +190,14 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecMutableWrites<T>
     /// unique.  If not, the last value with the same index will win.
     /// For unordered collections such as HashMap, the behavior is undefined.
     #[inline]
-    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+    pub(super) fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
         for (index, value) in key_vals.into_iter() {
             self.set(index, value);
         }
     }
 
     #[inline]
-    fn pop(&mut self) -> Option<T> {
+    pub(super) fn pop(&mut self) -> Option<T> {
         // add to write queue
         self.write_queue.push_back(WriteElement::Pop);
 
@@ -241,7 +220,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecMutableWrites<T>
     }
 
     #[inline]
-    fn push(&mut self, value: T) {
+    pub(super) fn push(&mut self, value: T) {
         // add to write queue
         self.write_queue
             .push_back(WriteElement::Push(value.clone()));
@@ -258,7 +237,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVecMutableWrites<T>
     }
 
     #[inline]
-    fn clear(&mut self) {
+    pub(super) fn clear(&mut self) {
         while !self.is_empty() {
             self.pop();
         }

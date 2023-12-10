@@ -1,9 +1,4 @@
-use super::{
-    traits::{
-        StorageVecImmutableWrites, StorageVecMutableWrites, StorageVecReads, StorageVecRwLock,
-    },
-    Index,
-};
+use super::{traits::*, Index};
 use lending_iterator::prelude::*;
 use lending_iterator::{gat, LendingIterator};
 use std::iter::Iterator;
@@ -17,7 +12,7 @@ use std::sync::RwLockWriteGuard;
 #[allow(private_bounds)]
 pub struct ManyIterMut<'a, V, T>
 where
-    V: StorageVecImmutableWrites<T> + StorageVecRwLock<T> + ?Sized,
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     indices: Box<dyn Iterator<Item = Index>>,
     write_lock: RwLockWriteGuard<'a, V::LockedData>,
@@ -28,7 +23,7 @@ where
 #[allow(private_bounds)]
 impl<'a, V, T> ManyIterMut<'a, V, T>
 where
-    V: StorageVecImmutableWrites<T> + StorageVecRwLock<T> + ?Sized,
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     pub(super) fn new<I>(indices: I, data: &'a V) -> Self
     where
@@ -49,8 +44,8 @@ where
 #[gat]
 impl<'a, V, T: 'a> LendingIterator for ManyIterMut<'a, V, T>
 where
-    V: StorageVecImmutableWrites<T> + StorageVecRwLock<T> + ?Sized,
-    V::LockedData: StorageVecReads<T>,
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
+    V::LockedData: StorageVecLockedData<T>,
 {
     type Item<'b> = StorageSetter<'a, 'b, V, T>
     where
@@ -75,7 +70,7 @@ where
 #[allow(private_bounds)]
 pub struct StorageSetter<'c, 'd, V, T>
 where
-    V: StorageVecImmutableWrites<T> + StorageVecRwLock<T> + ?Sized,
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     phantom: PhantomData<V>,
     write_lock: &'d mut RwLockWriteGuard<'c, V::LockedData>,
@@ -86,8 +81,8 @@ where
 #[allow(private_bounds)]
 impl<'a, 'b, V, T> StorageSetter<'a, 'b, V, T>
 where
-    V: StorageVecImmutableWrites<T> + StorageVecRwLock<T> + ?Sized,
-    V::LockedData: StorageVecMutableWrites<T>,
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
+    V::LockedData: StorageVecLockedData<T>,
 {
     pub fn set(&mut self, value: T) {
         self.write_lock.set(self.index, value);

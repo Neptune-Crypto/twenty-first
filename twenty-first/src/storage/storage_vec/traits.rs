@@ -10,7 +10,7 @@ use std::sync::{RwLockReadGuard, RwLockWriteGuard};
 // re-export to make life easier for users of our API.
 pub use lending_iterator::LendingIterator;
 
-pub trait StorageVecReads<T> {
+pub trait StorageVec<T> {
     /// check if collection is empty
     fn is_empty(&self) -> bool;
 
@@ -221,10 +221,6 @@ pub trait StorageVecReads<T> {
         &self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = T> + '_>;
-}
-
-pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
-    // type LockedData;
 
     /// set a single element.
     ///
@@ -402,6 +398,15 @@ pub trait StorageVecImmutableWrites<T>: StorageVecReads<T> {
     }
 }
 
+// We keep this trait private for now as impl detail.
+pub(in super::super) trait StorageVecLockedData<T> {
+    /// get single element at index
+    fn get(&self, index: Index) -> T;
+
+    /// set a single element.
+    fn set(&mut self, index: Index, value: T);
+}
+
 // We keep this trait private so that the locks remain encapsulated inside our API.
 pub(in super::super) trait StorageVecRwLock<T> {
     type LockedData;
@@ -414,57 +419,6 @@ pub(in super::super) trait StorageVecRwLock<T> {
 }
 
 pub(in super::super) trait StorageVecIterMut<T>: StorageVec<T> {}
-
-pub trait StorageVecMutableWrites<T>: StorageVecReads<T> {
-    /// set a single element.
-    fn set(&mut self, index: Index, value: T);
-
-    /// set multiple elements.
-    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
-        for (key, val) in key_vals.into_iter() {
-            self.set(key, val)
-        }
-    }
-
-    /// set elements from start to vals.count()
-    #[inline]
-    fn set_first_n(&mut self, vals: impl IntoIterator<Item = T>) {
-        self.set_many((0..).zip(vals));
-    }
-
-    /// set all elements with a simple list of values in an array or Vec
-    /// and validates that input length matches target length.
-    ///
-    /// calls ::set_many() internally.
-    ///
-    /// panics if input length does not match target length.
-    ///
-    /// note: casts the input value's length from usize to Index
-    ///       so will panic if vals contains more than 2^32 items
-    #[inline]
-    fn set_all(&mut self, vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = T>>) {
-        let iter = vals.into_iter();
-
-        assert!(
-            iter.len() as Index == self.len(),
-            "size-mismatch.  input has {} elements and target has {} elements.",
-            iter.len(),
-            self.len(),
-        );
-
-        self.set_first_n(iter);
-    }
-
-    /// pop an element from end of collection
-    fn pop(&mut self) -> Option<T>;
-
-    /// push an element to end of collection
-    fn push(&mut self, value: T);
-
-    fn clear(&mut self);
-}
-
-pub trait StorageVec<T>: StorageVecReads<T> + StorageVecImmutableWrites<T> {}
 
 #[cfg(test)]
 pub(in crate::storage) mod tests {
@@ -629,7 +583,7 @@ pub(in crate::storage) mod tests {
         pub fn atomic_iter_mut_and_iter<T>(vec: &T)
         where
             T: StorageVec<u64> + StorageVecRwLock<u64> + Send + Sync,
-            T::LockedData: StorageVecReads<u64> + StorageVecMutableWrites<u64>,
+            T::LockedData: StorageVecLockedData<u64>,
         {
             prepare_concurrency_test_vec(vec);
             let orig = vec.get_all();
