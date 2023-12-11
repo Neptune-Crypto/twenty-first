@@ -3,6 +3,7 @@ use super::super::storage_vec::Index;
 use super::dbtvec_private::DbtVecPrivate;
 use super::{traits::*, RustyValue, VecWriteOperation, WriteOperation};
 use crate::sync::AtomicRw;
+use serde::{de::DeserializeOwned, Serialize};
 use std::{
     fmt::Debug,
     sync::{Arc, RwLockReadGuard, RwLockWriteGuard},
@@ -71,7 +72,7 @@ impl<V> StorageVecRwLock<V> for DbtVec<V> {
 impl<V> StorageVec<V> for DbtVec<V>
 where
     V: Clone + Debug,
-    V: From<RustyValue>,
+    V: DeserializeOwned,
 {
     #[inline]
     fn is_empty(&self) -> bool {
@@ -108,7 +109,7 @@ where
             } else {
                 let key = inner.get_index_key(i);
                 let db_element = inner.reader.get(key).unwrap();
-                (i, V::from(db_element))
+                (i, db_element.deserialize_from())
             }
         }))
     }
@@ -133,7 +134,7 @@ where
             } else {
                 let key = inner.get_index_key(i);
                 let db_element = inner.reader.get(key).unwrap();
-                V::from(db_element)
+                db_element.deserialize_from()
             }
         }))
     }
@@ -177,8 +178,7 @@ where
 impl<V> DbTable for DbtVec<V>
 where
     V: Clone,
-    V: From<RustyValue>,
-    RustyValue: From<V>,
+    V: Serialize + DeserializeOwned,
 {
     /// Collect all added elements that have not yet been persisted
     fn pull_queue(&self) -> Vec<WriteOperation> {
@@ -192,12 +192,12 @@ where
                 match write_element {
                     VecWriteOperation::OverWrite((i, t)) => {
                         let key = inner.get_index_key(i);
-                        queue.push(WriteOperation::Write(key, t.into()));
+                        queue.push(WriteOperation::Write(key, RustyValue::serialize_into(&t)));
                     }
                     VecWriteOperation::Push(t) => {
                         let key = inner.get_index_key(length);
                         length += 1;
-                        queue.push(WriteOperation::Write(key, t.into()));
+                        queue.push(WriteOperation::Write(key, RustyValue::serialize_into(&t)));
                     }
                     VecWriteOperation::Pop => {
                         let key = inner.get_index_key(length - 1);
@@ -209,7 +209,10 @@ where
 
             if original_length != length || maybe_original_length.is_none() {
                 let key = DbtVecPrivate::<V>::get_length_key(inner.key_prefix);
-                queue.push(WriteOperation::Write(key, length.into()));
+                queue.push(WriteOperation::Write(
+                    key,
+                    RustyValue::serialize_into(&length),
+                ));
             }
 
             inner.cache.clear();
@@ -225,7 +228,7 @@ where
                 .reader
                 .get(DbtVecPrivate::<V>::get_length_key(inner.key_prefix))
             {
-                inner.current_length = Some(length.into());
+                inner.current_length = Some(length.deserialize_from());
             } else {
                 inner.current_length = Some(0);
             }

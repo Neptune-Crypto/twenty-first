@@ -1,6 +1,7 @@
 // use super::super::storage_vec::Index;
-use super::{traits::*, DbtSingleton, DbtVec, RustyKey, RustyValue};
+use super::{traits::*, DbtSingleton, DbtVec, RustyKey};
 use crate::sync::{AtomicMutex, AtomicRw};
+use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
 
 /// Provides a virtual database schema.
@@ -110,8 +111,8 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     #[inline]
     pub fn new_vec<V>(&mut self, name: &str) -> DbtVec<V>
     where
-        V: Clone + From<RustyValue> + 'static,
-        RustyValue: From<V>,
+        V: Clone + 'static,
+        V: Serialize + DeserializeOwned,
         DbtVec<V>: DbTable + Send + Sync,
     {
         self.tables.with_mut(|tables| {
@@ -138,8 +139,8 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     #[inline]
     pub fn new_singleton<V>(&mut self, key: RustyKey) -> DbtSingleton<V>
     where
-        V: Default + Clone + From<RustyValue> + 'static,
-        RustyValue: From<V>,
+        V: Default + Clone + 'static,
+        V: Serialize + DeserializeOwned,
         DbtSingleton<V>: DbTable + Send + Sync,
     {
         let singleton = DbtSingleton::<V>::new(key, self.reader.clone());

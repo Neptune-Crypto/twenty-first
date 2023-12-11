@@ -4,6 +4,7 @@ use super::{
     dbtsingleton_private::DbtSingletonPrivate, traits::*, RustyKey, RustyValue, WriteOperation,
 };
 use crate::sync::AtomicRw;
+use serde::{de::DeserializeOwned, Serialize};
 
 /// Singleton type created by [`super::DbtSchema`]
 ///
@@ -55,7 +56,7 @@ where
 impl<V> StorageSingleton<V> for DbtSingleton<V>
 where
     V: Clone + From<V> + Default,
-    V: From<RustyValue>,
+    V: DeserializeOwned,
 {
     #[inline]
     fn get(&self) -> V {
@@ -71,8 +72,7 @@ where
 impl<V> DbTable for DbtSingleton<V>
 where
     V: Eq + Clone + Default + Debug,
-    V: From<RustyValue>,
-    RustyValue: From<V>,
+    V: Serialize + DeserializeOwned,
 {
     #[inline]
     fn pull_queue(&self) -> Vec<WriteOperation> {
@@ -83,7 +83,7 @@ where
                 inner.old_value = inner.current_value.clone();
                 vec![WriteOperation::Write(
                     inner.key.clone(),
-                    inner.current_value.clone().into(),
+                    RustyValue::serialize_into(&inner.current_value),
                 )]
             }
         })
@@ -93,7 +93,7 @@ where
     fn restore_or_new(&self) {
         self.inner.with_mut(|inner| {
             inner.current_value = match inner.reader.get(inner.key.clone()) {
-                Some(value) => value.into(),
+                Some(value) => value.deserialize_from(),
                 None => V::default(),
             }
         });

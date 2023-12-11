@@ -38,6 +38,7 @@ mod tests {
     use std::{collections::BTreeSet, sync::Arc};
 
     use rand::{random, Rng, RngCore};
+    use serde::{Deserialize, Serialize};
 
     use crate::{
         shared_math::other::random_elements,
@@ -48,7 +49,7 @@ mod tests {
     };
     use itertools::Itertools;
 
-    #[derive(Default, PartialEq, Eq, Clone, Debug)]
+    #[derive(Default, PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
     struct S(Vec<u8>);
     impl From<Vec<u8>> for S {
         fn from(value: Vec<u8>) -> Self {
@@ -65,16 +66,6 @@ mod tests {
             let vector0: Vec<u8> = value.0.into();
             let vector1: Vec<u8> = value.1.into();
             S([vector0, vector1].concat())
-        }
-    }
-    impl From<RustyValue> for S {
-        fn from(value: RustyValue) -> Self {
-            Self(value.0)
-        }
-    }
-    impl From<S> for RustyValue {
-        fn from(value: S) -> Self {
-            Self(value.0)
         }
     }
     impl From<S> for u64 {
