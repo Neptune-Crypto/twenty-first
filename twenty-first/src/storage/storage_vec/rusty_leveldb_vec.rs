@@ -7,8 +7,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
 use std::sync::{RwLockReadGuard, RwLockWriteGuard};
 
-/// RustyLevelDbVec is a concurrency safe database-backed
-/// Vec with in memory read/write caching for all operations.
+/// A concurrency safe database-backed Vec with in memory read/write caching for all operations.
 #[derive(Debug, Clone)]
 pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
     inner: AtomicRw<RustyLevelDbVecPrivate<T>>,

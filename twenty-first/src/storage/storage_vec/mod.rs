@@ -1,3 +1,5 @@
+//! Provides a DB backed Vector API that is thread-safe, cached, and atomic
+
 // We have split storage_vec into individual files, but for compatibility
 // we still keep everything in mod storage_vec.
 //

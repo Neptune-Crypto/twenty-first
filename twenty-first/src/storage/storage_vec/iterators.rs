@@ -5,10 +5,12 @@ use std::iter::Iterator;
 use std::marker::PhantomData;
 use std::sync::RwLockWriteGuard;
 
-/// a mutating iterator for StorageVec trait
+/// A mutating iterator for [`StorageVec`] trait
 ///
 /// Important: This iterator holds a write lock over `StorageVecRwLock::LockedData`
 /// which will not be released until the iterator is dropped.
+///
+/// See examples for [`StorageVec::iter_mut()`].
 #[allow(private_bounds)]
 pub struct ManyIterMut<'a, V, T>
 where

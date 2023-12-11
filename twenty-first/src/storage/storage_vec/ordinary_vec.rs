@@ -3,8 +3,8 @@ use super::{traits::*, Index};
 use crate::sync::AtomicRw;
 use std::sync::{RwLockReadGuard, RwLockWriteGuard};
 
-/// OrdinaryVec is a wrapper that adds RwLock and atomic snapshot
-/// guarantees around all accesses to an ordinary `Vec<T>`
+/// A wrapper that adds [`RwLock`](std::sync::RwLock) and atomic snapshot
+/// guarantees around all accesses to an ordinary [`Vec`]
 #[derive(Debug, Clone, Default)]
 pub struct OrdinaryVec<T>(AtomicRw<OrdinaryVecPrivate<T>>);
 

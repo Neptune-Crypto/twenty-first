@@ -1,4 +1,4 @@
-//! [`DB`] wraps [`crate::leveldb::database::Database`] and provides
+//! [`DB`] wraps [`Database`] and provides
 //! functionality for reading the database on-disk path
 //! as well as destroying the on-disk database manually
 //! or automatically upon drop.
