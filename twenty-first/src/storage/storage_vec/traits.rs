@@ -436,7 +436,11 @@ pub(in crate::storage) mod tests {
             }
         }
 
-        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        // This test demonstrates/verifies that multiple calls to set() and get() are not atomic
+        // for a type that impl's StorageVec.
+        //
+        // note: this test is expected to panic and calling test fn should be annotated with:
+        //  #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
         pub fn non_atomic_set_and_get(vec: &(impl StorageVec<u64> + Send + Sync)) {
             prepare_concurrency_test_vec(vec);
             let orig = vec.get_all();
@@ -474,7 +478,60 @@ pub(in crate::storage) mod tests {
             });
         }
 
-        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        // This test demonstrates/verifies that wrapping an impl StorageVec in an AtomicRw
+        // (Arc<RwLock<..>>) is atomic if the lock is held across all write/read operations
+        //
+        // note: this test is expected to panic and calling test fn should be annotated with:
+        //  #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        pub fn non_atomic_set_and_get_wrapped_atomic_rw(
+            vec: &(impl StorageVec<u64> + Send + Sync),
+        ) {
+            prepare_concurrency_test_vec(vec);
+            let orig = vec.get_all();
+            let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+
+            let atomic_vec = crate::sync::AtomicRw::from(vec);
+
+            // note: this test is expected to fail/assert within 1000 iterations
+            //       though that can depend on machine load, etc.
+            thread::scope(|s| {
+                for _i in 0..1000 {
+                    let gets = s.spawn(|| {
+                        // read values one by one.
+                        let mut copy = vec![];
+                        for z in 0..atomic_vec.with(|v| v.len()) {
+                            // acquire write lock
+                            atomic_vec.with(|v| {
+                                copy.push(v.get(z));
+                            }); // release read lock
+                        }
+
+                        assert!(
+                            copy == orig || copy == modified,
+                            "encountered inconsistent read: {:?}",
+                            copy
+                        );
+                    });
+
+                    let sets = s.spawn(|| {
+                        // set values one by one.
+                        for j in 0..atomic_vec.with(|v| v.len()) {
+                            // acquire write lock
+                            atomic_vec.with_mut(|v| {
+                                v.set(j, 50);
+                            }); // release write lock
+                        }
+                    });
+                    gets.join().unwrap();
+                    sets.join().unwrap();
+
+                    atomic_vec.with_mut(|v| v.set_all(orig.clone()));
+                }
+            });
+        }
+
+        // This test demonstrates/verifies that wrapping an impl StorageVec in an AtomicRw
+        // (Arc<RwLock<..>>) is atomic if the lock is held across all write/read operations
         pub fn atomic_set_and_get_wrapped_atomic_rw(vec: &(impl StorageVec<u64> + Send + Sync)) {
             prepare_concurrency_test_vec(vec);
             let orig = vec.get_all();
@@ -487,6 +544,7 @@ pub(in crate::storage) mod tests {
             thread::scope(|s| {
                 for _i in 0..1000 {
                     let gets = s.spawn(|| {
+                        // acquire read lock
                         atomic_vec.with(|v| {
                             // read values one by one.
                             let mut copy = vec![];
@@ -499,16 +557,17 @@ pub(in crate::storage) mod tests {
                                 "encountered inconsistent read: {:?}",
                                 copy
                             );
-                        });
+                        }); // release read lock
                     });
 
                     let sets = s.spawn(|| {
                         atomic_vec.with_mut(|v| {
-                            // set values one by one.
+                            // acquire write lock
                             for j in 0..v.len() {
+                                // set values one by one.
                                 v.set(j, 50);
                             }
-                        });
+                        }); // release write lock.
                     });
                     gets.join().unwrap();
                     sets.join().unwrap();

@@ -1015,6 +1015,14 @@ mod tests {
             }
 
             #[test]
+            #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+            fn non_atomic_set_and_get_wrapped_atomic_rw() {
+                traits_tests::concurrency::non_atomic_set_and_get_wrapped_atomic_rw(
+                    &gen_concurrency_test_vec(),
+                );
+            }
+
+            #[test]
             fn atomic_set_and_get_wrapped_atomic_rw() {
                 traits_tests::concurrency::atomic_set_and_get_wrapped_atomic_rw(
                     &gen_concurrency_test_vec(),

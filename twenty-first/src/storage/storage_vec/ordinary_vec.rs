@@ -121,10 +121,18 @@ mod tests {
             Default::default()
         }
 
-        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
         #[test]
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
         fn non_atomic_set_and_get() {
             traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
+        }
+
+        #[test]
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        fn non_atomic_set_and_get_wrapped_atomic_rw() {
+            traits_tests::concurrency::non_atomic_set_and_get_wrapped_atomic_rw(
+                &gen_concurrency_test_vec(),
+            );
         }
 
         #[test]
