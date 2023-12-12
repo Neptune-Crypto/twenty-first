@@ -57,13 +57,13 @@ use std::fmt::Debug;
 ///
 /// impl From<RustyValue> for Person {
 ///    fn from(value: RustyValue) -> Self {
-///        value.deserialize_from()
+///        value.into_any()
 ///    }
 /// }
 ///
 /// impl From<Person> for RustyValue {
 ///    fn from(value: Person) -> Self {
-///        Self::serialize_into(&value)
+///        Self::from_any(&value)
 ///    }
 /// }
 /// ```
@@ -79,7 +79,7 @@ impl RustyValue {
     /// At present `bincode` is used for de/serialization, but this could
     /// change in the future.  No guarantee is made as the to serialization format.
     #[inline]
-    pub fn serialize_into<T: Serialize>(value: &T) -> Self {
+    pub fn from_any<T: Serialize>(value: &T) -> Self {
         Self(serialize(value))
     }
     /// Deserialize `RustyValue` into a value `T` that implements `serde::de::DeserializeOwned`
@@ -90,7 +90,7 @@ impl RustyValue {
     /// At present `bincode` is used for de/serialization, but this could
     /// change in the future.  No guarantee is made as the to serialization format.
     #[inline]
-    pub fn deserialize_from<T: DeserializeOwned>(&self) -> T {
+    pub fn into_any<T: DeserializeOwned>(&self) -> T {
         deserialize(&self.0)
     }
 }

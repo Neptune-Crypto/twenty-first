@@ -109,7 +109,7 @@ where
             } else {
                 let key = inner.get_index_key(i);
                 let db_element = inner.reader.get(key).unwrap();
-                (i, db_element.deserialize_from())
+                (i, db_element.into_any())
             }
         }))
     }
@@ -134,7 +134,7 @@ where
             } else {
                 let key = inner.get_index_key(i);
                 let db_element = inner.reader.get(key).unwrap();
-                db_element.deserialize_from()
+                db_element.into_any()
             }
         }))
     }
@@ -192,12 +192,12 @@ where
                 match write_element {
                     VecWriteOperation::OverWrite((i, t)) => {
                         let key = inner.get_index_key(i);
-                        queue.push(WriteOperation::Write(key, RustyValue::serialize_into(&t)));
+                        queue.push(WriteOperation::Write(key, RustyValue::from_any(&t)));
                     }
                     VecWriteOperation::Push(t) => {
                         let key = inner.get_index_key(length);
                         length += 1;
-                        queue.push(WriteOperation::Write(key, RustyValue::serialize_into(&t)));
+                        queue.push(WriteOperation::Write(key, RustyValue::from_any(&t)));
                     }
                     VecWriteOperation::Pop => {
                         let key = inner.get_index_key(length - 1);
@@ -209,10 +209,7 @@ where
 
             if original_length != length || maybe_original_length.is_none() {
                 let key = DbtVecPrivate::<V>::get_length_key(inner.key_prefix);
-                queue.push(WriteOperation::Write(
-                    key,
-                    RustyValue::serialize_into(&length),
-                ));
+                queue.push(WriteOperation::Write(key, RustyValue::from_any(&length)));
             }
 
             inner.cache.clear();
@@ -228,7 +225,7 @@ where
                 .reader
                 .get(DbtVecPrivate::<V>::get_length_key(inner.key_prefix))
             {
-                inner.current_length = Some(length.deserialize_from());
+                inner.current_length = Some(length.into_any());
             } else {
                 inner.current_length = Some(0);
             }

@@ -83,7 +83,7 @@ where
                 inner.old_value = inner.current_value.clone();
                 vec![WriteOperation::Write(
                     inner.key.clone(),
-                    RustyValue::serialize_into(&inner.current_value),
+                    RustyValue::from_any(&inner.current_value),
                 )]
             }
         })
@@ -93,7 +93,7 @@ where
     fn restore_or_new(&self) {
         self.inner.with_mut(|inner| {
             inner.current_value = match inner.reader.get(inner.key.clone()) {
-                Some(value) => value.deserialize_from(),
+                Some(value) => value.into_any(),
                 None => V::default(),
             }
         });

@@ -66,7 +66,7 @@ impl<V: Clone + DeserializeOwned> StorageVecLockedData<V> for DbtVecPrivate<V> {
                 self.name
             )
         });
-        val.deserialize_from()
+        val.into_any()
     }
 
     #[inline]
@@ -104,7 +104,7 @@ where
     pub(super) fn persisted_length(&self) -> Option<Index> {
         self.reader
             .get(Self::get_length_key(self.key_prefix))
-            .map(|v| v.deserialize_from())
+            .map(|v| v.into_any())
     }
 
     /// Return the key of K type used to store the element at a given index of Index type
@@ -227,7 +227,7 @@ where
             .reader
             .get_many(&keys_for_indices_not_in_cache)
             .into_iter()
-            .map(|x| x.expect("there should be some value").deserialize_from());
+            .map(|x| x.expect("there should be some value").into_any());
 
         let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
             .iter()
@@ -266,7 +266,7 @@ where
             .reader
             .get_many(&keys)
             .into_iter()
-            .map(|x| x.expect("there should be some value").deserialize_from());
+            .map(|x| x.expect("there should be some value").into_any());
         let indexed_fetched_elements_from_db = indices_of_elements_not_in_cache
             .into_iter()
             .zip_eq(elements_fetched_from_db);
@@ -325,7 +325,7 @@ where
         } else {
             // then try persistent storage
             let key = self.get_index_key(current_length);
-            self.reader.get(key).map(|value| value.deserialize_from())
+            self.reader.get(key).map(|value| value.into_any())
         }
     }
 
