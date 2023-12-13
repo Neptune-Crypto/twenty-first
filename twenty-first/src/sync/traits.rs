@@ -1,3 +1,5 @@
+//! Traits that define the [`sync`](crate::sync) interface
+
 pub trait Atomic<T> {
     /// Immutably access the data of type `T` in a closure and possibly return a result of type `R`
     ///
