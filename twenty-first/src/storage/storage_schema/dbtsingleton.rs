@@ -60,12 +60,12 @@ where
 {
     #[inline]
     fn get(&self) -> V {
-        self.inner.with(|inner| inner.get())
+        self.inner.lock(|inner| inner.get())
     }
 
     #[inline]
     fn set(&self, t: V) {
-        self.inner.with_mut(|inner| inner.set(t));
+        self.inner.lock_mut(|inner| inner.set(t));
     }
 }
 
@@ -76,7 +76,7 @@ where
 {
     #[inline]
     fn pull_queue(&self) -> Vec<WriteOperation> {
-        self.inner.with_mut(|inner| {
+        self.inner.lock_mut(|inner| {
             if inner.current_value == inner.old_value {
                 vec![]
             } else {
@@ -91,7 +91,7 @@ where
 
     #[inline]
     fn restore_or_new(&self) {
-        self.inner.with_mut(|inner| {
+        self.inner.lock_mut(|inner| {
             inner.current_value = match inner.reader.get(inner.key.clone()) {
                 Some(value) => value.into_any(),
                 None => V::default(),

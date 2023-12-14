@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 ///     year: u16,
 /// };
 /// let atomic_car = AtomicMutex::from(Car{year: 2016});
-/// atomic_car.with(|c| println!("year: {}", c.year));
-/// atomic_car.with_mut(|mut c| c.year = 2023);
+/// atomic_car.lock(|c| println!("year: {}", c.year));
+/// atomic_car.lock_mut(|mut c| c.year = 2023);
 /// ```
 #[derive(Debug, Default, Clone)]
 pub struct AtomicMutex<T>(Arc<Mutex<T>>);
@@ -57,6 +57,10 @@ impl<T> From<AtomicMutex<T>> for Arc<Mutex<T>> {
 impl<T> AtomicMutex<T> {
     /// Acquire lock and return a `MutexGuard`
     ///
+    /// note: this method is exactly the same as [`lock_guard_mut()`](Self::lock_guard_mut).
+    /// It exists only for compatibility with [`AtomicRw`](super::AtomicRw) so
+    /// they can be used interchangeably.
+    ///
     /// # Examples
     /// ```
     /// # use twenty_first::sync::{AtomicMutex, traits::*};
@@ -64,9 +68,24 @@ impl<T> AtomicMutex<T> {
     ///     year: u16,
     /// };
     /// let atomic_car = AtomicMutex::from(Car{year: 2016});
-    /// atomic_car.guard_mut().year = 2022;
+    /// atomic_car.lock_guard().year = 2022;
     /// ```
-    pub fn guard_mut(&self) -> MutexGuard<T> {
+    pub fn lock_guard(&self) -> MutexGuard<T> {
+        self.0.lock().expect("Mutex lock should succeed")
+    }
+
+    /// Acquire lock and return a `MutexGuard`
+    ///
+    /// # Examples
+    /// ```
+    /// # use twenty_first::sync::{AtomicMutex, traits::*};
+    /// struct Car {
+    ///     year: u16,
+    /// };
+    /// let atomic_car = AtomicMutex::from(Car{year: 2016});
+    /// atomic_car.lock_guard_mut().year = 2022;
+    /// ```
+    pub fn lock_guard_mut(&self) -> MutexGuard<T> {
         self.0.lock().expect("Mutex lock should succeed")
     }
 
@@ -79,10 +98,10 @@ impl<T> AtomicMutex<T> {
     ///     year: u16,
     /// };
     /// let atomic_car = AtomicMutex::from(Car{year: 2016});
-    /// atomic_car.with(|c| println!("year: {}", c.year));
-    /// let year = atomic_car.with(|c| c.year);
+    /// atomic_car.lock(|c| println!("year: {}", c.year));
+    /// let year = atomic_car.lock(|c| c.year);
     /// ```
-    pub fn with<R, F>(&self, f: F) -> R
+    pub fn lock<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&T) -> R,
     {
@@ -99,10 +118,10 @@ impl<T> AtomicMutex<T> {
     ///     year: u16,
     /// };
     /// let atomic_car = AtomicMutex::from(Car{year: 2016});
-    /// atomic_car.with_mut(|mut c| c.year = 2022);
-    /// let year = atomic_car.with_mut(|mut c| {c.year = 2023; c.year});
+    /// atomic_car.lock_mut(|mut c| c.year = 2022);
+    /// let year = atomic_car.lock_mut(|mut c| {c.year = 2023; c.year});
     /// ```
-    pub fn with_mut<R, F>(&self, f: F) -> R
+    pub fn lock_mut<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&mut T) -> R,
     {
@@ -112,18 +131,18 @@ impl<T> AtomicMutex<T> {
 }
 
 impl<T> Atomic<T> for AtomicMutex<T> {
-    fn with<R, F>(&self, f: F) -> R
+    fn lock<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&T) -> R,
     {
-        AtomicMutex::<T>::with(self, f)
+        AtomicMutex::<T>::lock(self, f)
     }
 
-    fn with_mut<R, F>(&self, f: F) -> R
+    fn lock_mut<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&mut T) -> R,
     {
-        AtomicMutex::<T>::with_mut(self, f)
+        AtomicMutex::<T>::lock_mut(self, f)
     }
 }
 
@@ -132,13 +151,13 @@ mod tests {
     use super::*;
 
     #[test]
-    // Verify (compile-time) that AtomicRw::with() and ::with_mut() accept mutable values.  (FnOnce)
+    // Verify (compile-time) that AtomicRw::lock() and ::lock_mut() accept mutable values.  (FnOnce)
     fn mutable_assignment() {
         let name = "Jim".to_string();
         let atomic_name = AtomicMutex::from(name);
 
         let mut new_name: String = Default::default();
-        atomic_name.with(|n| new_name = n.to_string());
-        atomic_name.with_mut(|n| new_name = n.to_string());
+        atomic_name.lock(|n| new_name = n.to_string());
+        atomic_name.lock_mut(|n| new_name = n.to_string());
     }
 }

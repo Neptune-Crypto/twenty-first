@@ -1106,7 +1106,7 @@ mod tests {
                 let table_singletons = gen_atomic_rw_test_singleton(2);
 
                 // performs single-line read lock on table_singletons to copy original state.
-                let orig = table_singletons.with(|ts| ts[0].get());
+                let orig = table_singletons.lock(|ts| ts[0].get());
 
                 // make a modified state template equal to twice original value.
                 let modified = orig * 2;
@@ -1120,7 +1120,7 @@ mod tests {
                             let mut copies = vec![];
 
                             // start locked read operations
-                            table_singletons.with(|tables| {
+                            table_singletons.lock(|tables| {
                                 for singleton in tables.iter() {
                                     let copy = singleton.get();
 
@@ -1149,7 +1149,7 @@ mod tests {
                         // This is our writer thread
                         let sets = s.spawn(|| {
                             // start locked write ops
-                            table_singletons.with_mut(|tables| {
+                            table_singletons.lock_mut(|tables| {
                                 // iterate tables backwards from reader to find inconsistencies faster.
                                 for singleton in tables.iter().rev() {
                                     singleton.set(modified);
@@ -1162,7 +1162,7 @@ mod tests {
                         println!("--- Both threads (reader, writer) finished. restart. ---");
 
                         // start locked write ops
-                        table_singletons.with_mut(|tables| {
+                        table_singletons.lock_mut(|tables| {
                             for singleton in tables.iter_mut() {
                                 singleton.set(orig);
                             }
@@ -1319,7 +1319,7 @@ mod tests {
                 let table_vecs = gen_atomic_rw_test_vecs(2);
 
                 // performs single-line read lock on table_vecs to copy original state.
-                let orig = table_vecs.with(|tv| tv[0].get_all());
+                let orig = table_vecs.lock(|tv| tv[0].get_all());
 
                 // make a modified state template setting all values to 50 in all tables.
                 let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
@@ -1336,7 +1336,7 @@ mod tests {
                             let mut copies = vec![];
 
                             // start locked read operations
-                            table_vecs.with(|tables| {
+                            table_vecs.lock(|tables| {
                                 for vec in tables.iter() {
                                     let copy = vec.get_many(&indices);
 
@@ -1369,7 +1369,7 @@ mod tests {
                         // This is our writer thread
                         let sets = s.spawn(|| {
                             // start locked write ops
-                            table_vecs.with_mut(|tables| {
+                            table_vecs.lock_mut(|tables| {
                                 // iterate tables backwards from reader to find inconsistencies faster.
                                 for vec in tables.iter().rev() {
                                     vec.set_many(
@@ -1384,7 +1384,7 @@ mod tests {
                         println!("--- Both threads (reader, writer) finished. restart. ---");
 
                         // start locked write ops
-                        table_vecs.with_mut(|tables| {
+                        table_vecs.lock_mut(|tables| {
                             for vec in tables.iter_mut() {
                                 vec.set_all(orig.clone());
                             }

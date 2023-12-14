@@ -10,10 +10,10 @@ pub trait Atomic<T> {
     ///     year: u16,
     /// };
     /// let atomic_car = AtomicRw::from(Car{year: 2016});
-    /// atomic_car.with(|c| {println!("year: {}", c.year); });
-    /// let year = atomic_car.with(|c| c.year);
+    /// atomic_car.lock(|c| {println!("year: {}", c.year); });
+    /// let year = atomic_car.lock(|c| c.year);
     /// ```
-    fn with<R, F>(&self, f: F) -> R
+    fn lock<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&T) -> R;
 
@@ -26,10 +26,10 @@ pub trait Atomic<T> {
     ///     year: u16,
     /// };
     /// let atomic_car = AtomicRw::from(Car{year: 2016});
-    /// atomic_car.with_mut(|mut c| {c.year = 2022;});
-    /// let year = atomic_car.with_mut(|mut c| {c.year = 2023; c.year});
+    /// atomic_car.lock_mut(|mut c| {c.year = 2022;});
+    /// let year = atomic_car.lock_mut(|mut c| {c.year = 2023; c.year});
     /// ```
-    fn with_mut<R, F>(&self, f: F) -> R
+    fn lock_mut<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&mut T) -> R;
 }

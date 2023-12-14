@@ -59,13 +59,13 @@ impl<V> StorageVecRwLock<V> for DbtVec<V> {
 
     #[inline]
     fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
-        self.inner.guard_mut()
+        self.inner.lock_guard_mut()
     }
 
     // This is a private method, but we allow unit tests in super to use it.
     #[inline]
     fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
-        self.inner.guard()
+        self.inner.lock_guard()
     }
 }
 
@@ -76,17 +76,17 @@ where
 {
     #[inline]
     fn is_empty(&self) -> bool {
-        self.inner.with(|inner| inner.is_empty())
+        self.inner.lock(|inner| inner.is_empty())
     }
 
     #[inline]
     fn len(&self) -> Index {
-        self.inner.with(|inner| inner.len())
+        self.inner.lock(|inner| inner.len())
     }
 
     #[inline]
     fn get(&self, index: Index) -> V {
-        self.inner.with(|inner| inner.get(index))
+        self.inner.lock(|inner| inner.get(index))
     }
 
     #[inline]
@@ -94,7 +94,7 @@ where
         &'a self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = (Index, V)> + '_> {
-        let inner = self.inner.guard();
+        let inner = self.inner.lock_guard();
         Box::new(indices.into_iter().map(move |i| {
             assert!(
                 i < inner.len(),
@@ -119,7 +119,7 @@ where
         &'a self,
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> Box<dyn Iterator<Item = V> + '_> {
-        let inner = self.inner.guard();
+        let inner = self.inner.lock_guard();
         Box::new(indices.into_iter().map(move |i| {
             assert!(
                 i < inner.len(),
@@ -141,37 +141,37 @@ where
 
     #[inline]
     fn get_many(&self, indices: &[Index]) -> Vec<V> {
-        self.inner.with(|inner| inner.get_many(indices))
+        self.inner.lock(|inner| inner.get_many(indices))
     }
 
     #[inline]
     fn get_all(&self) -> Vec<V> {
-        self.inner.with(|inner| inner.get_all())
+        self.inner.lock(|inner| inner.get_all())
     }
 
     #[inline]
     fn set(&self, index: Index, value: V) {
-        self.inner.with_mut(|inner| inner.set(index, value));
+        self.inner.lock_mut(|inner| inner.set(index, value));
     }
 
     #[inline]
     fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, V)>) {
-        self.inner.with_mut(|inner| inner.set_many(key_vals));
+        self.inner.lock_mut(|inner| inner.set_many(key_vals));
     }
 
     #[inline]
     fn pop(&self) -> Option<V> {
-        self.inner.with_mut(|inner| inner.pop())
+        self.inner.lock_mut(|inner| inner.pop())
     }
 
     #[inline]
     fn push(&self, value: V) {
-        self.inner.with_mut(|inner| inner.push(value));
+        self.inner.lock_mut(|inner| inner.push(value));
     }
 
     #[inline]
     fn clear(&self) {
-        self.inner.with_mut(|inner| inner.clear());
+        self.inner.lock_mut(|inner| inner.clear());
     }
 }
 
@@ -182,7 +182,7 @@ where
 {
     /// Collect all added elements that have not yet been persisted
     fn pull_queue(&self) -> Vec<WriteOperation> {
-        self.inner.with_mut(|inner| {
+        self.inner.lock_mut(|inner| {
             let maybe_original_length = inner.persisted_length();
             // necessary because we need maybe_original_length.is_none() later
             let original_length = maybe_original_length.unwrap_or(0);
@@ -220,7 +220,7 @@ where
 
     #[inline]
     fn restore_or_new(&self) {
-        self.inner.with_mut(|inner| {
+        self.inner.lock_mut(|inner| {
             if let Some(length) = inner
                 .reader
                 .get(DbtVecPrivate::<V>::get_length_key(inner.key_prefix))

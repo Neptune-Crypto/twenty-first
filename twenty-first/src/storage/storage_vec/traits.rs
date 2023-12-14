@@ -499,9 +499,9 @@ pub(in crate::storage) mod tests {
                     let gets = s.spawn(|| {
                         // read values one by one.
                         let mut copy = vec![];
-                        for z in 0..atomic_vec.with(|v| v.len()) {
+                        for z in 0..atomic_vec.lock(|v| v.len()) {
                             // acquire write lock
-                            atomic_vec.with(|v| {
+                            atomic_vec.lock(|v| {
                                 copy.push(v.get(z));
                             }); // release read lock
                         }
@@ -515,9 +515,9 @@ pub(in crate::storage) mod tests {
 
                     let sets = s.spawn(|| {
                         // set values one by one.
-                        for j in 0..atomic_vec.with(|v| v.len()) {
+                        for j in 0..atomic_vec.lock(|v| v.len()) {
                             // acquire write lock
-                            atomic_vec.with_mut(|v| {
+                            atomic_vec.lock_mut(|v| {
                                 v.set(j, 50);
                             }); // release write lock
                         }
@@ -525,7 +525,7 @@ pub(in crate::storage) mod tests {
                     gets.join().unwrap();
                     sets.join().unwrap();
 
-                    atomic_vec.with_mut(|v| v.set_all(orig.clone()));
+                    atomic_vec.lock_mut(|v| v.set_all(orig.clone()));
                 }
             });
         }
@@ -545,7 +545,7 @@ pub(in crate::storage) mod tests {
                 for _i in 0..1000 {
                     let gets = s.spawn(|| {
                         // acquire read lock
-                        atomic_vec.with(|v| {
+                        atomic_vec.lock(|v| {
                             // read values one by one.
                             let mut copy = vec![];
                             for z in 0..v.len() {
@@ -561,7 +561,7 @@ pub(in crate::storage) mod tests {
                     });
 
                     let sets = s.spawn(|| {
-                        atomic_vec.with_mut(|v| {
+                        atomic_vec.lock_mut(|v| {
                             // acquire write lock
                             for j in 0..v.len() {
                                 // set values one by one.
@@ -572,7 +572,7 @@ pub(in crate::storage) mod tests {
                     gets.join().unwrap();
                     sets.join().unwrap();
 
-                    atomic_vec.with_mut(|v| v.set_all(orig.clone()));
+                    atomic_vec.lock_mut(|v| v.set_all(orig.clone()));
                 }
             });
         }

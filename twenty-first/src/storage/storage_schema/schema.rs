@@ -82,7 +82,7 @@ use std::sync::Arc;
 /// });
 ///
 /// // these writes happen atomically.
-/// atomic_tables.with_mut(|tables| {
+/// atomic_tables.lock_mut(|tables| {
 ///     tables.0.push(5);
 ///     tables.1.push("Sally".into());
 ///     tables.2.set(true);
@@ -115,7 +115,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
         V: Serialize + DeserializeOwned,
         DbtVec<V>: DbTable + Send + Sync,
     {
-        self.tables.with_mut(|tables| {
+        self.tables.lock_mut(|tables| {
             assert!(tables.len() < 255);
             let reader = self.reader.clone();
             let key_prefix = tables.len() as u8;
@@ -145,7 +145,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     {
         let singleton = DbtSingleton::<V>::new(key, self.reader.clone());
         self.tables
-            .with_mut(|t| t.push(Box::new(singleton.clone())));
+            .lock_mut(|t| t.push(Box::new(singleton.clone())));
         singleton
     }
 
@@ -173,7 +173,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// });
     ///
     /// // these writes happen atomically.
-    /// atomic_tables.with_mut(|tables| {
+    /// atomic_tables.lock_mut(|tables| {
     ///     tables.0.push(5);
     ///     tables.1.push("Sally".into());
     ///     tables.2.set(true);
@@ -211,7 +211,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// });
     ///
     /// // these writes happen atomically.
-    /// atomic_tables.with_mut(|tables| {
+    /// atomic_tables.lock_mut(|tables| {
     ///     tables.0.push(5);
     ///     tables.1.push("Sally".into());
     ///     tables.2.set(true);
@@ -245,7 +245,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// let atomic_tables = storage.schema.atomic_rw(tables);
     ///
     /// // these writes happen atomically.
-    /// atomic_tables.with_mut(|tables| {
+    /// atomic_tables.lock_mut(|tables| {
     ///     tables.0.push(5);
     ///     tables.1.push("Sally".into());
     ///     tables.2.set(true);
@@ -275,7 +275,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// let atomic_tables = storage.schema.atomic_mutex(tables);
     ///
     /// // these writes happen atomically.
-    /// atomic_tables.with_mut(|tables| {
+    /// atomic_tables.lock_mut(|tables| {
     ///     tables.0.push(5);
     ///     tables.1.push("Sally".into());
     ///     tables.2.set(true);

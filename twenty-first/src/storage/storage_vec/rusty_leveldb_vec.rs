@@ -131,12 +131,12 @@ impl<T: Serialize + DeserializeOwned> StorageVecRwLock<T> for RustyLevelDbVec<T>
 
     #[inline]
     fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
-        self.inner.guard_mut()
+        self.inner.lock_guard_mut()
     }
 
     #[inline]
     fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
-        self.inner.guard()
+        self.inner.lock_guard()
     }
 }
 

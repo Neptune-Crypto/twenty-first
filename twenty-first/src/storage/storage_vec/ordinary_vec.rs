@@ -100,12 +100,12 @@ impl<T> StorageVecRwLock<T> for OrdinaryVec<T> {
 
     #[inline]
     fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
-        self.0.guard_mut()
+        self.0.lock_guard_mut()
     }
 
     #[inline]
     fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
-        self.0.guard()
+        self.0.lock_guard()
     }
 }
 
