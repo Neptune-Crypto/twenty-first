@@ -52,3 +52,5 @@ This crate depends on the [rs-leveldb](https://crates.io/crates/rs-leveldb) crat
 ```
 sudo apt-get install libleveldb-dev libsnappy-dev
 ```
+
+For more detailed buildings instructions, see the description in `HACKING.md`.
