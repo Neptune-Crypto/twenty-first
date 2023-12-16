@@ -10,7 +10,7 @@ use std::hash::Hash;
 use arbitrary::{Arbitrary, Unstructured};
 use phf::phf_map;
 use rand::Rng;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::{TryFrom, TryInto};
 use std::iter::Sum;
 use std::num::TryFromIntError;
@@ -55,10 +55,11 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
     4294967296u64 => 1753635133440165772,
 };
 
-// BFieldElement ∈ ℤ_{2^64 - 2^32 + 1} using Montgomery representation.
-// This implementation follows https://eprint.iacr.org/2022/274.pdf
-// and https://github.com/novifinancial/winterfell/pull/101/files
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, Default, Hash, PartialEq, Eq)]
+/// Base field element ∈ ℤ_{2^64 - 2^32 + 1}.
+///
+/// In Montgomery representation. This implementation follows <https://eprint.iacr.org/2022/274.pdf>
+/// and <https://github.com/novifinancial/winterfell/pull/101/files>.
+#[derive(Debug, Copy, Clone, Default, Hash, PartialEq, Eq)]
 pub struct BFieldElement(u64);
 
 impl GetSize for BFieldElement {
@@ -74,6 +75,24 @@ impl GetSize for BFieldElement {
 impl<'a> Arbitrary<'a> for BFieldElement {
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
         u.arbitrary().map(BFieldElement::new)
+    }
+}
+
+impl Serialize for BFieldElement {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.value().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for BFieldElement {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Self::new(u64::deserialize(deserializer)?))
     }
 }
 
@@ -572,6 +591,20 @@ mod b_prime_field_element_test {
     #[proptest]
     fn get_size(bfe: BFieldElement) {
         prop_assert_eq!(8, bfe.get_size());
+    }
+
+    #[proptest]
+    fn serialization_and_deserialization_to_and_from_json_is_identity(bfe: BFieldElement) {
+        let serialized = serde_json::to_string(&bfe).unwrap();
+        let deserialized: BFieldElement = serde_json::from_str(&serialized).unwrap();
+        prop_assert_eq!(bfe, deserialized);
+    }
+
+    #[proptest]
+    fn deserializing_u64_is_like_calling_new(#[strategy(0..=BFieldElement::MAX)] value: u64) {
+        let bfe = BFieldElement::new(value);
+        let deserialized: BFieldElement = serde_json::from_str(&value.to_string()).unwrap();
+        prop_assert_eq!(bfe, deserialized);
     }
 
     #[proptest]
