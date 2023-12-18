@@ -446,16 +446,19 @@ pub(in crate::storage) mod tests {
             let orig = vec.get_all();
             let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
 
-            // note: this test is expected to fail/assert within 1000 iterations
-            //       though that can depend on machine load, etc.
+            // note: this non-deterministic test is expected to fail/assert
+            //       within 10000 iterations though that can depend on
+            //       machine load, etc.
             thread::scope(|s| {
-                for _i in 0..1000 {
+                for _i in 0..10000 {
                     let gets = s.spawn(|| {
                         // read values one by one.
                         let mut copy = vec![];
                         for z in 0..vec.len() {
                             copy.push(vec.get(z));
                         }
+                        // seems to help find inconsistencies sooner
+                        thread::sleep(std::time::Duration::from_millis(1));
 
                         assert!(
                             copy == orig || copy == modified,
@@ -492,10 +495,10 @@ pub(in crate::storage) mod tests {
 
             let atomic_vec = crate::sync::AtomicRw::from(vec);
 
-            // note: this test is expected to fail/assert within 1000 iterations
-            //       though that can depend on machine load, etc.
+            // note: this test is non-deterministic.  It is expected to fail/assert
+            // within 10000 iterations though that can depend on machine load, etc.
             thread::scope(|s| {
-                for _i in 0..1000 {
+                for _i in 0..10000 {
                     let gets = s.spawn(|| {
                         // read values one by one.
                         let mut copy = vec![];
@@ -505,6 +508,8 @@ pub(in crate::storage) mod tests {
                                 copy.push(v.get(z));
                             }); // release read lock
                         }
+                        // seems to help find inconsistencies sooner
+                        thread::sleep(std::time::Duration::from_millis(1));
 
                         assert!(
                             copy == orig || copy == modified,
