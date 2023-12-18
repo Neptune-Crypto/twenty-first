@@ -95,3 +95,6 @@ harness = false
 name = "db_dbtvec"
 harness = false
 
+[[bench]]
+name = "sync_atomic"
+harness = false
