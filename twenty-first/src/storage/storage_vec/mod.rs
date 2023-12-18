@@ -33,12 +33,10 @@ mod tests {
 
     use leveldb::batch::WriteBatch;
 
-    // todo: delete fn
     pub(super) fn get_test_db(destroy_db_on_drop: bool) -> Arc<DB> {
         Arc::new(DB::open_new_test_database(destroy_db_on_drop, None, None, None).unwrap())
     }
 
-    // todo: delete fn
     fn open_test_db(path: &std::path::Path, destroy_db_on_drop: bool) -> Arc<DB> {
         Arc::new(DB::open_test_database(path, destroy_db_on_drop, None, None, None).unwrap())
     }

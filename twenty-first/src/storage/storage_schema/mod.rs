@@ -984,10 +984,6 @@ mod tests {
         type TestVec = DbtVec<u64>;
         type TestSingleton = DbtSingleton<u64>;
 
-        // pub fn prepare_concurrency_test_singleton(singleton: &impl StorageSingleton<u64>) {
-        //     singleton.set(42);
-        // }
-
         pub fn iter_all_eq<T: PartialEq>(iter: impl IntoIterator<Item = T>) -> bool {
             let mut iter = iter.into_iter();
             let first = match iter.next() {

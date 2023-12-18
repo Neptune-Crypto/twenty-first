@@ -181,6 +181,11 @@ where
     V: Serialize + DeserializeOwned,
 {
     /// Collect all added elements that have not yet been persisted
+    ///
+    /// note: this clears the internal cache.  Thus the cache does
+    /// not grow unbounded, so long as `pull_queue()` is called
+    /// regularly.  It also means the cache must be rebuilt after
+    /// each call (batch write)
     fn pull_queue(&self) -> Vec<WriteOperation> {
         self.inner.lock_mut(|inner| {
             let maybe_original_length = inner.persisted_length();
