@@ -128,6 +128,38 @@ impl<T> AtomicMutex<T> {
         let mut lock = self.0.lock().expect("Write lock should succeed");
         f(&mut lock)
     }
+
+    /// get copy of the locked value T (if T implements Copy).
+    ///
+    /// # Example
+    /// ```
+    /// # use twenty_first::sync::{AtomicRw, traits::*};
+    /// let atomic_u64 = AtomicRw::from(25u64);
+    /// let age = atomic_u64.get();
+    /// ```
+    #[inline]
+    pub fn get(&self) -> T
+    where
+        T: Copy,
+    {
+        self.lock(|v| *v)
+    }
+
+    /// set the locked value T (if T implements Copy).
+    ///
+    /// # Example
+    /// ```
+    /// # use twenty_first::sync::{AtomicRw, traits::*};
+    /// let atomic_bool = AtomicRw::from(false);
+    /// atomic_bool.set(true);
+    /// ```
+    #[inline]
+    pub fn set(&self, value: T)
+    where
+        T: Copy,
+    {
+        self.lock_mut(|v| *v = value)
+    }
 }
 
 impl<T> Atomic<T> for AtomicMutex<T> {

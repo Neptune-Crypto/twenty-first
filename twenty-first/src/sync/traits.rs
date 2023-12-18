@@ -32,4 +32,36 @@ pub trait Atomic<T> {
     fn lock_mut<R, F>(&self, f: F) -> R
     where
         F: FnOnce(&mut T) -> R;
+
+    /// get copy of the locked value T (if T implements Copy).
+    ///
+    /// # Example
+    /// ```
+    /// # use twenty_first::sync::{AtomicRw, traits::*};
+    /// let atomic_u64 = AtomicRw::from(25u64);
+    /// let age = atomic_u64.get();
+    /// ```
+    #[inline]
+    fn get(&self) -> T
+    where
+        T: Copy,
+    {
+        self.lock(|v| *v)
+    }
+
+    /// set the locked value T (if T implements Copy).
+    ///
+    /// # Example
+    /// ```
+    /// # use twenty_first::sync::{AtomicRw, traits::*};
+    /// let atomic_bool = AtomicRw::from(false);
+    /// atomic_bool.set(true);
+    /// ```
+    #[inline]
+    fn set(&self, value: T)
+    where
+        T: Copy,
+    {
+        self.lock_mut(|v| *v = value)
+    }
 }

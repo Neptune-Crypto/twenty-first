@@ -128,6 +128,22 @@ impl<T> AtomicRw<T> {
         let mut lock = self.0.write().expect("Write lock should succeed");
         f(&mut lock)
     }
+
+    #[inline]
+    pub fn get(&self) -> T
+    where
+        T: Copy,
+    {
+        self.lock(|v| *v)
+    }
+
+    #[inline]
+    pub fn set(&self, value: T)
+    where
+        T: Copy,
+    {
+        self.lock_mut(|v| *v = value)
+    }
 }
 
 impl<T> Atomic<T> for AtomicRw<T> {
