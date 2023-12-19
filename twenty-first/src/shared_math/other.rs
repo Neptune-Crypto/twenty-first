@@ -57,7 +57,7 @@ pub fn indices_of_set_bits(x: u64) -> Vec<u8> {
 }
 
 /// Check if the number is a power of two: { 1,2,4 .. }
-/// [Bit Twiddling Hacks]: https://graphics.stanford.edu/~seander/bithacks.html#DetermineIfPowerOf2
+/// [Bit Twiddling Hacks]: <https://graphics.stanford.edu/~seander/bithacks.html#DetermineIfPowerOf2>
 pub fn is_power_of_two<T: Zero + One + Sub<Output = T> + BitAnd<Output = T> + Copy>(n: T) -> bool {
     !n.is_zero() && (n & (n - T::one())).is_zero()
 }

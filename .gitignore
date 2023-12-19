@@ -28,10 +28,8 @@ rusty-tags.vi
 # CMake
 cmake-build-*/
 
-# Unwanted VS Code files
-.vscode/dryrun.log
-.vscode/targets.log
-.vscode/configurationCache.log
+# VS Code
+.vscode/
 
 # Mongo Explorer plugin
 .idea/**/mongoSettings.xml

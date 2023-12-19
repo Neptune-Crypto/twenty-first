@@ -5,11 +5,11 @@ use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
 use super::{shared_advanced, shared_basic};
 use crate::shared_math::digest::Digest;
+use crate::storage::storage_vec::{traits::*, RustyLevelDbVec};
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::shared::bag_peaks;
-use crate::util_types::storage_vec::{RustyLevelDbVec, StorageVec};
 use crate::utils::has_unique_elements;
-use rusty_leveldb::WriteBatch;
+use leveldb::batch::WriteBatch;
 
 /// A Merkle Mountain Range is a datastructure for storing a list of hashes.
 ///
@@ -318,7 +318,7 @@ impl<H: AlgebraicHasher> ArchivalMmr<H, RustyLevelDbVec<Digest>> {
 
 #[cfg(test)]
 mod mmr_test {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     use super::*;
     use crate::shared_math::other::random_elements;
@@ -327,16 +327,19 @@ mod mmr_test {
         get_empty_rustyleveldb_ammr, get_rustyleveldb_ammr_from_digests,
     };
     use crate::util_types::merkle_tree::merkle_tree_test;
+    use crate::util_types::storage_schema::{SimpleRustyStorage, StorageWriter};
     use crate::{
         shared_math::b_field_element::BFieldElement,
+        storage::level_db::DB,
         util_types::mmr::{
             archival_mmr::ArchivalMmr, mmr_accumulator::MmrAccumulator,
             shared_advanced::get_peak_heights_and_peak_node_indices,
         },
     };
     use itertools::izip;
+    use leveldb::iterator::Iterable;
+    use leveldb::options::ReadOptions;
     use rand::random;
-    use rusty_leveldb::{LdbIterator, DB};
 
     impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
         /// Return the number of nodes in all the trees in the MMR
@@ -1025,12 +1028,10 @@ mod mmr_test {
     fn rust_leveldb_persist_test() {
         type H = blake3::Hasher;
 
-        let opt = rusty_leveldb::in_memory();
-        let db = DB::open("mydatabase", opt).unwrap();
-        let db = Arc::new(Mutex::new(db));
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
+        let db = Arc::new(db);
         let persistent_vec_0 = RustyLevelDbVec::new(db.clone(), 0, "archival MMR for unit tests");
         let mut ammr0: ArchivalMmr<H, RustyLevelDbVec<Digest>> = ArchivalMmr::new(persistent_vec_0);
-
         let persistent_vec_1 = RustyLevelDbVec::new(db.clone(), 1, "archival MMR for unit tests");
         let mut ammr1: ArchivalMmr<H, RustyLevelDbVec<Digest>> = ArchivalMmr::new(persistent_vec_1);
 
@@ -1039,29 +1040,53 @@ mod mmr_test {
 
         let digest1: Digest = random();
         ammr1.append(digest1);
-
         // Verify that DB is still empty
-        let mut db_iter = db.lock().unwrap().new_iter().unwrap();
+        let mut db_iter = db.iter(&ReadOptions::new());
         assert!(db_iter.next().is_none());
 
         let mut write_batch = WriteBatch::new();
         ammr0.persist(&mut write_batch);
 
         // Verify that DB is still empty, as the write batch hasn't been applied yet
-        db_iter = db.lock().unwrap().new_iter().unwrap();
-        assert!(db_iter.next().is_none());
+        let mut db_iter2 = db.iter(&ReadOptions::new());
+        assert!(db_iter2.next().is_none());
 
         ammr1.persist(&mut write_batch);
 
         // Verify that DB is still empty, as the write batch hasn't been applied yet
-        db_iter = db.lock().unwrap().new_iter().unwrap();
-        assert!(db_iter.next().is_none());
+        let mut db_iter3 = db.iter(&ReadOptions::new());
+        assert!(db_iter3.next().is_none());
 
-        db.lock().unwrap().write(write_batch, true).unwrap();
+        db.write_auto(&write_batch).unwrap();
 
         // Verify that DB is not empty
-        db_iter = db.lock().unwrap().new_iter().unwrap();
-        assert!(db_iter.next().is_some());
+        let mut db_iter4 = db.iter(&ReadOptions::new());
+        assert!(db_iter4.next().is_some());
+
+        assert_eq!(digest0, ammr0.get_leaf(0));
+        assert_eq!(digest1, ammr1.get_leaf(0));
+    }
+
+    #[test]
+    fn rust_leveldb_persist_storage_schema_test() {
+        type H = blake3::Hasher;
+
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
+        let mut storage = SimpleRustyStorage::new(db);
+        storage.restore_or_new();
+        let ammr0 = storage.schema.new_vec::<Digest>("ammr-nodes-digests-0");
+        let mut ammr0: ArchivalMmr<H, _> = ArchivalMmr::new(ammr0);
+        let ammr1 = storage.schema.new_vec::<Digest>("ammr-nodes-digests-1");
+        let mut ammr1: ArchivalMmr<H, _> = ArchivalMmr::new(ammr1);
+
+        let digest0: Digest = random();
+        ammr0.append(digest0);
+
+        let digest1: Digest = random();
+        ammr1.append(digest1);
+        assert_eq!(digest0, ammr0.get_leaf(0));
+        assert_eq!(digest1, ammr1.get_leaf(0));
+        storage.persist();
 
         assert_eq!(digest0, ammr0.get_leaf(0));
         assert_eq!(digest1, ammr1.get_leaf(0));

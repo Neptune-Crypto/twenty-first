@@ -44,3 +44,13 @@ While twenty-first's version is `0.x.y`, releasing a new version:
 [crates]: https://crates.io/crates/twenty-first/versions
 
 If you do not have the privilege to create git tags or run `cargo publish`, submit a PR and the merger will take care of these.
+
+## Building
+
+This crate depends on the [rs-leveldb](https://crates.io/crates/rs-leveldb) crate which wraps the C++ implementation of leveldb. As such, `snappy` and `leveldb` must be installed. Eg, on Ubuntu:
+
+```
+sudo apt-get install libleveldb-dev libsnappy-dev
+```
+
+For more detailed buildings instructions, see the description in `HACKING.md`.

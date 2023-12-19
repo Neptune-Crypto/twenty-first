@@ -611,7 +611,7 @@ impl AlgebraicHasher for Tip5 {
     ///
     /// Since [RATE] is not divisible by [EXTENSION_DEGREE], produce as many [XFieldElement] per
     /// `squeeze` as possible, and spill the remaining element(s). This causes some internal
-    /// fragmentation, but it greatly simplifies building [AlgebraicHasher::sample_xfield()] on
+    /// fragmentation, but it greatly simplifies building `AlgebraicHasher::sample_xfield()` on
     /// Triton VM.
     ///
     fn sample_scalars(state: &mut Self::SpongeState, num_elements: usize) -> Vec<XFieldElement> {

@@ -1,6 +1,8 @@
 #![deny(clippy::shadow_unrelated)]
 pub mod amount;
 pub mod shared_math;
+pub mod storage;
+pub mod sync;
 pub mod test_shared;
 pub mod timing_reporter;
 pub mod util_types;
@@ -15,3 +17,8 @@ pub mod utils;
 // See also:
 // https://github.com/bkchr/proc-macro-crate/issues/2#issuecomment-572914520
 extern crate self as twenty_first;
+
+// re-export crates used in our public API
+pub use lending_iterator;
+pub use leveldb;
+pub use leveldb_sys; // for Compression, in leveldb::option::Option

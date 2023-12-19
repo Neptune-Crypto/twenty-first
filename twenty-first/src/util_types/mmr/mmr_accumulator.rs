@@ -10,10 +10,10 @@ use super::mmr_trait::Mmr;
 use super::shared_basic;
 use crate::shared_math::bfield_codec::BFieldCodec;
 use crate::shared_math::digest::Digest;
+use crate::storage::storage_vec::traits::StorageVec;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::mmr::shared_advanced;
 use crate::util_types::shared::bag_peaks;
-use crate::util_types::storage_vec::StorageVec;
 use crate::utils::has_unique_elements;
 
 impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> From<ArchivalMmr<H, Storage>>

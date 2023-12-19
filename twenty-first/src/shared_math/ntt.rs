@@ -28,7 +28,7 @@ use super::{
 /// Speeding up the Number Theoretic Transform
 /// for Faster Ideal Lattice-Based Cryptography
 /// Longa and Naehrig
-/// <https://eprint.iacr.org/2016/504.pdf>
+/// https://eprint.iacr.org/2016/504.pdf
 /// </pre>
 ///
 /// as well as inspired by <https://github.com/dusk-network/plonk>
@@ -101,13 +101,13 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
 /// INTT is the inverse NTT, so abstractly,
 /// *intt(values, omega, log2(n)) = ntt(values, 1/omega, log2(n)) / n*.
 ///
-/// <pre>
+/// ```ignore
 /// let original_values: Vec<PF> = ...;
 /// let mut transformed_values = original_values.clone();
 /// ntt::<PF>(&mut values, omega, log_2_n);
 /// intt::<PF>(&mut values, omega, log_2_n);
 /// assert_eq!(original_values, transformed_values);
-/// </pre>
+/// ```
 ///
 /// This transform is performed in-place.
 pub fn intt<FF: FiniteField + MulAssign<BFieldElement>>(

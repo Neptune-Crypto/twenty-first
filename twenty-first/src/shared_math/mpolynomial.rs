@@ -636,7 +636,7 @@ impl<FF: FiniteField> MPolynomial<FF> {
 
     // This does relate to multivariate polynomials since it is used as a step to do faster
     // scalar evaluation. For this reason, this function is placed here.
-    /// Get a hash map with precalculated values for point[i]^j
+    /// Get a hash map with precalculated values for `point[i]^j`
     /// Only exponents 2 and above are stored.
     pub fn precalculate_scalar_mod_pows(limit: u8, point: &[FF]) -> HashMap<(usize, u8), FF> {
         let mut hash_map: HashMap<(usize, u8), FF> = HashMap::new();

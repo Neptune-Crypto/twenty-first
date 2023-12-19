@@ -1,16 +1,16 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use itertools::Itertools;
-use rusty_leveldb::DB;
 
 use crate::shared_math::digest::Digest;
 use crate::shared_math::other::{log_2_ceil, random_elements};
+use crate::storage::level_db::DB;
+use crate::storage::storage_vec::RustyLevelDbVec;
 use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
 use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
 use crate::util_types::mmr::shared_advanced::right_lineage_length_from_node_index;
 use crate::util_types::mmr::shared_basic::{self, leaf_index_to_mt_index_and_peak_index};
-use crate::util_types::storage_vec::RustyLevelDbVec;
 use crate::util_types::{algebraic_hasher::AlgebraicHasher, mmr::archival_mmr::ArchivalMmr};
 use crate::utils::has_unique_elements;
 
@@ -20,10 +20,8 @@ use crate::utils::has_unique_elements;
 /// underlying data structure.
 pub fn get_empty_rustyleveldb_ammr<H: AlgebraicHasher>() -> ArchivalMmr<H, RustyLevelDbVec<Digest>>
 {
-    let opt = rusty_leveldb::in_memory();
-    let db = DB::open("mydatabase", opt).unwrap();
-    let db = Arc::new(Mutex::new(db));
-    let pv = RustyLevelDbVec::new(db, 0, "in-memory AMMR for unit tests");
+    let db = DB::open_new_test_database(true, None, None, None).unwrap();
+    let pv = RustyLevelDbVec::new(Arc::new(db), 0, "AMMR for unit tests");
     ArchivalMmr::new(pv)
 }
 

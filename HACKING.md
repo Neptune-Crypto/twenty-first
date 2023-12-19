@@ -14,6 +14,10 @@ To compile code locally and run tests, the instructions below should help you ge
  - in `vscode` activate format-on-save via `File` > `Preferences` > `Settings` then check the box for "Format on Save"
  - install Criterion with `cargo install cargo-criterion`
 
+## Setup on Windows
+With a functioning version of `cargo`, compilation on Windows should just work out-of-the-box with `cargo build` etc. Installing `cargo`
+might require you to install Visual Studio with some C++ support but the cargo installer for Windows should handle that.
+
 ## Cheatsheet
  - To test, use `cargo test [start_of_test_name]`. Or, for a complete and much slower build, run `make test`.
  - To generate and view API documentation, use `make doc`.
@@ -28,4 +32,4 @@ To compile code locally and run tests, the instructions below should help you ge
 
 ## Notes
 
-The `Makefile` recipes set the flag `RUSTFLAGS=-Dwarnings` and this makes the recompilation **much** slower than without this flag, as `cargo` for some reason rebuilds the entire crate when this flag is set and a minor change is made in a test. So it is much faster to run the tests using cargo and then use the `make test` command before e.g. committing to ensure that the test build does not produce any warnings.
+The `Makefile` recipes set the flag `RUSTFLAGS=-Dwarnings` and this makes `cargo` recompile everything. For this reason, commands that are run through `make`/`Makefile` will compile to another target directory to prevent a complete recompilation in case you switch between using `cargo` and `make`. You can run `make all` for a comprehensive check that the code is in a good state.
