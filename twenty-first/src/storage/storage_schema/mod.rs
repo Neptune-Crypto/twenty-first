@@ -1197,7 +1197,7 @@ mod tests {
                 let orig = singletons[0].get();
                 let modified = orig * 2;
 
-                for i in 0..1000 {
+                for i in 0..10000 {
                     thread::scope(|s| {
                         let gets = s.spawn(|| {
                             let mut copies = vec![];
@@ -1422,7 +1422,7 @@ mod tests {
                 // note: all vecs have the same length and same values.
                 let indices: Vec<_> = (0..orig.len() as u64).collect();
 
-                for i in 0..100 {
+                for i in 0..10000 {
                     thread::scope(|s| {
                         let gets = s.spawn(|| {
                             let mut copies = vec![];
@@ -1439,6 +1439,9 @@ mod tests {
                                 );
 
                                 copies.push(copy);
+
+                                // this sleep helps find an inconsistency in fewer iterations.
+                                std::thread::sleep(std::time::Duration::from_nanos(50));
                             }
 
                             let sums: Vec<u64> = copies.iter().map(|f| f.iter().sum()).collect();
