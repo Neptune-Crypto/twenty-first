@@ -327,6 +327,7 @@ mod mmr_test {
         get_empty_rustyleveldb_ammr, get_rustyleveldb_ammr_from_digests,
     };
     use crate::util_types::merkle_tree::merkle_tree_test;
+    use crate::util_types::storage_schema::{SimpleRustyStorage, StorageWriter};
     use crate::{
         shared_math::b_field_element::BFieldElement,
         storage::level_db::DB,
@@ -1061,6 +1062,31 @@ mod mmr_test {
         // Verify that DB is not empty
         let mut db_iter4 = db.iter(&ReadOptions::new());
         assert!(db_iter4.next().is_some());
+
+        assert_eq!(digest0, ammr0.get_leaf(0));
+        assert_eq!(digest1, ammr1.get_leaf(0));
+    }
+
+    #[test]
+    fn rust_leveldb_persist_storage_schema_test() {
+        type H = blake3::Hasher;
+
+        let db = DB::open_new_test_database(true, None, None, None).unwrap();
+        let mut storage = SimpleRustyStorage::new(db);
+        storage.restore_or_new();
+        let ammr0 = storage.schema.new_vec::<Digest>("ammr-nodes-digests-0");
+        let mut ammr0: ArchivalMmr<H, _> = ArchivalMmr::new(ammr0);
+        let ammr1 = storage.schema.new_vec::<Digest>("ammr-nodes-digests-1");
+        let mut ammr1: ArchivalMmr<H, _> = ArchivalMmr::new(ammr1);
+
+        let digest0: Digest = random();
+        ammr0.append(digest0);
+
+        let digest1: Digest = random();
+        ammr1.append(digest1);
+        assert_eq!(digest0, ammr0.get_leaf(0));
+        assert_eq!(digest1, ammr1.get_leaf(0));
+        storage.persist();
 
         assert_eq!(digest0, ammr0.get_leaf(0));
         assert_eq!(digest1, ammr1.get_leaf(0));
