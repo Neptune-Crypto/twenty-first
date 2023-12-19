@@ -436,64 +436,49 @@ pub(in crate::storage) mod tests {
             }
         }
 
-        /**
-         * I am commenting out these two non-deterministic tests for now
-         * because they sometimes/often fail on github CI.
-         *
-         * I'm leaving them here for now, as they are good examples
-         * and hopefully can be made to pass on CI near 100% later on
-         * when I have a bit more time.
-         */
         // This test demonstrates/verifies that multiple calls to set() and get() are not atomic
         // for a type that impl's StorageVec.
         //
         // note: this test is expected to panic and calling test fn should be annotated with:
         //  #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
-        pub fn non_atomic_set_and_get(_vec: &(impl StorageVec<u64> + Send + Sync)) {
-            // hack to generate same type of panic as commented test
-            let value_any = &true as &dyn std::any::Any;
-            Err::<(), &dyn std::any::Any>(value_any).unwrap();
+        pub fn non_atomic_set_and_get(vec: &(impl StorageVec<u64> + Send + Sync)) {
+            prepare_concurrency_test_vec(vec);
+            let orig = vec.get_all();
+            let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
 
-            /*          commenting for now. see above explanation.
-             *
-                        prepare_concurrency_test_vec(vec);
-                        let orig = vec.get_all();
-                        let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+            // note: this non-deterministic test is expected to fail/assert
+            //       within 10000 iterations though that can depend on
+            //       machine load, etc.
+            thread::scope(|s| {
+                for _i in 0..10000 {
+                    let gets = s.spawn(|| {
+                        // read values one by one.
+                        let mut copy = vec![];
+                        for z in 0..vec.len() {
+                            copy.push(vec.get(z));
+                        }
+                        // seems to help find inconsistencies sooner
+                        thread::sleep(std::time::Duration::from_millis(1));
 
-                        // note: this non-deterministic test is expected to fail/assert
-                        //       within 10000 iterations though that can depend on
-                        //       machine load, etc.
-                        thread::scope(|s| {
-                            for _i in 0..10000 {
-                                let gets = s.spawn(|| {
-                                    // read values one by one.
-                                    let mut copy = vec![];
-                                    for z in 0..vec.len() {
-                                        copy.push(vec.get(z));
-                                    }
-                                    // seems to help find inconsistencies sooner
-                                    thread::sleep(std::time::Duration::from_millis(1));
+                        assert!(
+                            copy == orig || copy == modified,
+                            "encountered inconsistent read: {:?}",
+                            copy
+                        );
+                    });
 
-                                    assert!(
-                                        copy == orig || copy == modified,
-                                        "encountered inconsistent read: {:?}",
-                                        copy
-                                    );
-                                });
+                    let sets = s.spawn(|| {
+                        // set values one by one, in reverse order than the reader.
+                        for j in (0..vec.len()).rev() {
+                            vec.set(j, 50);
+                        }
+                    });
+                    gets.join().unwrap();
+                    sets.join().unwrap();
 
-                                let sets = s.spawn(|| {
-                                    // set values one by one, in reverse order than the reader.
-                                    for j in (0..vec.len()).rev() {
-                                        vec.set(j, 50);
-                                    }
-                                });
-                                gets.join().unwrap();
-                                sets.join().unwrap();
-
-                                vec.set_all(orig.clone());
-                            }
-                        });
-            */
+                    vec.set_all(orig.clone());
+                }
+            });
         }
 
         // This test demonstrates/verifies that wrapping an impl StorageVec in an AtomicRw
@@ -502,59 +487,52 @@ pub(in crate::storage) mod tests {
         // note: this test is expected to panic and calling test fn should be annotated with:
         //  #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
         pub fn non_atomic_set_and_get_wrapped_atomic_rw(
-            _vec: &(impl StorageVec<u64> + Send + Sync),
+            vec: &(impl StorageVec<u64> + Send + Sync),
         ) {
-            // hack to generate same type of panic as commented test
-            let value_any = &true as &dyn std::any::Any;
-            Err::<(), &dyn std::any::Any>(value_any).unwrap();
+            prepare_concurrency_test_vec(vec);
+            let orig = vec.get_all();
+            let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
 
-            /*          commenting for now. see above explanation.
-             *
-                        prepare_concurrency_test_vec(vec);
-                        let orig = vec.get_all();
-                        let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
+            let atomic_vec = crate::sync::AtomicRw::from(vec);
 
-                        let atomic_vec = crate::sync::AtomicRw::from(vec);
+            // note: this test is non-deterministic.  It is expected to fail/assert
+            // within 10000 iterations though that can depend on machine load, etc.
+            thread::scope(|s| {
+                for _i in 0..10000 {
+                    let gets = s.spawn(|| {
+                        // read values one by one.
+                        let mut copy = vec![];
+                        for z in 0..atomic_vec.lock(|v| v.len()) {
+                            // acquire write lock
+                            atomic_vec.lock(|v| {
+                                copy.push(v.get(z));
+                            }); // release read lock
+                        }
+                        // seems to help find inconsistencies sooner
+                        thread::sleep(std::time::Duration::from_millis(1));
 
-                        // note: this test is non-deterministic.  It is expected to fail/assert
-                        // within 10000 iterations though that can depend on machine load, etc.
-                        thread::scope(|s| {
-                            for _i in 0..10000 {
-                                let gets = s.spawn(|| {
-                                    // read values one by one.
-                                    let mut copy = vec![];
-                                    for z in 0..atomic_vec.lock(|v| v.len()) {
-                                        // acquire write lock
-                                        atomic_vec.lock(|v| {
-                                            copy.push(v.get(z));
-                                        }); // release read lock
-                                    }
-                                    // seems to help find inconsistencies sooner
-                                    thread::sleep(std::time::Duration::from_millis(1));
+                        assert!(
+                            copy == orig || copy == modified,
+                            "encountered inconsistent read: {:?}",
+                            copy
+                        );
+                    });
 
-                                    assert!(
-                                        copy == orig || copy == modified,
-                                        "encountered inconsistent read: {:?}",
-                                        copy
-                                    );
-                                });
+                    let sets = s.spawn(|| {
+                        // set values one by one.
+                        for j in 0..atomic_vec.lock(|v| v.len()) {
+                            // acquire write lock
+                            atomic_vec.lock_mut(|v| {
+                                v.set(j, 50);
+                            }); // release write lock
+                        }
+                    });
+                    gets.join().unwrap();
+                    sets.join().unwrap();
 
-                                let sets = s.spawn(|| {
-                                    // set values one by one.
-                                    for j in 0..atomic_vec.lock(|v| v.len()) {
-                                        // acquire write lock
-                                        atomic_vec.lock_mut(|v| {
-                                            v.set(j, 50);
-                                        }); // release write lock
-                                    }
-                                });
-                                gets.join().unwrap();
-                                sets.join().unwrap();
-
-                                atomic_vec.lock_mut(|v| v.set_all(orig.clone()));
-                            }
-                        });
-            */
+                    atomic_vec.lock_mut(|v| v.set_all(orig.clone()));
+                }
+            });
         }
 
         // This test demonstrates/verifies that wrapping an impl StorageVec in an AtomicRw
