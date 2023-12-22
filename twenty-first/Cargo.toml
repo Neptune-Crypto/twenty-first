@@ -33,8 +33,8 @@ arbitrary = { version = "1", features = ["derive"] }
 bincode = "1.3"
 bfieldcodec_derive = "0.5.2"
 blake3 = "1.5.0"
-colored = "2.0"
-divan = "0.1.3"
+colored = "2.1"
+divan = "0.1.8"
 hashbrown = "0.14"
 itertools = "0.12"
 num-bigint = { version = "0.4", features = ["serde"] }
