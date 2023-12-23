@@ -90,6 +90,10 @@ where
         self.write_lock.set(self.index, value);
     }
 
+    pub fn index(&self) -> Index {
+        self.index
+    }
+
     pub fn value(&self) -> &T {
         &self.value
     }
