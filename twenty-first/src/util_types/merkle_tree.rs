@@ -137,18 +137,17 @@ where
         {
             return true;
         }
-        let mut partial_tree = match Self::partial_tree_from_authentication_structure(
+        let Ok(mut partial_tree) = Self::partial_tree_from_authentication_structure(
             tree_height,
             leaf_indices,
             leaf_digests,
             authentication_structure,
-        ) {
-            Ok(tree) => tree,
-            Err(_) => return false,
-        };
-        if Self::fill_partial_tree(&mut partial_tree, tree_height, leaf_indices).is_err() {
+        ) else {
             return false;
-        }
+        };
+        let Ok(()) = Self::fill_partial_tree(&mut partial_tree, tree_height, leaf_indices) else {
+            return false;
+        };
         let computed_root = partial_tree[&1];
         computed_root == expected_root
     }
