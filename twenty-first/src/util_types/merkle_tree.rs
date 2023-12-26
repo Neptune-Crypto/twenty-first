@@ -575,6 +575,23 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
+    #[proptest]
+    fn supplying_too_many_indices_leads_to_verification_failure(
+        test_tree: MerkleTreeToTest,
+        #[strategy(vec(0..#test_tree.tree.num_leafs(), 1..100))] spurious_indices: Vec<usize>,
+    ) {
+        let mut all_indices = test_tree.selected_indices.clone();
+        all_indices.extend(spurious_indices);
+        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
+            test_tree.tree.root(),
+            test_tree.tree.height(),
+            &all_indices,
+            &test_tree.leaves,
+            &test_tree.auth_structure,
+        );
+        prop_assert!(!verified);
+    }
+
     #[test]
     fn merkle_tree_test_32() {
         type H = blake3::Hasher;
