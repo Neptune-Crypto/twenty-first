@@ -361,14 +361,10 @@ where
         self.nodes[first_leaf..].to_vec()
     }
 
-    pub fn leaf(&self, index: usize) -> Digest {
+    /// The leaf at the given index, if it exists.
+    pub fn leaf(&self, index: usize) -> Option<Digest> {
         let first_leaf_index = self.nodes.len() / 2;
-        let beyond_last_leaf_index = self.nodes.len();
-        assert!(
-            index < first_leaf_index || beyond_last_leaf_index <= index,
-            "Out of bounds index requested"
-        );
-        self.nodes[first_leaf_index + index]
+        self.nodes.get(first_leaf_index + index).copied()
     }
 }
 
@@ -472,7 +468,11 @@ pub mod merkle_tree_test {
         H: AlgebraicHasher,
     {
         fn leaves_by_indices(&self, leaf_indices: &[usize]) -> Vec<Digest> {
-            leaf_indices.iter().map(|&i| self.leaf(i)).collect()
+            // test helper function, so unwrap is fine
+            leaf_indices
+                .iter()
+                .map(|&i| self.leaf(i).unwrap())
+                .collect()
         }
     }
 
@@ -997,7 +997,10 @@ pub mod merkle_tree_test {
             &[H::hash_varlen(&payload_leaf)],
             &ap,
         );
-        assert_eq!(tree.leaf(test_leaf_idx), H::hash_varlen(&payload_leaf));
+        assert_eq!(
+            tree.leaf(test_leaf_idx).unwrap(),
+            H::hash_varlen(&payload_leaf)
+        );
         assert!(
             verdict,
             "Rejected: `leaf: {payload_leaf:?}` at `leaf_idx: {test_leaf_idx:?}` failed to verify."
