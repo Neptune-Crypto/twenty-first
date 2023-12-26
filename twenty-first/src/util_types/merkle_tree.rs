@@ -345,13 +345,13 @@ where
 
     pub fn num_leafs(&self) -> usize {
         let node_count = self.nodes.len();
-        assert!(node_count.is_power_of_two());
+        debug_assert!(node_count.is_power_of_two());
         node_count / 2
     }
 
     pub fn height(&self) -> usize {
         let leaf_count = self.num_leafs();
-        assert!(leaf_count.is_power_of_two());
+        debug_assert!(leaf_count.is_power_of_two());
         leaf_count.ilog2() as usize
     }
 
@@ -520,6 +520,14 @@ pub mod merkle_tree_test {
         }
         let roots = trees.iter().map(|t| t.root()).collect_vec();
         bag_peaks::<H>(&roots)
+    }
+
+    #[proptest]
+    fn accessing_number_of_leaves_and_height_never_panics(
+        #[strategy(arb())] merkle_tree: MerkleTree<Tip5>,
+    ) {
+        let _ = merkle_tree.num_leafs();
+        let _ = merkle_tree.height();
     }
 
     #[proptest]
