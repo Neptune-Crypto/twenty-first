@@ -11,7 +11,6 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterato
 use thiserror::Error;
 
 use crate::shared_math::digest::Digest;
-use crate::shared_math::other::{is_power_of_two, log_2_floor};
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 
@@ -351,14 +350,14 @@ where
 
     pub fn num_leafs(&self) -> usize {
         let node_count = self.nodes.len();
-        assert!(is_power_of_two(node_count));
+        assert!(node_count.is_power_of_two());
         node_count / 2
     }
 
     pub fn height(&self) -> usize {
-        let leaf_count = self.num_leafs() as u128;
-        assert!(is_power_of_two(leaf_count));
-        log_2_floor(leaf_count) as usize
+        let leaf_count = self.num_leafs();
+        assert!(leaf_count.is_power_of_two());
+        leaf_count.ilog2() as usize
     }
 
     /// All leaves of the Merkle tree.
@@ -388,7 +387,7 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
         let leaves_count = digests.len();
 
         assert!(
-            is_power_of_two(leaves_count),
+            leaves_count.is_power_of_two(),
             "Size of input for Merkle tree must be a power of 2"
         );
 
@@ -913,7 +912,7 @@ pub mod merkle_tree_test {
         let exponent = 6;
         let num_leaves = usize::pow(2, exponent);
         assert!(
-            is_power_of_two(num_leaves),
+            num_leaves.is_power_of_two(),
             "Size of input for Merkle tree must be a power of 2"
         );
 
@@ -964,7 +963,7 @@ pub mod merkle_tree_test {
         let exponent = 6;
         let num_leaves = usize::pow(2, exponent);
         assert!(
-            is_power_of_two(num_leaves),
+            num_leaves.is_power_of_two(),
             "Size of input for Merkle tree must be a power of 2"
         );
 
