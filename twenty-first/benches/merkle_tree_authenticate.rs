@@ -28,7 +28,7 @@ fn merkle_tree_authenticate(c: &mut Criterion) {
     let opened_indices = (0..num_opened_indices)
         .map(|_| rng.gen_range(0..num_leaves))
         .collect_vec();
-    let authentication_structure = mt.authentication_structure(&opened_indices);
+    let authentication_structure = mt.authentication_structure(&opened_indices).unwrap();
     let opened_leaves = opened_indices
         .iter()
         .map(|&i| leaf_digests[i])
