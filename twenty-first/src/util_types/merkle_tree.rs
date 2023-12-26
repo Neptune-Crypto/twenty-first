@@ -383,7 +383,7 @@ where
     H: AlgebraicHasher,
 {
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
-        let height = u.int_in_range(0..=20)?;
+        let height = u.int_in_range(0..=13)?;
         let num_leaves = 1 << height;
         let mut leaves = Vec::with_capacity(num_leaves);
         for _ in 0..num_leaves {
@@ -474,9 +474,13 @@ pub enum MerkleTreeError {
 #[cfg(test)]
 pub mod merkle_tree_test {
     use itertools::Itertools;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+    use proptest_arbitrary_interop::arb;
     use rand::thread_rng;
     use rand::Rng;
     use rand::RngCore;
+    use test_strategy::proptest;
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::{
@@ -516,6 +520,24 @@ pub mod merkle_tree_test {
         }
         let roots = trees.iter().map(|t| t.root()).collect_vec();
         bag_peaks::<H>(&roots)
+    }
+
+    #[proptest]
+    fn honestly_generated_authentication_structure_can_be_verified(
+        #[strategy(arb())] merkle_tree: MerkleTree<Tip5>,
+        #[strategy(Just(#merkle_tree.num_leafs()))] _num_leaves: usize,
+        #[strategy(vec(0..#_num_leaves, 0..#_num_leaves))] indices: Vec<usize>,
+    ) {
+        let auth_structure = merkle_tree.authentication_structure(&indices).unwrap();
+        let leaves = merkle_tree.leaves_by_indices(&indices);
+        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
+            merkle_tree.root(),
+            merkle_tree.height(),
+            &indices,
+            &leaves,
+            &auth_structure,
+        );
+        prop_assert!(verified);
     }
 
     #[test]
