@@ -221,11 +221,41 @@ impl Digest {
 }
 
 #[cfg(test)]
-mod digest_tests {
+pub(crate) mod digest_tests {
     use num_traits::One;
+    use proptest::collection::vec;
+    use proptest::prelude::TestCaseError;
+    use proptest::prelude::*;
+    use proptest_arbitrary_interop::arb;
     use rand::{thread_rng, RngCore};
 
     use super::*;
+
+    /// Test helper struct for corrupting digests. Primarily used for negative tests.
+    #[derive(Debug, Clone, PartialEq, Eq, test_strategy::Arbitrary)]
+    pub(crate) struct DigestCorruptor {
+        #[strategy(vec(0..DIGEST_LENGTH, 1..DIGEST_LENGTH))]
+        #[filter(#corrupt_indices.iter().all_unique())]
+        corrupt_indices: Vec<usize>,
+
+        #[strategy(vec(arb(), #corrupt_indices.len()))]
+        corrupt_elements: Vec<BFieldElement>,
+    }
+
+    impl DigestCorruptor {
+        pub fn corrupt_digest(&self, digest: Digest) -> Result<Digest, TestCaseError> {
+            let mut corrupt_digest = digest;
+            for (&i, &element) in self.corrupt_indices.iter().zip(&self.corrupt_elements) {
+                corrupt_digest.0[i] = element;
+            }
+            if corrupt_digest == digest {
+                let reject_reason = "corruption must change digest".into();
+                return Err(TestCaseError::Reject(reject_reason));
+            }
+
+            Ok(corrupt_digest)
+        }
+    }
 
     #[test]
     pub fn get_size() {

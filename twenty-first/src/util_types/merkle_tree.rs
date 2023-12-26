@@ -483,6 +483,7 @@ pub mod merkle_tree_test {
     use test_strategy::proptest;
 
     use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::digest::digest_tests::DigestCorruptor;
     use crate::shared_math::other::{
         indices_of_set_bits, random_elements, random_elements_distinct_range, random_elements_range,
     };
@@ -556,6 +557,22 @@ pub mod merkle_tree_test {
             &test_tree.auth_structure,
         );
         prop_assert!(verified);
+    }
+
+    #[proptest]
+    fn corrupt_root_cannot_be_verified(
+        #[filter(#test_tree.selected_indices.len() > 0)] test_tree: MerkleTreeToTest,
+        corruptor: DigestCorruptor,
+    ) {
+        let bad_root = corruptor.corrupt_digest(test_tree.tree.root())?;
+        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
+            bad_root,
+            test_tree.tree.height(),
+            &test_tree.selected_indices,
+            &test_tree.leaves,
+            &test_tree.auth_structure,
+        );
+        prop_assert!(!verified);
     }
 
     #[test]
