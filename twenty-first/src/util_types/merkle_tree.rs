@@ -376,17 +376,6 @@ where
         );
         self.nodes[first_leaf_index + index]
     }
-
-    pub fn leaves_by_indices(&self, leaf_indices: &[usize]) -> Vec<Digest> {
-        let leaf_count = leaf_indices.len();
-
-        let mut result = Vec::with_capacity(leaf_count);
-
-        for index in leaf_indices {
-            result.push(self.leaf(*index));
-        }
-        result
-    }
 }
 
 #[derive(Debug)]
@@ -483,6 +472,15 @@ pub mod merkle_tree_test {
     use crate::util_types::shared::bag_peaks;
 
     use super::*;
+
+    impl<H> MerkleTree<H>
+    where
+        H: AlgebraicHasher,
+    {
+        fn leaves_by_indices(&self, leaf_indices: &[usize]) -> Vec<Digest> {
+            leaf_indices.iter().map(|&i| self.leaf(i)).collect()
+        }
+    }
 
     /// Calculate a Merkle root from a list of digests of arbitrary length.
     pub fn root_from_arbitrary_number_of_digests<H: AlgebraicHasher>(digests: &[Digest]) -> Digest {
