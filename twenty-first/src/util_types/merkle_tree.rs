@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::result;
 
-use arbitrary::Arbitrary;
+use arbitrary::*;
 use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use thiserror::Error;
@@ -25,7 +25,7 @@ type Result<T> = result::Result<T, MerkleTreeError>;
 /// Static methods are called from the verifier, who does not have the original `MerkleTree` object, but only partial
 /// information from it, in the form of the quadruples: `(root_hash, index, digest, auth_path)`. These are exactly the
 /// arguments for the `verify_*` family of static methods.
-#[derive(Debug, Clone, Arbitrary)]
+#[derive(Debug, Clone)]
 pub struct MerkleTree<H>
 where
     H: AlgebraicHasher,
@@ -375,6 +375,22 @@ where
     pub fn leaf(&self, index: usize) -> Option<Digest> {
         let first_leaf_index = self.nodes.len() / 2;
         self.nodes.get(first_leaf_index + index).copied()
+    }
+}
+
+impl<'a, H> Arbitrary<'a> for MerkleTree<H>
+where
+    H: AlgebraicHasher,
+{
+    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+        let height = u.int_in_range(0..=20)?;
+        let num_leaves = 1 << height;
+        let mut leaves = Vec::with_capacity(num_leaves);
+        for _ in 0..num_leaves {
+            leaves.push(u.arbitrary()?);
+        }
+
+        Ok(CpuParallel::from_digests(&leaves))
     }
 }
 
