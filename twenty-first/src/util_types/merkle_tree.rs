@@ -3,13 +3,12 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
+use std::result;
 
-use anyhow::anyhow;
-use anyhow::bail;
-use anyhow::Result;
 use arbitrary::Arbitrary;
 use itertools::Itertools;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use thiserror::Error;
 
 use crate::shared_math::digest::Digest;
 use crate::shared_math::other::{is_power_of_two, log_2_floor};
@@ -20,6 +19,8 @@ use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 // hash function (the original Rescue Prime implementation). It should probably
 // be a higher number than 16 when using a faster hash function.
 const PARALLELLIZATION_THRESHOLD: usize = 16;
+
+type Result<T> = result::Result<T, MerkleTreeError>;
 
 #[derive(Debug, Clone, Arbitrary)]
 pub struct MerkleTree<H>
@@ -182,19 +183,19 @@ where
         let num_nodes = num_leaves * 2;
 
         if leaf_indices.len() != leaf_digests.len() {
-            bail!("Number of leaf indices must match number of leaf digests.");
+            return Err(MerkleTreeError::NumLeafIndicesAndDigestsMismatch);
         }
         if leaf_indices.is_empty() && authentication_structure.is_empty() {
             return Ok(HashMap::new());
         }
         if leaf_indices.iter().any(|&i| i >= num_leaves) {
-            bail!("All leaf indices must be valid, i.e., less than {num_leaves}.");
+            return Err(MerkleTreeError::LeafIndexInvalid { num_leaves });
         }
 
         let indices_of_nodes_in_authentication_structure =
             Self::indices_of_nodes_in_authentication_structure(num_nodes, leaf_indices);
         if authentication_structure.len() != indices_of_nodes_in_authentication_structure.len() {
-            bail!("The length of the supplied authentication must match the expected length.");
+            return Err(MerkleTreeError::AuthenticationPathLengthMismatch);
         }
 
         let mut partial_merkle_tree: HashMap<_, _> = indices_of_nodes_in_authentication_structure
@@ -207,7 +208,7 @@ where
             if let Vacant(entry) = partial_merkle_tree.entry(node_index) {
                 entry.insert(leaf_digest);
             } else if partial_merkle_tree[&node_index] != leaf_digest {
-                bail!("Leaf digests of repeated indices must be identical.");
+                return Err(MerkleTreeError::RepeatedLeafDigestMismatch);
             }
         }
         Ok(partial_merkle_tree)
@@ -242,26 +243,15 @@ where
                 let right_node_index = left_node_index ^ 1;
 
                 if partial_tree.contains_key(&parent_node_index) {
-                    bail!(
-                        "The partial tree must be minimal. \
-                        Node {parent_node_index} was supplied but can be computed."
-                    );
+                    return Err(MerkleTreeError::SpuriousNodeIndex(parent_node_index));
                 }
 
-                let left_node = match partial_tree.get(&left_node_index) {
-                    Some(&left_node) => left_node,
-                    None => bail!(
-                        "The partial tree must contain all necessary information. \
-                        Node {left_node_index} is missing."
-                    ),
-                };
-                let right_node = match partial_tree.get(&right_node_index) {
-                    Some(&right_node) => right_node,
-                    None => bail!(
-                        "The partial tree must contain all necessary information. \
-                        Node {right_node_index} is missing."
-                    ),
-                };
+                let &left_node = partial_tree
+                    .get(&left_node_index)
+                    .ok_or(MerkleTreeError::MissingNodeIndex(left_node_index))?;
+                let &right_node = partial_tree
+                    .get(&right_node_index)
+                    .ok_or(MerkleTreeError::MissingNodeIndex(right_node_index))?;
 
                 let parent_digest = H::hash_pair(left_node, right_node);
                 partial_tree.insert(parent_node_index, parent_digest);
@@ -274,7 +264,7 @@ where
         }
 
         if !partial_tree.contains_key(&1) {
-            bail!("Could not compute the root. Maybe no leaf indices were supplied?");
+            return Err(MerkleTreeError::RootNotFound);
         }
 
         Ok(())
@@ -353,9 +343,9 @@ where
         let mut node_index = leaf_index + num_leaves;
         while node_index > root_index {
             let sibling_index = node_index ^ 1;
-            let &sibling = partial_tree.get(&sibling_index).ok_or(anyhow!(
-                "Missing node {sibling_index} in partial Merkle tree."
-            ))?;
+            let &sibling = partial_tree
+                .get(&sibling_index)
+                .ok_or(MerkleTreeError::MissingNodeIndex(sibling_index))?;
             authentication_path.push(sibling);
             node_index /= 2;
         }
@@ -458,9 +448,37 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+pub enum MerkleTreeError {
+    #[error("Number of leaf indices must match number of leaf digests.")]
+    NumLeafIndicesAndDigestsMismatch,
+
+    #[error("All leaf indices must be valid, i.e., less than {num_leaves}.")]
+    LeafIndexInvalid { num_leaves: usize },
+
+    #[error("The length of the supplied authentication must match the expected length.")]
+    AuthenticationPathLengthMismatch,
+
+    #[error("Leaf digests of repeated indices must be identical.")]
+    RepeatedLeafDigestMismatch,
+
+    #[error("The partial tree must be minimal. Node {0} was supplied but can be computed.")]
+    SpuriousNodeIndex(usize),
+
+    #[error("The partial tree must contain all necessary information. Node {0} is missing.")]
+    MissingNodeIndex(usize),
+
+    #[error("Could not compute the root. Maybe no leaf indices were supplied?")]
+    RootNotFound,
+}
+
 #[cfg(test)]
 pub mod merkle_tree_test {
-    use super::*;
+    use itertools::Itertools;
+    use rand::thread_rng;
+    use rand::Rng;
+    use rand::RngCore;
+
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::{
         indices_of_set_bits, random_elements, random_elements_distinct_range, random_elements_range,
@@ -469,10 +487,8 @@ pub mod merkle_tree_test {
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::test_shared::corrupt_digest;
     use crate::util_types::shared::bag_peaks;
-    use itertools::Itertools;
-    use rand::thread_rng;
-    use rand::Rng;
-    use rand::RngCore;
+
+    use super::*;
 
     /// Calculate a Merkle root from a list of digests of arbitrary length.
     pub fn root_from_arbitrary_number_of_digests<H: AlgebraicHasher>(digests: &[Digest]) -> Digest {
@@ -1116,7 +1132,6 @@ pub mod merkle_tree_test {
     }
 
     #[test]
-    #[should_panic(expected = "Node 3 is missing.")]
     fn compute_root_of_incomplete_partial_tree_test() {
         type H = Tip5;
         type MT = MerkleTree<H>;
@@ -1135,11 +1150,11 @@ pub mod merkle_tree_test {
         partial_tree.insert(9, rand::random());
         partial_tree.insert(10, rand::random());
         partial_tree.insert(11, rand::random());
-        MT::fill_partial_tree(&mut partial_tree, tree_height, &[0, 2]).unwrap();
+        let err = MT::fill_partial_tree(&mut partial_tree, tree_height, &[0, 2]).unwrap_err();
+        assert_eq!(MerkleTreeError::MissingNodeIndex(3), err);
     }
 
     #[test]
-    #[should_panic(expected = "Node 2 was supplied but can be computed.")]
     fn compute_root_of_non_minimal_partial_tree_test() {
         type H = Tip5;
         type MT = MerkleTree<H>;
@@ -1160,7 +1175,8 @@ pub mod merkle_tree_test {
         partial_tree.insert(9, rand::random());
         partial_tree.insert(10, rand::random());
         partial_tree.insert(11, rand::random());
-        MT::fill_partial_tree(&mut partial_tree, tree_height, &[0, 2]).unwrap();
+        let err = MT::fill_partial_tree(&mut partial_tree, tree_height, &[0, 2]).unwrap_err();
+        assert_eq!(MerkleTreeError::SpuriousNodeIndex(2), err);
     }
 
     #[test]
