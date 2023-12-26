@@ -15,13 +15,17 @@ use crate::shared_math::other::{is_power_of_two, log_2_floor};
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 
-// Chosen from a very small number of benchmark runs, optimized for a slow
-// hash function (the original Rescue Prime implementation). It should probably
-// be a higher number than 16 when using a faster hash function.
-const PARALLELLIZATION_THRESHOLD: usize = 16;
+/// Chosen from a very small number of benchmark runs, optimized for a slow hash function (the original Rescue Prime
+/// implementation). It should probably be a higher number than 16 when using a faster hash function.
+const PARALLELIZATION_THRESHOLD: usize = 16;
 
 type Result<T> = result::Result<T, MerkleTreeError>;
 
+/// # Design
+///
+/// Static methods are called from the verifier, who does not have the original `MerkleTree` object, but only partial
+/// information from it, in the form of the quadruples: `(root_hash, index, digest, auth_path)`. These are exactly the
+/// arguments for the `verify_*` family of static methods.
 #[derive(Debug, Clone, Arbitrary)]
 pub struct MerkleTree<H>
 where
@@ -31,19 +35,14 @@ where
     _hasher: PhantomData<H>,
 }
 
-/// # Design
-/// Static methods are called from the verifier, who does not have
-/// the original `MerkleTree` object, but only partial information from it,
-/// in the form of the quadruples: `(root_hash, index, digest, auth_path)`.
-/// These are exactly the arguments for the `verify_*` family of static methods.
 impl<H> MerkleTree<H>
 where
     H: AlgebraicHasher,
 {
-    /// Given a list of leaf indices, return the indices of exactly those nodes that are needed to
-    /// prove (or verify) that the indicated leaves are in the Merkle tree.
-    // This function is not defined as a method (taking self as argument) since it's
-    // needed by the verifier who does not have access to the Merkle tree.
+    /// Given a list of leaf indices, return the indices of exactly those nodes that are needed to prove (or verify)
+    /// that the indicated leaves are in the Merkle tree.
+    // This function is not defined as a method (taking self as argument) since it's needed by the verifier who does not
+    // have access to the Merkle tree.
     fn indices_of_nodes_in_authentication_structure(
         num_nodes: usize,
         leaf_indices: &[usize],
@@ -106,13 +105,12 @@ where
     ///
     /// The authentication path for leaf 2, _i.e._, node 10, is nodes [11, 4, 3].
     ///
-    /// The authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively,
-    /// is nodes [11, 9, 3].
+    /// The authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively, is nodes [11, 9, 3].
     /// Note how:
-    /// - Node 3 is included only once, even though the individual authentication paths for
-    /// leaves 0 and 2 both include node 3. This is one part of the de-duplication.
-    /// - Node 4 is not included at all, even though the authentication path for leaf 2 requires
-    /// the node. Instead, node 4 can be computed from nodes 8 and 9;
+    /// - Node 3 is included only once, even though the individual authentication paths for leaves 0 and 2 both include
+    /// node 3. This is one part of the de-duplication.
+    /// - Node 4 is not included at all, even though the authentication path for leaf 2 requires the node. Instead,
+    /// node 4 can be computed from nodes 8 and 9;
     /// the former is supplied explicitly for during [verification][verify],
     /// the latter is included in the authentication structure.
     /// This is the other part of the de-duplication.
@@ -126,8 +124,8 @@ where
             .collect()
     }
 
-    /// Verify a list of indicated digests and corresponding authentication structure against a
-    /// Merkle root. See also [`get_authentication_structure`][Self::get_authentication_structure].
+    /// Verify a list of indicated digests and corresponding authentication structure against a Merkle root.
+    /// See also [`get_authentication_structure`][Self::get_authentication_structure].
     pub fn verify_authentication_structure(
         expected_root: Digest,
         tree_height: usize,
@@ -155,13 +153,12 @@ where
         computed_root == expected_root
     }
 
-    /// Given a list of leaf indices and corresponding digests as well as an authentication
-    /// structure for a tree of indicated height, build a partial Merkle tree.
+    /// Given a list of leaf indices and corresponding digests as well as an authentication structure for a tree of
+    /// indicated height, build a partial Merkle tree.
     ///
-    /// Continuing the example from
-    /// [`get_authentication_structure`][Self::get_authentication_structure],
-    /// the partial tree for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively,
-    /// with nodes [11, 9, 3] from the authentication structure is:
+    /// Continuing the example from [`get_authentication_structure`][Self::get_authentication_structure], the partial
+    /// tree for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively, with nodes [11, 9, 3] from the authentication
+    /// structure is:
     ///
     /// ```markdown
     ///         ──── _ ────
@@ -272,13 +269,11 @@ where
 
     /// Transform an authentication structure into a list of authentication paths.
     /// This corresponds to a decompression of the authentication structure.
-    /// In some contexts, it is easier to deal with individual authentication paths than with
-    /// the de-duplicated authentication structure.
+    /// In some contexts, it is easier to deal with individual authentication paths than with the de-duplicated
+    /// authentication structure.
     ///
-    /// Continuing the example from
-    /// [`get_authentication_structure`][Self::get_authentication_structure],
-    /// the authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively,
-    /// is nodes [11, 9, 3].
+    /// Continuing the example from [`get_authentication_structure`][Self::get_authentication_structure],
+    /// the authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively, is nodes [11, 9, 3].
     ///
     /// The authentication path
     /// - for leaf 0 is [9, 5, 3], and
@@ -328,8 +323,7 @@ where
         Ok(authentication_paths)
     }
 
-    /// Given a single leaf index and a partial Merkle tree, collect the authentication path for
-    /// the indicated leaf.
+    /// Given a single leaf index and a partial Merkle tree, collect the authentication path for the indicated leaf.
     ///
     /// Fails if the partial Merkle tree does not contain the entire authentication path.
     fn single_authentication_path_from_partial_tree(
@@ -419,7 +413,7 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
         // Parallel digest calculations
         let mut node_count_on_this_level: usize = digests.len() / 2;
         let mut count_acc: usize = 0;
-        while node_count_on_this_level >= PARALLELLIZATION_THRESHOLD {
+        while node_count_on_this_level >= PARALLELIZATION_THRESHOLD {
             let mut local_digests: Vec<Digest> = Vec::with_capacity(node_count_on_this_level);
             (0..node_count_on_this_level)
                 .into_par_iter()
