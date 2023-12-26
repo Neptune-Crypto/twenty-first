@@ -522,6 +522,22 @@ pub mod merkle_tree_test {
         bag_peaks::<H>(&roots)
     }
 
+    /// Test helper to deduplicate generation of Merkle trees.
+    #[derive(Debug, Clone, test_strategy::Arbitrary)]
+    struct MerkleTreeToTest {
+        #[strategy(arb())]
+        tree: MerkleTree<Tip5>,
+
+        #[strategy(vec(0..#tree.num_leafs(), 0..#tree.num_leafs()))]
+        selected_indices: Vec<usize>,
+
+        #[strategy(Just(#tree.authentication_structure(&#selected_indices).unwrap()))]
+        auth_structure: Vec<Digest>,
+
+        #[strategy(Just(#tree.leaves_by_indices(&#selected_indices)))]
+        leaves: Vec<Digest>,
+    }
+
     #[proptest]
     fn accessing_number_of_leaves_and_height_never_panics(
         #[strategy(arb())] merkle_tree: MerkleTree<Tip5>,
@@ -531,19 +547,13 @@ pub mod merkle_tree_test {
     }
 
     #[proptest]
-    fn honestly_generated_authentication_structure_can_be_verified(
-        #[strategy(arb())] merkle_tree: MerkleTree<Tip5>,
-        #[strategy(Just(#merkle_tree.num_leafs()))] _num_leaves: usize,
-        #[strategy(vec(0..#_num_leaves, 0..#_num_leaves))] indices: Vec<usize>,
-    ) {
-        let auth_structure = merkle_tree.authentication_structure(&indices).unwrap();
-        let leaves = merkle_tree.leaves_by_indices(&indices);
+    fn honestly_generated_authentication_structure_can_be_verified(test_tree: MerkleTreeToTest) {
         let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            merkle_tree.root(),
-            merkle_tree.height(),
-            &indices,
-            &leaves,
-            &auth_structure,
+            test_tree.tree.root(),
+            test_tree.tree.height(),
+            &test_tree.selected_indices,
+            &test_tree.leaves,
+            &test_tree.auth_structure,
         );
         prop_assert!(verified);
     }
