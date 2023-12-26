@@ -355,10 +355,20 @@ where
         leaf_count.ilog2() as usize
     }
 
+    /// All nodes of the Merkle tree.
+    pub fn nodes(&self) -> &[Digest] {
+        &self.nodes
+    }
+
+    /// The node at the given node index, if it exists.
+    pub fn node(&self, index: usize) -> Option<Digest> {
+        self.nodes.get(index).copied()
+    }
+
     /// All leaves of the Merkle tree.
-    pub fn leaves(&self) -> Vec<Digest> {
+    pub fn leaves(&self) -> &[Digest] {
         let first_leaf = self.nodes.len() / 2;
-        self.nodes[first_leaf..].to_vec()
+        &self.nodes[first_leaf..]
     }
 
     /// The leaf at the given index, if it exists.
