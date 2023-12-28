@@ -550,6 +550,12 @@ pub mod merkle_tree_test {
         leaves: Vec<Digest>,
     }
 
+    impl MerkleTreeToTest {
+        fn has_non_trivial_proof(&self) -> bool {
+            !self.selected_indices.is_empty()
+        }
+    }
+
     #[proptest]
     fn accessing_number_of_leaves_and_height_never_panics(
         #[strategy(arb())] merkle_tree: MerkleTree<Tip5>,
@@ -590,7 +596,7 @@ pub mod merkle_tree_test {
 
     #[proptest]
     fn corrupt_root_cannot_be_verified(
-        #[filter(#test_tree.selected_indices.len() > 0)] test_tree: MerkleTreeToTest,
+        #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         corruptor: DigestCorruptor,
     ) {
         let bad_root = corruptor.corrupt_digest(test_tree.tree.root())?;
@@ -623,7 +629,7 @@ pub mod merkle_tree_test {
 
     #[proptest]
     fn supplying_too_few_indices_leads_to_verification_failure(
-        #[filter(!#test_tree.selected_indices.is_empty())] test_tree: MerkleTreeToTest,
+        #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(vec(0..#test_tree.selected_indices.len(), 0..#test_tree.selected_indices.len()))]
         indices_to_remove: Vec<usize>,
     ) {
@@ -688,17 +694,17 @@ pub mod merkle_tree_test {
 
     #[proptest]
     fn corrupt_authentication_structure_leads_to_verification_failure(
-        #[filter(!#tree.auth_structure.is_empty())] tree: MerkleTreeToTest,
-        #[strategy(auth_structure_corruptor(#tree.auth_structure.len().try_into().unwrap()))]
+        #[filter(!#test_tree.auth_structure.is_empty())] test_tree: MerkleTreeToTest,
+        #[strategy(auth_structure_corruptor(#test_tree.auth_structure.len().try_into().unwrap()))]
         corruptor: AuthenticationStructureCorruptor,
     ) {
         let corrupt_auth_structure =
-            corruptor.corrupt_authentication_structure(&tree.auth_structure)?;
+            corruptor.corrupt_authentication_structure(&test_tree.auth_structure)?;
         let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            tree.tree.root(),
-            tree.tree.height(),
-            &tree.selected_indices,
-            &tree.leaves,
+            test_tree.tree.root(),
+            test_tree.tree.height(),
+            &test_tree.selected_indices,
+            &test_tree.leaves,
             &corrupt_auth_structure,
         );
         prop_assert!(!verified);
@@ -706,17 +712,17 @@ pub mod merkle_tree_test {
 
     #[proptest]
     fn incorrect_tree_height_leads_to_verification_failure(
-        #[filter(!#tree.selected_indices.is_empty())] tree: MerkleTreeToTest,
+        #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(0..=MerkleTree::<Tip5>::MAX_TREE_HEIGHT)]
-        #[filter(#tree.tree.height() != #incorrect_height)]
+        #[filter(#test_tree.tree.height() != #incorrect_height)]
         incorrect_height: usize,
     ) {
         let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            tree.tree.root(),
+            test_tree.tree.root(),
             incorrect_height,
-            &tree.selected_indices,
-            &tree.leaves,
-            &tree.auth_structure,
+            &test_tree.selected_indices,
+            &test_tree.leaves,
+            &test_tree.auth_structure,
         );
         prop_assert!(!verified);
     }
