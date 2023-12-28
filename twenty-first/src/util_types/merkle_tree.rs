@@ -484,9 +484,7 @@ pub mod merkle_tree_test {
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::digest_tests::DigestCorruptor;
-    use crate::shared_math::other::{
-        indices_of_set_bits, random_elements, random_elements_distinct_range, random_elements_range,
-    };
+    use crate::shared_math::other::{indices_of_set_bits, random_elements, random_elements_range};
     use crate::shared_math::tip5::Tip5;
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::test_shared::corrupt_digest;
@@ -592,98 +590,31 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
-    #[test]
-    fn merkle_tree_test_32() {
-        type H = blake3::Hasher;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-
-        let tree_height = 5;
-        let num_leaves = 1 << tree_height;
-        let leaves: Vec<Digest> = random_elements(num_leaves);
-        let tree: MT = M::from_digests(&leaves);
-
-        for test_size in 0..20 {
-            // Create a vector of distinct, uniform random indices `random_indices`
-            // Separate one of these distinct indices `random_index` for negative testing.
-            let num_indices = test_size + 10;
-            let (bad_index, random_indices): (usize, Vec<usize>) = {
-                let mut tmp = random_elements_distinct_range(num_indices, 0..num_leaves);
-                (tmp.remove(0), tmp)
-            };
-
-            // Get a vector of digests for each of those indices
-            let selected_leaves: Vec<Digest> = tree.leaves_by_indices(&random_indices);
-
-            // Get the authentication structure for those indices
-            let auth_structure = tree.authentication_structure(&random_indices).unwrap();
-
-            // Assert membership of randomly chosen leaves
-            let random_leaves_are_members = MT::verify_authentication_structure(
-                tree.root(),
-                tree_height,
-                &random_indices,
-                &selected_leaves,
-                &auth_structure,
-            );
-            assert!(random_leaves_are_members);
-
-            // Negative: Verify bad Merkle root
-            let bad_root_digest = corrupt_digest(tree.root());
-            let bad_root_verifies = MT::verify_authentication_structure(
-                bad_root_digest,
-                tree_height,
-                &random_indices,
-                &selected_leaves,
-                &auth_structure,
-            );
-            assert!(!bad_root_verifies);
-
-            // Negative: Make random indices not match proof length (too long)
-            let bad_random_indices_1 = {
-                let mut tmp = random_indices.clone();
-                tmp.push(tmp[0]);
-                tmp
-            };
-            let too_many_indices_verifies = MT::verify_authentication_structure(
-                tree.root(),
-                tree_height,
-                &bad_random_indices_1,
-                &selected_leaves,
-                &auth_structure,
-            );
-            assert!(!too_many_indices_verifies);
-
-            // Negative: Make random indices not match proof length (too short)
-            let bad_random_indices_2 = {
-                let mut tmp = random_indices.clone();
-                tmp.remove(0);
-                tmp
-            };
-            let too_few_indices_verifies = MT::verify_authentication_structure(
-                tree.root(),
-                tree_height,
-                &bad_random_indices_2,
-                &selected_leaves,
-                &auth_structure,
-            );
-            assert!(!too_few_indices_verifies);
-
-            // Negative: Request non-existent index
-            let bad_random_indices_3 = {
-                let mut tmp = random_indices.clone();
-                tmp[0] = bad_index;
-                tmp
-            };
-            let non_existent_index_verifies = MT::verify_authentication_structure(
-                tree.root(),
-                tree_height,
-                &bad_random_indices_3,
-                &selected_leaves,
-                &auth_structure,
-            );
-            assert!(!non_existent_index_verifies);
+    #[proptest]
+    fn supplying_too_few_indices_leads_to_verification_failure(
+        #[filter(!#test_tree.selected_indices.is_empty())] test_tree: MerkleTreeToTest,
+        #[strategy(vec(0..#test_tree.selected_indices.len(), 0..#test_tree.selected_indices.len()))]
+        indices_to_remove: Vec<usize>,
+    ) {
+        let mut all_indices = test_tree.selected_indices.clone();
+        for index_to_remove in indices_to_remove {
+            if all_indices.len() > index_to_remove {
+                all_indices.remove(index_to_remove);
+            }
         }
+        if all_indices == test_tree.selected_indices {
+            let reject_reason = "index manipulation unsuccessful".into();
+            return Err(TestCaseError::Reject(reject_reason));
+        }
+
+        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
+            test_tree.tree.root(),
+            test_tree.tree.height(),
+            &all_indices,
+            &test_tree.leaves,
+            &test_tree.auth_structure,
+        );
+        prop_assert!(!verified);
     }
 
     #[test]
