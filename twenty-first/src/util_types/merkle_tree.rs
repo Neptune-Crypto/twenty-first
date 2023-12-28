@@ -493,7 +493,6 @@ pub mod merkle_tree_test {
     use proptest_arbitrary_interop::arb;
     use rand::thread_rng;
     use rand::Rng;
-    use std::num::NonZeroUsize;
     use test_strategy::proptest;
 
     use crate::shared_math::b_field_element::BFieldElement;
@@ -654,58 +653,28 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
-    /// Test helper for corrupting authentication structures.
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    struct AuthenticationStructureCorruptor {
-        corrupt_indices: Vec<usize>,
-        digest_corruptors: Vec<DigestCorruptor>,
-    }
-
-    prop_compose! {
-        fn auth_structure_corruptor(auth_structure_len: NonZeroUsize) (
-            num_corruptions in 1..=auth_structure_len.get(),
-        )(
-            corrupt_indices in vec(0..auth_structure_len.get(), num_corruptions),
-            digest_corruptors in vec(any::<DigestCorruptor>(), num_corruptions),
-        ) -> AuthenticationStructureCorruptor {
-            AuthenticationStructureCorruptor{
-                corrupt_indices,
-                digest_corruptors,
-            }
-        }
-    }
-
-    impl AuthenticationStructureCorruptor {
-        fn corrupt_authentication_structure(
-            &self,
-            authentication_structure: &[Digest],
-        ) -> result::Result<Vec<Digest>, TestCaseError> {
-            let mut corrupt_structure = authentication_structure.to_vec();
-            for (&i, digest_corruptor) in self.corrupt_indices.iter().zip(&self.digest_corruptors) {
-                corrupt_structure[i] = digest_corruptor.corrupt_digest(corrupt_structure[i])?;
-            }
-            if corrupt_structure == authentication_structure {
-                let reject_reason = "corruption must change authentication structure".into();
-                return Err(TestCaseError::Reject(reject_reason));
-            }
-            Ok(corrupt_structure)
-        }
-    }
-
     #[proptest]
     fn corrupt_authentication_structure_leads_to_verification_failure(
         #[filter(!#test_tree.auth_structure.is_empty())] test_tree: MerkleTreeToTest,
-        #[strategy(auth_structure_corruptor(#test_tree.auth_structure.len().try_into().unwrap()))]
-        corruptor: AuthenticationStructureCorruptor,
+        #[strategy(vec(0..#test_tree.auth_structure.len(), 1..=#test_tree.auth_structure.len()))]
+        indices_to_corrupt: Vec<usize>,
+        #[strategy(vec(any::<DigestCorruptor>(),  #indices_to_corrupt.len()))]
+        digest_corruptors: Vec<DigestCorruptor>,
     ) {
-        let corrupt_auth_structure =
-            corruptor.corrupt_authentication_structure(&test_tree.auth_structure)?;
+        let mut corrupt_structure = test_tree.auth_structure.clone();
+        for (i, digest_corruptor) in indices_to_corrupt.into_iter().zip(digest_corruptors) {
+            corrupt_structure[i] = digest_corruptor.corrupt_digest(corrupt_structure[i])?;
+        }
+        if corrupt_structure == test_tree.auth_structure {
+            let reject_reason = "corruption must change authentication structure".into();
+            return Err(TestCaseError::Reject(reject_reason));
+        }
         let verified = MerkleTree::<Tip5>::verify_authentication_structure(
             test_tree.tree.root(),
             test_tree.tree.height(),
             &test_tree.selected_indices,
             &test_tree.leaves,
-            &corrupt_auth_structure,
+            &corrupt_structure,
         );
         prop_assert!(!verified);
     }
