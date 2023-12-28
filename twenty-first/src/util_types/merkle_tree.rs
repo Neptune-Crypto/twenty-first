@@ -704,65 +704,21 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
-    #[test]
-    fn fail_on_bad_specified_length_test() {
-        type H = blake3::Hasher;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-        let tree_height = 5;
-        let num_leaves = 1 << tree_height;
-        let leaf_digests: Vec<Digest> = random_elements(num_leaves);
-        let tree: MT = M::from_digests(&leaf_digests);
-
-        let leaf_indices = [0, 3, 5];
-        let opened_leaves = leaf_indices.iter().map(|&i| leaf_digests[i]).collect_vec();
-        let mut authentication_structure = tree.authentication_structure(&leaf_indices).unwrap();
-        assert!(
-            !MT::verify_authentication_structure(
-                tree.root(),
-                tree_height - 1,
-                &leaf_indices,
-                &opened_leaves,
-                &authentication_structure
-            ),
-            "Must return false when called with wrong height, minus one"
+    #[proptest]
+    fn incorrect_tree_height_leads_to_verification_failure(
+        #[filter(!#tree.selected_indices.is_empty())] tree: MerkleTreeToTest,
+        #[strategy(0..=MerkleTree::<Tip5>::MAX_TREE_HEIGHT)]
+        #[filter(#tree.tree.height() != #incorrect_height)]
+        incorrect_height: usize,
+    ) {
+        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
+            tree.tree.root(),
+            incorrect_height,
+            &tree.selected_indices,
+            &tree.leaves,
+            &tree.auth_structure,
         );
-
-        assert!(
-            !MT::verify_authentication_structure(
-                tree.root(),
-                tree_height + 1,
-                &leaf_indices,
-                &opened_leaves,
-                &authentication_structure
-            ),
-            "Must return false when called with wrong height, plus one"
-        );
-
-        assert!(
-            MT::verify_authentication_structure(
-                tree.root(),
-                tree_height,
-                &leaf_indices,
-                &opened_leaves,
-                &authentication_structure
-            ),
-            "Must return true when called with correct height"
-        );
-
-        // Modify length of authentication structure. Verify failure.
-        let random_index = thread_rng().gen_range(0..authentication_structure.len());
-        authentication_structure.remove(random_index);
-        assert!(
-            !MT::verify_authentication_structure(
-                tree.root(),
-                tree_height,
-                &leaf_indices,
-                &opened_leaves,
-                &authentication_structure
-            ),
-            "Must return false when called with too authentication structure."
-        );
+        prop_assert!(!verified);
     }
 
     #[test]
