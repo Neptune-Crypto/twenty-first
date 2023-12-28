@@ -546,6 +546,24 @@ pub mod merkle_tree_test {
     }
 
     #[proptest]
+    fn trivial_proof_can_be_verified(#[strategy(arb())] merkle_tree: MerkleTree<Tip5>) {
+        let leaf_indices = [];
+        let leaf_digests = [];
+
+        let proof = merkle_tree.authentication_structure(&leaf_indices).unwrap();
+        prop_assert!(proof.is_empty());
+
+        let verdict = MerkleTree::<Tip5>::verify_authentication_structure(
+            merkle_tree.root(),
+            merkle_tree.height(),
+            &leaf_indices,
+            &leaf_digests,
+            &proof,
+        );
+        prop_assert!(verdict);
+    }
+
+    #[proptest]
     fn honestly_generated_authentication_structure_can_be_verified(test_tree: MerkleTreeToTest) {
         let verified = MerkleTree::<Tip5>::verify_authentication_structure(
             test_tree.tree.root(),
@@ -615,25 +633,6 @@ pub mod merkle_tree_test {
             &test_tree.auth_structure,
         );
         prop_assert!(!verified);
-    }
-
-    #[test]
-    fn merkle_tree_verify_authentication_structure_degenerate_test() {
-        type H = blake3::Hasher;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-
-        let tree_height = 5;
-        let num_leaves = 1 << tree_height;
-        let leaves: Vec<Digest> = random_elements(num_leaves);
-        let tree: MT = M::from_digests(&leaves);
-
-        let empty_proof = tree.authentication_structure(&[]).unwrap();
-        assert!(empty_proof.is_empty());
-
-        let empty_proof_verifies =
-            MT::verify_authentication_structure(tree.root(), tree_height, &[], &[], &empty_proof);
-        assert!(empty_proof_verifies);
     }
 
     #[test]
