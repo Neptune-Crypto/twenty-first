@@ -479,15 +479,14 @@ pub mod merkle_tree_test {
     use proptest_arbitrary_interop::arb;
     use rand::thread_rng;
     use rand::Rng;
-    use rand::RngCore;
+    use std::num::NonZeroUsize;
     use test_strategy::proptest;
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::digest_tests::DigestCorruptor;
-    use crate::shared_math::other::{indices_of_set_bits, random_elements, random_elements_range};
+    use crate::shared_math::other::{indices_of_set_bits, random_elements};
     use crate::shared_math::tip5::Tip5;
     use crate::shared_math::x_field_element::XFieldElement;
-    use crate::test_shared::corrupt_digest;
     use crate::util_types::shared::bag_peaks;
 
     use super::*;
@@ -635,72 +634,60 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
-    #[test]
-    fn merkle_tree_verify_authentication_structure_test() {
-        type H = blake3::Hasher;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-        let mut rng = thread_rng();
+    /// Test helper for corrupting authentication structures.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct AuthenticationStructureCorruptor {
+        corrupt_indices: Vec<usize>,
+        digest_corruptors: Vec<DigestCorruptor>,
+    }
 
-        for tree_height in 2..=13 {
-            let num_leaves = 1 << tree_height;
-            let leaves: Vec<Digest> = random_elements(num_leaves);
-            let tree: MT = M::from_digests(&leaves);
-
-            for _ in 0..3 {
-                // Generate an arbitrary, positive amount of indices less than the total
-                let num_indices = (rng.next_u64() % num_leaves as u64 / 2) as usize + 1;
-
-                // Generate that amount of indices in the valid index range [0,num_leaves)
-                let selected_indices: Vec<usize> =
-                    random_elements_range(num_indices, 0..num_leaves)
-                        .iter()
-                        .copied()
-                        .unique()
-                        .collect();
-
-                let selected_leaves = tree.leaves_by_indices(&selected_indices);
-                let auth_structure = tree.authentication_structure(&selected_indices).unwrap();
-
-                let good_tree = MT::verify_authentication_structure(
-                    tree.root(),
-                    tree_height,
-                    &selected_indices,
-                    &selected_leaves,
-                    &auth_structure,
-                );
-                assert!(
-                    good_tree,
-                    "An uncorrupted tree and an uncorrupted proof should verify."
-                );
-
-                // Negative: Corrupt the root and thereby the tree
-                let bad_root_hash = corrupt_digest(tree.root());
-
-                let verified = MT::verify_authentication_structure(
-                    bad_root_hash,
-                    tree_height,
-                    &selected_indices,
-                    &selected_leaves,
-                    &auth_structure,
-                );
-                assert!(!verified, "Should not verify against bad root hash.");
-
-                // Negative: Corrupt authentication structure at random index
-                let random_index = thread_rng().gen_range(0..auth_structure.len());
-                let mut bad_auth_structure = auth_structure.clone();
-                bad_auth_structure[random_index] = corrupt_digest(bad_auth_structure[random_index]);
-
-                let corrupted_proof_verifies = MT::verify_authentication_structure(
-                    tree.root(),
-                    tree_height,
-                    &selected_indices,
-                    &selected_leaves,
-                    &bad_auth_structure,
-                );
-                assert!(!corrupted_proof_verifies);
+    prop_compose! {
+        fn auth_structure_corruptor(auth_structure_len: NonZeroUsize) (
+            num_corruptions in 1..=auth_structure_len.get(),
+        )(
+            corrupt_indices in vec(0..auth_structure_len.get(), num_corruptions),
+            digest_corruptors in vec(any::<DigestCorruptor>(), num_corruptions),
+        ) -> AuthenticationStructureCorruptor {
+            AuthenticationStructureCorruptor{
+                corrupt_indices,
+                digest_corruptors,
             }
         }
+    }
+
+    impl AuthenticationStructureCorruptor {
+        fn corrupt_authentication_structure(
+            &self,
+            authentication_structure: &[Digest],
+        ) -> result::Result<Vec<Digest>, TestCaseError> {
+            let mut corrupt_structure = authentication_structure.to_vec();
+            for (&i, digest_corruptor) in self.corrupt_indices.iter().zip(&self.digest_corruptors) {
+                corrupt_structure[i] = digest_corruptor.corrupt_digest(corrupt_structure[i])?;
+            }
+            if corrupt_structure == authentication_structure {
+                let reject_reason = "corruption must change authentication structure".into();
+                return Err(TestCaseError::Reject(reject_reason));
+            }
+            Ok(corrupt_structure)
+        }
+    }
+
+    #[proptest]
+    fn corrupt_authentication_structure_leads_to_verification_failure(
+        #[filter(!#tree.auth_structure.is_empty())] tree: MerkleTreeToTest,
+        #[strategy(auth_structure_corruptor(#tree.auth_structure.len().try_into().unwrap()))]
+        corruptor: AuthenticationStructureCorruptor,
+    ) {
+        let corrupt_auth_structure =
+            corruptor.corrupt_authentication_structure(&tree.auth_structure)?;
+        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
+            tree.tree.root(),
+            tree.tree.height(),
+            &tree.selected_indices,
+            &tree.leaves,
+            &corrupt_auth_structure,
+        );
+        prop_assert!(!verified);
     }
 
     #[test]
