@@ -38,6 +38,17 @@ impl<H> MerkleTree<H>
 where
     H: AlgebraicHasher,
 {
+    const MAX_NUM_LEAVES: usize = usize::MAX / 2;
+    pub const MAX_TREE_HEIGHT: usize = Self::MAX_NUM_LEAVES.ilog2() as usize;
+
+    fn num_leaves(tree_height: usize) -> Result<usize> {
+        let max_tree_height = Self::MAX_TREE_HEIGHT;
+        if tree_height > max_tree_height {
+            return Err(MerkleTreeError::TreeTooHigh { max_tree_height });
+        }
+        Ok(1 << tree_height)
+    }
+
     /// Given a list of leaf indices, return the indices of exactly those nodes that are needed to prove (or verify)
     /// that the indicated leaves are in the Merkle tree.
     // This function is not defined as a method (taking self as argument) since it's needed by the verifier who does not
@@ -169,7 +180,7 @@ where
         leaf_digests: &[Digest],
         authentication_structure: &[Digest],
     ) -> Result<HashMap<usize, Digest>> {
-        let num_leaves = 1 << tree_height;
+        let num_leaves = Self::num_leaves(tree_height)?;
         let num_nodes = num_leaves * 2;
 
         if leaf_indices.len() != leaf_digests.len() {
@@ -215,7 +226,7 @@ where
         tree_height: usize,
         leaf_indices: &[usize],
     ) -> Result<()> {
-        let num_leaves = 1 << tree_height;
+        let num_leaves = Self::num_leaves(tree_height)?;
 
         // Deduplicate parent node indices to avoid hashing the same nodes twice,
         // which happens when two leaves are siblings.
@@ -325,7 +336,7 @@ where
         leaf_index: usize,
     ) -> Result<Vec<Digest>> {
         let root_index = 1;
-        let num_leaves = 1 << tree_height;
+        let num_leaves = Self::num_leaves(tree_height)?;
         let mut authentication_path = vec![];
         let mut node_index = leaf_index + num_leaves;
         while node_index > root_index {
@@ -469,6 +480,9 @@ pub enum MerkleTreeError {
 
     #[error("Could not compute the root. Maybe no leaf indices were supplied?")]
     RootNotFound,
+
+    #[error("Tree height must not exceed {max_tree_height}.")]
+    TreeTooHigh { max_tree_height: usize },
 }
 
 #[cfg(test)]
