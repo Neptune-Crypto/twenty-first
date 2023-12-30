@@ -45,11 +45,13 @@ where
         reader: Arc<dyn StorageReader + Send + Sync>,
         key_prefix: u8,
         name: &str,
+        lock_name: String,
+        lock_acquired_callback: Option<fn(is_mut: bool, name: Option<&str>)>,
     ) -> Self {
         let vec = DbtVecPrivate::<V>::new(reader, key_prefix, name);
 
         Self {
-            inner: AtomicRw::from(vec),
+            inner: AtomicRw::from((vec, Some(lock_name), lock_acquired_callback)),
         }
     }
 }

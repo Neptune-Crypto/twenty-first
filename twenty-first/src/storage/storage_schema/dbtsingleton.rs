@@ -40,7 +40,12 @@ where
 {
     // DbtSingleton can not be instantiated directly outside of this crate.
     #[inline]
-    pub(crate) fn new(key: RustyKey, reader: Arc<dyn StorageReader + Sync + Send>) -> Self {
+    pub(crate) fn new(
+        key: RustyKey,
+        lock_name: String,
+        reader: Arc<dyn StorageReader + Sync + Send>,
+        lock_acquired_callback: Option<fn(is_mut: bool, name: Option<&str>)>,
+    ) -> Self {
         let singleton = DbtSingletonPrivate::<V> {
             current_value: Default::default(),
             old_value: Default::default(),
@@ -48,7 +53,7 @@ where
             reader,
         };
         Self {
-            inner: AtomicRw::from(singleton),
+            inner: AtomicRw::from((singleton, Some(lock_name), lock_acquired_callback)),
         }
     }
 }
