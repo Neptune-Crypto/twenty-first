@@ -38,7 +38,8 @@ impl<H> MerkleTree<H>
 where
     H: AlgebraicHasher,
 {
-    const MAX_NUM_LEAVES: usize = usize::MAX / 2;
+    const MAX_NUM_NODES: usize = 1 << 32;
+    const MAX_NUM_LEAVES: usize = Self::MAX_NUM_NODES / 2;
     pub const MAX_TREE_HEIGHT: usize = Self::MAX_NUM_LEAVES.ilog2() as usize;
 
     fn num_leaves(tree_height: usize) -> Result<usize> {
