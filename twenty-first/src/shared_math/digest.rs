@@ -358,24 +358,12 @@ mod digest_tests {
         );
 
         // Verify conversion from Digest to BigUint
-        assert_eq!(fourteen, fourteen_converted_expected.try_into().unwrap());
-        assert_eq!(bfe_max, bfe_max_converted_expected.try_into().unwrap());
-        assert_eq!(
-            bfe_max_plus_one,
-            bfe_max_plus_one_converted_expected.try_into().unwrap()
-        );
-        assert_eq!(
-            two_pow_64,
-            two_pow_64_converted_expected.try_into().unwrap()
-        );
-        assert_eq!(
-            two_pow_123,
-            two_pow_123_converted_expected.try_into().unwrap()
-        );
-        assert_eq!(
-            two_pow_315,
-            two_pow_315_converted_expected.try_into().unwrap()
-        );
+        assert_eq!(fourteen, fourteen_converted_expected.into());
+        assert_eq!(bfe_max, bfe_max_converted_expected.into());
+        assert_eq!(bfe_max_plus_one, bfe_max_plus_one_converted_expected.into());
+        assert_eq!(two_pow_64, two_pow_64_converted_expected.into());
+        assert_eq!(two_pow_123, two_pow_123_converted_expected.into());
+        assert_eq!(two_pow_315, two_pow_315_converted_expected.into());
     }
 
     #[test]

@@ -7,7 +7,6 @@ use num_traits::{One, Zero};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
@@ -1114,11 +1113,7 @@ impl<FF: FiniteField> MPolynomial<FF> {
                 continue;
             }
 
-            let signed_exponents = exponents.iter().map(|e| {
-                let res = i64::try_from(*e);
-                assert!(res.is_ok());
-                res.unwrap()
-            });
+            let signed_exponents = exponents.iter().map(|&e| i64::from(e));
 
             let term_degree_bound = max_degrees
                 .iter()

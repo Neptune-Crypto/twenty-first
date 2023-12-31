@@ -619,7 +619,6 @@ mod accumulator_mmr_tests {
                         .clone()
                         .into_iter()
                         .zip(membership_proofs)
-                        .map(|(v, mp)| (v, mp))
                         .collect();
                     assert!(accumulator_mmr.verify_batch_update(
                         &expected_new_peaks_from_accumulator,
