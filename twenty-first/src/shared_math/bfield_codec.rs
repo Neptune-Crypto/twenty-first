@@ -225,7 +225,7 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
         // decode S
-        if S::static_length().is_none() && sequence.get(0).is_none() {
+        if S::static_length().is_none() && sequence.first().is_none() {
             return Err(Self::Error::MissingLengthIndicator);
         }
         let (length_of_s, sequence) = match S::static_length() {
@@ -239,7 +239,7 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
         let s = *S::decode(sequence_for_s).map_err(|err| err.into())?;
 
         // decode T
-        if T::static_length().is_none() && sequence.get(0).is_none() {
+        if T::static_length().is_none() && sequence.first().is_none() {
             return Err(Self::Error::MissingLengthIndicator);
         }
         let (length_of_t, sequence) = match T::static_length() {

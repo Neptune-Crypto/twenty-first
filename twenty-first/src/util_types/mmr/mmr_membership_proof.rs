@@ -745,11 +745,7 @@ mod mmr_membership_proof_test {
         let mut updated_leaf_hashes = leaf_hashes;
         updated_leaf_hashes[2] = new_leaf2;
         updated_leaf_hashes[3] = new_leaf3;
-        for (_i, (mp, &leaf_hash)) in membership_proofs
-            .iter()
-            .zip(updated_leaf_hashes.iter())
-            .enumerate()
-        {
+        for (mp, &leaf_hash) in membership_proofs.iter().zip(&updated_leaf_hashes) {
             mp.verify(
                 &archival_mmr.get_peaks(),
                 leaf_hash,
