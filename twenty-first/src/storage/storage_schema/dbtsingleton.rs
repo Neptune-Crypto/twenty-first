@@ -3,7 +3,7 @@ use std::{fmt::Debug, sync::Arc};
 use super::{
     dbtsingleton_private::DbtSingletonPrivate, traits::*, RustyKey, RustyValue, WriteOperation,
 };
-use crate::sync::AtomicRw;
+use crate::sync::{AtomicRw, LockCallbackFn};
 use serde::{de::DeserializeOwned, Serialize};
 
 /// Singleton type created by [`super::DbtSchema`]
@@ -44,7 +44,7 @@ where
         key: RustyKey,
         lock_name: String,
         reader: Arc<dyn StorageReader + Sync + Send>,
-        lock_acquired_callback: Option<fn(is_mut: bool, name: Option<&str>)>,
+        lock_callback_fn: Option<LockCallbackFn>,
     ) -> Self {
         let singleton = DbtSingletonPrivate::<V> {
             current_value: Default::default(),
@@ -53,7 +53,7 @@ where
             reader,
         };
         Self {
-            inner: AtomicRw::from((singleton, Some(lock_name), lock_acquired_callback)),
+            inner: AtomicRw::from((singleton, Some(lock_name), lock_callback_fn)),
         }
     }
 }

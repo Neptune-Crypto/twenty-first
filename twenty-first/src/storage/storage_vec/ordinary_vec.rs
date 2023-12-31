@@ -1,7 +1,6 @@
 use super::ordinary_vec_private::OrdinaryVecPrivate;
 use super::{traits::*, Index};
-use crate::sync::AtomicRw;
-use std::sync::{RwLockReadGuard, RwLockWriteGuard};
+use crate::sync::{AtomicRw, AtomicRwReadGuard, AtomicRwWriteGuard};
 
 /// A wrapper that adds [`RwLock`](std::sync::RwLock) and atomic snapshot
 /// guarantees around all accesses to an ordinary [`Vec`]
@@ -99,12 +98,12 @@ impl<T> StorageVecRwLock<T> for OrdinaryVec<T> {
     type LockedData = OrdinaryVecPrivate<T>;
 
     #[inline]
-    fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
+    fn write_lock(&self) -> AtomicRwWriteGuard<'_, Self::LockedData> {
         self.0.lock_guard_mut()
     }
 
     #[inline]
-    fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
+    fn read_lock(&self) -> AtomicRwReadGuard<'_, Self::LockedData> {
         self.0.lock_guard()
     }
 }

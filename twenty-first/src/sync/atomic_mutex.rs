@@ -1,7 +1,7 @@
 use super::traits::Atomic;
+use super::{LockAcquisition, LockCallbackFn, LockCallbackInfo, LockEvent, LockType};
+use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, MutexGuard};
-
-type AcquiredCallbackFn = fn(is_mut: bool, name: Option<&str>);
 
 /// An `Arc<Mutex<T>>` wrapper to make data thread-safe and easy to work with.
 ///
@@ -22,65 +22,95 @@ type AcquiredCallbackFn = fn(is_mut: bool, name: Option<&str>);
 ///
 /// # Examples
 /// ```
-/// # use twenty_first::sync::AtomicMutex;
+/// # use twenty_first::sync::{AtomicMutex, LockEvent, LockCallbackFn};
 /// struct Car {
 ///     year: u16,
 /// };
 ///
-/// pub fn log_lock_acquired(is_mut: bool, name: Option<&str>) {
-///     println!(
-///         "thread {{name: `{}`, id: {:?}}} acquired lock `{}` for {}",
-///         std::thread::current().name().unwrap_or("?"),
-///         std::thread::current().id(),
-///         name.unwrap_or("?"),
-///         if is_mut { "write" } else { "read" }
-///     );
+/// pub fn log_lock_event(lock_event: LockEvent) {
+///     match lock_event {
+///         LockEvent::Acquire{info, acquired} =>
+///             println!(
+///                 "thread {{name: `{}`, id: {:?}}} acquired `{}` lock `{}` for {}",
+///                 std::thread::current().name().unwrap_or("?"),
+///                 std::thread::current().id(),
+///                 info.lock_type(),
+///                 info.name().unwrap_or("?"),
+///                 acquired,
+///             ),
+///         LockEvent::Release{info, acquired} =>
+///             println!(
+///                 "thread {{name: `{}`, id: {:?}}} released `{}` lock `{}` for {}",
+///                 std::thread::current().name().unwrap_or("?"),
+///                 std::thread::current().id(),
+///                 info.lock_type(),
+///                 info.name().unwrap_or("?"),
+///                 acquired,
+///             ),
+///     }
 /// }
-/// const LOG_LOCK_ACQUIRED_CB: fn(is_mut: bool, name: Option<&str>) = log_lock_acquired;
+/// const LOG_LOCK_EVENT_CB: LockCallbackFn = log_lock_event;
 ///
-/// let atomic_car = AtomicMutex::<Car>::from((Car{year: 2016}, Some("car"), Some(LOG_LOCK_ACQUIRED_CB)));
+/// let atomic_car = AtomicMutex::<Car>::from((Car{year: 2016}, Some("car"), Some(LOG_LOCK_EVENT_CB)));
 /// atomic_car.lock(|c| {println!("year: {}", c.year)});
 /// atomic_car.lock_mut(|mut c| {c.year = 2023});
 /// ```
 ///
 /// results in:
-#[derive(Debug, Default)]
+/// ```text
+/// thread {name: `main`, id: ThreadId(1)} acquired `RwLock` lock `car` for Read
+/// year: 2016
+/// thread {name: `main`, id: ThreadId(1)} released `RwLock` lock `car` for Read
+/// thread {name: `main`, id: ThreadId(1)} acquired `RwLock` lock `car` for Write
+/// thread {name: `main`, id: ThreadId(1)} released `RwLock` lock `car` for Write
+/// ```
+#[derive(Debug)]
 pub struct AtomicMutex<T> {
     inner: Arc<Mutex<T>>,
-    name: Option<String>,
-    acquired_callback: Option<AcquiredCallbackFn>,
+    lock_callback_info: LockCallbackInfo,
 }
+
+impl<T: Default> Default for AtomicMutex<T> {
+    fn default() -> Self {
+        Self {
+            inner: Default::default(),
+            lock_callback_info: LockCallbackInfo::new(LockType::Mutex, None, None),
+        }
+    }
+}
+
 impl<T> From<T> for AtomicMutex<T> {
     #[inline]
     fn from(t: T) -> Self {
         Self {
             inner: Arc::new(Mutex::new(t)),
-            name: None,
-            acquired_callback: None,
+            lock_callback_info: LockCallbackInfo::new(LockType::Mutex, None, None),
         }
     }
 }
-impl<T> From<(T, Option<String>, Option<AcquiredCallbackFn>)> for AtomicMutex<T> {
+impl<T> From<(T, Option<String>, Option<LockCallbackFn>)> for AtomicMutex<T> {
     /// Create from an optional name and an optional callback function, which
     /// is called when a lock is acquired.
     #[inline]
-    fn from(v: (T, Option<String>, Option<AcquiredCallbackFn>)) -> Self {
+    fn from(v: (T, Option<String>, Option<LockCallbackFn>)) -> Self {
         Self {
             inner: Arc::new(Mutex::new(v.0)),
-            name: v.1,
-            acquired_callback: v.2,
+            lock_callback_info: LockCallbackInfo::new(LockType::Mutex, v.1, v.2),
         }
     }
 }
-impl<T> From<(T, Option<&str>, Option<AcquiredCallbackFn>)> for AtomicMutex<T> {
+impl<T> From<(T, Option<&str>, Option<LockCallbackFn>)> for AtomicMutex<T> {
     /// Create from a name ref and an optional callback function, which
     /// is called when a lock is acquired.
     #[inline]
-    fn from(v: (T, Option<&str>, Option<AcquiredCallbackFn>)) -> Self {
+    fn from(v: (T, Option<&str>, Option<LockCallbackFn>)) -> Self {
         Self {
             inner: Arc::new(Mutex::new(v.0)),
-            name: v.1.map(|s| s.to_owned()),
-            acquired_callback: v.2,
+            lock_callback_info: LockCallbackInfo::new(
+                LockType::Mutex,
+                v.1.map(|s| s.to_owned()),
+                v.2,
+            ),
         }
     }
 }
@@ -88,9 +118,8 @@ impl<T> From<(T, Option<&str>, Option<AcquiredCallbackFn>)> for AtomicMutex<T> {
 impl<T> Clone for AtomicMutex<T> {
     fn clone(&self) -> Self {
         Self {
-            name: self.name.clone(),
+            lock_callback_info: self.lock_callback_info.clone(),
             inner: self.inner.clone(),
-            acquired_callback: None,
         }
     }
 }
@@ -99,22 +128,20 @@ impl<T> From<Mutex<T>> for AtomicMutex<T> {
     #[inline]
     fn from(t: Mutex<T>) -> Self {
         Self {
-            name: None,
             inner: Arc::new(t),
-            acquired_callback: None,
+            lock_callback_info: LockCallbackInfo::new(LockType::Mutex, None, None),
         }
     }
 }
-impl<T> From<(Mutex<T>, Option<String>, Option<AcquiredCallbackFn>)> for AtomicMutex<T> {
-    /// Create from an Mutex<T> plus an optional name
+impl<T> From<(Mutex<T>, Option<String>, Option<LockCallbackFn>)> for AtomicMutex<T> {
+    /// Create from an `Mutex<T>` plus an optional name
     /// and an optional callback function, which is called
     /// when a lock is acquired.
     #[inline]
-    fn from(v: (Mutex<T>, Option<String>, Option<AcquiredCallbackFn>)) -> Self {
+    fn from(v: (Mutex<T>, Option<String>, Option<LockCallbackFn>)) -> Self {
         Self {
             inner: Arc::new(v.0),
-            name: v.1,
-            acquired_callback: v.2,
+            lock_callback_info: LockCallbackInfo::new(LockType::Mutex, v.1, v.2),
         }
     }
 }
@@ -130,22 +157,20 @@ impl<T> From<Arc<Mutex<T>>> for AtomicMutex<T> {
     #[inline]
     fn from(t: Arc<Mutex<T>>) -> Self {
         Self {
-            name: None,
             inner: t,
-            acquired_callback: None,
+            lock_callback_info: LockCallbackInfo::new(LockType::Mutex, None, None),
         }
     }
 }
-impl<T> From<(Arc<Mutex<T>>, Option<String>, Option<AcquiredCallbackFn>)> for AtomicMutex<T> {
+impl<T> From<(Arc<Mutex<T>>, Option<String>, Option<LockCallbackFn>)> for AtomicMutex<T> {
     /// Create from an `Arc<Mutex<T>>` plus an optional name and
     /// an optional callback function, which is called when a lock
     /// is acquired.
     #[inline]
-    fn from(v: (Arc<Mutex<T>>, Option<String>, Option<AcquiredCallbackFn>)) -> Self {
+    fn from(v: (Arc<Mutex<T>>, Option<String>, Option<LockCallbackFn>)) -> Self {
         Self {
             inner: v.0,
-            name: v.1,
-            acquired_callback: v.2,
+            lock_callback_info: LockCallbackInfo::new(LockType::Mutex, v.1, v.2),
         }
     }
 }
@@ -160,7 +185,7 @@ impl<T> From<AtomicMutex<T>> for Arc<Mutex<T>> {
 // note: we impl the Atomic trait methods here also so they
 // can be used without caller having to use the trait.
 impl<T> AtomicMutex<T> {
-    /// Acquire read lock and return an `MutexGuard`
+    /// Acquire read lock and return an `AtomicMutexGuard`
     ///
     /// # Examples
     /// ```
@@ -171,15 +196,12 @@ impl<T> AtomicMutex<T> {
     /// let atomic_car = AtomicMutex::from(Car{year: 2016});
     /// let year = atomic_car.lock_guard().year;
     /// ```
-    pub fn lock_guard(&self) -> MutexGuard<T> {
+    pub fn lock_guard(&self) -> AtomicMutexGuard<T> {
         let guard = self.inner.lock().expect("Read lock should succeed");
-        if let Some(cb) = self.acquired_callback {
-            cb(false, self.name.as_deref());
-        }
-        guard
+        AtomicMutexGuard::new(guard, &self.lock_callback_info, LockAcquisition::Read)
     }
 
-    /// Acquire write lock and return an `MutexGuard`
+    /// Acquire write lock and return an `AtomicMutexGuard`
     ///
     /// # Examples
     /// ```
@@ -190,12 +212,9 @@ impl<T> AtomicMutex<T> {
     /// let atomic_car = AtomicMutex::from(Car{year: 2016});
     /// atomic_car.lock_guard_mut().year = 2022;
     /// ```
-    pub fn lock_guard_mut(&self) -> MutexGuard<T> {
+    pub fn lock_guard_mut(&self) -> AtomicMutexGuard<T> {
         let guard = self.inner.lock().expect("Write lock should succeed");
-        if let Some(cb) = self.acquired_callback {
-            cb(false, self.name.as_deref());
-        }
-        guard
+        AtomicMutexGuard::new(guard, &self.lock_callback_info, LockAcquisition::Write)
     }
 
     /// Immutably access the data of type `T` in a closure and possibly return a result of type `R`
@@ -214,11 +233,10 @@ impl<T> AtomicMutex<T> {
     where
         F: FnOnce(&T) -> R,
     {
-        let lock = self.inner.lock().expect("Read lock should succeed");
-        if let Some(cb) = self.acquired_callback {
-            cb(false, self.name.as_deref());
-        }
-        f(&lock)
+        let guard = self.inner.lock().expect("Read lock should succeed");
+        let my_guard =
+            AtomicMutexGuard::new(guard, &self.lock_callback_info, LockAcquisition::Read);
+        f(&my_guard)
     }
 
     /// Mutably access the data of type `T` in a closure and possibly return a result of type `R`
@@ -237,11 +255,10 @@ impl<T> AtomicMutex<T> {
     where
         F: FnOnce(&mut T) -> R,
     {
-        let mut lock = self.inner.lock().expect("Write lock should succeed");
-        if let Some(cb) = self.acquired_callback {
-            cb(false, self.name.as_deref());
-        }
-        f(&mut lock)
+        let guard = self.inner.lock().expect("Write lock should succeed");
+        let mut my_guard =
+            AtomicMutexGuard::new(guard, &self.lock_callback_info, LockAcquisition::Write);
+        f(&mut my_guard)
     }
 
     /// get copy of the locked value T (if T implements Copy).
@@ -279,7 +296,7 @@ impl<T> AtomicMutex<T> {
     /// retrieve lock name if present, or None
     #[inline]
     pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
+        self.lock_callback_info.lock_info_owned.name.as_deref()
     }
 }
 
@@ -298,6 +315,60 @@ impl<T> Atomic<T> for AtomicMutex<T> {
         F: FnOnce(&mut T) -> R,
     {
         AtomicMutex::<T>::lock_mut(self, f)
+    }
+}
+
+/// A wrapper for [MutexGuard](std::sync::MutexGuard) that
+/// can optionally call a callback to notify when the
+/// lock is acquired or released.
+pub struct AtomicMutexGuard<'a, T> {
+    guard: MutexGuard<'a, T>,
+    lock_callback_info: &'a LockCallbackInfo,
+    acquired: LockAcquisition,
+}
+
+impl<'a, T> AtomicMutexGuard<'a, T> {
+    fn new(
+        guard: MutexGuard<'a, T>,
+        lock_callback_info: &'a LockCallbackInfo,
+        acquired: LockAcquisition,
+    ) -> Self {
+        if let Some(cb) = lock_callback_info.lock_callback_fn {
+            cb(LockEvent::Acquire {
+                info: lock_callback_info.lock_info_owned.as_lock_info(),
+                acquired,
+            });
+        }
+        Self {
+            guard,
+            lock_callback_info,
+            acquired,
+        }
+    }
+}
+
+impl<'a, T> Drop for AtomicMutexGuard<'a, T> {
+    fn drop(&mut self) {
+        let lock_callback_info = self.lock_callback_info;
+        if let Some(cb) = lock_callback_info.lock_callback_fn {
+            cb(LockEvent::Release {
+                info: lock_callback_info.lock_info_owned.as_lock_info(),
+                acquired: self.acquired,
+            });
+        }
+    }
+}
+
+impl<'a, T> Deref for AtomicMutexGuard<'a, T> {
+    type Target = MutexGuard<'a, T>;
+    fn deref(&self) -> &Self::Target {
+        &self.guard
+    }
+}
+
+impl<'a, T> DerefMut for AtomicMutexGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.guard
     }
 }
 

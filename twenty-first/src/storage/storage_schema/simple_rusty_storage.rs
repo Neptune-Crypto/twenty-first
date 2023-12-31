@@ -1,6 +1,7 @@
 use super::super::level_db::DB;
 use super::enums::WriteOperation;
 use super::{traits::StorageWriter, DbtSchema, SimpleRustyReader};
+use crate::sync::LockCallbackFn;
 use leveldb::batch::WriteBatch;
 use std::sync::Arc;
 
@@ -55,15 +56,11 @@ impl SimpleRustyStorage {
 
     /// Create a new SimpleRustyStorage and provide a
     /// name and lock acquisition callback for tracing
-    pub fn new_with_callback(
-        db: DB,
-        storage_name: &str,
-        lock_acquired_callback: fn(is_mut: bool, name: Option<&str>),
-    ) -> Self {
+    pub fn new_with_callback(db: DB, storage_name: &str, lock_callback_fn: LockCallbackFn) -> Self {
         let schema = DbtSchema::<SimpleRustyReader>::new(
             Arc::new(SimpleRustyReader { db }),
             Some(storage_name),
-            Some(lock_acquired_callback),
+            Some(lock_callback_fn),
         );
         Self { schema }
     }

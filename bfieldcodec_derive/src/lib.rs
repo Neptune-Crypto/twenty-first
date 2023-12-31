@@ -27,7 +27,6 @@ use quote::quote;
 /// ```
 ///
 /// ### Known limitations
-/// ```
 #[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
 pub fn bfieldcodec_derive(input: TokenStream) -> TokenStream {
     // ...
