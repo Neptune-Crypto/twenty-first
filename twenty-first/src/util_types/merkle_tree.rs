@@ -771,46 +771,32 @@ pub mod merkle_tree_test {
     }
 
     #[test]
-    fn merkle_tree_get_authentication_path_test() {
-        type H = blake3::Hasher;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-
-        // 1: Create Merkle tree
-
+    fn authentication_paths_of_extremely_small_tree_use_expected_digests() {
         //     _ 1_
         //    /    \
         //   2      3
         //  / \    / \
         // 4   5  6   7
-        // 0   1  2   3 <- leaf indices
-        let num_leaves_a = 4;
-        let leaves_a: Vec<Digest> = random_elements(num_leaves_a);
-        let tree_a: MT = M::from_digests(&leaves_a);
-
-        // 2: Get the path for some index
-        let leaf_index_a = 2;
-        let auth_path_a = tree_a.authentication_structure(&[leaf_index_a]).unwrap();
-
-        let auth_path_a_len = 2;
-        assert_eq!(auth_path_a_len, auth_path_a.len());
-        assert_eq!(tree_a.nodes[7], auth_path_a[0]);
-        assert_eq!(tree_a.nodes[2], auth_path_a[1]);
-
-        // Also test this small Merkle tree with compressed auth paths. To get the node index
-        // in the tree assign 1 to the root, 2/3 to its left/right child, and so on. To convert
-        // from a leaf index to a node index, add the number of leaves. So leaf number 3 above
-        // is node index 7. `x` is node index 2.
-        let needed_nodes = MerkleTree::<Tip5>::indices_of_nodes_in_authentication_structure(
-            tree_a.num_leafs() * 2,
-            &[leaf_index_a],
-        )
-        .unwrap()
-        .collect_vec();
-        assert_eq!(vec![7, 2], needed_nodes);
-
-        // 1: Create Merkle tree
         //
+        // 0   1  2   3 <- leaf indices
+
+        let num_leaves = 4;
+        let leaves = (0..num_leaves).map(BFieldElement::new);
+        let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
+        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests);
+        assert!(leaf_digests.iter().all_unique());
+
+        let auth_path_with_nodes = |indices: [usize; 2]| indices.map(|i| tree.nodes[i]).to_vec();
+        let auth_path_for_leaf = |index| tree.authentication_structure(&[index]).unwrap();
+
+        assert_eq!(auth_path_with_nodes([5, 3]), auth_path_for_leaf(0));
+        assert_eq!(auth_path_with_nodes([4, 3]), auth_path_for_leaf(1));
+        assert_eq!(auth_path_with_nodes([7, 2]), auth_path_for_leaf(2));
+        assert_eq!(auth_path_with_nodes([6, 2]), auth_path_for_leaf(3));
+    }
+
+    #[test]
+    fn authentication_paths_of_very_small_tree_use_expected_digests() {
         //         ──── 1 ────
         //        ╱           ╲
         //       2             3
@@ -821,19 +807,24 @@ pub mod merkle_tree_test {
         //  8   9  10 11  12 13  14 15
         //
         //  0   1  2   3  4   5  6   7  <- leaf indices
-        let num_leaves_b = 8;
-        let leaves_b: Vec<Digest> = random_elements(num_leaves_b);
-        let tree_b: MT = M::from_digests(&leaves_b);
 
-        // 2: Get the path for some index
-        let leaf_index_b = 5;
-        let auth_path_b = tree_b.authentication_structure(&[leaf_index_b]).unwrap();
+        let num_leaves = 8;
+        let leaves = (0..num_leaves).map(BFieldElement::new);
+        let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
+        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests);
+        assert!(leaf_digests.iter().all_unique());
 
-        let auth_path_b_len = 3;
-        assert_eq!(auth_path_b_len, auth_path_b.len());
-        assert_eq!(tree_b.nodes[12], auth_path_b[0]);
-        assert_eq!(tree_b.nodes[7], auth_path_b[1]);
-        assert_eq!(tree_b.nodes[2], auth_path_b[2]);
+        let auth_path_with_nodes = |indices: [usize; 3]| indices.map(|i| tree.nodes[i]).to_vec();
+        let auth_path_for_leaf = |index| tree.authentication_structure(&[index]).unwrap();
+
+        assert_eq!(auth_path_with_nodes([9, 5, 3]), auth_path_for_leaf(0));
+        assert_eq!(auth_path_with_nodes([8, 5, 3]), auth_path_for_leaf(1));
+        assert_eq!(auth_path_with_nodes([11, 4, 3]), auth_path_for_leaf(2));
+        assert_eq!(auth_path_with_nodes([10, 4, 3]), auth_path_for_leaf(3));
+        assert_eq!(auth_path_with_nodes([13, 7, 2]), auth_path_for_leaf(4));
+        assert_eq!(auth_path_with_nodes([12, 7, 2]), auth_path_for_leaf(5));
+        assert_eq!(auth_path_with_nodes([15, 6, 2]), auth_path_for_leaf(6));
+        assert_eq!(auth_path_with_nodes([14, 6, 2]), auth_path_for_leaf(7));
     }
 
     #[test]
