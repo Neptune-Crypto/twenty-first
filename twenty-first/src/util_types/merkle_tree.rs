@@ -595,7 +595,7 @@ pub mod merkle_tree_test {
     }
 
     #[proptest]
-    fn corrupt_root_cannot_be_verified(
+    fn corrupt_root_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         corruptor: DigestCorruptor,
     ) {
@@ -681,6 +681,33 @@ pub mod merkle_tree_test {
     }
 
     #[proptest]
+    fn corrupt_leaf_digests_lead_to_verification_failure(
+        #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
+        #[strategy(vec(0..#test_tree.leaves.len(), 1..=#test_tree.leaves.len()))]
+        indices_to_corrupt: Vec<usize>,
+        #[strategy(vec(any::<DigestCorruptor>(), #indices_to_corrupt.len()))]
+        digest_corruptors: Vec<DigestCorruptor>,
+    ) {
+        let mut corrupt_leaves = test_tree.leaves.clone();
+        for (&i, digest_corruptor) in indices_to_corrupt.iter().zip(&digest_corruptors) {
+            corrupt_leaves[i] = digest_corruptor.corrupt_digest(corrupt_leaves[i])?;
+        }
+        if corrupt_leaves == test_tree.leaves {
+            let reject_reason = "corruption must change leaf digest".into();
+            return Err(TestCaseError::Reject(reject_reason));
+        }
+
+        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
+            test_tree.tree.root(),
+            test_tree.tree.height(),
+            &test_tree.selected_indices,
+            &corrupt_leaves,
+            &test_tree.auth_structure,
+        );
+        prop_assert!(!verified);
+    }
+
+    #[proptest]
     fn incorrect_tree_height_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(0..=MerkleTree::<Tip5>::MAX_TREE_HEIGHT)]
@@ -697,92 +724,51 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
-    #[test]
-    fn verify_merkle_tree_with_duplicated_indices() {
-        type H = blake3::Hasher;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-        let tree_height = 5;
-        let num_leaves = 1 << tree_height;
-        let leaf_digests: Vec<Digest> = random_elements(num_leaves);
-        let tree: MT = M::from_digests(&leaf_digests);
+    /// The property-test framework can already select the same leaves multiple times. However, this
+    /// a. ensures that property, making the test explicit instead of implicit, and
+    /// b. ensures the property holds even for an already-generated proof.
+    #[proptest]
+    fn honestly_generated_proof_with_duplicate_leaves_can_be_verified(
+        #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
+        #[strategy(vec(0..#test_tree.selected_indices.len(), 1..=#test_tree.selected_indices.len()))]
+        indices_to_duplicate: Vec<usize>,
+    ) {
+        let additional_indices = indices_to_duplicate
+            .iter()
+            .map(|&i| test_tree.selected_indices[i])
+            .collect_vec();
+        let all_indices = [test_tree.selected_indices.clone(), additional_indices].concat();
 
-        let leaf_indices = [0, 5, 3, 5];
-        let opened_leaves = leaf_indices.iter().map(|&i| leaf_digests[i]).collect_vec();
-        let authentication_structure = tree.authentication_structure(&leaf_indices).unwrap();
-        let verdict = MT::verify_authentication_structure(
-            tree.root(),
-            tree_height,
-            &leaf_indices,
-            &opened_leaves,
-            &authentication_structure,
-        );
-        assert!(verdict, "Repeated indices must be tolerated.");
+        let additional_leaves = indices_to_duplicate
+            .into_iter()
+            .map(|i| test_tree.leaves[i])
+            .collect_vec();
+        let all_leaves = [test_tree.leaves.clone(), additional_leaves].concat();
 
-        let incorrectly_opened_leaves = [
-            opened_leaves[0],
-            opened_leaves[1],
-            opened_leaves[2],
-            opened_leaves[0],
-        ];
-        let verdict_for_incorrect_statement = MT::verify_authentication_structure(
-            tree.root(),
-            tree_height,
-            &leaf_indices,
-            &incorrectly_opened_leaves,
-            &authentication_structure,
+        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
+            test_tree.tree.root(),
+            test_tree.tree.height(),
+            &all_indices,
+            &all_leaves,
+            &test_tree.auth_structure,
         );
-        assert!(
-            !verdict_for_incorrect_statement,
-            "Repeated indices with different leaves must be rejected."
-        );
+        prop_assert!(verified);
     }
 
-    #[test]
-    fn verify_merkle_tree_where_every_leaf_is_revealed() {
-        type H = blake3::Hasher;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-
-        let tree_height = 5;
-        let num_leaves = 1 << tree_height;
-        let leaf_digests: Vec<Digest> = random_elements(num_leaves);
-        let tree: MT = M::from_digests(&leaf_digests);
-
-        let leaf_indices = (0..num_leaves).collect_vec();
-        let opened_leaves = leaf_indices.iter().map(|&i| leaf_digests[i]).collect_vec();
-        let authentication_structure = tree.authentication_structure(&leaf_indices).unwrap();
-        assert!(authentication_structure.is_empty());
-
-        let verdict = MT::verify_authentication_structure(
+    #[proptest]
+    fn honestly_generated_proof_with_all_leaves_revealed_can_be_verified(
+        #[strategy(arb())] tree: MerkleTree<Tip5>,
+    ) {
+        let leaf_indices = (0..tree.num_leafs()).collect_vec();
+        let proof = tree.authentication_structure(&leaf_indices).unwrap();
+        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
             tree.root(),
-            tree_height,
+            tree.height(),
             &leaf_indices,
-            &opened_leaves,
-            &authentication_structure,
+            tree.leaves(),
+            &proof,
         );
-        assert!(verdict, "Revealing all leaves must be tolerated.");
-
-        let leaf_indices_x2 = leaf_indices
-            .iter()
-            .chain(leaf_indices.iter())
-            .copied()
-            .collect_vec();
-        let opened_leaves_x2 = leaf_indices_x2
-            .iter()
-            .map(|&i| leaf_digests[i])
-            .collect_vec();
-        let authentication_structure_x2 = tree.authentication_structure(&leaf_indices_x2).unwrap();
-        assert!(authentication_structure_x2.is_empty());
-
-        let verdict_x2 = MT::verify_authentication_structure(
-            tree.root(),
-            tree_height,
-            &leaf_indices_x2,
-            &opened_leaves_x2,
-            &authentication_structure_x2,
-        );
-        assert!(verdict_x2, "Revealing all leaves twice must be tolerated.");
+        prop_assert!(verified);
     }
 
     #[test]
