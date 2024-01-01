@@ -360,15 +360,15 @@ impl<'a, T> Drop for AtomicMutexGuard<'a, T> {
 }
 
 impl<'a, T> Deref for AtomicMutexGuard<'a, T> {
-    type Target = MutexGuard<'a, T>;
+    type Target = T;
     fn deref(&self) -> &Self::Target {
-        &self.guard
+        &*self.guard
     }
 }
 
 impl<'a, T> DerefMut for AtomicMutexGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.guard
+        &mut *self.guard
     }
 }
 

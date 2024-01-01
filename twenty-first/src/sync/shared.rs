@@ -6,6 +6,7 @@ pub enum LockType {
 }
 
 impl std::fmt::Display for LockType {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Mutex => write!(f, "Mutex"),
@@ -22,6 +23,7 @@ pub enum LockAcquisition {
 }
 
 impl std::fmt::Display for LockAcquisition {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Read => write!(f, "Read"),
@@ -36,6 +38,7 @@ pub(super) struct LockInfoOwned {
     pub lock_type: LockType,
 }
 impl LockInfoOwned {
+    #[inline]
     pub fn as_lock_info(&self) -> LockInfo<'_> {
         LockInfo {
             name: self.name.as_deref(),
@@ -52,11 +55,13 @@ pub struct LockInfo<'a> {
 }
 impl<'a> LockInfo<'a> {
     /// get the lock's name
+    #[inline]
     pub fn name(&self) -> Option<&str> {
         self.name
     }
 
     /// get the lock's type
+    #[inline]
     pub fn lock_type(&self) -> LockType {
         self.lock_type
     }
@@ -68,6 +73,7 @@ pub(super) struct LockCallbackInfo {
     pub lock_callback_fn: Option<LockCallbackFn>,
 }
 impl LockCallbackInfo {
+    #[inline]
     pub fn new(
         lock_type: LockType,
         name: Option<String>,

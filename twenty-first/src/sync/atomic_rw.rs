@@ -354,15 +354,9 @@ impl<'a, T> Drop for AtomicRwReadGuard<'a, T> {
 }
 
 impl<'a, T> Deref for AtomicRwReadGuard<'a, T> {
-    type Target = RwLockReadGuard<'a, T>;
+    type Target = T;
     fn deref(&self) -> &Self::Target {
-        &self.guard
-    }
-}
-
-impl<'a, T> DerefMut for AtomicRwReadGuard<'a, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.guard
+        &*self.guard
     }
 }
 
@@ -402,15 +396,15 @@ impl<'a, T> Drop for AtomicRwWriteGuard<'a, T> {
 }
 
 impl<'a, T> Deref for AtomicRwWriteGuard<'a, T> {
-    type Target = RwLockWriteGuard<'a, T>;
+    type Target = T;
     fn deref(&self) -> &Self::Target {
-        &self.guard
+        &*self.guard
     }
 }
 
 impl<'a, T> DerefMut for AtomicRwWriteGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.guard
+        &mut *self.guard
     }
 }
 
