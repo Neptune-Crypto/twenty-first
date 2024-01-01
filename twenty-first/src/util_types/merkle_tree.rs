@@ -57,7 +57,7 @@ where
     fn indices_of_nodes_in_authentication_structure(
         num_nodes: usize,
         leaf_indices: &[usize],
-    ) -> Result<Vec<usize>> {
+    ) -> Result<impl ExactSizeIterator<Item = usize>> {
         let num_leaves = num_nodes / 2;
         let root_index = 1;
 
@@ -88,7 +88,7 @@ where
         }
 
         let set_difference = node_is_needed.difference(&node_can_be_computed).cloned();
-        Ok(set_difference.sorted_unstable().rev().collect())
+        Ok(set_difference.sorted_unstable().rev())
     }
 
     /// Generate a de-duplicated authentication structure for the given leaf indices.
@@ -126,7 +126,7 @@ where
     pub fn authentication_structure(&self, leaf_indices: &[usize]) -> Result<Vec<Digest>> {
         let num_nodes = self.nodes.len();
         let indices = Self::indices_of_nodes_in_authentication_structure(num_nodes, leaf_indices)?;
-        let auth_structure = indices.into_iter().map(|idx| self.nodes[idx]).collect();
+        let auth_structure = indices.map(|idx| self.nodes[idx]).collect();
         Ok(auth_structure)
     }
 
@@ -201,7 +201,6 @@ where
         }
 
         let mut partial_merkle_tree: HashMap<_, _> = indices_of_nodes_in_authentication_structure
-            .into_iter()
             .zip(authentication_structure.iter().copied())
             .collect();
 
@@ -806,7 +805,8 @@ pub mod merkle_tree_test {
             tree_a.num_leafs() * 2,
             &[leaf_index_a],
         )
-        .unwrap();
+        .unwrap()
+        .collect_vec();
         assert_eq!(vec![7, 2], needed_nodes);
 
         // 1: Create Merkle tree
