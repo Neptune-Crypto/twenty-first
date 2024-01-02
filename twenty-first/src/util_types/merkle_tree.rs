@@ -17,6 +17,8 @@ use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 /// implementation). It should probably be a higher number than 16 when using a faster hash function.
 const PARALLELIZATION_THRESHOLD: usize = 16;
 
+const ROOT_INDEX: usize = 1;
+
 type Result<T> = result::Result<T, MerkleTreeError>;
 
 /// # Design
@@ -58,7 +60,6 @@ where
         leaf_indices: &[usize],
     ) -> Result<impl ExactSizeIterator<Item = usize>> {
         let num_leaves = num_nodes / 2;
-        let root_index = 1;
 
         let some_index_is_invalid = leaf_indices.iter().any(|&i| i >= num_leaves);
         if some_index_is_invalid {
@@ -78,7 +79,7 @@ where
 
         for leaf_index in leaf_indices {
             let mut node_index = leaf_index + num_leaves;
-            while node_index > root_index {
+            while node_index > ROOT_INDEX {
                 let sibling_index = node_index ^ 1;
                 node_can_be_computed.insert(node_index);
                 node_is_needed.insert(sibling_index);
@@ -153,7 +154,7 @@ where
         let Ok(()) = Self::fill_partial_tree(&mut partial_tree, tree_height, leaf_indices) else {
             return false;
         };
-        let computed_root = partial_tree[&1];
+        let computed_root = partial_tree[&ROOT_INDEX];
         computed_root == expected_root
     }
 
@@ -263,7 +264,7 @@ where
             parent_node_indices.dedup();
         }
 
-        if !partial_tree.contains_key(&1) {
+        if !partial_tree.contains_key(&ROOT_INDEX) {
             return Err(MerkleTreeError::RootNotFound);
         }
 
@@ -334,11 +335,10 @@ where
         tree_height: usize,
         leaf_index: usize,
     ) -> Result<Vec<Digest>> {
-        let root_index = 1;
         let num_leaves = Self::num_leaves(tree_height)?;
         let mut authentication_path = vec![];
         let mut node_index = leaf_index + num_leaves;
-        while node_index > root_index {
+        while node_index > ROOT_INDEX {
             let sibling_index = node_index ^ 1;
             let &sibling = partial_tree
                 .get(&sibling_index)
@@ -350,7 +350,7 @@ where
     }
 
     pub fn root(&self) -> Digest {
-        self.nodes[1]
+        self.nodes[ROOT_INDEX]
     }
 
     pub fn num_leafs(&self) -> usize {
