@@ -14,6 +14,8 @@ use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 
+const ROOT_INDEX: usize = 1;
+
 type Result<T> = result::Result<T, MerkleTreeError>;
 
 /// # Design
@@ -55,7 +57,6 @@ where
         leaf_indices: &[usize],
     ) -> Result<Vec<usize>> {
         let num_leaves = num_nodes / 2;
-        let root_index = 1;
 
         let some_index_is_invalid = leaf_indices.iter().any(|&i| i >= num_leaves);
         if some_index_is_invalid {
@@ -75,7 +76,7 @@ where
 
         for leaf_index in leaf_indices {
             let mut node_index = leaf_index + num_leaves;
-            while node_index > root_index {
+            while node_index > ROOT_INDEX {
                 let sibling_index = node_index ^ 1;
                 node_can_be_computed.insert(node_index);
                 node_is_needed.insert(sibling_index);
@@ -332,11 +333,10 @@ where
         tree_height: usize,
         leaf_index: usize,
     ) -> Result<Vec<Digest>> {
-        let root_index = 1;
         let num_leaves = Self::num_leaves(tree_height)?;
         let mut authentication_path = vec![];
         let mut node_index = leaf_index + num_leaves;
-        while node_index > root_index {
+        while node_index > ROOT_INDEX {
             let sibling_index = node_index ^ 1;
             let &sibling = partial_tree
                 .get(&sibling_index)
