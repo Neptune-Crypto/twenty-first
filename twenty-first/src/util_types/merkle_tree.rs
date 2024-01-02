@@ -491,15 +491,12 @@ pub mod merkle_tree_test {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use rand::thread_rng;
-    use rand::Rng;
     use test_strategy::proptest;
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::digest_tests::DigestCorruptor;
     use crate::shared_math::other::{indices_of_set_bits, random_elements};
     use crate::shared_math::tip5::Tip5;
-    use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::shared::bag_peaks;
 
     use super::*;
@@ -827,165 +824,34 @@ pub mod merkle_tree_test {
         assert_eq!(auth_path_with_nodes([14, 6, 2]), auth_path_for_leaf(7));
     }
 
-    #[test]
-    fn verify_all_leaves_individually() {
-        /*
-        Essentially this:
-
-        ```
-        from_digests
-
-        for each leaf:
-            get ap
-            verify(leaf, ap)
-        ```
-        */
-
-        type H = Tip5;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-
-        let exponent = 6;
-        let num_leaves = usize::pow(2, exponent);
-        assert!(
-            num_leaves.is_power_of_two(),
-            "Size of input for Merkle tree must be a power of 2"
-        );
-
-        let offset = 17;
-
-        let values: Vec<[BFieldElement; 1]> = (offset..num_leaves + offset)
-            .map(|i| [BFieldElement::new(i as u64)])
-            .collect_vec();
-
-        let leafs = values.iter().map(|leaf| H::hash_varlen(leaf)).collect_vec();
-
-        let tree: MT = M::from_digests(&leafs);
-
-        assert_eq!(
-            tree.num_leafs(),
-            num_leaves,
-            "All leaves should have been added to the Merkle tree."
-        );
-
-        let root_hash = tree.root().to_owned();
-
-        for (leaf_idx, leaf) in leafs.iter().enumerate() {
-            let ap = tree.authentication_structure(&[leaf_idx]).unwrap();
-            let verdict = MT::verify_authentication_structure(
-                root_hash,
+    #[proptest(cases = 50)]
+    fn each_leaf_can_be_verified_individually(test_tree: MerkleTreeToTest) {
+        let tree = test_tree.tree;
+        for (leaf_index, &leaf) in tree.leaves().iter().enumerate() {
+            let authentication_path = tree.authentication_structure(&[leaf_index]).unwrap();
+            let verdict = MerkleTree::<Tip5>::verify_authentication_structure(
+                tree.root(),
                 tree.height(),
-                &[leaf_idx],
-                &[*leaf],
-                &ap,
+                &[leaf_index],
+                &[leaf],
+                &authentication_path,
             );
-            assert!(
-                verdict,
-                "Rejected: `leaf: {:?}` at `leaf_idx: {:?}` failed to verify.",
-                { leaf },
-                { leaf_idx }
-            );
+            prop_assert!(verdict);
         }
     }
 
+    /// A block can contain an empty list of addition or removal records.
     #[test]
-    fn verify_some_payload() {
-        /// This tests that we do not confuse indices and payloads in the test `verify_all_leaves_individually`.
-
-        type H = Tip5;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-
-        let exponent = 6;
-        let num_leaves = usize::pow(2, exponent);
-        assert!(
-            num_leaves.is_power_of_two(),
-            "Size of input for Merkle tree must be a power of 2"
-        );
-
-        let offset = 17 * 17;
-
-        let values: Vec<[BFieldElement; 1]> = (offset..num_leaves as u64 + offset)
-            .map(|i| [BFieldElement::new(i); 1])
-            .collect_vec();
-
-        let mut leafs: Vec<Digest> = values.iter().map(|leaf| H::hash_varlen(leaf)).collect_vec();
-
-        // A payload integrity test
-        let test_leaf_idx = 42;
-        let payload_offset = 317;
-        let payload_leaf = vec![BFieldElement::new((test_leaf_idx + payload_offset) as u64)];
-
-        // Embed
-        leafs[test_leaf_idx] = H::hash_varlen(&payload_leaf);
-
-        let tree: MT = M::from_digests(&leafs[..]);
-
-        assert_eq!(
-            tree.num_leafs(),
-            num_leaves,
-            "All leaves should have been added to the Merkle tree."
-        );
-
-        let root_hash = tree.root().to_owned();
-
-        let ap = tree.authentication_structure(&[test_leaf_idx]).unwrap();
-        let verdict = MT::verify_authentication_structure(
-            root_hash,
-            tree.height(),
-            &[test_leaf_idx],
-            &[H::hash_varlen(&payload_leaf)],
-            &ap,
-        );
-        assert_eq!(
-            tree.leaf(test_leaf_idx).unwrap(),
-            H::hash_varlen(&payload_leaf)
-        );
-        assert!(
-            verdict,
-            "Rejected: `leaf: {payload_leaf:?}` at `leaf_idx: {test_leaf_idx:?}` failed to verify."
-        );
+    fn computing_merkle_root_for_no_leaves_produces_some_digest() {
+        root_from_arbitrary_number_of_digests::<Tip5>(&[]);
     }
 
-    #[test]
-    fn root_from_odd_number_of_digests_test() {
-        type H = Tip5;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-
-        let leafs: Vec<Digest> = random_elements(128);
-        let mt: MT = M::from_digests(&leafs);
-
-        println!("Merkle root (RP 1): {:?}", mt.root());
-
-        assert_eq!(
-            mt.root(),
-            root_from_arbitrary_number_of_digests::<H>(&leafs)
-        );
-    }
-
-    #[test]
-    fn root_from_arbitrary_number_of_digests_empty_test() {
-        // Ensure that we can calculate a Merkle root from an empty list of digests.
-        // This is needed since a block can contain an empty list of addition or
-        // removal records.
-
-        type H = Tip5;
-        root_from_arbitrary_number_of_digests::<H>(&[]);
-    }
-
-    #[test]
-    fn merkle_tree_with_xfes_as_leafs() {
-        type MT = MerkleTree<Tip5>;
-
-        let num_leaves = 128;
-        let leafs: Vec<XFieldElement> = random_elements(num_leaves);
-        let mt: MT = CpuParallel::from_digests(&leafs.iter().map(|&x| x.into()).collect_vec());
-
-        let leaf_index: usize = thread_rng().gen_range(0..num_leaves);
-        let path = mt.authentication_structure(&[leaf_index]).unwrap();
-        let sibling = leafs[leaf_index ^ 1];
-        assert_eq!(path[0], sibling.into());
+    #[proptest]
+    fn merkle_root_of_arbitrary_number_of_leaves_is_usual_root_when_number_of_leaves_is_a_power_of_two(
+        test_tree: MerkleTreeToTest,
+    ) {
+        let root = root_from_arbitrary_number_of_digests::<Tip5>(test_tree.tree.leaves());
+        assert_eq!(test_tree.tree.root(), root);
     }
 
     #[test]
