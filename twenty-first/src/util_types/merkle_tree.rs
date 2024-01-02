@@ -489,6 +489,7 @@ pub enum MerkleTreeError {
 #[cfg(test)]
 pub mod merkle_tree_test {
     use itertools::Itertools;
+    use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
@@ -984,6 +985,50 @@ pub mod merkle_tree_test {
         assert_eq!(
             mt.root(),
             root_from_arbitrary_number_of_digests::<H>(&leafs)
+        );
+    }
+
+    #[test]
+    fn digest_list_length_zero() {
+        type MT = MerkleTree<Tip5>;
+        let mt: MT = CpuParallel::from_digests(&[]);
+        let ap = mt.authentication_structure(&[]).unwrap();
+        let verdict = MT::verify_authentication_structure(mt.root(), 0, &[], &[], &ap);
+        assert!(verdict, "Empty Merkle tree must verify on empty input");
+    }
+
+    #[test]
+    fn digest_list_length_one() {
+        type MT = MerkleTree<Tip5>;
+        const TREE_HEIGHT: usize = 0;
+        const LEAF_COUNT: usize = 1 << TREE_HEIGHT;
+        let digests = random_elements(LEAF_COUNT);
+        let mt: MT = CpuParallel::from_digests(&digests);
+        let leaf_indices = [0];
+        let ap = mt.authentication_structure(&leaf_indices).unwrap();
+        assert!(
+            ap.len().is_zero(),
+            "Authentication path must be empty with singular input"
+        );
+        let verdict = MT::verify_authentication_structure(
+            mt.root(),
+            TREE_HEIGHT,
+            &leaf_indices,
+            &digests,
+            &ap,
+        );
+        assert!(
+            verdict,
+            "Merkle tree of height 0 must verify on calculated authentication path"
+        );
+
+        // Negative test
+        let bad_digests = random_elements(LEAF_COUNT);
+        let negative_verdict =
+            MT::verify_authentication_structure(mt.root(), 0, &leaf_indices, &bad_digests, &ap);
+        assert!(
+            !negative_verdict,
+            "Merkle tree of height 1 must fail to verify on different leaf digests"
         );
     }
 
