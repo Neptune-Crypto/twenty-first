@@ -503,7 +503,7 @@ pub mod merkle_tree_test {
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::digest_tests::DigestCorruptor;
-    use crate::shared_math::other::{indices_of_set_bits, random_elements};
+    use crate::shared_math::other::indices_of_set_bits;
     use crate::shared_math::tip5::Tip5;
     use crate::util_types::shared::bag_peaks;
 
@@ -863,23 +863,23 @@ pub mod merkle_tree_test {
     }
 
     #[test]
-    fn build_partial_tree_from_authentication_structure_test() {
-        type H = Tip5;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-
-        let tree_height = 3;
-        let num_leaves = 1 << tree_height;
-        let leafs: Vec<Digest> = random_elements(num_leaves);
-        let merkle_tree: MT = M::from_digests(&leafs).unwrap();
+    fn partial_merkle_tree_built_from_authentication_structure_contains_expected_nodes() {
+        let num_leaves = 8;
+        let leaves = (0..num_leaves).map(BFieldElement::new);
+        let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
+        let merkle_tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests).unwrap();
+        assert!(leaf_digests.iter().all_unique());
 
         let opened_leaf_indices = [0, 2];
-        let opened_leaves = opened_leaf_indices.iter().map(|&i| leafs[i]).collect_vec();
+        let opened_leaves = opened_leaf_indices
+            .iter()
+            .map(|&i| leaf_digests[i])
+            .collect_vec();
         let authentication_structure = merkle_tree
             .authentication_structure(&opened_leaf_indices)
             .unwrap();
 
-        let partial_mt = MT::partial_tree_from_authentication_structure(
+        let partial_tree = MerkleTree::<Tip5>::partial_tree_from_authentication_structure(
             merkle_tree.height(),
             &opened_leaf_indices,
             &opened_leaves,
@@ -897,20 +897,15 @@ pub mod merkle_tree_test {
         //  8   9  10 11
         //
         //  0      2   <-- opened_leaf_indices
-        assert_eq!(5, partial_mt.len());
-        assert!(partial_mt.contains_key(&3));
-        assert!(partial_mt.contains_key(&8));
-        assert!(partial_mt.contains_key(&9));
-        assert!(partial_mt.contains_key(&10));
-        assert!(partial_mt.contains_key(&11));
+
+        let expected_node_indices = vec![3, 8, 9, 10, 11];
+        let node_indices = partial_tree.keys().copied().sorted().collect_vec();
+        assert_eq!(expected_node_indices, node_indices);
     }
 
     #[test]
-    fn compute_root_of_partial_tree_test() {
-        type H = Tip5;
-        type MT = MerkleTree<H>;
-
-        //         ──── _ ────
+    fn manually_constructed_partial_tree_can_be_filled() {
+        //         ──── _ ───
         //        ╱           ╲
         //       _             3
         //      ╱  ╲
@@ -918,21 +913,21 @@ pub mod merkle_tree_test {
         //    _      _
         //   ╱ ╲    ╱ ╲
         //  8   9  10 11
+        //
+        //  0      2   <-- opened_leaf_indices
+
         let tree_height = 3;
-        let mut partial_tree = HashMap::new();
-        partial_tree.insert(3, rand::random());
-        partial_tree.insert(8, rand::random());
-        partial_tree.insert(9, rand::random());
-        partial_tree.insert(10, rand::random());
-        partial_tree.insert(11, rand::random());
-        MT::fill_partial_tree(&mut partial_tree, tree_height, &[0, 2]).unwrap();
+        let opened_leaf_indices = [0, 2];
+        let mut partial_tree: HashMap<usize, Digest> = [3, 8, 9, 10, 11]
+            .into_iter()
+            .map(|i| (i, Tip5::hash_varlen(&[BFieldElement::new(i as u64)])))
+            .collect();
+        MerkleTree::<Tip5>::fill_partial_tree(&mut partial_tree, tree_height, &opened_leaf_indices)
+            .unwrap();
     }
 
     #[test]
-    fn compute_root_of_incomplete_partial_tree_test() {
-        type H = Tip5;
-        type MT = MerkleTree<H>;
-
+    fn trying_to_compute_root_of_partial_tree_with_necessary_node_missing_gives_expected_error() {
         //         ──── _ ────
         //        ╱           ╲
         //       _             X
@@ -941,21 +936,27 @@ pub mod merkle_tree_test {
         //    _      _
         //   ╱ ╲    ╱ ╲
         //  8   9  10 11
+        //
+        //  0      2   <-- opened_leaf_indices
+
         let tree_height = 3;
-        let mut partial_tree = HashMap::new();
-        partial_tree.insert(8, rand::random());
-        partial_tree.insert(9, rand::random());
-        partial_tree.insert(10, rand::random());
-        partial_tree.insert(11, rand::random());
-        let err = MT::fill_partial_tree(&mut partial_tree, tree_height, &[0, 2]).unwrap_err();
+        let opened_leaf_indices = [0, 2];
+        let mut partial_tree: HashMap<usize, Digest> = [8, 9, 10, 11]
+            .into_iter()
+            .map(|i| (i, Tip5::hash_varlen(&[BFieldElement::new(i as u64)])))
+            .collect();
+
+        let err = MerkleTree::<Tip5>::fill_partial_tree(
+            &mut partial_tree,
+            tree_height,
+            &opened_leaf_indices,
+        )
+        .unwrap_err();
         assert_eq!(MerkleTreeError::MissingNodeIndex(3), err);
     }
 
     #[test]
-    fn compute_root_of_non_minimal_partial_tree_test() {
-        type H = Tip5;
-        type MT = MerkleTree<H>;
-
+    fn trying_to_compute_root_of_partial_tree_with_redundant_node_gives_expected_error() {
         //         ──── _ ────
         //        ╱           ╲
         //       2 (!)         3
@@ -964,52 +965,58 @@ pub mod merkle_tree_test {
         //    _      _
         //   ╱ ╲    ╱ ╲
         //  8   9  10 11
+        //
+        //  0      2   <-- opened_leaf_indices
+
         let tree_height = 3;
-        let mut partial_tree = HashMap::new();
-        partial_tree.insert(2, rand::random());
-        partial_tree.insert(3, rand::random());
-        partial_tree.insert(8, rand::random());
-        partial_tree.insert(9, rand::random());
-        partial_tree.insert(10, rand::random());
-        partial_tree.insert(11, rand::random());
-        let err = MT::fill_partial_tree(&mut partial_tree, tree_height, &[0, 2]).unwrap_err();
+        let opened_leaf_indices = [0, 2];
+        let mut partial_tree: HashMap<usize, Digest> = [2, 3, 8, 9, 10, 11]
+            .into_iter()
+            .map(|i| (i, Tip5::hash_varlen(&[BFieldElement::new(i as u64)])))
+            .collect();
+
+        let err = MerkleTree::<Tip5>::fill_partial_tree(
+            &mut partial_tree,
+            tree_height,
+            &opened_leaf_indices,
+        )
+        .unwrap_err();
         assert_eq!(MerkleTreeError::SpuriousNodeIndex(2), err);
     }
 
     #[test]
-    fn authentication_paths_from_authentication_structure_test() {
-        type H = Tip5;
-        type M = CpuParallel;
-        type MT = MerkleTree<H>;
-
-        let tree_height = 3;
-        let num_leaves = 1 << tree_height;
-        let leafs: Vec<Digest> = random_elements(num_leaves);
-        let merkle_tree: MT = M::from_digests(&leafs).unwrap();
+    fn converting_authentication_structure_to_authentication_paths_results_in_expected_paths() {
+        const TREE_HEIGHT: usize = 3;
+        let num_leaves = 1 << TREE_HEIGHT;
+        let leaves = (0..num_leaves).map(BFieldElement::new);
+        let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
+        let merkle_tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests).unwrap();
+        assert!(leaf_digests.iter().all_unique());
 
         let opened_leaf_indices = [0, 2];
-        let opened_leaves = opened_leaf_indices.iter().map(|&i| leafs[i]).collect_vec();
+        let opened_leaves = opened_leaf_indices
+            .iter()
+            .map(|&i| leaf_digests[i])
+            .collect_vec();
         let authentication_structure = merkle_tree
             .authentication_structure(&opened_leaf_indices)
             .unwrap();
 
-        let authentication_paths = MT::authentication_paths_from_authentication_structure(
-            tree_height,
-            &opened_leaf_indices,
-            &opened_leaves,
-            &authentication_structure,
-        )
-        .unwrap();
+        let authentication_paths =
+            MerkleTree::<Tip5>::authentication_paths_from_authentication_structure(
+                TREE_HEIGHT,
+                &opened_leaf_indices,
+                &opened_leaves,
+                &authentication_structure,
+            )
+            .unwrap();
 
-        assert_eq!(2, authentication_paths.len());
-        assert_eq!(tree_height, authentication_paths[0].len());
-        assert_eq!(tree_height, authentication_paths[1].len());
+        let auth_path_with_nodes =
+            |indices: [usize; TREE_HEIGHT]| indices.map(|i| merkle_tree.nodes[i]).to_vec();
+        let expected_path_0 = auth_path_with_nodes([9, 5, 3]);
+        let expected_path_1 = auth_path_with_nodes([11, 4, 3]);
+        let expected_paths = vec![expected_path_0, expected_path_1];
 
-        let nodes = merkle_tree.nodes;
-        let expected_path_0 = vec![nodes[9], nodes[5], nodes[3]];
-        assert_eq!(expected_path_0, authentication_paths[0]);
-
-        let expected_path_1 = vec![nodes[11], nodes[4], nodes[3]];
-        assert_eq!(expected_path_1, authentication_paths[1]);
+        assert_eq!(expected_paths, authentication_paths);
     }
 }
