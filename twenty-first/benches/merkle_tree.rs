@@ -18,7 +18,7 @@ fn merkle_tree(c: &mut Criterion) {
     let elements: Vec<Digest> = random_elements(size);
 
     group.bench_function(BenchmarkId::new("merkle_tree", size), |bencher| {
-        bencher.iter(|| -> MerkleTree<H> { CpuParallel::from_digests(&elements[..]) });
+        bencher.iter(|| -> MerkleTree<H> { CpuParallel::from_digests(&elements[..]).unwrap() });
     });
 }
 

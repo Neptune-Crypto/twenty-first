@@ -401,7 +401,8 @@ where
             leaves.push(u.arbitrary()?);
         }
 
-        Ok(CpuParallel::from_digests(&leaves))
+        let tree = CpuParallel::from_digests(&leaves).unwrap();
+        Ok(tree)
     }
 }
 
@@ -409,25 +410,25 @@ where
 pub struct CpuParallel;
 
 impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
-    /// Takes an array of digests and builds a MerkleTree over them.
-    /// The digests are used copied over as the leaves of the tree.
-    fn from_digests(digests: &[Digest]) -> MerkleTree<H> {
+    /// Takes an array of digests and builds a MerkleTree over them. The digests are copied as the leaves of the tree.
+    fn from_digests(digests: &[Digest]) -> Result<MerkleTree<H>> {
+        if digests.is_empty() {
+            return Err(MerkleTreeError::TooFewLeaves);
+        }
+
         let leaves_count = digests.len();
-
-        assert!(
-            leaves_count.is_power_of_two(),
-            "Size of input for Merkle tree must be a power of 2"
-        );
-
-        let filler = digests[0];
+        if !leaves_count.is_power_of_two() {
+            return Err(MerkleTreeError::IncorrectNumberOfLeaves);
+        }
 
         // nodes[0] is never used for anything.
+        let filler = Digest::default();
         let mut nodes = vec![filler; 2 * leaves_count];
         nodes[leaves_count..(leaves_count + leaves_count)]
             .clone_from_slice(&digests[..leaves_count]);
 
         // Parallel digest calculations
-        let mut node_count_on_this_level: usize = digests.len() / 2;
+        let mut node_count_on_this_level: usize = leaves_count / 2;
         let mut count_acc: usize = 0;
         while node_count_on_this_level >= PARALLELIZATION_THRESHOLD {
             let mut local_digests: Vec<Digest> = Vec::with_capacity(node_count_on_this_level);
@@ -451,10 +452,11 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
             nodes[i] = H::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
         }
 
-        MerkleTree {
+        let tree = MerkleTree {
             nodes,
             _hasher: PhantomData,
-        }
+        };
+        Ok(tree)
     }
 }
 
@@ -480,6 +482,12 @@ pub enum MerkleTreeError {
 
     #[error("Could not compute the root. Maybe no leaf indices were supplied?")]
     RootNotFound,
+
+    #[error("Too few leaves to build a Merkle tree.")]
+    TooFewLeaves,
+
+    #[error("The number of leaves must be a power of two.")]
+    IncorrectNumberOfLeaves,
 
     #[error("Tree height must not exceed {max_tree_height}.")]
     TreeTooHigh { max_tree_height: usize },
@@ -522,7 +530,7 @@ pub mod merkle_tree_test {
             let num_leaves_in_tree = 1 << tree_height;
             let leaf_digests =
                 &digests[num_processed_digests..num_processed_digests + num_leaves_in_tree];
-            let tree: MerkleTree<H> = CpuParallel::from_digests(leaf_digests);
+            let tree: MerkleTree<H> = CpuParallel::from_digests(leaf_digests).unwrap();
             num_processed_digests += num_leaves_in_tree;
             trees.push(tree);
         }
@@ -780,7 +788,7 @@ pub mod merkle_tree_test {
         let num_leaves = 4;
         let leaves = (0..num_leaves).map(BFieldElement::new);
         let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
-        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests);
+        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests).unwrap();
         assert!(leaf_digests.iter().all_unique());
 
         let auth_path_with_nodes = |indices: [usize; 2]| indices.map(|i| tree.nodes[i]).to_vec();
@@ -808,7 +816,7 @@ pub mod merkle_tree_test {
         let num_leaves = 8;
         let leaves = (0..num_leaves).map(BFieldElement::new);
         let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
-        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests);
+        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests).unwrap();
         assert!(leaf_digests.iter().all_unique());
 
         let auth_path_with_nodes = |indices: [usize; 3]| indices.map(|i| tree.nodes[i]).to_vec();
@@ -863,7 +871,7 @@ pub mod merkle_tree_test {
         let tree_height = 3;
         let num_leaves = 1 << tree_height;
         let leafs: Vec<Digest> = random_elements(num_leaves);
-        let merkle_tree: MT = M::from_digests(&leafs);
+        let merkle_tree: MT = M::from_digests(&leafs).unwrap();
 
         let opened_leaf_indices = [0, 2];
         let opened_leaves = opened_leaf_indices.iter().map(|&i| leafs[i]).collect_vec();
@@ -977,7 +985,7 @@ pub mod merkle_tree_test {
         let tree_height = 3;
         let num_leaves = 1 << tree_height;
         let leafs: Vec<Digest> = random_elements(num_leaves);
-        let merkle_tree: MT = M::from_digests(&leafs);
+        let merkle_tree: MT = M::from_digests(&leafs).unwrap();
 
         let opened_leaf_indices = [0, 2];
         let opened_leaves = opened_leaf_indices.iter().map(|&i| leafs[i]).collect_vec();

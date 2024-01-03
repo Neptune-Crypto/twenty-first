@@ -88,7 +88,7 @@ impl MerkleTreeSampler {
 
     fn tree(&mut self) -> MerkleTree<Tip5> {
         let leaf_digests = self.leaf_digests();
-        CpuParallel::from_digests(&leaf_digests)
+        CpuParallel::from_digests(&leaf_digests).unwrap()
     }
 
     fn indices_to_open(&mut self) -> Vec<usize> {
