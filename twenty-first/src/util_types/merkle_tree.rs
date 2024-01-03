@@ -513,13 +513,39 @@ pub mod merkle_tree_test {
     where
         H: AlgebraicHasher,
     {
+        fn test_tree_of_height(tree_height: usize) -> Self {
+            let num_leaves = 1 << tree_height;
+            let leaves = (0..num_leaves).map(BFieldElement::new);
+            let leaf_digests = leaves.map(|bfe| H::hash_varlen(&[bfe])).collect_vec();
+            let tree: MerkleTree<H> = CpuParallel::from_digests(&leaf_digests).unwrap();
+            assert!(leaf_digests.iter().all_unique());
+            tree
+        }
+
         fn leaves_by_indices(&self, leaf_indices: &[usize]) -> Vec<Digest> {
-            // test helper function, so unwrap is fine
+            // test helper: `.unwrap()` is fine
             leaf_indices
                 .iter()
                 .map(|&i| self.leaf(i).unwrap())
                 .collect()
         }
+
+        fn authentication_info_for_leaf_indices(&self, indices: Vec<usize>) -> AuthenticationInfo {
+            let opened_leaves = self.leaves_by_indices(&indices);
+            let auth_structure = self.authentication_structure(&indices).unwrap();
+            AuthenticationInfo {
+                opened_indices: indices,
+                opened_leaves,
+                auth_structure,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    struct AuthenticationInfo {
+        opened_indices: Vec<usize>,
+        opened_leaves: Vec<Digest>,
+        auth_structure: Vec<Digest>,
     }
 
     /// Calculate a Merkle root from a list of digests of arbitrary length.
@@ -634,7 +660,7 @@ pub mod merkle_tree_test {
     #[proptest]
     fn supplying_too_few_indices_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
-        #[strategy(vec(0..#test_tree.selected_indices.len(), 0..#test_tree.selected_indices.len()))]
+        #[strategy(vec(0..#test_tree.selected_indices.len(), 1..=#test_tree.selected_indices.len()))]
         indices_to_remove: Vec<usize>,
     ) {
         let mut all_indices = test_tree.selected_indices.clone();
@@ -785,12 +811,7 @@ pub mod merkle_tree_test {
         //
         // 0   1  2   3 <- leaf indices
 
-        let num_leaves = 4;
-        let leaves = (0..num_leaves).map(BFieldElement::new);
-        let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
-        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests).unwrap();
-        assert!(leaf_digests.iter().all_unique());
-
+        let tree = MerkleTree::<Tip5>::test_tree_of_height(2);
         let auth_path_with_nodes = |indices: [usize; 2]| indices.map(|i| tree.nodes[i]).to_vec();
         let auth_path_for_leaf = |index| tree.authentication_structure(&[index]).unwrap();
 
@@ -813,12 +834,7 @@ pub mod merkle_tree_test {
         //
         //  0   1  2   3  4   5  6   7  <- leaf indices
 
-        let num_leaves = 8;
-        let leaves = (0..num_leaves).map(BFieldElement::new);
-        let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
-        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests).unwrap();
-        assert!(leaf_digests.iter().all_unique());
-
+        let tree = MerkleTree::<Tip5>::test_tree_of_height(3);
         let auth_path_with_nodes = |indices: [usize; 3]| indices.map(|i| tree.nodes[i]).to_vec();
         let auth_path_for_leaf = |index| tree.authentication_structure(&[index]).unwrap();
 
@@ -864,26 +880,18 @@ pub mod merkle_tree_test {
 
     #[test]
     fn partial_merkle_tree_built_from_authentication_structure_contains_expected_nodes() {
-        let num_leaves = 8;
-        let leaves = (0..num_leaves).map(BFieldElement::new);
-        let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
-        let merkle_tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests).unwrap();
-        assert!(leaf_digests.iter().all_unique());
-
-        let opened_leaf_indices = [0, 2];
-        let opened_leaves = opened_leaf_indices
-            .iter()
-            .map(|&i| leaf_digests[i])
-            .collect_vec();
-        let authentication_structure = merkle_tree
-            .authentication_structure(&opened_leaf_indices)
-            .unwrap();
+        let merkle_tree = MerkleTree::<Tip5>::test_tree_of_height(3);
+        let AuthenticationInfo {
+            opened_indices,
+            opened_leaves,
+            auth_structure,
+        } = merkle_tree.authentication_info_for_leaf_indices(vec![0, 2]);
 
         let partial_tree = MerkleTree::<Tip5>::partial_tree_from_authentication_structure(
             merkle_tree.height(),
-            &opened_leaf_indices,
+            &opened_indices,
             &opened_leaves,
-            &authentication_structure,
+            &auth_structure,
         )
         .unwrap();
 
@@ -987,29 +995,20 @@ pub mod merkle_tree_test {
     #[test]
     fn converting_authentication_structure_to_authentication_paths_results_in_expected_paths() {
         const TREE_HEIGHT: usize = 3;
-        let num_leaves = 1 << TREE_HEIGHT;
-        let leaves = (0..num_leaves).map(BFieldElement::new);
-        let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
-        let merkle_tree: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests).unwrap();
-        assert!(leaf_digests.iter().all_unique());
+        let merkle_tree = MerkleTree::<Tip5>::test_tree_of_height(TREE_HEIGHT);
+        let AuthenticationInfo {
+            opened_indices,
+            opened_leaves,
+            auth_structure,
+        } = merkle_tree.authentication_info_for_leaf_indices(vec![0, 2]);
 
-        let opened_leaf_indices = [0, 2];
-        let opened_leaves = opened_leaf_indices
-            .iter()
-            .map(|&i| leaf_digests[i])
-            .collect_vec();
-        let authentication_structure = merkle_tree
-            .authentication_structure(&opened_leaf_indices)
-            .unwrap();
-
-        let authentication_paths =
-            MerkleTree::<Tip5>::authentication_paths_from_authentication_structure(
-                TREE_HEIGHT,
-                &opened_leaf_indices,
-                &opened_leaves,
-                &authentication_structure,
-            )
-            .unwrap();
+        let auth_paths = MerkleTree::<Tip5>::authentication_paths_from_authentication_structure(
+            TREE_HEIGHT,
+            &opened_indices,
+            &opened_leaves,
+            &auth_structure,
+        )
+        .unwrap();
 
         let auth_path_with_nodes =
             |indices: [usize; TREE_HEIGHT]| indices.map(|i| merkle_tree.nodes[i]).to_vec();
@@ -1017,6 +1016,6 @@ pub mod merkle_tree_test {
         let expected_path_1 = auth_path_with_nodes([11, 4, 3]);
         let expected_paths = vec![expected_path_0, expected_path_1];
 
-        assert_eq!(expected_paths, authentication_paths);
+        assert_eq!(expected_paths, auth_paths);
     }
 }
