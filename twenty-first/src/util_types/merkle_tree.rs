@@ -522,6 +522,14 @@ pub mod merkle_tree_test {
             tree
         }
 
+        fn partial_test_tree_for_node_indices(node_indices: &[usize]) -> HashMap<usize, Digest> {
+            node_indices
+                .iter()
+                .map(|&i| (i, BFieldElement::new(i as u64)))
+                .map(|(i, leaf)| (i, Tip5::hash_varlen(&[leaf])))
+                .collect()
+        }
+
         fn leaves_by_indices(&self, leaf_indices: &[usize]) -> Vec<Digest> {
             // test helper: `.unwrap()` is fine
             leaf_indices
@@ -926,10 +934,8 @@ pub mod merkle_tree_test {
 
         let tree_height = 3;
         let opened_leaf_indices = [0, 2];
-        let mut partial_tree: HashMap<usize, Digest> = [3, 8, 9, 10, 11]
-            .into_iter()
-            .map(|i| (i, Tip5::hash_varlen(&[BFieldElement::new(i as u64)])))
-            .collect();
+        let mut partial_tree =
+            MerkleTree::<Tip5>::partial_test_tree_for_node_indices(&[3, 8, 9, 10, 11]);
         MerkleTree::<Tip5>::fill_partial_tree(&mut partial_tree, tree_height, &opened_leaf_indices)
             .unwrap();
     }
@@ -938,7 +944,7 @@ pub mod merkle_tree_test {
     fn trying_to_compute_root_of_partial_tree_with_necessary_node_missing_gives_expected_error() {
         //         ──── _ ────
         //        ╱           ╲
-        //       _             X
+        //       _             _ (!)
         //      ╱  ╲
         //     ╱    ╲
         //    _      _
@@ -949,10 +955,8 @@ pub mod merkle_tree_test {
 
         let tree_height = 3;
         let opened_leaf_indices = [0, 2];
-        let mut partial_tree: HashMap<usize, Digest> = [8, 9, 10, 11]
-            .into_iter()
-            .map(|i| (i, Tip5::hash_varlen(&[BFieldElement::new(i as u64)])))
-            .collect();
+        let mut partial_tree =
+            MerkleTree::<Tip5>::partial_test_tree_for_node_indices(&[8, 9, 10, 11]);
 
         let err = MerkleTree::<Tip5>::fill_partial_tree(
             &mut partial_tree,
@@ -978,10 +982,8 @@ pub mod merkle_tree_test {
 
         let tree_height = 3;
         let opened_leaf_indices = [0, 2];
-        let mut partial_tree: HashMap<usize, Digest> = [2, 3, 8, 9, 10, 11]
-            .into_iter()
-            .map(|i| (i, Tip5::hash_varlen(&[BFieldElement::new(i as u64)])))
-            .collect();
+        let mut partial_tree =
+            MerkleTree::<Tip5>::partial_test_tree_for_node_indices(&[2, 3, 8, 9, 10, 11]);
 
         let err = MerkleTree::<Tip5>::fill_partial_tree(
             &mut partial_tree,
