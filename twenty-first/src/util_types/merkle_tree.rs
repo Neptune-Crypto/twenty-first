@@ -1,13 +1,12 @@
 use std::collections::hash_map::Entry::*;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::*;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::result;
 
 use arbitrary::*;
 use itertools::Itertools;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::prelude::*;
 use thiserror::Error;
 
 use crate::shared_math::digest::Digest;
@@ -503,9 +502,7 @@ pub mod merkle_tree_test {
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::digest_tests::DigestCorruptor;
-    use crate::shared_math::other::indices_of_set_bits;
     use crate::shared_math::tip5::Tip5;
-    use crate::util_types::shared::bag_peaks;
 
     use super::*;
 
@@ -556,36 +553,20 @@ pub mod merkle_tree_test {
         auth_structure: Vec<Digest>,
     }
 
-    /// Calculate a Merkle root from a list of digests of arbitrary length.
-    pub fn root_from_arbitrary_number_of_digests<H: AlgebraicHasher>(digests: &[Digest]) -> Digest {
-        let mut trees = vec![];
-        let mut num_processed_digests = 0;
-        for tree_height in indices_of_set_bits(digests.len() as u64) {
-            let num_leaves_in_tree = 1 << tree_height;
-            let leaf_digests =
-                &digests[num_processed_digests..num_processed_digests + num_leaves_in_tree];
-            let tree: MerkleTree<H> = CpuParallel::from_digests(leaf_digests).unwrap();
-            num_processed_digests += num_leaves_in_tree;
-            trees.push(tree);
-        }
-        let roots = trees.iter().map(|t| t.root()).collect_vec();
-        bag_peaks::<H>(&roots)
-    }
-
     /// Test helper to deduplicate generation of Merkle trees.
     #[derive(Debug, Clone, test_strategy::Arbitrary)]
-    struct MerkleTreeToTest {
+    pub(crate) struct MerkleTreeToTest {
         #[strategy(arb())]
-        tree: MerkleTree<Tip5>,
+        pub tree: MerkleTree<Tip5>,
 
         #[strategy(vec(0..#tree.num_leafs(), 0..#tree.num_leafs()))]
-        selected_indices: Vec<usize>,
+        pub selected_indices: Vec<usize>,
 
         #[strategy(Just(#tree.authentication_structure(&#selected_indices).unwrap()))]
-        auth_structure: Vec<Digest>,
+        pub auth_structure: Vec<Digest>,
 
         #[strategy(Just(#tree.leaves_by_indices(&#selected_indices)))]
-        leaves: Vec<Digest>,
+        pub leaves: Vec<Digest>,
     }
 
     impl MerkleTreeToTest {
@@ -890,20 +871,6 @@ pub mod merkle_tree_test {
             );
             prop_assert!(verdict);
         }
-    }
-
-    /// A block can contain an empty list of addition or removal records.
-    #[test]
-    fn computing_merkle_root_for_no_leaves_produces_some_digest() {
-        root_from_arbitrary_number_of_digests::<Tip5>(&[]);
-    }
-
-    #[proptest]
-    fn merkle_root_of_arbitrary_number_of_leaves_is_usual_root_when_number_of_leaves_is_a_power_of_two(
-        test_tree: MerkleTreeToTest,
-    ) {
-        let root = root_from_arbitrary_number_of_digests::<Tip5>(test_tree.tree.leaves());
-        assert_eq!(test_tree.tree.root(), root);
     }
 
     #[test]

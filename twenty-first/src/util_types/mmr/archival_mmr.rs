@@ -1,15 +1,19 @@
 use std::marker::PhantomData;
 
-use super::mmr_accumulator::MmrAccumulator;
-use super::mmr_membership_proof::MmrMembershipProof;
-use super::mmr_trait::Mmr;
-use super::{shared_advanced, shared_basic};
+use leveldb::batch::WriteBatch;
+
 use crate::shared_math::digest::Digest;
-use crate::storage::storage_vec::{traits::*, RustyLevelDbVec};
+use crate::storage::storage_vec::traits::*;
+use crate::storage::storage_vec::RustyLevelDbVec;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::shared::bag_peaks;
 use crate::utils::has_unique_elements;
-use leveldb::batch::WriteBatch;
+
+use super::mmr_accumulator::MmrAccumulator;
+use super::mmr_membership_proof::MmrMembershipProof;
+use super::mmr_trait::Mmr;
+use super::shared_advanced;
+use super::shared_basic;
 
 /// A Merkle Mountain Range is a datastructure for storing a list of hashes.
 ///
@@ -320,32 +324,62 @@ impl<H: AlgebraicHasher> ArchivalMmr<H, RustyLevelDbVec<Digest>> {
 mod mmr_test {
     use std::sync::Arc;
 
-    use super::*;
-    use crate::shared_math::other::random_elements;
-    use crate::shared_math::tip5::Tip5;
-    use crate::test_shared::mmr::{
-        get_empty_rustyleveldb_ammr, get_rustyleveldb_ammr_from_digests,
-    };
-    use crate::util_types::merkle_tree::merkle_tree_test;
-    use crate::util_types::storage_schema::{SimpleRustyStorage, StorageWriter};
-    use crate::{
-        shared_math::b_field_element::BFieldElement,
-        storage::level_db::DB,
-        util_types::mmr::{
-            archival_mmr::ArchivalMmr, mmr_accumulator::MmrAccumulator,
-            shared_advanced::get_peak_heights_and_peak_node_indices,
-        },
-    };
-    use itertools::izip;
+    use itertools::*;
     use leveldb::iterator::Iterable;
     use leveldb::options::ReadOptions;
     use rand::random;
+    use test_strategy::proptest;
+
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::other::*;
+    use crate::shared_math::tip5::Tip5;
+    use crate::storage::level_db::DB;
+    use crate::test_shared::mmr::*;
+    use crate::util_types::merkle_tree::merkle_tree_test::MerkleTreeToTest;
+    use crate::util_types::merkle_tree::*;
+    use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
+    use crate::util_types::mmr::archival_mmr::ArchivalMmr;
+    use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
+    use crate::util_types::mmr::shared_advanced::get_peak_heights_and_peak_node_indices;
+    use crate::util_types::storage_schema::*;
+
+    use super::*;
 
     impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
         /// Return the number of nodes in all the trees in the MMR
         fn count_nodes(&mut self) -> u64 {
             self.digests.len() - 1
         }
+    }
+
+    /// Calculate a Merkle root from a list of digests of arbitrary length.
+    pub fn root_from_arbitrary_number_of_digests<H: AlgebraicHasher>(digests: &[Digest]) -> Digest {
+        let mut trees = vec![];
+        let mut num_processed_digests = 0;
+        for tree_height in indices_of_set_bits(digests.len() as u64) {
+            let num_leaves_in_tree = 1 << tree_height;
+            let leaf_digests =
+                &digests[num_processed_digests..num_processed_digests + num_leaves_in_tree];
+            let tree: MerkleTree<H> = CpuParallel::from_digests(leaf_digests).unwrap();
+            num_processed_digests += num_leaves_in_tree;
+            trees.push(tree);
+        }
+        let roots = trees.iter().map(|t| t.root()).collect_vec();
+        bag_peaks::<H>(&roots)
+    }
+
+    /// A block can contain an empty list of addition or removal records.
+    #[test]
+    fn computing_mmr_root_for_no_leaves_produces_some_digest() {
+        root_from_arbitrary_number_of_digests::<Tip5>(&[]);
+    }
+
+    #[proptest]
+    fn mmr_root_of_arbitrary_number_of_leaves_is_merkle_root_when_number_of_leaves_is_a_power_of_two(
+        test_tree: MerkleTreeToTest,
+    ) {
+        let root = root_from_arbitrary_number_of_digests::<Tip5>(test_tree.tree.leaves());
+        assert_eq!(test_tree.tree.root(), root);
     }
 
     #[test]
@@ -363,7 +397,7 @@ mod mmr_test {
         assert_eq!(archival_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
         assert_eq!(
             archival_mmr.bag_peaks(),
-            merkle_tree_test::root_from_arbitrary_number_of_digests::<H>(&[]),
+            root_from_arbitrary_number_of_digests::<H>(&[]),
             "Bagged peaks for empty MMR must agree with MT root finder"
         );
         assert_eq!(0, archival_mmr.count_nodes());
@@ -849,8 +883,7 @@ mod mmr_test {
 
             // Verify that MMR root from odd number of digests and MMR bagged peaks agree
             let mmra_root = mmr.bag_peaks();
-            let mt_root =
-                merkle_tree_test::root_from_arbitrary_number_of_digests::<H>(&input_hashes);
+            let mt_root = root_from_arbitrary_number_of_digests::<H>(&input_hashes);
 
             assert_eq!(
                 mmra_root, mt_root,
@@ -974,8 +1007,7 @@ mod mmr_test {
 
             // Verify that MMR root from odd number of digests and MMR bagged peaks agree
             let mmra_root = mmr.bag_peaks();
-            let mt_root =
-                merkle_tree_test::root_from_arbitrary_number_of_digests::<H>(&input_digests);
+            let mt_root = root_from_arbitrary_number_of_digests::<H>(&input_digests);
             assert_eq!(
                 mmra_root, mt_root,
                 "MMRA bagged peaks and MT root must agree"
