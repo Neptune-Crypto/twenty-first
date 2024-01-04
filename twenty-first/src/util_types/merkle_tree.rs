@@ -583,6 +583,14 @@ pub mod merkle_tree_test {
     }
 
     #[proptest]
+    fn building_merkle_tree_from_one_digest_makes_that_digest_the_root(
+        #[strategy(arb())] digest: Digest,
+    ) {
+        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&[digest]).unwrap();
+        assert_eq!(digest, tree.root());
+    }
+
+    #[proptest]
     fn building_merkle_tree_from_list_of_digests_with_incorrect_number_of_leaves_fails_with_expected_error(
         #[filter(!#num_leaves.is_power_of_two())]
         #[strategy(1_usize..1 << 13)]
