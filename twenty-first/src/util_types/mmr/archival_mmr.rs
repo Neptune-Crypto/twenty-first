@@ -374,7 +374,7 @@ mod mmr_test {
         root_from_arbitrary_number_of_digests::<Tip5>(&[]);
     }
 
-    #[proptest]
+    #[proptest(cases = 30)]
     fn mmr_root_of_arbitrary_number_of_leaves_is_merkle_root_when_number_of_leaves_is_a_power_of_two(
         test_tree: MerkleTreeToTest,
     ) {

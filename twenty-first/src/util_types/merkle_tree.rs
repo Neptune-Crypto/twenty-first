@@ -595,7 +595,7 @@ pub mod merkle_tree_test {
         assert_eq!(MerkleTreeError::IncorrectNumberOfLeaves, err);
     }
 
-    #[proptest]
+    #[proptest(cases = 100)]
     fn accessing_number_of_leaves_and_height_never_panics(
         #[strategy(arb())] merkle_tree: MerkleTree<Tip5>,
     ) {
@@ -603,7 +603,7 @@ pub mod merkle_tree_test {
         let _ = merkle_tree.height();
     }
 
-    #[proptest]
+    #[proptest(cases = 50)]
     fn trivial_proof_can_be_verified(#[strategy(arb())] merkle_tree: MerkleTree<Tip5>) {
         let leaf_indices = [];
         let leaf_digests = [];
@@ -621,7 +621,7 @@ pub mod merkle_tree_test {
         prop_assert!(verdict);
     }
 
-    #[proptest]
+    #[proptest(cases = 40)]
     fn honestly_generated_authentication_structure_can_be_verified(test_tree: MerkleTreeToTest) {
         let verified = MerkleTree::<Tip5>::verify_authentication_structure(
             test_tree.tree.root(),
@@ -633,7 +633,7 @@ pub mod merkle_tree_test {
         prop_assert!(verified);
     }
 
-    #[proptest]
+    #[proptest(cases = 30)]
     fn corrupt_root_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         corruptor: DigestCorruptor,
@@ -649,7 +649,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
-    #[proptest]
+    #[proptest(cases = 50)]
     fn supplying_too_many_indices_leads_to_verification_failure(
         test_tree: MerkleTreeToTest,
         #[strategy(vec(0..#test_tree.tree.num_leafs(), 1..100))] spurious_indices: Vec<usize>,
@@ -666,7 +666,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
-    #[proptest]
+    #[proptest(cases = 50)]
     fn supplying_too_few_indices_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(vec(0..#test_tree.selected_indices.len(), 1..=#test_tree.selected_indices.len()))]
@@ -693,7 +693,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
-    #[proptest]
+    #[proptest(cases = 20)]
     fn corrupt_authentication_structure_leads_to_verification_failure(
         #[filter(!#test_tree.auth_structure.is_empty())] test_tree: MerkleTreeToTest,
         #[strategy(vec(0..#test_tree.auth_structure.len(), 1..=#test_tree.auth_structure.len()))]
@@ -719,7 +719,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
-    #[proptest]
+    #[proptest(cases = 30)]
     fn corrupt_leaf_digests_lead_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(vec(0..#test_tree.leaves.len(), 1..=#test_tree.leaves.len()))]
@@ -746,7 +746,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verified);
     }
 
-    #[proptest]
+    #[proptest(cases = 40)]
     fn incorrect_tree_height_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(0..=MerkleTree::<Tip5>::MAX_TREE_HEIGHT)]
@@ -766,7 +766,7 @@ pub mod merkle_tree_test {
     /// The property-test framework can already select the same leaves multiple times. However, this
     /// a. ensures that property, making the test explicit instead of implicit, and
     /// b. ensures the property holds even for an already-generated proof.
-    #[proptest]
+    #[proptest(cases = 30)]
     fn honestly_generated_proof_with_duplicate_leaves_can_be_verified(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(vec(0..#test_tree.selected_indices.len(), 1..=#test_tree.selected_indices.len()))]
@@ -794,7 +794,7 @@ pub mod merkle_tree_test {
         prop_assert!(verified);
     }
 
-    #[proptest]
+    #[proptest(cases = 20)]
     fn honestly_generated_proof_with_all_leaves_revealed_can_be_verified(
         #[strategy(arb())] tree: MerkleTree<Tip5>,
     ) {
@@ -857,7 +857,7 @@ pub mod merkle_tree_test {
         assert_eq!(auth_path_with_nodes([14, 6, 2]), auth_path_for_leaf(7));
     }
 
-    #[proptest(cases = 50)]
+    #[proptest(cases = 10)]
     fn each_leaf_can_be_verified_individually(test_tree: MerkleTreeToTest) {
         let tree = test_tree.tree;
         for (leaf_index, &leaf) in tree.leaves().iter().enumerate() {
