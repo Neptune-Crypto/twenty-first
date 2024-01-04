@@ -594,6 +594,26 @@ pub mod merkle_tree_test {
         }
     }
 
+    #[test]
+    fn building_merkle_tree_from_empty_list_of_digests_fails_with_expected_error() {
+        let maybe_tree: Result<MerkleTree<Tip5>> = CpuParallel::from_digests(&[]);
+        let err = maybe_tree.unwrap_err();
+        assert_eq!(MerkleTreeError::TooFewLeaves, err);
+    }
+
+    #[proptest]
+    fn building_merkle_tree_from_list_of_digests_with_incorrect_number_of_leaves_fails_with_expected_error(
+        #[filter(!#num_leaves.is_power_of_two())]
+        #[strategy(1_usize..1 << 13)]
+        num_leaves: usize,
+    ) {
+        let digest = Digest::default();
+        let digests = vec![digest; num_leaves];
+        let maybe_tree: Result<MerkleTree<Tip5>> = CpuParallel::from_digests(&digests);
+        let err = maybe_tree.unwrap_err();
+        assert_eq!(MerkleTreeError::IncorrectNumberOfLeaves, err);
+    }
+
     #[proptest]
     fn accessing_number_of_leaves_and_height_never_panics(
         #[strategy(arb())] merkle_tree: MerkleTree<Tip5>,
