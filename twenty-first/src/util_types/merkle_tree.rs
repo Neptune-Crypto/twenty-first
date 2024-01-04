@@ -24,7 +24,7 @@ type Result<T> = result::Result<T, MerkleTreeError>;
 /// Static methods are called from the verifier, who does not have the original `MerkleTree` object, but only partial
 /// information from it, in the form of the quadruples: `(root_hash, index, digest, auth_path)`. These are exactly the
 /// arguments for the `verify_*` family of static methods.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MerkleTree<H>
 where
     H: AlgebraicHasher,
