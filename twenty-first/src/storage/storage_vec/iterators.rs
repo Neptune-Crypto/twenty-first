@@ -64,7 +64,7 @@ where
             };
             Some(StorageSetter {
                 phantom: Default::default(),
-                data: &self.data,
+                data: self.data,
                 write_lock: &mut self.write_lock,
                 index: i,
                 value,
