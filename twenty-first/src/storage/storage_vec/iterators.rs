@@ -27,8 +27,7 @@ where
 #[allow(private_bounds)]
 impl<'a, V, T> ManyIterMut<'a, V, T>
 where
-    V: StorageVec<T> + StorageVecRwLock<T> + 'a,
-    V::LockedData: StorageVecLockedData<T>,
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     pub(super) fn new<I>(indices: I, data: &'a V) -> Self
     where
@@ -48,9 +47,9 @@ where
 // We only have to impl next()
 #[allow(private_bounds)]
 #[gat]
-impl<'a, V, T> LendingIterator for ManyIterMut<'a, V, T>
+impl<'a, V, T: 'a> LendingIterator for ManyIterMut<'a, V, T>
 where
-    V: StorageVec<T> + StorageVecRwLock<T> + Clone,
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
     V::LockedData: StorageVecLockedData<T>,
 {
     type Item<'b> = StorageSetter<'a, 'b, V, T>
@@ -80,8 +79,7 @@ where
 #[allow(private_bounds)]
 pub struct StorageSetter<'c, 'd, V, T>
 where
-    V: StorageVec<T> + StorageVecRwLock<T>,
-    V::LockedData: StorageVecLockedData<T>,
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     phantom: PhantomData<V>,
     data: &'c V,
@@ -93,7 +91,7 @@ where
 #[allow(private_bounds)]
 impl<'a, 'b, V, T> StorageSetter<'a, 'b, V, T>
 where
-    V: StorageVec<T> + StorageVecRwLock<T>,
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
     V::LockedData: StorageVecLockedData<T>,
 {
     pub fn set(&mut self, value: T) {

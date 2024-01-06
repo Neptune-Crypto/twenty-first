@@ -336,9 +336,7 @@ pub trait StorageVec<T> {
     #[inline]
     fn iter_mut(&self) -> ManyIterMut<Self, T>
     where
-        Self: StorageVecRwLock<T>,
-        <Self as StorageVecRwLock<T>>::LockedData: StorageVecLockedData<T>,
-        Self: Sized,
+        Self: Sized + StorageVecRwLock<T>,
     {
         ManyIterMut::new(0..self.len(), self)
     }
@@ -394,9 +392,7 @@ pub trait StorageVec<T> {
         indices: impl IntoIterator<Item = Index> + 'static,
     ) -> ManyIterMut<Self, T>
     where
-        Self: StorageVecRwLock<T>,
-        <Self as StorageVecRwLock<T>>::LockedData: StorageVecLockedData<T>,
-        Self: Sized,
+        Self: Sized + StorageVecRwLock<T>,
     {
         ManyIterMut::new(indices, self)
     }
@@ -651,8 +647,7 @@ pub(in crate::storage) mod tests {
         pub fn atomic_iter_mut_and_iter<T>(vec: &T)
         where
             T: StorageVec<u64> + StorageVecRwLock<u64> + Send + Sync,
-            <T as StorageVecRwLock<u64>>::LockedData: StorageVecLockedData<u64>,
-            T: Clone,
+            T::LockedData: StorageVecLockedData<u64>,
         {
             prepare_concurrency_test_vec(vec);
             let orig = vec.get_all();
