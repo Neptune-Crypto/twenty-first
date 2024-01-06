@@ -2,6 +2,7 @@ use criterion::*;
 use itertools::Itertools;
 use rand::rngs::StdRng;
 use rand::*;
+use std::marker::PhantomData;
 
 use twenty_first::shared_math::digest::Digest;
 use twenty_first::shared_math::tip5::Tip5;
@@ -35,23 +36,8 @@ fn verify_auth_structure(c: &mut Criterion) {
 
     c.bench_function("verify_auth_structure", |bencher| {
         bencher.iter_batched(
-            || sampler.auth_info(&tree),
-            |auth_info| {
-                let MerkleTreeAuthInfo {
-                    root,
-                    tree_height,
-                    opened_indices,
-                    opened_leaves,
-                    auth_structure,
-                } = auth_info;
-                MerkleTree::<Tip5>::verify_authentication_structure(
-                    root,
-                    tree_height,
-                    &opened_indices,
-                    &opened_leaves,
-                    &auth_structure,
-                )
-            },
+            || sampler.proof(&tree),
+            |proof| proof.verify(tree.root()),
             BatchSize::SmallInput,
         );
     });
@@ -97,29 +83,21 @@ impl MerkleTreeSampler {
             .collect()
     }
 
-    fn auth_info(&mut self, tree: &MerkleTree<Tip5>) -> MerkleTreeAuthInfo {
-        assert_eq!(self.tree_height, tree.height());
-        let opened_indices = self.indices_to_open();
-        let opened_leaves = opened_indices
+    fn proof(&mut self, tree: &MerkleTree<Tip5>) -> MerkleTreeInclusionProof<Tip5> {
+        let tree_height = tree.height();
+        assert_eq!(self.tree_height, tree_height);
+        let leaf_indices = self.indices_to_open();
+        let leaf_digests = leaf_indices
             .iter()
             .map(|&i| tree.leaf(i).unwrap())
-            .collect_vec();
-        let auth_structure = tree.authentication_structure(&opened_indices).unwrap();
-        MerkleTreeAuthInfo {
-            root: tree.root(),
-            tree_height: tree.height(),
-            opened_indices,
-            opened_leaves,
-            auth_structure,
+            .collect();
+        let authentication_structure = tree.authentication_structure(&leaf_indices).unwrap();
+        MerkleTreeInclusionProof {
+            tree_height,
+            leaf_indices,
+            leaf_digests,
+            authentication_structure,
+            _hasher: PhantomData,
         }
     }
-}
-
-#[derive(Debug, Clone)]
-struct MerkleTreeAuthInfo {
-    root: Digest,
-    tree_height: usize,
-    opened_indices: Vec<usize>,
-    opened_leaves: Vec<Digest>,
-    auth_structure: Vec<Digest>,
 }

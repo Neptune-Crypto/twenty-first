@@ -17,15 +17,14 @@ use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 /// implementation). It should probably be a higher number than 16 when using a faster hash function.
 const PARALLELIZATION_THRESHOLD: usize = 16;
 
+const MAX_NUM_NODES: usize = 1 << 32;
+const MAX_NUM_LEAVES: usize = MAX_NUM_NODES / 2;
+pub const MAX_TREE_HEIGHT: usize = MAX_NUM_LEAVES.ilog2() as usize;
+
 const ROOT_INDEX: usize = 1;
 
 type Result<T> = result::Result<T, MerkleTreeError>;
 
-/// # Design
-///
-/// Static methods are called from the verifier, who does not have the original `MerkleTree` object, but only partial
-/// information from it, in the form of the quadruples: `(root_hash, index, digest, auth_path)`. These are exactly the
-/// arguments for the `verify_*` family of static methods.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MerkleTree<H>
 where
@@ -35,32 +34,30 @@ where
     _hasher: PhantomData<H>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MerkleTreeInclusionProof<H>
+where
+    H: AlgebraicHasher,
+{
+    pub tree_height: usize,
+    pub leaf_indices: Vec<usize>,
+    pub leaf_digests: Vec<Digest>,
+    pub authentication_structure: Vec<Digest>,
+    pub _hasher: PhantomData<H>,
+}
+
 impl<H> MerkleTree<H>
 where
     H: AlgebraicHasher,
 {
-    const MAX_NUM_NODES: usize = 1 << 32;
-    const MAX_NUM_LEAVES: usize = Self::MAX_NUM_NODES / 2;
-    pub const MAX_TREE_HEIGHT: usize = Self::MAX_NUM_LEAVES.ilog2() as usize;
-
-    fn num_leaves(tree_height: usize) -> Result<usize> {
-        let max_tree_height = Self::MAX_TREE_HEIGHT;
-        if tree_height > max_tree_height {
-            return Err(MerkleTreeError::TreeTooHigh { max_tree_height });
-        }
-        Ok(1 << tree_height)
-    }
-
     /// Given a list of leaf indices, return the indices of exactly those nodes that are needed to prove (or verify)
     /// that the indicated leaves are in the Merkle tree.
-    // This function is not defined as a method (taking self as argument) since it's needed by the verifier who does not
-    // have access to the Merkle tree.
-    fn indices_of_nodes_in_authentication_structure(
-        num_nodes: usize,
+    // This function is not defined as a method (taking self as argument) since it's needed by the verifier, who does
+    // not have access to the Merkle tree.
+    fn authentication_structure_node_indices(
+        num_leaves: usize,
         leaf_indices: &[usize],
     ) -> Result<impl ExactSizeIterator<Item = usize>> {
-        let num_leaves = num_nodes / 2;
-
         let some_index_is_invalid = leaf_indices.iter().any(|&i| i >= num_leaves);
         if some_index_is_invalid {
             return Err(MerkleTreeError::LeafIndexInvalid { num_leaves });
@@ -92,8 +89,7 @@ where
     }
 
     /// Generate a de-duplicated authentication structure for the given leaf indices.
-    /// If a single index is supplied, the authentication structure is the authentication path
-    /// for the indicated leaf.
+    /// If a single index is supplied, the authentication structure is the authentication path for the indicated leaf.
     ///
     /// For example, consider the following Merkle tree.
     ///
@@ -118,235 +114,16 @@ where
     /// node 3. This is one part of the de-duplication.
     /// - Node 4 is not included at all, even though the authentication path for leaf 2 requires the node. Instead,
     /// node 4 can be computed from nodes 8 and 9;
-    /// the former is supplied explicitly for during [verification][verify],
+    /// the former is supplied explicitly during [verification][verify],
     /// the latter is included in the authentication structure.
     /// This is the other part of the de-duplication.
     ///
-    /// [verify]: Self::verify_authentication_structure
+    /// [verify]: MerkleTreeInclusionProof::verify
     pub fn authentication_structure(&self, leaf_indices: &[usize]) -> Result<Vec<Digest>> {
-        let num_nodes = self.nodes.len();
-        let indices = Self::indices_of_nodes_in_authentication_structure(num_nodes, leaf_indices)?;
+        let num_leafs = self.num_leafs();
+        let indices = Self::authentication_structure_node_indices(num_leafs, leaf_indices)?;
         let auth_structure = indices.map(|idx| self.nodes[idx]).collect();
         Ok(auth_structure)
-    }
-
-    /// Verify a list of indicated digests and corresponding authentication structure against a Merkle root.
-    /// See also [`get_authentication_structure`][Self::get_authentication_structure].
-    pub fn verify_authentication_structure(
-        expected_root: Digest,
-        tree_height: usize,
-        leaf_indices: &[usize],
-        leaf_digests: &[Digest],
-        authentication_structure: &[Digest],
-    ) -> bool {
-        if leaf_indices.is_empty() && leaf_digests.is_empty() && authentication_structure.is_empty()
-        {
-            return true;
-        }
-        let Ok(mut partial_tree) = Self::partial_tree_from_authentication_structure(
-            tree_height,
-            leaf_indices,
-            leaf_digests,
-            authentication_structure,
-        ) else {
-            return false;
-        };
-        let Ok(()) = Self::fill_partial_tree(&mut partial_tree, tree_height, leaf_indices) else {
-            return false;
-        };
-        let computed_root = partial_tree[&ROOT_INDEX];
-        computed_root == expected_root
-    }
-
-    /// Given a list of leaf indices and corresponding digests as well as an authentication structure for a tree of
-    /// indicated height, build a partial Merkle tree.
-    ///
-    /// Continuing the example from [`get_authentication_structure`][Self::get_authentication_structure], the partial
-    /// tree for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively, with nodes [11, 9, 3] from the authentication
-    /// structure is:
-    ///
-    /// ```markdown
-    ///         ──── _ ────
-    ///        ╱           ╲
-    ///       _             3
-    ///      ╱  ╲
-    ///     ╱    ╲
-    ///    _      _
-    ///   ╱ ╲    ╱ ╲
-    ///  8   9  10 11
-    /// ```
-    fn partial_tree_from_authentication_structure(
-        tree_height: usize,
-        leaf_indices: &[usize],
-        leaf_digests: &[Digest],
-        authentication_structure: &[Digest],
-    ) -> Result<HashMap<usize, Digest>> {
-        let num_leaves = Self::num_leaves(tree_height)?;
-        let num_nodes = num_leaves * 2;
-
-        if leaf_indices.len() != leaf_digests.len() {
-            return Err(MerkleTreeError::NumLeafIndicesAndDigestsMismatch);
-        }
-        if leaf_indices.is_empty() && authentication_structure.is_empty() {
-            return Ok(HashMap::new());
-        }
-        if leaf_indices.iter().any(|&i| i >= num_leaves) {
-            return Err(MerkleTreeError::LeafIndexInvalid { num_leaves });
-        }
-
-        let indices_of_nodes_in_authentication_structure =
-            Self::indices_of_nodes_in_authentication_structure(num_nodes, leaf_indices)?;
-        if authentication_structure.len() != indices_of_nodes_in_authentication_structure.len() {
-            return Err(MerkleTreeError::AuthenticationPathLengthMismatch);
-        }
-
-        let mut partial_merkle_tree: HashMap<_, _> = indices_of_nodes_in_authentication_structure
-            .zip(authentication_structure.iter().copied())
-            .collect();
-
-        for (leaf_index, &leaf_digest) in leaf_indices.iter().zip(leaf_digests.iter()) {
-            let node_index = leaf_index + num_leaves;
-            if let Vacant(entry) = partial_merkle_tree.entry(node_index) {
-                entry.insert(leaf_digest);
-            } else if partial_merkle_tree[&node_index] != leaf_digest {
-                return Err(MerkleTreeError::RepeatedLeafDigestMismatch);
-            }
-        }
-        Ok(partial_merkle_tree)
-    }
-
-    /// Compute all computable digests of the partial Merkle tree, modifying the given partial tree.
-    /// Returns an error if the given tree is either
-    /// - incomplete, _i.e._, does not contain all the nodes required to compute the root, or
-    /// - not minimal, _i.e._, if it contains nodes that can be computed from other nodes.
-    ///
-    /// On success, the given partial tree is guaranteed to contain the root digest at index 1.
-    fn fill_partial_tree(
-        partial_tree: &mut HashMap<usize, Digest>,
-        tree_height: usize,
-        leaf_indices: &[usize],
-    ) -> Result<()> {
-        let num_leaves = Self::num_leaves(tree_height)?;
-
-        // Deduplicate parent node indices to avoid hashing the same nodes twice,
-        // which happens when two leaves are siblings.
-        let mut parent_node_indices = leaf_indices
-            .iter()
-            .map(|&leaf_index| (leaf_index + num_leaves) / 2)
-            .collect_vec();
-        parent_node_indices.sort_unstable();
-        parent_node_indices.dedup();
-
-        // hash the partial tree from the bottom up
-        for _ in 0..tree_height {
-            for &parent_node_index in parent_node_indices.iter() {
-                let left_node_index = parent_node_index * 2;
-                let right_node_index = left_node_index ^ 1;
-
-                if partial_tree.contains_key(&parent_node_index) {
-                    return Err(MerkleTreeError::SpuriousNodeIndex(parent_node_index));
-                }
-
-                let &left_node = partial_tree
-                    .get(&left_node_index)
-                    .ok_or(MerkleTreeError::MissingNodeIndex(left_node_index))?;
-                let &right_node = partial_tree
-                    .get(&right_node_index)
-                    .ok_or(MerkleTreeError::MissingNodeIndex(right_node_index))?;
-
-                let parent_digest = H::hash_pair(left_node, right_node);
-                partial_tree.insert(parent_node_index, parent_digest);
-            }
-
-            // Move parent nodes indices one layer up,
-            // deduplicate to guarantee minimal number of hash operations.
-            parent_node_indices.iter_mut().for_each(|i| *i /= 2);
-            parent_node_indices.dedup();
-        }
-
-        if !partial_tree.contains_key(&ROOT_INDEX) {
-            return Err(MerkleTreeError::RootNotFound);
-        }
-
-        Ok(())
-    }
-
-    /// Transform an authentication structure into a list of authentication paths.
-    /// This corresponds to a decompression of the authentication structure.
-    /// In some contexts, it is easier to deal with individual authentication paths than with the de-duplicated
-    /// authentication structure.
-    ///
-    /// Continuing the example from [`get_authentication_structure`][Self::get_authentication_structure],
-    /// the authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively, is nodes [11, 9, 3].
-    ///
-    /// The authentication path
-    /// - for leaf 0 is [9, 5, 3], and
-    /// - for leaf 2 is [11, 4, 3].
-    ///
-    /// ```markdown
-    ///         ──── 1 ────
-    ///        ╱           ╲
-    ///       2             3
-    ///      ╱  ╲          ╱  ╲
-    ///     ╱    ╲        ╱    ╲
-    ///    4      5      6      7
-    ///   ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲
-    ///  8   9  10 11  12 13  14 15
-    /// ```
-    pub fn authentication_paths_from_authentication_structure(
-        tree_height: usize,
-        leaf_indices: &[usize],
-        leaf_digests: &[Digest],
-        authentication_structure: &[Digest],
-    ) -> Result<Vec<Vec<Digest>>> {
-        let mut partial_tree = Self::partial_tree_from_authentication_structure(
-            tree_height,
-            leaf_indices,
-            leaf_digests,
-            authentication_structure,
-        )?;
-        Self::fill_partial_tree(&mut partial_tree, tree_height, leaf_indices)?;
-        Self::authentication_paths_from_partial_tree(&partial_tree, tree_height, leaf_indices)
-    }
-
-    /// Given a partial Merkle tree, collect the authentication paths for the indicated leaves.
-    fn authentication_paths_from_partial_tree(
-        partial_tree: &HashMap<usize, Digest>,
-        tree_height: usize,
-        leaf_indices: &[usize],
-    ) -> Result<Vec<Vec<Digest>>> {
-        let mut authentication_paths = vec![];
-        for &leaf_index in leaf_indices {
-            let authentication_path = Self::single_authentication_path_from_partial_tree(
-                partial_tree,
-                tree_height,
-                leaf_index,
-            )?;
-            authentication_paths.push(authentication_path);
-        }
-        Ok(authentication_paths)
-    }
-
-    /// Given a single leaf index and a partial Merkle tree, collect the authentication path for the indicated leaf.
-    ///
-    /// Fails if the partial Merkle tree does not contain the entire authentication path.
-    fn single_authentication_path_from_partial_tree(
-        partial_tree: &HashMap<usize, Digest>,
-        tree_height: usize,
-        leaf_index: usize,
-    ) -> Result<Vec<Digest>> {
-        let num_leaves = Self::num_leaves(tree_height)?;
-        let mut authentication_path = vec![];
-        let mut node_index = leaf_index + num_leaves;
-        while node_index > ROOT_INDEX {
-            let sibling_index = node_index ^ 1;
-            let &sibling = partial_tree
-                .get(&sibling_index)
-                .ok_or(MerkleTreeError::MissingNodeIndex(sibling_index))?;
-            authentication_path.push(sibling);
-            node_index /= 2;
-        }
-        Ok(authentication_path)
     }
 
     pub fn root(&self) -> Digest {
@@ -402,6 +179,211 @@ where
 
         let tree = CpuParallel::from_digests(&leaves).unwrap();
         Ok(tree)
+    }
+}
+
+impl<H> MerkleTreeInclusionProof<H>
+where
+    H: AlgebraicHasher,
+{
+    fn num_leaves(&self) -> Result<usize> {
+        if self.tree_height > MAX_TREE_HEIGHT {
+            return Err(MerkleTreeError::TreeTooHigh);
+        }
+        Ok(1 << self.tree_height)
+    }
+
+    fn is_trivial(&self) -> bool {
+        self.leaf_indices.is_empty()
+            && self.leaf_digests.is_empty()
+            && self.authentication_structure.is_empty()
+    }
+
+    /// Verify that the given root digest is the root of a Merkle tree that contains the indicated leaves.
+    pub fn verify(&self, expected_root: Digest) -> bool {
+        if self.is_trivial() {
+            return true;
+        }
+        let Ok(mut partial_tree) = self.partial_tree() else {
+            return false;
+        };
+        let Ok(()) = self.fill_partial_tree(&mut partial_tree) else {
+            return false;
+        };
+        let computed_root = partial_tree[&ROOT_INDEX];
+        computed_root == expected_root
+    }
+
+    /// Given a list of leaf indices and corresponding digests as well as an authentication structure for a tree of
+    /// indicated height, build a partial Merkle tree.
+    ///
+    /// Continuing the example from [`authentication_structure`][authentication_structure], the partial
+    /// tree for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively, with nodes [11, 9, 3] from the authentication
+    /// structure is:
+    ///
+    /// ```markdown
+    ///         ──── _ ────
+    ///        ╱           ╲
+    ///       _             3
+    ///      ╱  ╲
+    ///     ╱    ╲
+    ///    _      _
+    ///   ╱ ╲    ╱ ╲
+    ///  8   9  10 11
+    /// ```
+    ///
+    /// [authentication_structure]: MerkleTree::authentication_structure
+    fn partial_tree(&self) -> Result<HashMap<usize, Digest>> {
+        let num_leaves = self.num_leaves()?;
+
+        if self.leaf_indices.len() != self.leaf_digests.len() {
+            return Err(MerkleTreeError::NumLeafIndicesAndDigestsMismatch);
+        }
+        if self.leaf_indices.is_empty() && self.authentication_structure.is_empty() {
+            return Ok(HashMap::new());
+        }
+        if self.leaf_indices.iter().any(|&i| i >= num_leaves) {
+            return Err(MerkleTreeError::LeafIndexInvalid { num_leaves });
+        }
+
+        let authentication_structure_node_indices =
+            MerkleTree::<H>::authentication_structure_node_indices(num_leaves, &self.leaf_indices)?;
+        if self.authentication_structure.len() != authentication_structure_node_indices.len() {
+            return Err(MerkleTreeError::AuthenticationStructureLengthMismatch);
+        }
+
+        let mut partial_merkle_tree: HashMap<_, _> = authentication_structure_node_indices
+            .zip(self.authentication_structure.clone())
+            .collect();
+
+        for (leaf_index, &leaf_digest) in self.leaf_indices.iter().zip(&self.leaf_digests) {
+            let node_index = leaf_index + num_leaves;
+            if let Vacant(entry) = partial_merkle_tree.entry(node_index) {
+                entry.insert(leaf_digest);
+            } else if partial_merkle_tree[&node_index] != leaf_digest {
+                return Err(MerkleTreeError::RepeatedLeafDigestMismatch);
+            }
+        }
+        Ok(partial_merkle_tree)
+    }
+
+    /// Compute all computable digests of the partial Merkle tree, modifying the given partial tree.
+    /// Returns an error if the given tree is either
+    /// - incomplete, _i.e._, does not contain all the nodes required to compute the root, or
+    /// - not minimal, _i.e._, if it contains nodes that can be computed from other nodes.
+    ///
+    /// On success, the given partial tree is guaranteed to contain the root digest at index 1.
+    fn fill_partial_tree(&self, partial_tree: &mut HashMap<usize, Digest>) -> Result<()> {
+        let num_leaves = self.num_leaves()?;
+
+        // De-duplicate parent node indices to avoid hashing the same nodes twice,
+        // which happens when two leaves are siblings.
+        let mut parent_node_indices = self
+            .leaf_indices
+            .iter()
+            .map(|&leaf_index| (leaf_index + num_leaves) / 2)
+            .collect_vec();
+        parent_node_indices.sort_unstable();
+        parent_node_indices.dedup();
+
+        // hash the partial tree from the bottom up
+        for _ in 0..self.tree_height {
+            for &parent_node_index in parent_node_indices.iter() {
+                let left_node_index = parent_node_index * 2;
+                let right_node_index = left_node_index ^ 1;
+
+                if partial_tree.contains_key(&parent_node_index) {
+                    return Err(MerkleTreeError::SpuriousNodeIndex(parent_node_index));
+                }
+
+                let &left_node = partial_tree
+                    .get(&left_node_index)
+                    .ok_or(MerkleTreeError::MissingNodeIndex(left_node_index))?;
+                let &right_node = partial_tree
+                    .get(&right_node_index)
+                    .ok_or(MerkleTreeError::MissingNodeIndex(right_node_index))?;
+
+                let parent_digest = H::hash_pair(left_node, right_node);
+                partial_tree.insert(parent_node_index, parent_digest);
+            }
+
+            // Move parent nodes indices one layer up,
+            // deduplicate to guarantee minimal number of hash operations.
+            parent_node_indices.iter_mut().for_each(|i| *i /= 2);
+            parent_node_indices.dedup();
+        }
+
+        if !partial_tree.contains_key(&ROOT_INDEX) {
+            return Err(MerkleTreeError::RootNotFound);
+        }
+
+        Ok(())
+    }
+
+    /// Transform the inclusion proof into a list of authentication paths.
+    /// This corresponds to a decompression of the authentication structure.
+    /// In some contexts, it is easier to deal with individual authentication paths than with the de-duplicated
+    /// authentication structure.
+    ///
+    /// Continuing the example from [`authentication_structure`][authentication_structure],
+    /// the authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively, is nodes [11, 9, 3].
+    ///
+    /// The authentication path
+    /// - for leaf 0 is [9, 5, 3], and
+    /// - for leaf 2 is [11, 4, 3].
+    ///
+    /// ```markdown
+    ///         ──── 1 ────
+    ///        ╱           ╲
+    ///       2             3
+    ///      ╱  ╲          ╱  ╲
+    ///     ╱    ╲        ╱    ╲
+    ///    4      5      6      7
+    ///   ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲
+    ///  8   9  10 11  12 13  14 15
+    /// ```
+    ///
+    /// [authentication_structure]: MerkleTree::authentication_structure
+    pub fn into_authentication_paths(self) -> Result<Vec<Vec<Digest>>> {
+        let mut partial_tree = self.partial_tree()?;
+        self.fill_partial_tree(&mut partial_tree)?;
+        self.authentication_paths_from_partial_tree(&partial_tree)
+    }
+
+    /// Given a partial Merkle tree, collect the authentication paths for the indicated leaves.
+    fn authentication_paths_from_partial_tree(
+        &self,
+        partial_tree: &HashMap<usize, Digest>,
+    ) -> Result<Vec<Vec<Digest>>> {
+        let mut authentication_paths = vec![];
+        for &leaf_index in &self.leaf_indices {
+            let authentication_path =
+                self.single_authentication_path_from_partial_tree(partial_tree, leaf_index)?;
+            authentication_paths.push(authentication_path);
+        }
+        Ok(authentication_paths)
+    }
+
+    /// Given a single leaf index and a partial Merkle tree, collect the authentication path for the indicated leaf.
+    ///
+    /// Fails if the partial Merkle tree does not contain the entire authentication path.
+    fn single_authentication_path_from_partial_tree(
+        &self,
+        partial_tree: &HashMap<usize, Digest>,
+        leaf_index: usize,
+    ) -> Result<Vec<Digest>> {
+        let num_leaves = self.num_leaves()?;
+        let mut authentication_path = vec![];
+        let mut node_index = leaf_index + num_leaves;
+        while node_index > ROOT_INDEX {
+            let sibling_index = node_index ^ 1;
+            let &sibling = partial_tree
+                .get(&sibling_index)
+                .ok_or(MerkleTreeError::MissingNodeIndex(sibling_index))?;
+            authentication_path.push(sibling);
+            node_index /= 2;
+        }
+        Ok(authentication_path)
     }
 }
 
@@ -467,8 +449,8 @@ pub enum MerkleTreeError {
     #[error("All leaf indices must be valid, i.e., less than {num_leaves}.")]
     LeafIndexInvalid { num_leaves: usize },
 
-    #[error("The length of the supplied authentication must match the expected length.")]
-    AuthenticationPathLengthMismatch,
+    #[error("The length of the supplied authentication structure must match the expected length.")]
+    AuthenticationStructureLengthMismatch,
 
     #[error("Leaf digests of repeated indices must be identical.")]
     RepeatedLeafDigestMismatch,
@@ -488,8 +470,8 @@ pub enum MerkleTreeError {
     #[error("The number of leaves must be a power of two.")]
     IncorrectNumberOfLeaves,
 
-    #[error("Tree height must not exceed {max_tree_height}.")]
-    TreeTooHigh { max_tree_height: usize },
+    #[error("Tree height must not exceed {MAX_TREE_HEIGHT}.")]
+    TreeTooHigh,
 }
 
 #[cfg(test)]
@@ -573,6 +555,16 @@ pub mod merkle_tree_test {
         fn has_non_trivial_proof(&self) -> bool {
             !self.selected_indices.is_empty()
         }
+
+        fn proof(&self) -> MerkleTreeInclusionProof<Tip5> {
+            MerkleTreeInclusionProof::<Tip5> {
+                tree_height: self.tree.height(),
+                leaf_indices: self.selected_indices.clone(),
+                leaf_digests: self.leaves.clone(),
+                authentication_structure: self.auth_structure.clone(),
+                _hasher: PhantomData,
+            }
+        }
     }
 
     #[test]
@@ -613,32 +605,28 @@ pub mod merkle_tree_test {
 
     #[proptest(cases = 50)]
     fn trivial_proof_can_be_verified(#[strategy(arb())] merkle_tree: MerkleTree<Tip5>) {
-        let leaf_indices = [];
-        let leaf_digests = [];
+        let leaf_indices = vec![];
+        let leaf_digests = vec![];
 
         let proof = merkle_tree.authentication_structure(&leaf_indices).unwrap();
         prop_assert!(proof.is_empty());
 
-        let verdict = MerkleTree::<Tip5>::verify_authentication_structure(
-            merkle_tree.root(),
-            merkle_tree.height(),
-            &leaf_indices,
-            &leaf_digests,
-            &proof,
-        );
+        let verifier = MerkleTreeInclusionProof::<Tip5> {
+            tree_height: merkle_tree.height(),
+            leaf_indices,
+            leaf_digests,
+            authentication_structure: proof,
+            _hasher: PhantomData,
+        };
+        let verdict = verifier.verify(merkle_tree.root());
         prop_assert!(verdict);
     }
 
     #[proptest(cases = 40)]
     fn honestly_generated_authentication_structure_can_be_verified(test_tree: MerkleTreeToTest) {
-        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            test_tree.tree.root(),
-            test_tree.tree.height(),
-            &test_tree.selected_indices,
-            &test_tree.leaves,
-            &test_tree.auth_structure,
-        );
-        prop_assert!(verified);
+        let proof = test_tree.proof();
+        let verdict = proof.verify(test_tree.tree.root());
+        prop_assert!(verdict);
     }
 
     #[proptest(cases = 30)]
@@ -647,14 +635,9 @@ pub mod merkle_tree_test {
         corruptor: DigestCorruptor,
     ) {
         let bad_root = corruptor.corrupt_digest(test_tree.tree.root())?;
-        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            bad_root,
-            test_tree.tree.height(),
-            &test_tree.selected_indices,
-            &test_tree.leaves,
-            &test_tree.auth_structure,
-        );
-        prop_assert!(!verified);
+        let proof = test_tree.proof();
+        let verdict = proof.verify(bad_root);
+        prop_assert!(!verdict);
     }
 
     #[proptest(cases = 50)]
@@ -662,16 +645,10 @@ pub mod merkle_tree_test {
         test_tree: MerkleTreeToTest,
         #[strategy(vec(0..#test_tree.tree.num_leafs(), 1..100))] spurious_indices: Vec<usize>,
     ) {
-        let mut all_indices = test_tree.selected_indices.clone();
-        all_indices.extend(spurious_indices);
-        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            test_tree.tree.root(),
-            test_tree.tree.height(),
-            &all_indices,
-            &test_tree.leaves,
-            &test_tree.auth_structure,
-        );
-        prop_assert!(!verified);
+        let mut proof = test_tree.proof();
+        proof.leaf_indices.extend(spurious_indices);
+        let verdict = proof.verify(test_tree.tree.root());
+        prop_assert!(!verdict);
     }
 
     #[proptest(cases = 50)]
@@ -691,14 +668,10 @@ pub mod merkle_tree_test {
             return Err(TestCaseError::Reject(reject_reason));
         }
 
-        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            test_tree.tree.root(),
-            test_tree.tree.height(),
-            &all_indices,
-            &test_tree.leaves,
-            &test_tree.auth_structure,
-        );
-        prop_assert!(!verified);
+        let mut proof = test_tree.proof();
+        proof.leaf_indices = all_indices;
+        let verdict = proof.verify(test_tree.tree.root());
+        prop_assert!(!verdict);
     }
 
     #[proptest(cases = 20)]
@@ -717,14 +690,11 @@ pub mod merkle_tree_test {
             let reject_reason = "corruption must change authentication structure".into();
             return Err(TestCaseError::Reject(reject_reason));
         }
-        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            test_tree.tree.root(),
-            test_tree.tree.height(),
-            &test_tree.selected_indices,
-            &test_tree.leaves,
-            &corrupt_structure,
-        );
-        prop_assert!(!verified);
+
+        let mut proof = test_tree.proof();
+        proof.authentication_structure = corrupt_structure;
+        let verdict = proof.verify(test_tree.tree.root());
+        prop_assert!(!verdict);
     }
 
     #[proptest(cases = 30)]
@@ -744,31 +714,23 @@ pub mod merkle_tree_test {
             return Err(TestCaseError::Reject(reject_reason));
         }
 
-        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            test_tree.tree.root(),
-            test_tree.tree.height(),
-            &test_tree.selected_indices,
-            &corrupt_leaves,
-            &test_tree.auth_structure,
-        );
-        prop_assert!(!verified);
+        let mut proof = test_tree.proof();
+        proof.leaf_digests = corrupt_leaves;
+        let verdict = proof.verify(test_tree.tree.root());
+        prop_assert!(!verdict);
     }
 
     #[proptest(cases = 40)]
     fn incorrect_tree_height_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
-        #[strategy(0..=MerkleTree::<Tip5>::MAX_TREE_HEIGHT)]
+        #[strategy(0..=MAX_TREE_HEIGHT)]
         #[filter(#test_tree.tree.height() != #incorrect_height)]
         incorrect_height: usize,
     ) {
-        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            test_tree.tree.root(),
-            incorrect_height,
-            &test_tree.selected_indices,
-            &test_tree.leaves,
-            &test_tree.auth_structure,
-        );
-        prop_assert!(!verified);
+        let mut proof = test_tree.proof();
+        proof.tree_height = incorrect_height;
+        let verdict = proof.verify(test_tree.tree.root());
+        prop_assert!(!verdict);
     }
 
     /// The property-test framework can already select the same leaves multiple times. However, this
@@ -784,22 +746,16 @@ pub mod merkle_tree_test {
             .iter()
             .map(|&i| test_tree.selected_indices[i])
             .collect_vec();
-        let all_indices = [test_tree.selected_indices.clone(), additional_indices].concat();
-
         let additional_leaves = indices_to_duplicate
             .into_iter()
             .map(|i| test_tree.leaves[i])
             .collect_vec();
-        let all_leaves = [test_tree.leaves.clone(), additional_leaves].concat();
 
-        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            test_tree.tree.root(),
-            test_tree.tree.height(),
-            &all_indices,
-            &all_leaves,
-            &test_tree.auth_structure,
-        );
-        prop_assert!(verified);
+        let mut proof = test_tree.proof();
+        proof.leaf_indices.extend(additional_indices);
+        proof.leaf_digests.extend(additional_leaves);
+        let verdict = proof.verify(test_tree.tree.root());
+        prop_assert!(verdict);
     }
 
     #[proptest(cases = 20)]
@@ -808,14 +764,15 @@ pub mod merkle_tree_test {
     ) {
         let leaf_indices = (0..tree.num_leafs()).collect_vec();
         let proof = tree.authentication_structure(&leaf_indices).unwrap();
-        let verified = MerkleTree::<Tip5>::verify_authentication_structure(
-            tree.root(),
-            tree.height(),
-            &leaf_indices,
-            tree.leaves(),
-            &proof,
-        );
-        prop_assert!(verified);
+        let verifier = MerkleTreeInclusionProof::<Tip5> {
+            tree_height: tree.height(),
+            leaf_indices,
+            leaf_digests: tree.leaves().to_vec(),
+            authentication_structure: proof,
+            _hasher: PhantomData,
+        };
+        let verdict = verifier.verify(tree.root());
+        prop_assert!(verdict);
     }
 
     #[test]
@@ -870,13 +827,14 @@ pub mod merkle_tree_test {
         let tree = test_tree.tree;
         for (leaf_index, &leaf) in tree.leaves().iter().enumerate() {
             let authentication_path = tree.authentication_structure(&[leaf_index]).unwrap();
-            let verdict = MerkleTree::<Tip5>::verify_authentication_structure(
-                tree.root(),
-                tree.height(),
-                &[leaf_index],
-                &[leaf],
-                &authentication_path,
-            );
+            let verifier = MerkleTreeInclusionProof::<Tip5> {
+                tree_height: tree.height(),
+                leaf_indices: vec![leaf_index],
+                leaf_digests: vec![leaf],
+                authentication_structure: authentication_path,
+                _hasher: PhantomData,
+            };
+            let verdict = verifier.verify(tree.root());
             prop_assert!(verdict);
         }
     }
@@ -889,14 +847,14 @@ pub mod merkle_tree_test {
             opened_leaves,
             auth_structure,
         } = merkle_tree.authentication_info_for_leaf_indices(vec![0, 2]);
-
-        let partial_tree = MerkleTree::<Tip5>::partial_tree_from_authentication_structure(
-            merkle_tree.height(),
-            &opened_indices,
-            &opened_leaves,
-            &auth_structure,
-        )
-        .unwrap();
+        let verifier = MerkleTreeInclusionProof::<Tip5> {
+            tree_height: merkle_tree.height(),
+            leaf_indices: opened_indices,
+            leaf_digests: opened_leaves,
+            authentication_structure: auth_structure,
+            _hasher: PhantomData,
+        };
+        let partial_tree = verifier.partial_tree().unwrap();
 
         //         ──── _ ────
         //        ╱           ╲
@@ -927,12 +885,15 @@ pub mod merkle_tree_test {
         //
         //  0      2   <-- opened_leaf_indices
 
-        let tree_height = 3;
-        let opened_leaf_indices = [0, 2];
         let mut partial_tree =
             MerkleTree::<Tip5>::partial_test_tree_for_node_indices(&[3, 8, 9, 10, 11]);
-        MerkleTree::<Tip5>::fill_partial_tree(&mut partial_tree, tree_height, &opened_leaf_indices)
-            .unwrap();
+
+        let verifier = MerkleTreeInclusionProof::<Tip5> {
+            tree_height: 3,
+            leaf_indices: vec![0, 2],
+            ..Default::default()
+        };
+        verifier.fill_partial_tree(&mut partial_tree).unwrap();
     }
 
     #[test]
@@ -948,17 +909,16 @@ pub mod merkle_tree_test {
         //
         //  0      2   <-- opened_leaf_indices
 
-        let tree_height = 3;
-        let opened_leaf_indices = [0, 2];
         let mut partial_tree =
             MerkleTree::<Tip5>::partial_test_tree_for_node_indices(&[8, 9, 10, 11]);
 
-        let err = MerkleTree::<Tip5>::fill_partial_tree(
-            &mut partial_tree,
-            tree_height,
-            &opened_leaf_indices,
-        )
-        .unwrap_err();
+        let verifier = MerkleTreeInclusionProof::<Tip5> {
+            tree_height: 3,
+            leaf_indices: vec![0, 2],
+            ..Default::default()
+        };
+
+        let err = verifier.fill_partial_tree(&mut partial_tree).unwrap_err();
         assert_eq!(MerkleTreeError::MissingNodeIndex(3), err);
     }
 
@@ -975,17 +935,15 @@ pub mod merkle_tree_test {
         //
         //  0      2   <-- opened_leaf_indices
 
-        let tree_height = 3;
-        let opened_leaf_indices = [0, 2];
         let mut partial_tree =
             MerkleTree::<Tip5>::partial_test_tree_for_node_indices(&[2, 3, 8, 9, 10, 11]);
 
-        let err = MerkleTree::<Tip5>::fill_partial_tree(
-            &mut partial_tree,
-            tree_height,
-            &opened_leaf_indices,
-        )
-        .unwrap_err();
+        let verifier = MerkleTreeInclusionProof::<Tip5> {
+            tree_height: 3,
+            leaf_indices: vec![0, 2],
+            ..Default::default()
+        };
+        let err = verifier.fill_partial_tree(&mut partial_tree).unwrap_err();
         assert_eq!(MerkleTreeError::SpuriousNodeIndex(2), err);
     }
 
@@ -999,13 +957,14 @@ pub mod merkle_tree_test {
             auth_structure,
         } = merkle_tree.authentication_info_for_leaf_indices(vec![0, 2]);
 
-        let auth_paths = MerkleTree::<Tip5>::authentication_paths_from_authentication_structure(
-            TREE_HEIGHT,
-            &opened_indices,
-            &opened_leaves,
-            &auth_structure,
-        )
-        .unwrap();
+        let verifier = MerkleTreeInclusionProof::<Tip5> {
+            tree_height: TREE_HEIGHT,
+            leaf_indices: opened_indices,
+            leaf_digests: opened_leaves,
+            authentication_structure: auth_structure,
+            _hasher: PhantomData,
+        };
+        let auth_paths = verifier.into_authentication_paths().unwrap();
 
         let auth_path_with_nodes =
             |indices: [usize; TREE_HEIGHT]| indices.map(|i| merkle_tree.nodes[i]).to_vec();
