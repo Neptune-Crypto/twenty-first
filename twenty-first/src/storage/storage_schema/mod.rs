@@ -7,8 +7,10 @@
 //! database in a single atomic batch operation.
 
 mod dbtsingleton;
+mod dbtsingleton_nolock;
 mod dbtsingleton_private;
 mod dbtvec;
+mod dbtvec_nolock;
 mod dbtvec_private;
 mod enums;
 mod rusty_key;
@@ -20,7 +22,9 @@ mod simple_rusty_storage;
 pub mod traits;
 
 pub use dbtsingleton::*;
+pub use dbtsingleton_nolock::*;
 pub use dbtvec::*;
+pub use dbtvec_nolock::*;
 pub use enums::*;
 pub use rusty_key::*;
 pub use rusty_reader::*;

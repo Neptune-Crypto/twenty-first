@@ -7,8 +7,9 @@ use std::marker::PhantomData;
 
 /// A mutating iterator for [`StorageVec`] trait
 ///
-/// Important: This iterator holds a write lock over `StorageVecRwLock::LockedData`
-/// which will not be released until the iterator is dropped.
+/// Important: This iterator holds a reference to the
+/// [`StorageVec`] implementor which will not be released
+/// until the iterator is dropped.
 ///
 /// See examples for [`StorageVec::iter_mut()`].
 #[allow(private_bounds)]
@@ -17,7 +18,8 @@ where
     V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     indices: Box<dyn Iterator<Item = Index>>,
-    write_lock: AtomicRwWriteGuard<'a, V::LockedData>,
+    data: &'a V,
+    write_lock: Option<AtomicRwWriteGuard<'a, V::LockedData>>,
     phantom_t: PhantomData<T>,
     phantom_d: PhantomData<V>,
 }
@@ -25,7 +27,8 @@ where
 #[allow(private_bounds)]
 impl<'a, V, T> ManyIterMut<'a, V, T>
 where
-    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
+    V: StorageVec<T> + StorageVecRwLock<T> + 'a,
+    V::LockedData: StorageVecLockedData<T>,
 {
     pub(super) fn new<I>(indices: I, data: &'a V) -> Self
     where
@@ -33,7 +36,8 @@ where
     {
         Self {
             indices: Box::new(indices.into_iter()),
-            write_lock: data.write_lock(),
+            data,
+            write_lock: data.try_write_lock(),
             phantom_t: Default::default(),
             phantom_d: Default::default(),
         }
@@ -44,9 +48,9 @@ where
 // We only have to impl next()
 #[allow(private_bounds)]
 #[gat]
-impl<'a, V, T: 'a> LendingIterator for ManyIterMut<'a, V, T>
+impl<'a, V, T> LendingIterator for ManyIterMut<'a, V, T>
 where
-    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
+    V: StorageVec<T> + StorageVecRwLock<T> + Clone,
     V::LockedData: StorageVecLockedData<T>,
 {
     type Item<'b> = StorageSetter<'a, 'b, V, T>
@@ -55,9 +59,13 @@ where
 
     fn next(&mut self) -> Option<Self::Item<'_>> {
         if let Some(i) = Iterator::next(&mut self.indices) {
-            let value = self.write_lock.get(i);
+            let value = match &self.write_lock {
+                Some(write_lock) => write_lock.get(i),
+                None => self.data.get(i),
+            };
             Some(StorageSetter {
                 phantom: Default::default(),
+                data: &self.data,
                 write_lock: &mut self.write_lock,
                 index: i,
                 value,
@@ -72,10 +80,12 @@ where
 #[allow(private_bounds)]
 pub struct StorageSetter<'c, 'd, V, T>
 where
-    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
+    V: StorageVec<T> + StorageVecRwLock<T>,
+    V::LockedData: StorageVecLockedData<T>,
 {
     phantom: PhantomData<V>,
-    write_lock: &'d mut AtomicRwWriteGuard<'c, V::LockedData>,
+    data: &'c V,
+    write_lock: &'d mut Option<AtomicRwWriteGuard<'c, V::LockedData>>,
     index: Index,
     value: T,
 }
@@ -83,11 +93,14 @@ where
 #[allow(private_bounds)]
 impl<'a, 'b, V, T> StorageSetter<'a, 'b, V, T>
 where
-    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
+    V: StorageVec<T> + StorageVecRwLock<T>,
     V::LockedData: StorageVecLockedData<T>,
 {
     pub fn set(&mut self, value: T) {
-        self.write_lock.set(self.index, value);
+        match self.write_lock {
+            Some(write_lock) => write_lock.set(self.index, value),
+            None => self.data.set(self.index, value),
+        }
     }
 
     pub fn index(&self) -> Index {

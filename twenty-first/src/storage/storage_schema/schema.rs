@@ -1,5 +1,5 @@
 // use super::super::storage_vec::Index;
-use super::{traits::*, DbtSingleton, DbtVec, RustyKey};
+use super::{traits::*, DbtSingleton, DbtSingletonNoLock, DbtVec, DbtVecNoLock, RustyKey};
 use crate::sync::{AtomicMutex, AtomicRw, LockCallbackFn};
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
@@ -154,6 +154,31 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
         })
     }
 
+    /// Create a new DbtVecNoLock
+    ///
+    /// The `DbtSchema` will keep a reference to the `DbtVecNoLock`. In this way,
+    /// the Schema becomes aware of any write operations and later
+    /// a [`StorageWriter`] impl can write them all out.
+    ///
+    /// Atomicity: see [`DbtSchema`]
+    #[inline]
+    pub fn new_vec_nolock<V>(&mut self, name: &str) -> DbtVecNoLock<V>
+    where
+        V: Clone + 'static,
+        V: Serialize + DeserializeOwned,
+        DbtVecNoLock<V>: DbTable + Send + Sync,
+    {
+        self.tables.lock_mut(|tables| {
+            assert!(tables.len() < 255);
+            let reader = self.reader.clone();
+            let key_prefix = tables.len() as u8;
+            let vector = DbtVecNoLock::<V>::new(reader, key_prefix, name);
+
+            tables.push(Box::new(vector.clone()));
+            vector
+        })
+    }
+
     // possible future extension
     // fn new_hashmap<K, V>(&self) -> Arc<RefCell<DbtHashMap<K, V>>> { }
 
@@ -179,6 +204,26 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
         );
         let singleton =
             DbtSingleton::<V>::new(key, lock_name, self.reader.clone(), self.lock_callback_fn);
+        self.tables
+            .lock_mut(|t| t.push(Box::new(singleton.clone())));
+        singleton
+    }
+
+    /// Create a new DbtSingletonNoLock
+    ///
+    /// The `DbtSchema` will keep a reference to the `DbtSingletonNoLock`.
+    /// In this way, the Schema becomes aware of any write operations
+    /// and later a [`StorageWriter`] impl can write them all out.
+    ///
+    /// Atomicity: see [`DbtSchema`]
+    #[inline]
+    pub fn new_singleton_nolock<V>(&mut self, key: RustyKey) -> DbtSingletonNoLock<V>
+    where
+        V: Default + Clone + 'static,
+        V: Serialize + DeserializeOwned,
+        DbtSingletonNoLock<V>: DbTable + Send + Sync,
+    {
+        let singleton = DbtSingletonNoLock::<V>::new(key, self.reader.clone());
         self.tables
             .lock_mut(|t| t.push(Box::new(singleton.clone())));
         singleton
