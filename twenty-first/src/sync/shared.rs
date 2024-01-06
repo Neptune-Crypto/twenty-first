@@ -89,13 +89,17 @@ impl LockCallbackInfo {
 /// Represents an event (acquire/release) for a lock
 #[derive(Debug, Clone)]
 pub enum LockEvent<'a> {
+    TryAcquire {
+        info: LockInfo<'a>,
+        acquisition: LockAcquisition,
+    },
     Acquire {
         info: LockInfo<'a>,
-        acquired: LockAcquisition,
+        acquisition: LockAcquisition,
     },
     Release {
         info: LockInfo<'a>,
-        acquired: LockAcquisition,
+        acquisition: LockAcquisition,
     },
 }
 
