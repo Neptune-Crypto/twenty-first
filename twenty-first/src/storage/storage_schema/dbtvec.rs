@@ -16,7 +16,7 @@ use std::{fmt::Debug, sync::Arc};
 /// there is no possibility of a caller holding a lock too long
 /// by accident or encountering ordering deadlock issues.
 ///
-/// `DbtSingleton` is a NewType around Arc<RwLock<..>>.  Thus it
+/// `DbtVec` is a NewType around Arc<RwLock<..>>.  Thus it
 /// can be cheaply cloned to create a reference as if it were an
 /// Arc.
 #[derive(Debug)]
@@ -55,7 +55,7 @@ where
 
 impl<T> DbtVec<T> {
     #[inline]
-    pub(crate) fn write_lock(&self) -> AtomicRwWriteGuard<'_, DbtVecPrivate<T>> {
+    pub(crate) fn write_lock(&mut self) -> AtomicRwWriteGuard<'_, DbtVecPrivate<T>> {
         self.inner.lock_guard_mut()
     }
 
@@ -69,7 +69,7 @@ impl<T> StorageVecRwLock<T> for DbtVec<T> {
     type LockedData = DbtVecPrivate<T>;
 
     #[inline]
-    fn try_write_lock(&self) -> Option<AtomicRwWriteGuard<'_, Self::LockedData>> {
+    fn try_write_lock(&mut self) -> Option<AtomicRwWriteGuard<'_, Self::LockedData>> {
         Some(self.write_lock())
     }
 
@@ -102,7 +102,7 @@ where
     #[inline]
     fn many_iter<'a>(
         &'a self,
-        indices: impl IntoIterator<Item = Index> + 'static,
+        indices: impl IntoIterator<Item = Index> + 'a,
     ) -> Box<dyn Iterator<Item = (Index, V)> + '_> {
         let inner = self.inner.lock_guard();
         Box::new(indices.into_iter().map(move |i| {
@@ -127,7 +127,7 @@ where
     #[inline]
     fn many_iter_values<'a>(
         &'a self,
-        indices: impl IntoIterator<Item = Index> + 'static,
+        indices: impl IntoIterator<Item = Index> + 'a,
     ) -> Box<dyn Iterator<Item = V> + '_> {
         let inner = self.inner.lock_guard();
         Box::new(indices.into_iter().map(move |i| {
@@ -160,27 +160,27 @@ where
     }
 
     #[inline]
-    fn set(&self, index: Index, value: V) {
+    fn set(&mut self, index: Index, value: V) {
         self.inner.lock_mut(|inner| inner.set(index, value));
     }
 
     #[inline]
-    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, V)>) {
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, V)>) {
         self.inner.lock_mut(|inner| inner.set_many(key_vals));
     }
 
     #[inline]
-    fn pop(&self) -> Option<V> {
+    fn pop(&mut self) -> Option<V> {
         self.inner.lock_mut(|inner| inner.pop())
     }
 
     #[inline]
-    fn push(&self, value: V) {
+    fn push(&mut self, value: V) {
         self.inner.lock_mut(|inner| inner.push(value));
     }
 
     #[inline]
-    fn clear(&self) {
+    fn clear(&mut self) {
         self.inner.lock_mut(|inner| inner.clear());
     }
 }
@@ -196,7 +196,7 @@ where
     /// not grow unbounded, so long as `pull_queue()` is called
     /// regularly.  It also means the cache must be rebuilt after
     /// each call (batch write)
-    fn pull_queue(&self) -> Vec<WriteOperation> {
+    fn pull_queue(&mut self) -> Vec<WriteOperation> {
         self.inner.lock_mut(|inner| {
             let maybe_original_length = inner.persisted_length();
             // necessary because we need maybe_original_length.is_none() later
@@ -234,7 +234,7 @@ where
     }
 
     #[inline]
-    fn restore_or_new(&self) {
+    fn restore_or_new(&mut self) {
         self.inner.lock_mut(|inner| {
             if let Some(length) = inner
                 .reader

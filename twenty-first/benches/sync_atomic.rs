@@ -71,7 +71,7 @@ mod lock_mut {
 
         #[divan::bench]
         fn lock_guard_mut(bencher: Bencher) {
-            let atom = AtomicRw::from(true);
+            let mut atom = AtomicRw::from(true);
 
             bencher.bench_local(|| {
                 for _i in 0..NUM_ACQUIRES {

@@ -18,17 +18,15 @@ impl StorageWriter for SimpleRustyStorage {
     #[inline]
     fn persist(&mut self) {
         let write_batch = WriteBatch::new();
-        self.schema.tables.lock(|tables| {
-            for table in tables.iter() {
-                let operations = table.pull_queue();
-                for op in operations {
-                    match op {
-                        WriteOperation::Write(key, value) => write_batch.put(&key.0, &value.0),
-                        WriteOperation::Delete(key) => write_batch.delete(&key.0),
-                    }
+        for table in self.schema.tables.lock_guard_mut().iter_mut() {
+            let operations = table.pull_queue();
+            for op in operations {
+                match op {
+                    WriteOperation::Write(key, value) => write_batch.put(&key.0, &value.0),
+                    WriteOperation::Delete(key) => write_batch.delete(&key.0),
                 }
             }
-        });
+        }
 
         self.db()
             .write(&write_batch, true)
@@ -37,11 +35,9 @@ impl StorageWriter for SimpleRustyStorage {
 
     #[inline]
     fn restore_or_new(&mut self) {
-        self.schema.tables.lock(|tables| {
-            for table in tables.iter() {
-                table.restore_or_new();
-            }
-        });
+        for table in self.schema.tables.lock_guard_mut().iter_mut() {
+            table.restore_or_new();
+        }
     }
 }
 

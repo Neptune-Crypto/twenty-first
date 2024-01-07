@@ -4,6 +4,7 @@ use lending_iterator::prelude::*;
 use lending_iterator::{gat, LendingIterator};
 use std::iter::Iterator;
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 /// A mutating iterator for [`StorageVec`] trait
 ///
@@ -17,9 +18,9 @@ pub struct ManyIterMut<'a, V, T>
 where
     V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
-    indices: Box<dyn Iterator<Item = Index>>,
-    data: &'a V,
-    write_lock: Option<AtomicRwWriteGuard<'a, V::LockedData>>,
+    indices: Box<dyn Iterator<Item = Index> + 'a>,
+
+    data_ref: DataRefMut<'a, V, T>,
     phantom_t: PhantomData<T>,
     phantom_d: PhantomData<V>,
 }
@@ -29,14 +30,26 @@ impl<'a, V, T> ManyIterMut<'a, V, T>
 where
     V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
-    pub(super) fn new<I>(indices: I, data: &'a V) -> Self
+    pub(super) fn new<I>(indices: I, data: &'a mut V) -> Self
     where
-        I: IntoIterator<Item = Index> + 'static,
+        I: IntoIterator<Item = Index> + 'a,
     {
+        // note: this is a bit awkward due to borrow-checker constraints.
+        // So we can't just `match data.try_write_lock() { .. }`
+
+        if data.try_write_lock().is_none() {
+            return Self {
+                indices: Box::new(indices.into_iter()),
+                data_ref: DataRefMut::RefMut(data),
+                phantom_t: Default::default(),
+                phantom_d: Default::default(),
+            };
+        }
+
+        let g = data.try_write_lock().unwrap();
         Self {
             indices: Box::new(indices.into_iter()),
-            data,
-            write_lock: data.try_write_lock(),
+            data_ref: DataRefMut::RwWriteGuard(g),
             phantom_t: Default::default(),
             phantom_d: Default::default(),
         }
@@ -58,14 +71,10 @@ where
 
     fn next(&mut self) -> Option<Self::Item<'_>> {
         if let Some(i) = Iterator::next(&mut self.indices) {
-            let value = match &self.write_lock {
-                Some(write_lock) => write_lock.get(i),
-                None => self.data.get(i),
-            };
+            let value = self.data_ref.get(i);
             Some(StorageSetter {
                 phantom: Default::default(),
-                data: self.data,
-                write_lock: &mut self.write_lock,
+                data_ref: &mut self.data_ref,
                 index: i,
                 value,
             })
@@ -77,13 +86,12 @@ where
 
 /// used for accessing and setting values returned from StorageVec::get_mut() and mutable iterators
 #[allow(private_bounds)]
-pub struct StorageSetter<'c, 'd, V, T>
+pub struct StorageSetter<'a, 'b, V, T>
 where
     V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     phantom: PhantomData<V>,
-    data: &'c V,
-    write_lock: &'d mut Option<AtomicRwWriteGuard<'c, V::LockedData>>,
+    data_ref: &'b mut DataRefMut<'a, V, T>,
     index: Index,
     value: T,
 }
@@ -95,10 +103,7 @@ where
     V::LockedData: StorageVecLockedData<T>,
 {
     pub fn set(&mut self, value: T) {
-        match self.write_lock {
-            Some(write_lock) => write_lock.set(self.index, value),
-            None => self.data.set(self.index, value),
-        }
+        self.data_ref.deref_mut().set(self.index, value)
     }
 
     pub fn index(&self) -> Index {
@@ -107,5 +112,40 @@ where
 
     pub fn value(&self) -> &T {
         &self.value
+    }
+}
+
+/// represents a reference to data held in an impl StorageVec.
+///
+/// abstracts over types with an RwLock or no lock.
+///
+/// For types with an RwLock, this enables ManyIterMut
+/// to hold the lock-write-guard for duration of the
+/// iteration.
+enum DataRefMut<'a, V, T>
+where
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
+{
+    RwWriteGuard(AtomicRwWriteGuard<'a, V::LockedData>),
+    RefMut(&'a mut V),
+}
+
+impl<'a, V, T> DataRefMut<'a, V, T>
+where
+    V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
+    V::LockedData: StorageVecLockedData<T>,
+{
+    fn get(&self, i: Index) -> T {
+        match self {
+            Self::RwWriteGuard(g) => g.deref().get(i),
+            Self::RefMut(r) => r.get(i),
+        }
+    }
+
+    fn set(&mut self, i: Index, value: T) {
+        match self {
+            Self::RwWriteGuard(g) => g.deref_mut().set(i, value),
+            Self::RefMut(r) => r.set(i, value),
+        }
     }
 }
