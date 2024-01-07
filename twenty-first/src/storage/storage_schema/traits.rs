@@ -9,9 +9,9 @@ pub use crate::leveldb::database::key::IntoLevelDBKey;
 /// Defines table interface for types used by [`super::DbtSchema`]
 pub trait DbTable {
     /// Retrieve all unwritten operations and empty write-queue
-    fn pull_queue(&self) -> Vec<WriteOperation>;
+    fn pull_queue(&mut self) -> Vec<WriteOperation>;
     /// Restore existing table if present, else create a new one
-    fn restore_or_new(&self);
+    fn restore_or_new(&mut self);
 }
 
 /// Defines storage singleton for types created by [`super::DbtSchema`]
@@ -23,7 +23,7 @@ where
     fn get(&self) -> T;
 
     /// Set value
-    fn set(&self, t: T);
+    fn set(&mut self, t: T);
 }
 
 /// Defines storage reader interface

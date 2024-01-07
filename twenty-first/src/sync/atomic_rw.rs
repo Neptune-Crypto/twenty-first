@@ -12,7 +12,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 /// struct Car {
 ///     year: u16,
 /// };
-/// let atomic_car = AtomicRw::from(Car{year: 2016});
+/// let mut atomic_car = AtomicRw::from(Car{year: 2016});
 /// atomic_car.lock(|c| println!("year: {}", c.year));
 /// atomic_car.lock_mut(|mut c| c.year = 2023);
 /// ```
@@ -48,7 +48,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 /// }
 /// const LOG_LOCK_EVENT_CB: LockCallbackFn = log_lock_event;
 ///
-/// let atomic_car = AtomicRw::<Car>::from((Car{year: 2016}, Some("car"), Some(LOG_LOCK_EVENT_CB)));
+/// let mut atomic_car = AtomicRw::<Car>::from((Car{year: 2016}, Some("car"), Some(LOG_LOCK_EVENT_CB)));
 /// atomic_car.lock(|c| {println!("year: {}", c.year)});
 /// atomic_car.lock_mut(|mut c| {c.year = 2023});
 /// ```
@@ -215,10 +215,10 @@ impl<T> AtomicRw<T> {
     /// struct Car {
     ///     year: u16,
     /// };
-    /// let atomic_car = AtomicRw::from(Car{year: 2016});
+    /// let mut atomic_car = AtomicRw::from(Car{year: 2016});
     /// atomic_car.lock_guard_mut().year = 2022;
     /// ```
-    pub fn lock_guard_mut(&self) -> AtomicRwWriteGuard<T> {
+    pub fn lock_guard_mut(&mut self) -> AtomicRwWriteGuard<T> {
         self.try_acquire_write_cb();
         let guard = self.inner.write().expect("Write lock should succeed");
         AtomicRwWriteGuard::new(guard, &self.lock_callback_info)
@@ -254,11 +254,11 @@ impl<T> AtomicRw<T> {
     /// struct Car {
     ///     year: u16,
     /// };
-    /// let atomic_car = AtomicRw::from(Car{year: 2016});
+    /// let mut atomic_car = AtomicRw::from(Car{year: 2016});
     /// atomic_car.lock_mut(|mut c| {c.year = 2022});
     /// let year = atomic_car.lock_mut(|mut c| {c.year = 2023; c.year});
     /// ```
-    pub fn lock_mut<R, F>(&self, f: F) -> R
+    pub fn lock_mut<R, F>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut T) -> R,
     {
@@ -289,11 +289,11 @@ impl<T> AtomicRw<T> {
     /// # Example
     /// ```
     /// # use twenty_first::sync::{AtomicRw, traits::*};
-    /// let atomic_bool = AtomicRw::from(false);
+    /// let mut atomic_bool = AtomicRw::from(false);
     /// atomic_bool.set(true);
     /// ```
     #[inline]
-    pub fn set(&self, value: T)
+    pub fn set(&mut self, value: T)
     where
         T: Copy,
     {
@@ -335,7 +335,7 @@ impl<T> Atomic<T> for AtomicRw<T> {
     }
 
     #[inline]
-    fn lock_mut<R, F>(&self, f: F) -> R
+    fn lock_mut<R, F>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut T) -> R,
     {
@@ -441,7 +441,7 @@ mod tests {
     // Verify (compile-time) that AtomicRw::lock() and ::lock_mut() accept mutable values.  (FnMut)
     fn mutable_assignment() {
         let name = "Jim".to_string();
-        let atomic_name = AtomicRw::from(name);
+        let mut atomic_name = AtomicRw::from(name);
 
         let mut new_name: String = Default::default();
         atomic_name.lock(|n| new_name = n.to_string());
