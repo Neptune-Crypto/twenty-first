@@ -7,10 +7,10 @@
 //! database in a single atomic batch operation.
 
 mod dbtsingleton;
-mod dbtsingleton_nolock;
+mod dbtsingleton_lock;
 mod dbtsingleton_private;
 mod dbtvec;
-mod dbtvec_nolock;
+mod dbtvec_lock;
 mod dbtvec_private;
 mod enums;
 mod rusty_key;
@@ -22,9 +22,9 @@ mod simple_rusty_storage;
 pub mod traits;
 
 pub use dbtsingleton::*;
-pub use dbtsingleton_nolock::*;
+pub use dbtsingleton_lock::*;
 pub use dbtvec::*;
-pub use dbtvec_nolock::*;
+pub use dbtvec_lock::*;
 pub use enums::*;
 pub use rusty_key::*;
 pub use rusty_reader::*;
@@ -985,8 +985,8 @@ mod tests {
         use crate::sync::AtomicRw;
         use std::thread;
 
-        type TestVec = DbtVec<u64>;
-        type TestSingleton = DbtSingleton<u64>;
+        type TestVec = DbtVecLock<u64>;
+        type TestSingleton = DbtSingletonLock<u64>;
 
         pub fn iter_all_eq<T: PartialEq>(iter: impl IntoIterator<Item = T>) -> bool {
             let mut iter = iter.into_iter();
@@ -1005,7 +1005,9 @@ mod tests {
                 // open new DB that will be removed on close.
                 let db = DB::open_new_test_database(true, None, None, None).unwrap();
                 let mut rusty_storage = SimpleRustyStorage::new(db);
-                rusty_storage.schema.new_vec::<u64>("atomicity-test-vector")
+                rusty_storage
+                    .schema
+                    .new_vec_lock::<u64>("atomicity-test-vector")
             }
 
             #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
@@ -1056,7 +1058,7 @@ mod tests {
                 storage.schema.create_tables_rw(|schema| {
                     (0..num)
                         .map(|_i| {
-                            let singleton = schema.new_singleton::<u64>(12u64.into());
+                            let singleton = schema.new_singleton_lock::<u64>(12u64.into());
                             singleton.set(25);
                             singleton
                         })
@@ -1071,7 +1073,7 @@ mod tests {
 
                 (0..num)
                     .map(|_i| {
-                        let singleton = storage.schema.new_singleton::<u64>(12u64.into());
+                        let singleton = storage.schema.new_singleton_lock::<u64>(12u64.into());
                         singleton.set(25);
                         singleton
                     })
@@ -1262,8 +1264,8 @@ mod tests {
                 storage.schema.create_tables_rw(|schema| {
                     (0..num)
                         .map(|i| {
-                            let vec =
-                                schema.new_vec::<u64>(&format!("atomicity-test-vector #{}", i));
+                            let vec = schema
+                                .new_vec_lock::<u64>(&format!("atomicity-test-vector #{}", i));
                             for j in 0u64..300 {
                                 vec.push(j);
                             }
@@ -1282,7 +1284,7 @@ mod tests {
                     .map(|i| {
                         let vec = rusty_storage
                             .schema
-                            .new_vec::<u64>(&format!("atomicity-test-vector #{}", i));
+                            .new_vec_lock::<u64>(&format!("atomicity-test-vector #{}", i));
                         for j in 0u64..300 {
                             vec.push(j);
                         }

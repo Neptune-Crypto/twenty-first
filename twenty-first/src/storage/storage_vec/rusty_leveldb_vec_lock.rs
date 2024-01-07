@@ -1,41 +1,31 @@
 use super::super::level_db::DB;
 use super::rusty_leveldb_vec_private::RustyLevelDbVecPrivate;
 use super::{traits::*, Index};
-use crate::sync::{AtomicRwReadGuard, AtomicRwWriteGuard};
+use crate::sync::{AtomicRw, AtomicRwReadGuard, AtomicRwWriteGuard};
 use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 /// A concurrency safe database-backed Vec with in memory read/write caching for all operations.
 #[derive(Debug, Clone)]
-pub struct RustyLevelDbVec<T: Serialize + DeserializeOwned> {
-    inner: Rc<RefCell<RustyLevelDbVecPrivate<T>>>,
+pub struct RustyLevelDbVecLock<T: Serialize + DeserializeOwned> {
+    inner: AtomicRw<RustyLevelDbVecPrivate<T>>,
 }
 
-impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVec<T> {
-    #[allow(dead_code)] // used by tests in mod.rs
-    pub(crate) fn with_inner<R, F>(&self, cb: F) -> R
-    where
-        F: FnOnce(&RustyLevelDbVecPrivate<T>) -> R,
-    {
-        cb(&self.inner.borrow())
-    }
-}
-
-impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<T> {
+impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVecLock<T> {
     #[inline]
     fn is_empty(&self) -> bool {
-        self.inner.borrow().is_empty()
+        self.read_lock().is_empty()
     }
 
     #[inline]
     fn len(&self) -> Index {
-        self.inner.borrow().len()
+        self.read_lock().len()
     }
 
     #[inline]
     fn get(&self, index: Index) -> T {
-        self.inner.borrow().get(index)
+        self.read_lock().get(index)
     }
 
     fn many_iter(
@@ -44,7 +34,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
         // note: this lock is moved into the iterator closure and is not
         //       released until caller drops the returned iterator
-        let inner = self.inner.borrow();
+        let inner = self.read_lock();
 
         Box::new(indices.into_iter().map(move |i| {
             assert!(
@@ -70,7 +60,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     ) -> Box<dyn Iterator<Item = T> + '_> {
         // note: this lock is moved into the iterator closure and is not
         //       released until caller drops the returned iterator
-        let inner = self.inner.borrow();
+        let inner = self.read_lock();
 
         Box::new(indices.into_iter().map(move |i| {
             assert!(
@@ -92,19 +82,19 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
 
     #[inline]
     fn get_many(&self, indices: &[Index]) -> Vec<T> {
-        self.inner.borrow().get_many(indices)
+        self.read_lock().get_many(indices)
     }
 
     /// Return all stored elements in a vector, whose index matches the StorageVec's.
     /// It's the caller's responsibility that there is enough memory to store all elements.
     #[inline]
     fn get_all(&self) -> Vec<T> {
-        self.inner.borrow().get_all()
+        self.read_lock().get_all()
     }
 
     #[inline]
     fn set(&self, index: Index, value: T) {
-        self.inner.borrow_mut().set(index, value)
+        self.write_lock().set(index, value)
     }
 
     /// set multiple elements.
@@ -116,40 +106,52 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     /// For unordered collections such as HashMap, the behavior is undefined.
     #[inline]
     fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>) {
-        self.inner.borrow_mut().set_many(key_vals)
+        self.write_lock().set_many(key_vals)
     }
 
     #[inline]
     fn pop(&self) -> Option<T> {
-        self.inner.borrow_mut().pop()
+        self.write_lock().pop()
     }
 
     #[inline]
     fn push(&self, value: T) {
-        self.inner.borrow_mut().push(value)
+        self.write_lock().push(value)
     }
 
     #[inline]
     fn clear(&self) {
-        self.inner.borrow_mut().clear();
+        self.write_lock().clear();
     }
 }
 
-impl<T: Serialize + DeserializeOwned> StorageVecRwLock<T> for RustyLevelDbVec<T> {
+impl<T: Serialize + DeserializeOwned> RustyLevelDbVecLock<T> {
+    #[inline]
+    pub(crate) fn write_lock(&self) -> AtomicRwWriteGuard<'_, RustyLevelDbVecPrivate<T>> {
+        self.inner.lock_guard_mut()
+    }
+
+    #[inline]
+    pub(crate) fn read_lock(&self) -> AtomicRwReadGuard<'_, RustyLevelDbVecPrivate<T>> {
+        self.inner.lock_guard()
+    }
+}
+
+impl<T: Serialize + DeserializeOwned> StorageVecRwLock<T> for RustyLevelDbVecLock<T> {
     type LockedData = RustyLevelDbVecPrivate<T>;
 
     #[inline]
     fn try_write_lock(&self) -> Option<AtomicRwWriteGuard<'_, Self::LockedData>> {
-        None
+        Some(self.write_lock())
     }
 
     #[inline]
     fn try_read_lock(&self) -> Option<AtomicRwReadGuard<'_, Self::LockedData>> {
-        None
+        Some(self.read_lock())
     }
 }
 
-impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVec<T> {
+impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVecLock<T> {
     // Return the key used to store the length of the persisted vector
     #[inline]
     pub fn get_length_key(key_prefix: u8) -> [u8; 2] {
@@ -159,27 +161,77 @@ impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVec<T> {
     /// Return the length at the last write to disk
     #[inline]
     pub fn persisted_length(&self) -> Index {
-        self.inner.borrow().persisted_length()
+        self.read_lock().persisted_length()
     }
 
     /// Return the level-DB key used to store the element at an index
     #[inline]
     pub fn get_index_key(&self, index: Index) -> [u8; 9] {
-        self.inner.borrow().get_index_key(index)
+        self.read_lock().get_index_key(index)
     }
 
     #[inline]
     pub fn new(db: Arc<DB>, key_prefix: u8, name: &str) -> Self {
         Self {
-            inner: Rc::new(RefCell::new(RustyLevelDbVecPrivate::<T>::new(
-                db, key_prefix, name,
-            ))),
+            inner: AtomicRw::from(RustyLevelDbVecPrivate::<T>::new(db, key_prefix, name)),
         }
     }
 
     /// Collect all added elements that have not yet bit persisted
     #[inline]
     pub fn pull_queue(&self, write_batch: &WriteBatch) {
-        self.inner.borrow_mut().pull_queue(write_batch)
+        self.write_lock().pull_queue(write_batch)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::tests::get_test_db;
+    use super::super::traits::tests as traits_tests;
+    use super::*;
+
+    mod concurrency {
+        use super::*;
+
+        fn gen_concurrency_test_vec() -> RustyLevelDbVecLock<u64> {
+            let db = get_test_db(true);
+            RustyLevelDbVecLock::new(db, 0, "test-vec")
+        }
+
+        #[test]
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        fn non_atomic_set_and_get() {
+            traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
+        }
+
+        #[test]
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        fn non_atomic_set_and_get_wrapped_atomic_rw() {
+            traits_tests::concurrency::non_atomic_set_and_get_wrapped_atomic_rw(
+                &gen_concurrency_test_vec(),
+            );
+        }
+
+        #[test]
+        fn atomic_set_and_get_wrapped_atomic_rw() {
+            traits_tests::concurrency::atomic_set_and_get_wrapped_atomic_rw(
+                &gen_concurrency_test_vec(),
+            );
+        }
+
+        #[test]
+        fn atomic_setmany_and_getmany() {
+            traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
+        }
+
+        #[test]
+        fn atomic_setall_and_getall() {
+            traits_tests::concurrency::atomic_setall_and_getall(&gen_concurrency_test_vec());
+        }
+
+        #[test]
+        fn atomic_iter_mut_and_iter() {
+            traits_tests::concurrency::atomic_iter_mut_and_iter(&gen_concurrency_test_vec());
+        }
     }
 }

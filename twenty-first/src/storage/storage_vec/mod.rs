@@ -9,14 +9,19 @@
 #![allow(missing_docs)]
 mod iterators;
 mod ordinary_vec;
+mod ordinary_vec_lock;
 mod ordinary_vec_private;
 mod rusty_leveldb_vec;
+mod rusty_leveldb_vec_lock;
 mod rusty_leveldb_vec_private;
 pub mod traits;
 
 pub type Index = u64;
 
-pub use {iterators::*, ordinary_vec::*, rusty_leveldb_vec::*};
+pub use {
+    iterators::*, ordinary_vec::*, ordinary_vec_lock::*, rusty_leveldb_vec::*,
+    rusty_leveldb_vec_lock::*,
+};
 
 #[cfg(test)]
 mod tests {
@@ -62,7 +67,7 @@ mod tests {
         assert!(db.write_auto(&write_batch).is_ok());
 
         // Sanity checks
-        assert!(persisted_vec.read_lock().cache.is_empty());
+        assert!(persisted_vec.with_inner(|i| i.cache.is_empty()));
         assert_eq!(persisted_vec.len(), regular_vec.len() as u64);
 
         (persisted_vec, regular_vec, db)
@@ -150,8 +155,8 @@ mod tests {
 
         assert_eq!(3, delegated_db_vec_a.len());
         assert_eq!(0, delegated_db_vec_b.len());
-        assert_eq!(3, delegated_db_vec_a.read_lock().cache.len());
-        assert!(delegated_db_vec_b.read_lock().cache.is_empty());
+        assert_eq!(3, delegated_db_vec_a.with_inner(|i| i.cache.len()));
+        assert!(delegated_db_vec_b.with_inner(|i| i.cache.is_empty()));
 
         // Get all entries to write to database. Write all entries.
         assert_eq!(0, delegated_db_vec_a.persisted_length());
@@ -171,8 +176,8 @@ mod tests {
         assert_eq!(0, delegated_db_vec_b.persisted_length());
         assert_eq!(3, delegated_db_vec_a.len());
         assert_eq!(0, delegated_db_vec_b.len());
-        assert!(delegated_db_vec_a.read_lock().cache.is_empty());
-        assert!(delegated_db_vec_b.read_lock().is_empty());
+        assert!(delegated_db_vec_a.with_inner(|i| i.cache.is_empty()));
+        assert!(delegated_db_vec_b.is_empty());
     }
 
     #[test]
@@ -271,7 +276,7 @@ mod tests {
 
         let write_batch = WriteBatch::new();
         vec.pull_queue(&write_batch);
-        assert!(vec.read_lock().db.write_auto(&write_batch).is_ok());
+        assert!(vec.with_inner(|i| i.db.write_auto(&write_batch).is_ok()));
 
         drop(vec); // this will drop (close) the Db
 

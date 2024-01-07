@@ -1,27 +1,17 @@
 use super::ordinary_vec_private::OrdinaryVecPrivate;
 use super::{traits::*, Index};
-use crate::sync::{AtomicRw, AtomicRwReadGuard, AtomicRwWriteGuard};
+use crate::sync::{AtomicRwReadGuard, AtomicRwWriteGuard};
+use std::{cell::RefCell, rc::Rc};
 
-/// A wrapper that adds [`RwLock`](std::sync::RwLock) and atomic snapshot
-/// guarantees around all accesses to an ordinary [`Vec`]
+/// A NewType for [`Vec`] that implements [`StorageVec`] trait
+///
+/// note: `OrdinaryVec` is NOT thread-safe.
 #[derive(Debug, Clone, Default)]
-pub struct OrdinaryVec<T>(AtomicRw<OrdinaryVecPrivate<T>>);
+pub struct OrdinaryVec<T>(Rc<RefCell<OrdinaryVecPrivate<T>>>);
 
 impl<T> From<Vec<T>> for OrdinaryVec<T> {
     fn from(v: Vec<T>) -> Self {
-        Self(AtomicRw::from(OrdinaryVecPrivate(v)))
-    }
-}
-
-impl<T> OrdinaryVec<T> {
-    #[inline]
-    pub(crate) fn write_lock(&self) -> AtomicRwWriteGuard<'_, OrdinaryVecPrivate<T>> {
-        self.0.lock_guard_mut()
-    }
-
-    #[inline]
-    pub(crate) fn read_lock(&self) -> AtomicRwReadGuard<'_, OrdinaryVecPrivate<T>> {
-        self.0.lock_guard()
+        Self(Rc::new(RefCell::new(OrdinaryVecPrivate(v))))
     }
 }
 
@@ -30,29 +20,29 @@ impl<T> StorageVecRwLock<T> for OrdinaryVec<T> {
 
     #[inline]
     fn try_write_lock(&self) -> Option<AtomicRwWriteGuard<'_, Self::LockedData>> {
-        Some(self.write_lock())
+        None
     }
 
     #[inline]
     fn try_read_lock(&self) -> Option<AtomicRwReadGuard<'_, Self::LockedData>> {
-        Some(self.read_lock())
+        None
     }
 }
 
 impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
     #[inline]
     fn is_empty(&self) -> bool {
-        self.read_lock().is_empty()
+        self.0.borrow().is_empty()
     }
 
     #[inline]
     fn len(&self) -> Index {
-        self.read_lock().len()
+        self.0.borrow().len()
     }
 
     #[inline]
     fn get(&self, index: Index) -> T {
-        self.read_lock().get(index)
+        self.0.borrow().get(index)
     }
 
     fn many_iter(
@@ -61,7 +51,7 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
         // note: this lock is moved into the iterator closure and is not
         //       released until caller drops the returned iterator
-        let inner = self.read_lock();
+        let inner = self.0.borrow();
 
         Box::new(indices.into_iter().map(move |i| {
             assert!(
@@ -80,7 +70,7 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
     ) -> Box<dyn Iterator<Item = T> + '_> {
         // note: this lock is moved into the iterator closure and is not
         //       released until caller drops the returned iterator
-        let inner = self.read_lock();
+        let inner = self.0.borrow();
 
         Box::new(indices.into_iter().map(move |i| {
             assert!(
@@ -96,76 +86,26 @@ impl<T: Clone> StorageVec<T> for OrdinaryVec<T> {
     #[inline]
     fn set(&self, index: Index, value: T) {
         // note: on 32 bit systems, this could panic.
-        self.write_lock().set(index, value);
+        self.0.borrow_mut().set(index, value);
     }
 
     #[inline]
     fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>) {
-        self.write_lock().set_many(key_vals);
+        self.0.borrow_mut().set_many(key_vals);
     }
 
     #[inline]
     fn pop(&self) -> Option<T> {
-        self.write_lock().pop()
+        self.0.borrow_mut().pop()
     }
 
     #[inline]
     fn push(&self, value: T) {
-        self.write_lock().push(value);
+        self.0.borrow_mut().push(value);
     }
 
     #[inline]
     fn clear(&self) {
-        self.write_lock().clear();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::super::traits::tests as traits_tests;
-    use super::*;
-
-    mod concurrency {
-        use super::*;
-
-        fn gen_concurrency_test_vec() -> OrdinaryVec<u64> {
-            Default::default()
-        }
-
-        #[test]
-        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
-        fn non_atomic_set_and_get() {
-            traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
-        }
-
-        #[test]
-        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
-        fn non_atomic_set_and_get_wrapped_atomic_rw() {
-            traits_tests::concurrency::non_atomic_set_and_get_wrapped_atomic_rw(
-                &gen_concurrency_test_vec(),
-            );
-        }
-
-        #[test]
-        fn atomic_set_and_get_wrapped_atomic_rw() {
-            traits_tests::concurrency::atomic_set_and_get_wrapped_atomic_rw(
-                &gen_concurrency_test_vec(),
-            );
-        }
-
-        #[test]
-        fn atomic_setmany_and_getmany() {
-            traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
-        }
-
-        #[test]
-        fn atomic_setall_and_getall() {
-            traits_tests::concurrency::atomic_setall_and_getall(&gen_concurrency_test_vec());
-        }
-
-        #[test]
-        fn atomic_iter_mut_and_iter() {
-            traits_tests::concurrency::atomic_iter_mut_and_iter(&gen_concurrency_test_vec());
-        }
+        self.0.borrow_mut().clear();
     }
 }

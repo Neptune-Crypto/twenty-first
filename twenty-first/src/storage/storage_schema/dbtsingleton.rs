@@ -1,28 +1,21 @@
-use std::{fmt::Debug, sync::Arc};
+use std::sync::Arc;
+use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
 use super::{
     dbtsingleton_private::DbtSingletonPrivate, traits::*, RustyKey, RustyValue, WriteOperation,
 };
-use crate::sync::{AtomicRw, LockCallbackFn};
 use serde::{de::DeserializeOwned, Serialize};
 
 /// Singleton type created by [`super::DbtSchema`]
 ///
-/// This type is concurrency-safe.  A single RwLock is employed
-/// for all read and write ops.  Callers do not need to perform
-/// any additional locking.
+/// This type is NOT concurrency-safe.
 ///
-/// Also because the locking is fully encapsulated within DbtSingleton
-/// there is no possibility of a caller holding a lock too long
-/// by accident or encountering ordering deadlock issues.
-///
-/// `DbtSingleton` is a NewType around Arc<RwLock<..>>.  Thus it
+/// `DbtSingleton` is a NewType around Rc<RefCell<..>>.  Thus it
 /// can be cheaply cloned to create a reference as if it were an
-/// Arc.
+/// Rc.
 #[derive(Debug)]
 pub struct DbtSingleton<V> {
-    // note: Arc is not needed, because we never hand out inner to anyone.
-    inner: AtomicRw<DbtSingletonPrivate<V>>,
+    inner: Rc<RefCell<DbtSingletonPrivate<V>>>,
 }
 
 // We manually impl Clone so that callers can make reference clones.
@@ -40,12 +33,7 @@ where
 {
     // DbtSingleton can not be instantiated directly outside of this crate.
     #[inline]
-    pub(crate) fn new(
-        key: RustyKey,
-        lock_name: String,
-        reader: Arc<dyn StorageReader + Sync + Send>,
-        lock_callback_fn: Option<LockCallbackFn>,
-    ) -> Self {
+    pub(crate) fn new(key: RustyKey, reader: Arc<dyn StorageReader + Sync + Send>) -> Self {
         let singleton = DbtSingletonPrivate::<V> {
             current_value: Default::default(),
             old_value: Default::default(),
@@ -53,7 +41,7 @@ where
             reader,
         };
         Self {
-            inner: AtomicRw::from((singleton, Some(lock_name), lock_callback_fn)),
+            inner: Rc::new(RefCell::new(singleton)),
         }
     }
 }
@@ -65,12 +53,12 @@ where
 {
     #[inline]
     fn get(&self) -> V {
-        self.inner.lock(|inner| inner.get())
+        self.inner.borrow().get()
     }
 
     #[inline]
     fn set(&self, t: V) {
-        self.inner.lock_mut(|inner| inner.set(t));
+        self.inner.borrow_mut().set(t);
     }
 }
 
@@ -81,26 +69,24 @@ where
 {
     #[inline]
     fn pull_queue(&self) -> Vec<WriteOperation> {
-        self.inner.lock_mut(|inner| {
-            if inner.current_value == inner.old_value {
-                vec![]
-            } else {
-                inner.old_value = inner.current_value.clone();
-                vec![WriteOperation::Write(
-                    inner.key.clone(),
-                    RustyValue::from_any(&inner.current_value),
-                )]
-            }
-        })
+        if self.inner.borrow().current_value == self.inner.borrow().old_value {
+            vec![]
+        } else {
+            let mut inner = self.inner.borrow_mut();
+            inner.old_value = inner.current_value.clone();
+            vec![WriteOperation::Write(
+                inner.key.clone(),
+                RustyValue::from_any(&inner.current_value),
+            )]
+        }
     }
 
     #[inline]
     fn restore_or_new(&self) {
-        self.inner.lock_mut(|inner| {
-            inner.current_value = match inner.reader.get(inner.key.clone()) {
-                Some(value) => value.into_any(),
-                None => V::default(),
-            }
-        });
+        let mut inner = self.inner.borrow_mut();
+        inner.current_value = match inner.reader.get(inner.key.clone()) {
+            Some(value) => value.into_any(),
+            None => V::default(),
+        }
     }
 }
