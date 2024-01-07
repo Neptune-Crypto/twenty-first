@@ -25,11 +25,11 @@ pub trait Atomic<T> {
     /// struct Car {
     ///     year: u16,
     /// };
-    /// let atomic_car = AtomicRw::from(Car{year: 2016});
+    /// let mut atomic_car = AtomicRw::from(Car{year: 2016});
     /// atomic_car.lock_mut(|mut c| {c.year = 2022;});
     /// let year = atomic_car.lock_mut(|mut c| {c.year = 2023; c.year});
     /// ```
-    fn lock_mut<R, F>(&self, f: F) -> R
+    fn lock_mut<R, F>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut T) -> R;
 
@@ -54,11 +54,11 @@ pub trait Atomic<T> {
     /// # Example
     /// ```
     /// # use twenty_first::sync::{AtomicRw, traits::*};
-    /// let atomic_bool = AtomicRw::from(false);
+    /// let mut atomic_bool = AtomicRw::from(false);
     /// atomic_bool.set(true);
     /// ```
     #[inline]
-    fn set(&self, value: T)
+    fn set(&mut self, value: T)
     where
         T: Copy,
     {

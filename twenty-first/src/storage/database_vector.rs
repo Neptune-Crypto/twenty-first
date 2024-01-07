@@ -169,7 +169,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// This function will panic if index is out of range
     /// or if the database write fails.
     #[inline]
-    pub fn set(&self, index: IndexType, value: T) {
+    pub fn set(&mut self, index: IndexType, value: T) {
         debug_assert!(
             self.len() > index,
             "Cannot set outside of length. Length: {}, index: {}",
@@ -211,7 +211,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// This function will panic if get, delete, or
     /// set_length operations panic.
     #[inline]
-    pub fn pop(&self) -> Option<T> {
+    pub fn pop(&mut self) -> Option<T> {
         match self.len() {
             0 => None,
             length => {
@@ -229,7 +229,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     ///
     /// This function will panic if the DB write fails
     #[inline]
-    pub fn push(&self, value: T) {
+    pub fn push(&mut self, value: T) {
         let length = self.len();
         let value_bytes = utils::serialize(&value);
         self.db.put(&length, &value_bytes).unwrap();
@@ -255,7 +255,7 @@ mod database_vector_tests {
 
     #[test]
     fn push_pop_test() {
-        let db_vector = test_constructor();
+        let mut db_vector = test_constructor();
         assert_eq!(0, db_vector.len());
         assert!(db_vector.is_empty());
 
@@ -285,7 +285,7 @@ mod database_vector_tests {
 
     #[test]
     fn overwrite_with_vec_test() {
-        let db_vector = test_constructor();
+        let mut db_vector = test_constructor();
         for _ in 0..10 {
             db_vector.push(17);
         }
@@ -306,7 +306,7 @@ mod database_vector_tests {
 
     #[test]
     fn batch_set_test() {
-        let db_vector = test_constructor();
+        let mut db_vector = test_constructor();
         for _ in 0..100 {
             db_vector.push(17);
         }
@@ -327,7 +327,7 @@ mod database_vector_tests {
 
     #[test]
     fn push_many_test() {
-        let db_vector = test_constructor();
+        let mut db_vector = test_constructor();
         for _ in 0..1000 {
             db_vector.push(17);
         }
@@ -345,7 +345,7 @@ mod database_vector_tests {
     #[should_panic = "Cannot get outside of length. Length: 1, index: 1"]
     #[test]
     fn panic_on_index_out_of_range_length_one_test() {
-        let db_vector = test_constructor();
+        let mut db_vector = test_constructor();
         db_vector.push(5558999);
         db_vector.get(1);
     }
@@ -353,7 +353,7 @@ mod database_vector_tests {
     #[should_panic = "Cannot set outside of length. Length: 1, index: 1"]
     #[test]
     fn panic_on_index_out_of_range_length_one_set_test() {
-        let db_vector = test_constructor();
+        let mut db_vector = test_constructor();
         db_vector.push(5558999);
         db_vector.set(1, 14);
     }
@@ -371,7 +371,7 @@ mod database_vector_tests {
     #[test]
     fn index_zero_test() {
         // Verify that index zero does not overwrite the stored length
-        let db_vector = test_constructor();
+        let mut db_vector = test_constructor();
         db_vector.push(17);
         assert_eq!(1, db_vector.len());
         assert_eq!(17u64, db_vector.get(0));

@@ -84,7 +84,7 @@ mod tests {
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
         assert_eq!(1, Arc::strong_count(&rusty_storage.schema.reader));
-        let singleton = rusty_storage
+        let mut singleton = rusty_storage
             .schema
             .new_singleton::<S>(RustyKey([1u8; 1].to_vec()));
         assert_eq!(2, Arc::strong_count(&rusty_storage.schema.reader));
@@ -142,7 +142,7 @@ mod tests {
         let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<S>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<S>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -267,7 +267,7 @@ mod tests {
         let new_db = DB::open_test_database(&db_path, true, None, None, None).unwrap();
 
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
-        let new_vector = new_rusty_storage.schema.new_vec::<S>("test-vector");
+        let mut new_vector = new_rusty_storage.schema.new_vec::<S>("test-vector");
 
         // initialize
         new_rusty_storage.restore_or_new();
@@ -345,7 +345,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<S>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<S>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -398,7 +398,7 @@ mod tests {
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
         rusty_storage.restore_or_new();
-        let vector = rusty_storage.schema.new_vec::<S>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<S>("test-vector");
 
         // Generate initial index/value pairs.
         const TEST_LIST_LENGTH: u8 = 105;
@@ -481,7 +481,7 @@ mod tests {
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
         rusty_storage.restore_or_new();
-        let vector = rusty_storage.schema.new_vec::<S>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<S>("test-vector");
 
         // Generate initial index/value pairs.
         const TEST_LIST_LENGTH: u8 = 105;
@@ -547,7 +547,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let persisted_vector = rusty_storage.schema.new_vec::<u64>("test-vector");
+        let mut persisted_vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // Insert 1000 elements
         let mut rng = rand::thread_rng();
@@ -653,9 +653,9 @@ mod tests {
         let db_path = db.path().clone();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector1 = rusty_storage.schema.new_vec::<S>("test-vector1");
-        let vector2 = rusty_storage.schema.new_vec::<S>("test-vector2");
-        let singleton = rusty_storage
+        let mut vector1 = rusty_storage.schema.new_vec::<S>("test-vector1");
+        let mut vector2 = rusty_storage.schema.new_vec::<S>("test-vector2");
+        let mut singleton = rusty_storage
             .schema
             .new_singleton::<S>(RustyKey([1u8; 1].to_vec()));
 
@@ -759,7 +759,7 @@ mod tests {
         let new_db = DB::open_test_database(&db_path, true, None, None, None).unwrap();
         let mut new_rusty_storage = SimpleRustyStorage::new(new_db);
         let new_vector1 = new_rusty_storage.schema.new_vec::<S>("test-vector1");
-        let new_vector2 = new_rusty_storage.schema.new_vec::<S>("test-vector2");
+        let mut new_vector2 = new_rusty_storage.schema.new_vec::<S>("test-vector2");
         new_rusty_storage.restore_or_new();
         let new_singleton = new_rusty_storage
             .schema
@@ -837,7 +837,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -855,7 +855,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -873,7 +873,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -890,7 +890,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -907,7 +907,7 @@ mod tests {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
         let mut rusty_storage = SimpleRustyStorage::new(db);
-        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // initialize
         rusty_storage.restore_or_new();
@@ -926,7 +926,7 @@ mod tests {
         // initialize storage
         let mut rusty_storage = SimpleRustyStorage::new(db);
         rusty_storage.restore_or_new();
-        let vector = rusty_storage.schema.new_vec::<u64>("test-vector");
+        let mut vector = rusty_storage.schema.new_vec::<u64>("test-vector");
 
         // Generate initial index/value pairs.
         const TEST_LIST_LENGTH: u64 = 105;
@@ -1007,37 +1007,39 @@ mod tests {
             #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
             #[test]
             fn non_atomic_set_and_get() {
-                traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
+                traits_tests::concurrency::non_atomic_set_and_get(&mut gen_concurrency_test_vec());
             }
 
             #[test]
             #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
             fn non_atomic_set_and_get_wrapped_atomic_rw() {
                 traits_tests::concurrency::non_atomic_set_and_get_wrapped_atomic_rw(
-                    &gen_concurrency_test_vec(),
+                    &mut gen_concurrency_test_vec(),
                 );
             }
 
             #[test]
             fn atomic_set_and_get_wrapped_atomic_rw() {
                 traits_tests::concurrency::atomic_set_and_get_wrapped_atomic_rw(
-                    &gen_concurrency_test_vec(),
+                    &mut gen_concurrency_test_vec(),
                 );
             }
 
             #[test]
             fn atomic_setmany_and_getmany() {
-                traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
+                traits_tests::concurrency::atomic_setmany_and_getmany(
+                    &mut gen_concurrency_test_vec(),
+                );
             }
 
             #[test]
             fn atomic_setall_and_getall() {
-                traits_tests::concurrency::atomic_setall_and_getall(&gen_concurrency_test_vec());
+                traits_tests::concurrency::atomic_setall_and_getall(&mut gen_concurrency_test_vec());
             }
 
             #[test]
             fn atomic_iter_mut_and_iter() {
-                traits_tests::concurrency::atomic_iter_mut_and_iter(&gen_concurrency_test_vec());
+                traits_tests::concurrency::atomic_iter_mut_and_iter(&mut gen_concurrency_test_vec());
             }
         }
 
@@ -1052,7 +1054,7 @@ mod tests {
                 storage.schema.create_tables_rw(|schema| {
                     (0..num)
                         .map(|_i| {
-                            let singleton = schema.new_singleton::<u64>(12u64.into());
+                            let mut singleton = schema.new_singleton::<u64>(12u64.into());
                             singleton.set(25);
                             singleton
                         })
@@ -1067,7 +1069,7 @@ mod tests {
 
                 (0..num)
                     .map(|_i| {
-                        let singleton = storage.schema.new_singleton::<u64>(12u64.into());
+                        let mut singleton = storage.schema.new_singleton::<u64>(12u64.into());
                         singleton.set(25);
                         singleton
                     })
@@ -1145,9 +1147,9 @@ mod tests {
                         // This is our writer thread
                         let sets = s.spawn(|| {
                             // start locked write ops
-                            table_singletons.lock_mut(|tables| {
+                            table_singletons.clone().lock_mut(|tables| {
                                 // iterate tables backwards from reader to find inconsistencies faster.
-                                for singleton in tables.iter().rev() {
+                                for singleton in tables.iter_mut().rev() {
                                     singleton.set(modified);
                                 }
                             }); // <--- end locked write ops
@@ -1158,7 +1160,7 @@ mod tests {
                         println!("--- Both threads (reader, writer) finished. restart. ---");
 
                         // start locked write ops
-                        table_singletons.lock_mut(|tables| {
+                        table_singletons.clone().lock_mut(|tables| {
                             for singleton in tables.iter_mut() {
                                 singleton.set(orig);
                             }
@@ -1194,6 +1196,7 @@ mod tests {
             #[test]
             pub fn non_atomic_multi_table_set_and_get() {
                 let singletons = gen_non_atomic_test_singleton(2);
+
                 let orig = singletons[0].get();
                 let modified = orig * 2;
 
@@ -1230,7 +1233,7 @@ mod tests {
 
                         let sets = s.spawn(|| {
                             // iterate tables backwards from reader to find inconsistencies faster.
-                            for singleton in singletons.iter().rev() {
+                            for singleton in singletons.clone().iter_mut().rev() {
                                 singleton.set(modified);
                             }
                         });
@@ -1239,7 +1242,7 @@ mod tests {
 
                         println!("--- threads finished. restart. ---");
 
-                        for singleton in singletons.iter() {
+                        for singleton in singletons.clone().iter_mut() {
                             singleton.set(orig);
                         }
                     });
@@ -1258,7 +1261,7 @@ mod tests {
                 storage.schema.create_tables_rw(|schema| {
                     (0..num)
                         .map(|i| {
-                            let vec =
+                            let mut vec =
                                 schema.new_vec::<u64>(&format!("atomicity-test-vector #{}", i));
                             for j in 0u64..300 {
                                 vec.push(j);
@@ -1276,7 +1279,7 @@ mod tests {
 
                 (0..num)
                     .map(|i| {
-                        let vec = rusty_storage
+                        let mut vec = rusty_storage
                             .schema
                             .new_vec::<u64>(&format!("atomicity-test-vector #{}", i));
                         for j in 0u64..300 {
@@ -1365,9 +1368,9 @@ mod tests {
                         // This is our writer thread
                         let sets = s.spawn(|| {
                             // start locked write ops
-                            table_vecs.lock_mut(|tables| {
+                            table_vecs.clone().lock_mut(|tables| {
                                 // iterate tables backwards from reader to find inconsistencies faster.
-                                for vec in tables.iter().rev() {
+                                for vec in tables.iter_mut().rev() {
                                     vec.set_many(
                                         orig.iter().enumerate().map(|(k, _v)| (k as u64, 50u64)),
                                     );
@@ -1380,7 +1383,7 @@ mod tests {
                         println!("--- Both threads (reader, writer) finished. restart. ---");
 
                         // start locked write ops
-                        table_vecs.lock_mut(|tables| {
+                        table_vecs.clone().lock_mut(|tables| {
                             for vec in tables.iter_mut() {
                                 vec.set_all(orig.clone());
                             }
@@ -1459,7 +1462,7 @@ mod tests {
 
                         let sets = s.spawn(|| {
                             // iterate tables backwards from reader to find inconsistencies faster.
-                            for vec in vecs.iter().rev() {
+                            for vec in vecs.clone().iter_mut().rev() {
                                 vec.set_many(
                                     orig.iter().enumerate().map(|(k, _v)| (k as u64, 50u64)),
                                 );
@@ -1470,7 +1473,7 @@ mod tests {
 
                         println!("--- threads finished. restart. ---");
 
-                        for vec in vecs.iter() {
+                        for vec in vecs.clone().iter_mut() {
                             vec.set_all(orig.clone());
                         }
                     });

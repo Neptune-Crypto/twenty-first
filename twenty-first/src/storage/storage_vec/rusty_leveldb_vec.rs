@@ -28,9 +28,9 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         self.read_lock().get(index)
     }
 
-    fn many_iter(
-        &self,
-        indices: impl IntoIterator<Item = Index> + 'static,
+    fn many_iter<'a>(
+        &'a self,
+        indices: impl IntoIterator<Item = Index> + 'a,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
         // note: this lock is moved into the iterator closure and is not
         //       released until caller drops the returned iterator
@@ -54,9 +54,9 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
         }))
     }
 
-    fn many_iter_values(
-        &self,
-        indices: impl IntoIterator<Item = Index> + 'static,
+    fn many_iter_values<'a>(
+        &'a self,
+        indices: impl IntoIterator<Item = Index> + 'a,
     ) -> Box<dyn Iterator<Item = T> + '_> {
         // note: this lock is moved into the iterator closure and is not
         //       released until caller drops the returned iterator
@@ -93,7 +93,7 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     }
 
     #[inline]
-    fn set(&self, index: Index, value: T) {
+    fn set(&mut self, index: Index, value: T) {
         self.write_lock().set(index, value)
     }
 
@@ -105,29 +105,29 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     /// unique.  If not, the last value with the same index will win.
     /// For unordered collections such as HashMap, the behavior is undefined.
     #[inline]
-    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>) {
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>) {
         self.write_lock().set_many(key_vals)
     }
 
     #[inline]
-    fn pop(&self) -> Option<T> {
+    fn pop(&mut self) -> Option<T> {
         self.write_lock().pop()
     }
 
     #[inline]
-    fn push(&self, value: T) {
+    fn push(&mut self, value: T) {
         self.write_lock().push(value)
     }
 
     #[inline]
-    fn clear(&self) {
+    fn clear(&mut self) {
         self.write_lock().clear();
     }
 }
 
 impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
     #[inline]
-    pub(crate) fn write_lock(&self) -> AtomicRwWriteGuard<'_, RustyLevelDbVecPrivate<T>> {
+    pub(crate) fn write_lock(&mut self) -> AtomicRwWriteGuard<'_, RustyLevelDbVecPrivate<T>> {
         self.inner.lock_guard_mut()
     }
 
@@ -141,7 +141,7 @@ impl<T: Serialize + DeserializeOwned> StorageVecRwLock<T> for RustyLevelDbVec<T>
     type LockedData = RustyLevelDbVecPrivate<T>;
 
     #[inline]
-    fn try_write_lock(&self) -> Option<AtomicRwWriteGuard<'_, Self::LockedData>> {
+    fn try_write_lock(&mut self) -> Option<AtomicRwWriteGuard<'_, Self::LockedData>> {
         Some(self.write_lock())
     }
 
@@ -179,7 +179,7 @@ impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVec<T> {
 
     /// Collect all added elements that have not yet bit persisted
     #[inline]
-    pub fn pull_queue(&self, write_batch: &WriteBatch) {
+    pub fn pull_queue(&mut self, write_batch: &WriteBatch) {
         self.write_lock().pull_queue(write_batch)
     }
 }
@@ -201,37 +201,37 @@ mod tests {
         #[test]
         #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
         fn non_atomic_set_and_get() {
-            traits_tests::concurrency::non_atomic_set_and_get(&gen_concurrency_test_vec());
+            traits_tests::concurrency::non_atomic_set_and_get(&mut gen_concurrency_test_vec());
         }
 
         #[test]
         #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
         fn non_atomic_set_and_get_wrapped_atomic_rw() {
             traits_tests::concurrency::non_atomic_set_and_get_wrapped_atomic_rw(
-                &gen_concurrency_test_vec(),
+                &mut gen_concurrency_test_vec(),
             );
         }
 
         #[test]
         fn atomic_set_and_get_wrapped_atomic_rw() {
             traits_tests::concurrency::atomic_set_and_get_wrapped_atomic_rw(
-                &gen_concurrency_test_vec(),
+                &mut gen_concurrency_test_vec(),
             );
         }
 
         #[test]
         fn atomic_setmany_and_getmany() {
-            traits_tests::concurrency::atomic_setmany_and_getmany(&gen_concurrency_test_vec());
+            traits_tests::concurrency::atomic_setmany_and_getmany(&mut gen_concurrency_test_vec());
         }
 
         #[test]
         fn atomic_setall_and_getall() {
-            traits_tests::concurrency::atomic_setall_and_getall(&gen_concurrency_test_vec());
+            traits_tests::concurrency::atomic_setall_and_getall(&mut gen_concurrency_test_vec());
         }
 
         #[test]
         fn atomic_iter_mut_and_iter() {
-            traits_tests::concurrency::atomic_iter_mut_and_iter(&gen_concurrency_test_vec());
+            traits_tests::concurrency::atomic_iter_mut_and_iter(&mut gen_concurrency_test_vec());
         }
     }
 }

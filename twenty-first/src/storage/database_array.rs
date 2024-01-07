@@ -51,7 +51,7 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
 
     /// Set the value at index
     #[inline]
-    pub fn set(&self, index: IndexType, value: T) {
+    pub fn set(&mut self, index: IndexType, value: T) {
         assert!(
             N > index,
             "Cannot set outside of length. Length: {N}, index: {index}"
@@ -91,7 +91,7 @@ mod database_array_tests {
     fn init_and_default_values_test() {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
         assert_eq!(0u64, u64::default());
-        let db_array: DatabaseArray<101, u64> = DatabaseArray::new(db);
+        let mut db_array: DatabaseArray<101, u64> = DatabaseArray::new(db);
         assert_eq!(0u64, db_array.get(0));
         assert_eq!(0u64, db_array.get(100));
         assert_eq!(0u64, db_array.get(42));
@@ -127,7 +127,7 @@ mod database_array_tests {
     fn panic_on_index_out_of_range_length_one_set_test() {
         let db = DB::open_new_test_database(true, None, None, None).unwrap();
 
-        let db_array: DatabaseArray<50, u64> = DatabaseArray::new(db);
+        let mut db_array: DatabaseArray<50, u64> = DatabaseArray::new(db);
         db_array.set(90, 17);
     }
 }

@@ -47,7 +47,7 @@ mod tests {
         name: &str,
     ) -> (RustyLevelDbVec<u64>, Vec<u64>, Arc<DB>) {
         let db = get_test_db(true);
-        let persisted_vec = RustyLevelDbVec::new(db.clone(), 0, name);
+        let mut persisted_vec = RustyLevelDbVec::new(db.clone(), 0, name);
         let mut regular_vec = vec![];
 
         let mut rng = rand::thread_rng();
@@ -68,7 +68,7 @@ mod tests {
         (persisted_vec, regular_vec, db)
     }
 
-    fn simple_prop<Storage: StorageVec<[u8; 13]>>(delegated_db_vec: Storage) {
+    fn simple_prop<Storage: StorageVec<[u8; 13]>>(mut delegated_db_vec: Storage) {
         assert_eq!(
             0,
             delegated_db_vec.len(),
@@ -138,9 +138,9 @@ mod tests {
     #[test]
     fn multiple_vectors_in_one_db() {
         let db = get_test_db(true);
-        let delegated_db_vec_a: RustyLevelDbVec<u128> =
+        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
-        let delegated_db_vec_b: RustyLevelDbVec<u128> =
+        let mut delegated_db_vec_b: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 1, "unit test vec b");
 
         // push values to vec_a, verify vec_b is not affected
@@ -172,13 +172,13 @@ mod tests {
         assert_eq!(3, delegated_db_vec_a.len());
         assert_eq!(0, delegated_db_vec_b.len());
         assert!(delegated_db_vec_a.read_lock().cache.is_empty());
-        assert!(delegated_db_vec_b.read_lock().is_empty());
+        assert!(delegated_db_vec_b.is_empty());
     }
 
     #[test]
     fn rusty_level_db_set_many() {
         let db = get_test_db(true);
-        let delegated_db_vec_a: RustyLevelDbVec<u128> =
+        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
         delegated_db_vec_a.push(10);
@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn rusty_level_db_set_all() {
         let db = get_test_db(true);
-        let delegated_db_vec_a: RustyLevelDbVec<u128> =
+        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
         delegated_db_vec_a.push(10);
@@ -264,7 +264,7 @@ mod tests {
         let db = get_test_db(false);
         let db_path = db.path().clone();
 
-        let vec: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db, 0, "vec1");
+        let mut vec: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db, 0, "vec1");
         vec.push(1000);
 
         assert_eq!(1, vec.len());
@@ -276,7 +276,7 @@ mod tests {
         drop(vec); // this will drop (close) the Db
 
         let db2 = open_test_db(&db_path, true);
-        let vec2: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db2, 0, "vec1");
+        let mut vec2: RustyLevelDbVec<u128> = RustyLevelDbVec::new(db2, 0, "vec1");
 
         assert_eq!(1, vec2.len());
         assert_eq!(1000, vec2.pop().unwrap());
@@ -285,7 +285,7 @@ mod tests {
     #[test]
     fn get_many_ordering_of_outputs() {
         let db = get_test_db(true);
-        let delegated_db_vec_a: RustyLevelDbVec<u128> =
+        let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
         delegated_db_vec_a.push(1000);
@@ -353,7 +353,7 @@ mod tests {
 
     #[test]
     fn delegated_vec_pbt() {
-        let (persisted_vector, mut normal_vector, db) =
+        let (mut persisted_vector, mut normal_vector, db) =
             get_persisted_vec_with_length(10000, "vec 1");
 
         let mut rng = rand::thread_rng();
@@ -475,7 +475,7 @@ mod tests {
     )]
     #[test]
     fn panic_on_out_of_bounds_set() {
-        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
         delegated_db_vec.set(1, 3000);
     }
 
@@ -484,7 +484,7 @@ mod tests {
     )]
     #[test]
     fn panic_on_out_of_bounds_set_many() {
-        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
 
         // attempt to set 2 values, when only one is in vector.
         delegated_db_vec.set_many([(0, 0), (1, 1)]);
@@ -493,7 +493,7 @@ mod tests {
     #[should_panic(expected = "size-mismatch.  input has 2 elements and target has 1 elements.")]
     #[test]
     fn panic_on_size_mismatch_set_all() {
-        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(1, "unit test vec 0");
 
         // attempt to set 2 values, when only one is in vector.
         delegated_db_vec.set_all([1, 2]);
@@ -504,7 +504,7 @@ mod tests {
     )]
     #[test]
     fn panic_on_out_of_bounds_get_even_though_value_exists_in_persistent_memory() {
-        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
         delegated_db_vec.pop();
         delegated_db_vec.get(11);
     }
@@ -514,7 +514,7 @@ mod tests {
     )]
     #[test]
     fn panic_on_out_of_bounds_set_even_though_value_exists_in_persistent_memory() {
-        let (delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
+        let (mut delegated_db_vec, _, _) = get_persisted_vec_with_length(12, "unit test vec 0");
         delegated_db_vec.pop();
         delegated_db_vec.set(11, 5000);
     }

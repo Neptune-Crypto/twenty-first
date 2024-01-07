@@ -47,7 +47,7 @@ use std::sync::Arc;
 ///
 /// storage.restore_or_new();  // populate tables.
 ///
-/// let atomic_tables = Arc::new(RwLock::new(tables));
+/// let mut atomic_tables = Arc::new(RwLock::new(tables));
 /// let mut lock = atomic_tables.write().unwrap();
 /// lock.0.push(5);
 /// lock.1.push("Sally".into());
@@ -73,7 +73,7 @@ use std::sync::Arc;
 /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
 /// let mut storage = SimpleRustyStorage::new(db);
 ///
-/// let atomic_tables = storage.schema.create_tables_rw(|s| {
+/// let mut atomic_tables = storage.schema.create_tables_rw(|s| {
 ///     (
 ///         s.new_vec::<u16>("ages"),
 ///         s.new_vec::<String>("names"),
@@ -139,21 +139,23 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
         V: Serialize + DeserializeOwned,
         DbtVec<V>: DbTable + Send + Sync,
     {
-        self.tables.lock_mut(|tables| {
-            assert!(tables.len() < 255);
-            let reader = self.reader.clone();
-            let key_prefix = tables.len() as u8;
-            let lock_name = format!(
-                "{}-DbtVec - {}",
-                self.tables.name().unwrap_or("DbtSchema"),
-                name
-            );
-            let vector =
-                DbtVec::<V>::new(reader, key_prefix, name, lock_name, self.lock_callback_fn);
+        let lock_name = format!(
+            "{}-DbtVec - {}",
+            self.tables.name().unwrap_or("DbtSchema"),
+            name
+        );
 
-            tables.push(Box::new(vector.clone()));
-            vector
-        })
+        let mut tables = self.tables.lock_guard_mut();
+        assert!(tables.len() < 255);
+        let reader = self.reader.clone();
+        let key_prefix = tables.len() as u8;
+        let vector = DbtVec::<V>::new(reader, key_prefix, name, lock_name, self.lock_callback_fn);
+
+        // note: this clone only bumps internal ref-count.
+        let elem = Box::new(vector.clone());
+
+        tables.push(elem);
+        vector
     }
 
     // possible future extension
@@ -181,8 +183,11 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
         );
         let singleton =
             DbtSingleton::<V>::new(key, lock_name, self.reader.clone(), self.lock_callback_fn);
-        self.tables
-            .lock_mut(|t| t.push(Box::new(singleton.clone())));
+
+        // note: this clone only bumps internal ref-count.
+        let elem = Box::new(singleton.clone());
+
+        self.tables.lock_guard_mut().push(elem);
         singleton
     }
 
@@ -200,7 +205,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
     /// let mut storage = SimpleRustyStorage::new(db);
     ///
-    /// let atomic_tables = storage.schema.create_tables_rw(|s| {
+    /// let mut atomic_tables = storage.schema.create_tables_rw(|s| {
     ///     (
     ///         s.new_vec::<u16>("ages"),
     ///         s.new_vec::<String>("names"),
@@ -239,7 +244,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
     /// let mut storage = SimpleRustyStorage::new(db);
     ///
-    /// let atomic_tables = storage.schema.create_tables_mutex(|s| {
+    /// let mut atomic_tables = storage.schema.create_tables_mutex(|s| {
     ///     (
     ///         s.new_vec::<u16>("ages"),
     ///         s.new_vec::<String>("names"),
@@ -282,7 +287,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// storage.restore_or_new();  // populate tables.
     ///
     /// let tables = (ages, names, proceed);
-    /// let atomic_tables = storage.schema.atomic_rw(tables);
+    /// let mut atomic_tables = storage.schema.atomic_rw(tables);
     ///
     /// // these writes happen atomically.
     /// atomic_tables.lock_mut(|tables| {
@@ -313,7 +318,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// storage.restore_or_new();  // populate tables.
     ///
     /// let tables = (ages, names, proceed);
-    /// let atomic_tables = storage.schema.atomic_mutex(tables);
+    /// let mut atomic_tables = storage.schema.atomic_mutex(tables);
     ///
     /// // these writes happen atomically.
     /// atomic_tables.lock_mut(|tables| {
