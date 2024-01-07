@@ -63,7 +63,7 @@ where
     }
 
     #[inline]
-    fn set(&self, t: V) {
+    fn set(&mut self, t: V) {
         self.inner.lock_mut(|inner| inner.set(t));
     }
 }
@@ -74,7 +74,7 @@ where
     V: Serialize + DeserializeOwned,
 {
     #[inline]
-    fn pull_queue(&self) -> Vec<WriteOperation> {
+    fn pull_queue(&mut self) -> Vec<WriteOperation> {
         self.inner.lock_mut(|inner| {
             if inner.current_value == inner.old_value {
                 vec![]
@@ -89,7 +89,7 @@ where
     }
 
     #[inline]
-    fn restore_or_new(&self) {
+    fn restore_or_new(&mut self) {
         self.inner.lock_mut(|inner| {
             inner.current_value = match inner.reader.get(inner.key.into()) {
                 Some(value) => value.into_any(),

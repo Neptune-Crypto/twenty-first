@@ -101,7 +101,7 @@ mod write_100_entries {
         use super::*;
 
         fn push_impl(bencher: Bencher, persist: bool) {
-            let (mut storage, vector) = create_test_dbtvec();
+            let (mut storage, mut vector) = create_test_dbtvec();
 
             bencher.bench_local(|| {
                 for _i in 0..NUM_WRITE_ITEMS {
@@ -128,7 +128,7 @@ mod write_100_entries {
         use super::*;
 
         fn set_impl(bencher: Bencher, persist: bool) {
-            let (mut storage, vector) = create_test_dbtvec();
+            let (mut storage, mut vector) = create_test_dbtvec();
 
             for _i in 0..NUM_WRITE_ITEMS {
                 vector.push(value());
@@ -160,7 +160,7 @@ mod write_100_entries {
         use super::*;
 
         fn set_many_impl(bencher: Bencher, persist: bool) {
-            let (mut storage, vector) = create_test_dbtvec();
+            let (mut storage, mut vector) = create_test_dbtvec();
 
             for _ in 0..NUM_WRITE_ITEMS {
                 vector.push(vec![42]);
@@ -190,7 +190,7 @@ mod write_100_entries {
         use super::*;
 
         fn pop_impl(bencher: Bencher, persist: bool) {
-            let (mut storage, vector) = create_test_dbtvec();
+            let (mut storage, mut vector) = create_test_dbtvec();
 
             for _i in 0..NUM_WRITE_ITEMS {
                 vector.push(value());
@@ -225,7 +225,7 @@ mod read_100_entries {
     const NUM_READ_ITEMS: u64 = 100;
 
     fn get_impl(bencher: Bencher, num_each: usize, persisted: bool) {
-        let (mut storage, vector) = create_test_dbtvec();
+        let (mut storage, mut vector) = create_test_dbtvec();
 
         for _i in 0..NUM_READ_ITEMS {
             vector.push(value());
@@ -244,7 +244,7 @@ mod read_100_entries {
     }
 
     fn get_many_impl(bencher: Bencher, num_each: usize, persisted: bool) {
-        let (mut storage, vector) = create_test_dbtvec();
+        let (mut storage, mut vector) = create_test_dbtvec();
 
         for _i in 0..NUM_READ_ITEMS {
             vector.push(value());

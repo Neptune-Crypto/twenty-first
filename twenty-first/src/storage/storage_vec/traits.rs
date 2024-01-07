@@ -50,13 +50,10 @@ pub trait StorageVec<T> {
     /// important to drop the iterator immediately after use.  Typical
     /// for-loop usage does this automatically.
     ///
-    /// If a write is attempted before the read lock is dropped, a deadlock
-    /// will occur.
-    ///
-    /// # Correct Example:
+    /// # Example:
     /// ```
     /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    /// # let mut vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
     ///
     /// for (key, val) in vec.iter() {
     ///     println!("{key}: {val}")
@@ -65,22 +62,6 @@ pub trait StorageVec<T> {
     /// // write can proceed
     /// vec.set(5, 2);
     /// ```
-    ///
-    /// # Deadlock Example:
-    /// ```no_run
-    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
-    ///
-    /// let mut iter = vec.iter();
-    /// while let Some((key, val)) = iter.next() {
-    ///     println!("{key}: {val}");
-    /// }
-    ///
-    /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
-    /// vec.set(5, 2);
-    /// ```
-    ///
-    /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
     #[inline]
     fn iter(&self) -> Box<dyn Iterator<Item = (Index, T)> + '_> {
         self.many_iter(0..self.len())
@@ -94,13 +75,10 @@ pub trait StorageVec<T> {
     /// important to drop the iterator immediately after use.  Typical
     /// for-loop usage does this automatically.
     ///
-    /// If a write is attempted before the read lock is dropped, a deadlock
-    /// will occur.
-    ///
-    /// # Correct Example:
+    /// # Example:
     /// ```
     /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    /// # let mut vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
     ///
     /// for (val) in vec.iter_values() {
     ///     println!("{val}")
@@ -109,22 +87,6 @@ pub trait StorageVec<T> {
     /// // write can proceed
     /// let val = vec.push(2);
     /// ```
-    ///
-    /// # Deadlock Example:
-    /// ```no_run
-    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
-    ///
-    /// let mut iter = vec.iter_values();
-    /// while let Some(val) = iter.next() {
-    ///     println!("{val}")
-    /// }
-    ///
-    /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
-    /// let val = vec.push(2);
-    /// ```
-    ///
-    /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
     #[inline]
     fn iter_values(&self) -> Box<dyn Iterator<Item = T> + '_> {
         self.many_iter_values(0..self.len())
@@ -140,13 +102,10 @@ pub trait StorageVec<T> {
     /// important to drop the iterator immediately after use.  Typical
     /// for-loop usage does this automatically.
     ///
-    /// If a write is attempted before the read lock is dropped, a deadlock
-    /// will occur.
-    ///
-    /// # Correct Example:
+    /// # Example:
     /// ```
     /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    /// # let mut vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
     ///
     /// for (key, val) in vec.many_iter([3, 5, 7]) {
     ///     println!("{key}: {val}")
@@ -155,25 +114,9 @@ pub trait StorageVec<T> {
     /// // write can proceed
     /// vec.set(5, 2);
     /// ```
-    ///
-    /// # Deadlock Example:
-    /// ```no_run
-    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
-    ///
-    /// let mut iter = vec.many_iter([3, 5, 7]);
-    /// while let Some((key, val)) = iter.next() {
-    ///     println!("{key}: {val}")
-    /// }
-    ///
-    /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
-    /// vec.set(5, 2);
-    /// ```
-    ///
-    /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
-    fn many_iter(
-        &self,
-        indices: impl IntoIterator<Item = Index> + 'static,
+    fn many_iter<'a>(
+        &'a self,
+        indices: impl IntoIterator<Item = Index> + 'a,
     ) -> Box<dyn Iterator<Item = (Index, T)> + '_>;
 
     /// get an iterator over elements matching indices
@@ -186,13 +129,10 @@ pub trait StorageVec<T> {
     /// important to drop the iterator immediately after use.  Typical
     /// for-loop usage does this automatically.
     ///
-    /// If a write is attempted before the read lock is dropped, a deadlock
-    /// will occur.
-    ///
-    /// # Correct Example:
+    /// # Example:
     /// ```
     /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    /// # let mut vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
     ///
     /// for (val) in vec.many_iter_values([2, 5, 8]) {
     ///     println!("{val}")
@@ -201,31 +141,15 @@ pub trait StorageVec<T> {
     /// // write can proceed
     /// vec.set(5, 2);
     /// ```
-    ///
-    /// # Deadlock Example:
-    /// ```no_run
-    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
-    ///
-    /// let mut iter = vec.many_iter_values([2, 5, 8]);
-    /// while let Some(val) = iter.next() {
-    ///     println!("{val}")
-    /// }
-    ///
-    /// // deadlock! This will wait for the write lock forever because iter is still holding read lock.
-    /// vec.set(5, 2);
-    /// ```
-    ///
-    /// note: any write op would deadlock, including `iter_mut()`, `many_iter_mut()`, `set_many()`, etc.
-    fn many_iter_values(
-        &self,
-        indices: impl IntoIterator<Item = Index> + 'static,
+    fn many_iter_values<'a>(
+        &'a self,
+        indices: impl IntoIterator<Item = Index> + 'a,
     ) -> Box<dyn Iterator<Item = T> + '_>;
 
     /// set a single element.
     ///
     /// note: The update is performed as a single atomic operation.
-    fn set(&self, index: Index, value: T);
+    fn set(&mut self, index: Index, value: T);
 
     /// set multiple elements.
     ///
@@ -236,7 +160,7 @@ pub trait StorageVec<T> {
     /// note: all updates are performed as a single atomic operation.
     ///       readers will see either the before or after state,
     ///       never an intermediate state.
-    fn set_many(&self, key_vals: impl IntoIterator<Item = (Index, T)>);
+    fn set_many(&mut self, key_vals: impl IntoIterator<Item = (Index, T)>);
 
     /// set elements from start to vals.count()
     ///
@@ -244,7 +168,7 @@ pub trait StorageVec<T> {
     ///       readers will see either the before or after state,
     ///       never an intermediate state.
     #[inline]
-    fn set_first_n(&self, vals: impl IntoIterator<Item = T>) {
+    fn set_first_n(&mut self, vals: impl IntoIterator<Item = T>) {
         self.set_many((0..).zip(vals));
     }
 
@@ -260,7 +184,7 @@ pub trait StorageVec<T> {
     /// note: casts the input value's length from usize to Index
     ///       so will panic if vals contains more than 2^32 items
     #[inline]
-    fn set_all(&self, vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = T>>) {
+    fn set_all(&mut self, vals: impl IntoIterator<IntoIter = impl ExactSizeIterator<Item = T>>) {
         let iter = vals.into_iter();
 
         assert!(
@@ -276,17 +200,17 @@ pub trait StorageVec<T> {
     /// pop an element from end of collection
     ///
     /// note: The update is performed as a single atomic operation.
-    fn pop(&self) -> Option<T>;
+    fn pop(&mut self) -> Option<T>;
 
     /// push an element to end of collection
     ///
     /// note: The update is performed as a single atomic operation.
-    fn push(&self, value: T);
+    fn push(&mut self, value: T);
 
     /// Removes all elements from the collection
     ///
     /// note: The update is performed as a single atomic operation.
-    fn clear(&self);
+    fn clear(&mut self);
 
     /// get a mutable iterator over all elements
     ///
@@ -297,14 +221,14 @@ pub trait StorageVec<T> {
     /// note: the returned (lending) iterator cannot be used in a for loop.  Use a
     ///       while loop instead.  See example below.
     ///
-    /// Important: The returned iterator holds a write lock over `StorageVecRwLock::LockedData`.
-    /// This write lock must be dropped before performing any read operation or the
-    /// code will deadlock.  See Deadlock Example.
+    /// Note: The returned iterator holds a write lock over `StorageVecRwLock::LockedData`.
+    /// This write lock must be dropped before performing any read operation.
+    /// This is enforced by the borrow-checker, which also prevents deadlocks.
     ///
-    /// # Correct Example:
+    /// # Example:
     /// ```
     /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
+    /// # let mut vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
     ///
     /// {
     ///     let mut iter = vec.iter_mut();
@@ -316,25 +240,9 @@ pub trait StorageVec<T> {
     /// // read can proceed
     /// let val = vec.get(2);
     /// ```
-    ///
-    /// # Deadlock Example:
-    /// ```no_run
-    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<u32>::from(vec![1,2,3,4,5,6,7,8,9]);
-    ///
-    /// let mut iter = vec.iter_mut();
-    /// while let Some(mut setter) = iter.next() {
-    ///     setter.set(50);
-    /// }
-    ///
-    /// // deadlock! This will wait for the read lock forever because iter is still holding write lock.
-    /// let val = vec.get(2);
-    /// ```
-    ///
-    /// note: any read op would deadlock, including `iter()`, `many_iter()`, `get_many()`, etc.
     #[allow(private_bounds)]
     #[inline]
-    fn iter_mut(&self) -> ManyIterMut<Self, T>
+    fn iter_mut(&mut self) -> ManyIterMut<Self, T>
     where
         Self: Sized + StorageVecRwLock<T>,
     {
@@ -350,14 +258,14 @@ pub trait StorageVec<T> {
     /// note: the returned (lending) iterator cannot be used in a for loop.  Use a
     ///       while loop instead.  See example below.
     ///
-    /// Important: The returned iterator holds a write lock over `StorageVecRwLock::LockedData`.
-    /// This write lock must be dropped before performing any read operation or the
-    /// code will deadlock.  See Deadlock Example.
+    /// Note: The returned iterator holds a write lock over `StorageVecRwLock::LockedData`.
+    /// This write lock must be dropped before performing any read operation.
+    /// This is enforced by the borrow-checker, which also prevents deadlocks.
     ///
-    /// # Correct Example:
-    /// ```no_run
+    /// # Example:
+    /// ```
     /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<&str>::from(vec!["1","2","3","4","5","6","7","8","9"]);
+    /// # let mut vec = OrdinaryVec::<&str>::from(vec!["1","2","3","4","5","6","7","8","9"]);
     ///
     /// {
     ///     let mut iter = vec.many_iter_mut([2, 4, 6]);
@@ -369,27 +277,11 @@ pub trait StorageVec<T> {
     /// // read can proceed
     /// let val = vec.get(2);
     /// ```
-    ///
-    /// # Deadlock Example:
-    /// ```no_run
-    /// # use twenty_first::storage::storage_vec::{OrdinaryVec, traits::*};
-    /// # let vec = OrdinaryVec::<&str>::from(vec!["1","2","3","4","5","6","7","8","9"]);
-    ///
-    /// let mut iter = vec.many_iter_mut([2, 4, 6]);
-    /// while let Some(mut setter) = iter.next() {
-    ///     setter.set("50");
-    /// }
-    ///
-    /// // deadlock! This will wait for the read lock forever because iter is still holding write lock.
-    /// let val = vec.get(2);
-    /// ```
-    ///
-    /// note: any read op would deadlock, including `iter()`, `many_iter()`, `get_many()`, etc.
     #[allow(private_bounds)]
     #[inline]
-    fn many_iter_mut(
-        &self,
-        indices: impl IntoIterator<Item = Index> + 'static,
+    fn many_iter_mut<'a>(
+        &'a mut self,
+        indices: impl IntoIterator<Item = Index> + 'a,
     ) -> ManyIterMut<Self, T>
     where
         Self: Sized + StorageVecRwLock<T>,
@@ -412,7 +304,7 @@ pub(in super::super) trait StorageVecRwLock<T> {
     type LockedData;
 
     /// obtain write lock over mutable data.
-    fn try_write_lock(&self) -> Option<AtomicRwWriteGuard<Self::LockedData>>;
+    fn try_write_lock(&mut self) -> Option<AtomicRwWriteGuard<Self::LockedData>>;
 
     /// obtain read lock over mutable data.
     fn try_read_lock(&self) -> Option<AtomicRwReadGuard<Self::LockedData>>;
@@ -429,7 +321,7 @@ pub(in crate::storage) mod tests {
         use super::*;
         use std::thread;
 
-        pub fn prepare_concurrency_test_vec(vec: &impl StorageVec<u64>) {
+        pub fn prepare_concurrency_test_vec(vec: &mut impl StorageVec<u64>) {
             vec.clear();
             for i in 0..400 {
                 vec.push(i);
@@ -440,8 +332,8 @@ pub(in crate::storage) mod tests {
         // for a type that impl's StorageVec.
         //
         // note: this test is expected to panic and calling test fn should be annotated with:
-        //  #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
-        pub fn non_atomic_set_and_get(vec: &(impl StorageVec<u64> + Send + Sync)) {
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        pub fn non_atomic_set_and_get(vec: &mut (impl StorageVec<u64> + Send + Sync + Clone)) {
             prepare_concurrency_test_vec(vec);
             let orig = vec.get_all();
             let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
@@ -470,13 +362,13 @@ pub(in crate::storage) mod tests {
                     let sets = s.spawn(|| {
                         // set values one by one, in reverse order than the reader.
                         for j in (0..vec.len()).rev() {
-                            vec.set(j, 50);
+                            vec.clone().set(j, 50);
                         }
                     });
                     gets.join().unwrap();
                     sets.join().unwrap();
 
-                    vec.set_all(orig.clone());
+                    vec.clone().set_all(orig.clone());
                 }
             });
         }
@@ -485,9 +377,9 @@ pub(in crate::storage) mod tests {
         // (Arc<RwLock<..>>) is atomic if the lock is held across all write/read operations
         //
         // note: this test is expected to panic and calling test fn should be annotated with:
-        //  #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
+        #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: Any { .. }")]
         pub fn non_atomic_set_and_get_wrapped_atomic_rw(
-            vec: &(impl StorageVec<u64> + Send + Sync),
+            vec: &mut (impl StorageVec<u64> + Send + Sync + Clone),
         ) {
             prepare_concurrency_test_vec(vec);
             let orig = vec.get_all();
@@ -522,22 +414,22 @@ pub(in crate::storage) mod tests {
                         // set values one by one.
                         for j in 0..atomic_vec.lock(|v| v.len()) {
                             // acquire write lock
-                            atomic_vec.lock_mut(|v| {
-                                v.set(j, 50);
-                            }); // release write lock
+                            atomic_vec.clone().lock_guard_mut().set(j, 50);
                         }
                     });
                     gets.join().unwrap();
                     sets.join().unwrap();
 
-                    atomic_vec.lock_mut(|v| v.set_all(orig.clone()));
+                    atomic_vec.clone().lock_mut(|v| v.set_all(orig.clone()));
                 }
             });
         }
 
         // This test demonstrates/verifies that wrapping an impl StorageVec in an AtomicRw
         // (Arc<RwLock<..>>) is atomic if the lock is held across all write/read operations
-        pub fn atomic_set_and_get_wrapped_atomic_rw(vec: &(impl StorageVec<u64> + Send + Sync)) {
+        pub fn atomic_set_and_get_wrapped_atomic_rw(
+            vec: &mut (impl StorageVec<u64> + Send + Sync),
+        ) {
             prepare_concurrency_test_vec(vec);
             let orig = vec.get_all();
             let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
@@ -566,7 +458,7 @@ pub(in crate::storage) mod tests {
                     });
 
                     let sets = s.spawn(|| {
-                        atomic_vec.lock_mut(|v| {
+                        atomic_vec.clone().lock_mut(|v| {
                             // acquire write lock
                             for j in 0..v.len() {
                                 // set values one by one.
@@ -577,12 +469,12 @@ pub(in crate::storage) mod tests {
                     gets.join().unwrap();
                     sets.join().unwrap();
 
-                    atomic_vec.lock_mut(|v| v.set_all(orig.clone()));
+                    atomic_vec.clone().lock_mut(|v| v.set_all(orig.clone()));
                 }
             });
         }
 
-        pub fn atomic_setmany_and_getmany(vec: &(impl StorageVec<u64> + Send + Sync)) {
+        pub fn atomic_setmany_and_getmany(vec: &mut (impl StorageVec<u64> + Send + Sync + Clone)) {
             prepare_concurrency_test_vec(vec);
             let orig = vec.get_all();
             let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
@@ -604,17 +496,18 @@ pub(in crate::storage) mod tests {
                     });
 
                     let sets = s.spawn(|| {
-                        vec.set_many(orig.iter().enumerate().map(|(k, _v)| (k as u64, 50u64)));
+                        vec.clone()
+                            .set_many(orig.iter().enumerate().map(|(k, _v)| (k as u64, 50u64)));
                     });
                     gets.join().unwrap();
                     sets.join().unwrap();
 
-                    vec.set_all(orig.clone());
+                    vec.clone().set_all(orig.clone());
                 }
             });
         }
 
-        pub fn atomic_setall_and_getall(vec: &(impl StorageVec<u64> + Send + Sync)) {
+        pub fn atomic_setall_and_getall(vec: &mut (impl StorageVec<u64> + Send + Sync + Clone)) {
             prepare_concurrency_test_vec(vec);
             let orig = vec.get_all();
             let modified: Vec<u64> = orig.iter().map(|_| 50).collect();
@@ -634,19 +527,19 @@ pub(in crate::storage) mod tests {
                     });
 
                     let sets = s.spawn(|| {
-                        vec.set_all(orig.iter().map(|_| 50));
+                        vec.clone().set_all(orig.iter().map(|_| 50));
                     });
                     gets.join().unwrap();
                     sets.join().unwrap();
 
-                    vec.set_all(orig.clone());
+                    vec.clone().set_all(orig.clone());
                 }
             });
         }
 
-        pub fn atomic_iter_mut_and_iter<T>(vec: &T)
+        pub fn atomic_iter_mut_and_iter<T>(vec: &mut T)
         where
-            T: StorageVec<u64> + StorageVecRwLock<u64> + Send + Sync,
+            T: StorageVec<u64> + StorageVecRwLock<u64> + Send + Sync + Clone,
             T::LockedData: StorageVecLockedData<u64>,
         {
             prepare_concurrency_test_vec(vec);
@@ -667,7 +560,8 @@ pub(in crate::storage) mod tests {
                     });
 
                     let sets = s.spawn(|| {
-                        let mut iter = vec.iter_mut();
+                        let mut vec_mut = vec.clone();
+                        let mut iter = vec_mut.iter_mut();
                         while let Some(mut setter) = iter.next() {
                             setter.set(50);
                         }
@@ -675,7 +569,7 @@ pub(in crate::storage) mod tests {
                     gets.join().unwrap();
                     sets.join().unwrap();
 
-                    vec.set_all(orig.clone());
+                    vec.clone().set_all(orig.clone());
                 }
             });
         }
