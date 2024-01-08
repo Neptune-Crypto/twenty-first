@@ -1,6 +1,6 @@
 // use super::super::storage_vec::Index;
 use super::{traits::*, DbtSingleton, DbtVec, RustyKey};
-use crate::sync::{AtomicMutex, AtomicRw};
+use crate::sync::{AtomicMutex, AtomicRw, LockCallbackFn};
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
 
@@ -98,6 +98,28 @@ pub struct DbtSchema<Reader: StorageReader + Send + Sync> {
 
     /// Database Reader
     pub reader: Arc<Reader>,
+
+    /// If present, the provided callback function will be called
+    /// whenever a lock is acquired by a `DbTable` instantiated
+    /// by this `DbtSchema`.  See [AtomicRw](crate::sync::AtomicRw)
+    pub lock_callback_fn: Option<LockCallbackFn>,
+}
+
+impl<Reader: StorageReader + Send + Sync> DbtSchema<Reader> {
+    /// Instantiate a `DbtSchema` from an `Arc<Reader` and
+    /// optional `name` and lock acquisition callback.
+    /// See See [AtomicRw](crate::sync::AtomicRw)
+    pub fn new(
+        reader: Arc<Reader>,
+        name: Option<&str>,
+        lock_callback_fn: Option<LockCallbackFn>,
+    ) -> Self {
+        Self {
+            tables: AtomicRw::from((vec![], name, lock_callback_fn)),
+            reader,
+            lock_callback_fn,
+        }
+    }
 }
 
 impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
@@ -119,7 +141,13 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
             assert!(tables.len() < 255);
             let reader = self.reader.clone();
             let key_prefix = tables.len() as u8;
-            let vector = DbtVec::<V>::new(reader, key_prefix, name);
+            let lock_name = format!(
+                "{}-DbtVec - {}",
+                self.tables.name().unwrap_or("DbtSchema"),
+                name
+            );
+            let vector =
+                DbtVec::<V>::new(reader, key_prefix, name, lock_name, self.lock_callback_fn);
 
             tables.push(Box::new(vector.clone()));
             vector
@@ -143,7 +171,14 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
         V: Serialize + DeserializeOwned,
         DbtSingleton<V>: DbTable + Send + Sync,
     {
-        let singleton = DbtSingleton::<V>::new(key, self.reader.clone());
+        let key_name = String::from_utf8_lossy(&key.0).to_string();
+        let lock_name = format!(
+            "{}-DbtSingleton - {}",
+            self.tables.name().unwrap_or("DbtSchema"),
+            key_name
+        );
+        let singleton =
+            DbtSingleton::<V>::new(key, lock_name, self.reader.clone(), self.lock_callback_fn);
         self.tables
             .lock_mut(|t| t.push(Box::new(singleton.clone())));
         singleton

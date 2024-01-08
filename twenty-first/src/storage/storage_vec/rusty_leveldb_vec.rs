@@ -125,17 +125,29 @@ impl<T: Serialize + DeserializeOwned + Clone> StorageVec<T> for RustyLevelDbVec<
     }
 }
 
-impl<T: Serialize + DeserializeOwned> StorageVecRwLock<T> for RustyLevelDbVec<T> {
-    type LockedData = RustyLevelDbVecPrivate<T>;
-
+impl<T: Serialize + DeserializeOwned> RustyLevelDbVec<T> {
     #[inline]
-    fn write_lock(&self) -> AtomicRwWriteGuard<'_, Self::LockedData> {
+    pub(crate) fn write_lock(&self) -> AtomicRwWriteGuard<'_, RustyLevelDbVecPrivate<T>> {
         self.inner.lock_guard_mut()
     }
 
     #[inline]
-    fn read_lock(&self) -> AtomicRwReadGuard<'_, Self::LockedData> {
+    pub(crate) fn read_lock(&self) -> AtomicRwReadGuard<'_, RustyLevelDbVecPrivate<T>> {
         self.inner.lock_guard()
+    }
+}
+
+impl<T: Serialize + DeserializeOwned> StorageVecRwLock<T> for RustyLevelDbVec<T> {
+    type LockedData = RustyLevelDbVecPrivate<T>;
+
+    #[inline]
+    fn try_write_lock(&self) -> Option<AtomicRwWriteGuard<'_, Self::LockedData>> {
+        Some(self.write_lock())
+    }
+
+    #[inline]
+    fn try_read_lock(&self) -> Option<AtomicRwReadGuard<'_, Self::LockedData>> {
+        Some(self.read_lock())
     }
 }
 
