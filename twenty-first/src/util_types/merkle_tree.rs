@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::collections::hash_map::Entry::*;
 use std::collections::*;
 use std::fmt::Debug;
@@ -85,14 +84,10 @@ where
     /// that the indicated leaves are in the Merkle tree.
     // This function is not defined as a method (taking self as argument) since it's needed by the verifier, who does
     // not have access to the Merkle tree.
-    fn authentication_structure_node_indices<Iter, Index>(
+    fn authentication_structure_node_indices(
         num_leaves: usize,
-        leaf_indices: Iter,
-    ) -> Result<impl ExactSizeIterator<Item = usize>>
-    where
-        Iter: Iterator<Item = Index>,
-        Index: Borrow<usize>,
-    {
+        leaf_indices: &[usize],
+    ) -> Result<impl ExactSizeIterator<Item = usize>> {
         // The set of indices of nodes that need to be included in the authentications structure.
         // In principle, every node of every authentication path is needed. The root is never
         // needed. Hence, it is not considered in the computation below.
@@ -104,8 +99,7 @@ where
         // nature of “authentication path”.
         let mut node_can_be_computed = HashSet::new();
 
-        for leaf_index in leaf_indices {
-            let &leaf_index = leaf_index.borrow();
+        for &leaf_index in leaf_indices {
             if leaf_index >= num_leaves {
                 return Err(MerkleTreeError::LeafIndexInvalid { num_leaves });
             }
@@ -119,7 +113,7 @@ where
             }
         }
 
-        let set_difference = node_is_needed.difference(&node_can_be_computed).cloned();
+        let set_difference = node_is_needed.difference(&node_can_be_computed).copied();
         Ok(set_difference.sorted_unstable().rev())
     }
 
@@ -156,7 +150,7 @@ where
     /// [verify]: MerkleTreeInclusionProof::verify
     pub fn authentication_structure(&self, leaf_indices: &[usize]) -> Result<Vec<Digest>> {
         let num_leafs = self.num_leafs();
-        let indices = Self::authentication_structure_node_indices(num_leafs, leaf_indices.iter())?;
+        let indices = Self::authentication_structure_node_indices(num_leafs, leaf_indices)?;
         let auth_structure = indices.map(|idx| self.nodes[idx]).collect();
         Ok(auth_structure)
     }
@@ -420,7 +414,7 @@ where
 
         let node_indices = MerkleTree::<H>::authentication_structure_node_indices(
             num_leaves,
-            partial_tree.leaf_indices.iter(),
+            &partial_tree.leaf_indices,
         )?;
         if proof.authentication_structure.len() != node_indices.len() {
             return Err(MerkleTreeError::AuthenticationStructureLengthMismatch);
