@@ -697,6 +697,45 @@ pub mod merkle_tree_test {
         prop_assert!(!verdict);
     }
 
+    #[proptest(cases = 30)]
+    fn removing_leaves_from_proof_leads_to_verification_failure(
+        #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
+        #[strategy(vec(0..#test_tree.proof().indexed_leaves.len(), 1..=#test_tree.proof().indexed_leaves.len()))]
+        leaf_indices_to_remove: Vec<usize>,
+    ) {
+        let mut proof = test_tree.proof();
+        let leaves_to_keep = proof
+            .indexed_leaves
+            .iter()
+            .filter(|(i, _)| !leaf_indices_to_remove.contains(i));
+        proof.indexed_leaves = leaves_to_keep.copied().collect();
+        if proof == test_tree.proof() {
+            let reject_reason = "removing leaves must change proof".into();
+            return Err(TestCaseError::Reject(reject_reason));
+        }
+
+        let verdict = proof.verify(test_tree.tree.root());
+        prop_assert!(!verdict);
+    }
+
+    #[proptest(cases = 30)]
+    fn checking_set_inclusion_of_items_not_in_set_leads_to_verification_failure(
+        #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
+        #[strategy(vec(0..#test_tree.tree.num_leafs(), 1..=#test_tree.tree.num_leafs()))]
+        spurious_indices: Vec<usize>,
+        #[strategy(vec(arb(), #spurious_indices.len()))] spurious_digests: Vec<Digest>,
+    ) {
+        let spurious_leaves = spurious_indices
+            .into_iter()
+            .zip_eq(spurious_digests)
+            .collect_vec();
+        let mut proof = test_tree.proof();
+        proof.indexed_leaves.extend(spurious_leaves);
+
+        let verdict = proof.verify(test_tree.tree.root());
+        prop_assert!(!verdict);
+    }
+
     #[proptest(cases = 40)]
     fn incorrect_tree_height_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
