@@ -1,11 +1,10 @@
 use super::super::level_db::DB;
 use super::rusty_leveldb_vec_private::RustyLevelDbVecPrivate;
 use super::{traits::*, Index};
-use crate::sync::AtomicRw;
+use crate::sync::{AtomicRw, AtomicRwReadGuard, AtomicRwWriteGuard};
 use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
-use std::sync::{RwLockReadGuard, RwLockWriteGuard};
 
 /// A concurrency safe database-backed Vec with in memory read/write caching for all operations.
 #[derive(Debug, Clone)]
@@ -130,12 +129,12 @@ impl<T: Serialize + DeserializeOwned> StorageVecRwLock<T> for RustyLevelDbVec<T>
     type LockedData = RustyLevelDbVecPrivate<T>;
 
     #[inline]
-    fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
+    fn write_lock(&self) -> AtomicRwWriteGuard<'_, Self::LockedData> {
         self.inner.lock_guard_mut()
     }
 
     #[inline]
-    fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
+    fn read_lock(&self) -> AtomicRwReadGuard<'_, Self::LockedData> {
         self.inner.lock_guard()
     }
 }
