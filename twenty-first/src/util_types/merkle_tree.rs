@@ -41,7 +41,9 @@ where
     H: AlgebraicHasher,
 {
     pub tree_height: usize,
-    pub indexed_leaves: HashMap<usize, Digest>,
+
+    // Purposefully not a HashMap to preserve order of the keys.
+    pub indexed_leaves: Vec<(usize, Digest)>,
     pub authentication_structure: Vec<Digest>,
     pub _hasher: PhantomData<H>,
 }
@@ -197,7 +199,7 @@ where
         self.nodes.get(first_leaf_index + index).copied()
     }
 
-    pub fn indexed_leaves(&self, indices: &[usize]) -> Result<HashMap<usize, Digest>> {
+    pub fn indexed_leaves(&self, indices: &[usize]) -> Result<Vec<(usize, Digest)>> {
         let num_leaves = self.num_leafs();
         if indices.iter().any(|&i| i >= num_leaves) {
             return Err(MerkleTreeError::LeafIndexInvalid { num_leaves });
@@ -241,7 +243,7 @@ where
     H: AlgebraicHasher,
 {
     fn leaf_indices(&self) -> impl Iterator<Item = &usize> {
-        self.indexed_leaves.keys()
+        self.indexed_leaves.iter().map(|(index, _)| index)
     }
 
     fn is_trivial(&self) -> bool {
@@ -677,12 +679,10 @@ pub mod merkle_tree_test {
         >,
     ) {
         let mut proof = test_tree.proof();
-        let leaf_indices = proof.leaf_indices().copied().collect_vec();
         for (&i, digest_corruptor) in leaves_to_corrupt.iter().zip_eq(&digest_corruptors) {
-            let leaf_index = leaf_indices[i];
-            let digest_to_corrupt = proof.indexed_leaves[&leaf_index];
-            let corrupt_digest = digest_corruptor.corrupt_digest(digest_to_corrupt)?;
-            proof.indexed_leaves.insert(leaf_index, corrupt_digest);
+            let (leaf_index, leaf_digest) = proof.indexed_leaves[i];
+            let corrupt_digest = digest_corruptor.corrupt_digest(leaf_digest)?;
+            proof.indexed_leaves[i] = (leaf_index, corrupt_digest);
         }
         if proof == test_tree.proof() {
             let reject_reason = "corruption must change leaf digests".into();
