@@ -87,16 +87,11 @@ impl MerkleTreeSampler {
         let tree_height = tree.height();
         assert_eq!(self.tree_height, tree_height);
         let leaf_indices = self.indices_to_open();
-        let leaf_digests = leaf_indices
-            .iter()
-            .map(|&i| tree.leaf(i).unwrap())
-            .collect();
-        let authentication_structure = tree.authentication_structure(&leaf_indices).unwrap();
+
         MerkleTreeInclusionProof {
             tree_height,
-            leaf_indices,
-            leaf_digests,
-            authentication_structure,
+            indexed_leaves: tree.indexed_leaves(&leaf_indices).unwrap(),
+            authentication_structure: tree.authentication_structure(&leaf_indices).unwrap(),
             _hasher: PhantomData,
         }
     }
