@@ -1,9 +1,9 @@
 use super::{traits::*, Index};
+use crate::sync::AtomicRwWriteGuard;
 use lending_iterator::prelude::*;
 use lending_iterator::{gat, LendingIterator};
 use std::iter::Iterator;
 use std::marker::PhantomData;
-use std::sync::RwLockWriteGuard;
 
 /// A mutating iterator for [`StorageVec`] trait
 ///
@@ -17,7 +17,7 @@ where
     V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     indices: Box<dyn Iterator<Item = Index>>,
-    write_lock: RwLockWriteGuard<'a, V::LockedData>,
+    write_lock: AtomicRwWriteGuard<'a, V::LockedData>,
     phantom_t: PhantomData<T>,
     phantom_d: PhantomData<V>,
 }
@@ -75,7 +75,7 @@ where
     V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     phantom: PhantomData<V>,
-    write_lock: &'d mut RwLockWriteGuard<'c, V::LockedData>,
+    write_lock: &'d mut AtomicRwWriteGuard<'c, V::LockedData>,
     index: Index,
     value: T,
 }
