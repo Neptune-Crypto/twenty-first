@@ -208,6 +208,9 @@ where
         Ok(indexed_leaves.collect())
     }
 
+    /// A full inclusion proof for the leaves at the supplied indices, including the leaves. Generally, using
+    /// [`authentication_structure`](Self::authentication_structure) is preferable. Use this method only if the
+    /// verifier needs explicit access to the leaves, _i.e._, cannot compute them from other information.
     pub fn inclusion_proof_for_leaf_indices(
         &self,
         indices: &[usize],
