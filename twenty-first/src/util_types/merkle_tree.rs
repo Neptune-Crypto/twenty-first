@@ -15,9 +15,7 @@ use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 
-/// Chosen from a very small number of benchmark runs, optimized for a slow hash function (the original Rescue Prime
-/// implementation). It should probably be a higher number than 16 when using a faster hash function.
-const DEFAULT_PARALLELIZATION_CUTOFF: usize = 16;
+const DEFAULT_PARALLELIZATION_CUTOFF: usize = 256;
 
 lazy_static! {
     static ref PARALLELIZATION_CUTOFF: usize = env::var("MERKLE_TREE_PARALLELIZATION_CUTOFF")
