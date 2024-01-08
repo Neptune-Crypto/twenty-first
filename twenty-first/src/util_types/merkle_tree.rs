@@ -1,11 +1,13 @@
 use std::collections::hash_map::Entry::*;
 use std::collections::*;
+use std::env;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::result;
 
 use arbitrary::*;
 use itertools::Itertools;
+use lazy_static::lazy_static;
 use rayon::prelude::*;
 use thiserror::Error;
 
@@ -15,7 +17,14 @@ use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 
 /// Chosen from a very small number of benchmark runs, optimized for a slow hash function (the original Rescue Prime
 /// implementation). It should probably be a higher number than 16 when using a faster hash function.
-const PARALLELIZATION_THRESHOLD: usize = 16;
+const DEFAULT_PARALLELIZATION_CUTOFF: usize = 16;
+
+lazy_static! {
+    static ref PARALLELIZATION_CUTOFF: usize = env::var("MERKLE_TREE_PARALLELIZATION_CUTOFF")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_PARALLELIZATION_CUTOFF);
+}
 
 const MAX_NUM_NODES: usize = 1 << 32;
 const MAX_NUM_LEAVES: usize = MAX_NUM_NODES / 2;
@@ -463,7 +472,7 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
         // Parallel digest calculations
         let mut node_count_on_this_level: usize = leaves_count / 2;
         let mut count_acc: usize = 0;
-        while node_count_on_this_level >= PARALLELIZATION_THRESHOLD {
+        while node_count_on_this_level >= *PARALLELIZATION_CUTOFF {
             let mut local_digests: Vec<Digest> = Vec::with_capacity(node_count_on_this_level);
             (0..node_count_on_this_level)
                 .into_par_iter()
