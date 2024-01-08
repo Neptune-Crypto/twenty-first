@@ -7,8 +7,9 @@ use std::marker::PhantomData;
 
 /// A mutating iterator for [`StorageVec`] trait
 ///
-/// Important: This iterator holds a write lock over `StorageVecRwLock::LockedData`
-/// which will not be released until the iterator is dropped.
+/// Important: This iterator holds a reference to the
+/// [`StorageVec`] implementor which will not be released
+/// until the iterator is dropped.
 ///
 /// See examples for [`StorageVec::iter_mut()`].
 #[allow(private_bounds)]
@@ -17,7 +18,8 @@ where
     V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     indices: Box<dyn Iterator<Item = Index>>,
-    write_lock: AtomicRwWriteGuard<'a, V::LockedData>,
+    data: &'a V,
+    write_lock: Option<AtomicRwWriteGuard<'a, V::LockedData>>,
     phantom_t: PhantomData<T>,
     phantom_d: PhantomData<V>,
 }
@@ -33,7 +35,8 @@ where
     {
         Self {
             indices: Box::new(indices.into_iter()),
-            write_lock: data.write_lock(),
+            data,
+            write_lock: data.try_write_lock(),
             phantom_t: Default::default(),
             phantom_d: Default::default(),
         }
@@ -55,9 +58,13 @@ where
 
     fn next(&mut self) -> Option<Self::Item<'_>> {
         if let Some(i) = Iterator::next(&mut self.indices) {
-            let value = self.write_lock.get(i);
+            let value = match &self.write_lock {
+                Some(write_lock) => write_lock.get(i),
+                None => self.data.get(i),
+            };
             Some(StorageSetter {
                 phantom: Default::default(),
+                data: self.data,
                 write_lock: &mut self.write_lock,
                 index: i,
                 value,
@@ -75,7 +82,8 @@ where
     V: StorageVec<T> + StorageVecRwLock<T> + ?Sized,
 {
     phantom: PhantomData<V>,
-    write_lock: &'d mut AtomicRwWriteGuard<'c, V::LockedData>,
+    data: &'c V,
+    write_lock: &'d mut Option<AtomicRwWriteGuard<'c, V::LockedData>>,
     index: Index,
     value: T,
 }
@@ -87,7 +95,10 @@ where
     V::LockedData: StorageVecLockedData<T>,
 {
     pub fn set(&mut self, value: T) {
-        self.write_lock.set(self.index, value);
+        match self.write_lock {
+            Some(write_lock) => write_lock.set(self.index, value),
+            None => self.data.set(self.index, value),
+        }
     }
 
     pub fn index(&self) -> Index {
