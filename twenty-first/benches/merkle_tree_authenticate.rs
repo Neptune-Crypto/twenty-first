@@ -65,10 +65,10 @@ impl MerkleTreeSampler {
     }
 
     fn leaf_digests(&mut self) -> Vec<Digest> {
-        let leaves = (0..self.num_leaves())
+        (0..self.num_leaves())
             .map(|_| self.rng.next_u64())
-            .collect_vec();
-        leaves.iter().map(Tip5::hash).collect_vec()
+            .map(|leaf| Tip5::hash(&leaf))
+            .collect()
     }
 
     fn tree(&mut self) -> MerkleTree<Tip5> {
