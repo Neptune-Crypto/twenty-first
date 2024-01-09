@@ -736,6 +736,22 @@ pub mod merkle_tree_test {
         prop_assert!(!verdict);
     }
 
+    #[proptest(cases = 30)]
+    fn honestly_generated_proof_with_duplicate_leaves_can_be_verified(
+        #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
+        #[strategy(vec(0..#test_tree.proof().indexed_leaves.len(), 1..=#test_tree.proof().indexed_leaves.len()))]
+        indices_to_duplicate: Vec<usize>,
+    ) {
+        let mut proof = test_tree.proof();
+        let duplicate_leaves = indices_to_duplicate
+            .into_iter()
+            .map(|i| proof.indexed_leaves[i])
+            .collect_vec();
+        proof.indexed_leaves.extend(duplicate_leaves);
+        let verdict = proof.verify(test_tree.tree.root());
+        prop_assert!(verdict);
+    }
+
     #[proptest(cases = 40)]
     fn incorrect_tree_height_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
