@@ -16,7 +16,6 @@ use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 
 const DEFAULT_PARALLELIZATION_CUTOFF: usize = 256;
-
 lazy_static! {
     static ref PARALLELIZATION_CUTOFF: usize = env::var("MERKLE_TREE_PARALLELIZATION_CUTOFF")
         .ok()
@@ -28,10 +27,16 @@ const MAX_NUM_NODES: usize = 1 << 32;
 const MAX_NUM_LEAVES: usize = MAX_NUM_NODES / 2;
 pub const MAX_TREE_HEIGHT: usize = MAX_NUM_LEAVES.ilog2() as usize;
 
-const ROOT_INDEX: usize = 1;
+/// The index of the root node in a [Merkle tree](MerkleTree).
+/// It is recommended to use [`root()`](MerkleTree::root) instead.
+pub const ROOT_INDEX: usize = 1;
 
 type Result<T> = result::Result<T, MerkleTreeError>;
 
+/// A [Merkle tree][merkle_tree] is a binary tree of [digests](Digest) that is used to efficiently prove the
+/// inclusion of items in a set. Set inclusion can be verified through an [inclusion proof](MerkleTreeInclusionProof).
+///
+/// [merkle_tree]: https://en.wikipedia.org/wiki/Merkle_tree
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MerkleTree<H>
 where
@@ -41,16 +46,27 @@ where
     _hasher: PhantomData<H>,
 }
 
+/// A full inclusion proof for the leaves at the supplied indices, including the leaves themselves.
+/// The proof is relative to some [Merkle tree](MerkleTree), which is not necessarily (and generally cannot be) known in
+/// its entirety by the verifier.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MerkleTreeInclusionProof<H>
 where
     H: AlgebraicHasher,
 {
+    /// The stated height of the Merkle tree this proof is relative to.
     pub tree_height: usize,
 
-    // Purposefully not a HashMap to preserve order of the keys.
+    /// The leaves the proof is about, _i.e._, the revealed leaves.
+    ///
+    /// Purposefully not a [`HashMap`] to preserve order of the keys, which is relevant for
+    /// [`into_authentication_paths`](MerkleTreeInclusionProof::into_authentication_paths).
     pub indexed_leaves: Vec<(usize, Digest)>,
+
+    /// The proof's witness: de-duplicated authentication structure for the leaves this proof is about.
+    /// See [`authentication_structure`](MerkleTree::authentication_structure) for details.
     pub authentication_structure: Vec<Digest>,
+
     pub _hasher: PhantomData<H>,
 }
 
