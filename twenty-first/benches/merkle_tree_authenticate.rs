@@ -1,5 +1,4 @@
 use criterion::*;
-use itertools::Itertools;
 use rand::rngs::StdRng;
 use rand::*;
 
