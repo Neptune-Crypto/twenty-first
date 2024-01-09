@@ -2,7 +2,6 @@ use criterion::*;
 use itertools::Itertools;
 use rand::rngs::StdRng;
 use rand::*;
-use std::marker::PhantomData;
 
 use twenty_first::shared_math::digest::Digest;
 use twenty_first::shared_math::tip5::Tip5;
@@ -84,15 +83,8 @@ impl MerkleTreeSampler {
     }
 
     fn proof(&mut self, tree: &MerkleTree<Tip5>) -> MerkleTreeInclusionProof<Tip5> {
-        let tree_height = tree.height();
-        assert_eq!(self.tree_height, tree_height);
         let leaf_indices = self.indices_to_open();
-
-        MerkleTreeInclusionProof {
-            tree_height,
-            indexed_leaves: tree.indexed_leaves(&leaf_indices).unwrap(),
-            authentication_structure: tree.authentication_structure(&leaf_indices).unwrap(),
-            _hasher: PhantomData,
-        }
+        tree.inclusion_proof_for_leaf_indices(&leaf_indices)
+            .unwrap()
     }
 }
