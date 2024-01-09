@@ -202,11 +202,10 @@ where
 
     pub fn indexed_leaves(&self, indices: &[usize]) -> Result<Vec<(usize, Digest)>> {
         let num_leaves = self.num_leafs();
-        if indices.iter().any(|&i| i >= num_leaves) {
-            return Err(MerkleTreeError::LeafIndexInvalid { num_leaves });
-        }
-        let indexed_leaves = indices.iter().copied().map(|i| (i, self.leaf(i).unwrap()));
-        Ok(indexed_leaves.collect())
+        let invalid_index = MerkleTreeError::LeafIndexInvalid { num_leaves };
+        let maybe_indexed_leaf = |&i| self.leaf(i).ok_or(invalid_index).map(|leaf| (i, leaf));
+
+        indices.iter().map(maybe_indexed_leaf).collect()
     }
 
     /// A full inclusion proof for the leaves at the supplied indices, including the leaves. Generally, using
@@ -215,13 +214,14 @@ where
     pub fn inclusion_proof_for_leaf_indices(
         &self,
         indices: &[usize],
-    ) -> MerkleTreeInclusionProof<H> {
-        MerkleTreeInclusionProof {
+    ) -> Result<MerkleTreeInclusionProof<H>> {
+        let proof = MerkleTreeInclusionProof {
             tree_height: self.height(),
-            indexed_leaves: self.indexed_leaves(indices).unwrap(),
-            authentication_structure: self.authentication_structure(indices).unwrap(),
+            indexed_leaves: self.indexed_leaves(indices)?,
+            authentication_structure: self.authentication_structure(indices)?,
             _hasher: PhantomData,
-        }
+        };
+        Ok(proof)
     }
 }
 
@@ -581,8 +581,10 @@ pub mod merkle_tree_test {
         }
 
         fn proof(&self) -> MerkleTreeInclusionProof<Tip5> {
+            // test helper – unwrap is fine
             self.tree
                 .inclusion_proof_for_leaf_indices(&self.selected_indices)
+                .unwrap()
         }
     }
 
@@ -624,7 +626,7 @@ pub mod merkle_tree_test {
 
     #[proptest(cases = 50)]
     fn trivial_proof_can_be_verified(#[strategy(arb())] merkle_tree: MerkleTree<Tip5>) {
-        let proof = merkle_tree.inclusion_proof_for_leaf_indices(&[]);
+        let proof = merkle_tree.inclusion_proof_for_leaf_indices(&[]).unwrap();
         prop_assert!(proof.authentication_structure.is_empty());
         let verdict = proof.verify(merkle_tree.root());
         prop_assert!(verdict);
@@ -770,9 +772,23 @@ pub mod merkle_tree_test {
         #[strategy(arb())] tree: MerkleTree<Tip5>,
     ) {
         let leaf_indices = (0..tree.num_leafs()).collect_vec();
-        let proof = tree.inclusion_proof_for_leaf_indices(&leaf_indices);
+        let proof = tree
+            .inclusion_proof_for_leaf_indices(&leaf_indices)
+            .unwrap();
         let verdict = proof.verify(tree.root());
         prop_assert!(verdict);
+    }
+
+    #[proptest(cases = 30)]
+    fn requesting_inclusion_proof_for_nonexistent_leaf_fails_with_expected_error(
+        #[strategy(arb())] tree: MerkleTree<Tip5>,
+        #[filter(#leaf_indices.iter().any(|&i| i > #tree.num_leafs()))] leaf_indices: Vec<usize>,
+    ) {
+        let maybe_proof = tree.inclusion_proof_for_leaf_indices(&leaf_indices);
+        let err = maybe_proof.unwrap_err();
+
+        let num_leaves = tree.num_leafs();
+        assert_eq!(MerkleTreeError::LeafIndexInvalid { num_leaves }, err);
     }
 
     #[test]
@@ -841,7 +857,9 @@ pub mod merkle_tree_test {
     #[test]
     fn partial_merkle_tree_built_from_authentication_structure_contains_expected_nodes() {
         let merkle_tree = MerkleTree::<Tip5>::test_tree_of_height(3);
-        let proof = merkle_tree.inclusion_proof_for_leaf_indices(&[0, 2]);
+        let proof = merkle_tree
+            .inclusion_proof_for_leaf_indices(&[0, 2])
+            .unwrap();
         let partial_tree = PartialMerkleTree::try_from(proof).unwrap();
 
         //         ──── 1 ────
@@ -937,7 +955,9 @@ pub mod merkle_tree_test {
     fn converting_authentication_structure_to_authentication_paths_results_in_expected_paths() {
         const TREE_HEIGHT: usize = 3;
         let merkle_tree = MerkleTree::<Tip5>::test_tree_of_height(TREE_HEIGHT);
-        let proof = merkle_tree.inclusion_proof_for_leaf_indices(&[0, 2]);
+        let proof = merkle_tree
+            .inclusion_proof_for_leaf_indices(&[0, 2])
+            .unwrap();
         let auth_paths = proof.into_authentication_paths().unwrap();
 
         let auth_path_with_nodes =
