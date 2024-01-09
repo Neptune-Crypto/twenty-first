@@ -326,6 +326,13 @@ where
             .ok_or(MerkleTreeError::RootNotFound)
     }
 
+    fn node(&self, index: usize) -> Result<Digest> {
+        self.nodes
+            .get(&index)
+            .copied()
+            .ok_or(MerkleTreeError::MissingNodeIndex(index))
+    }
+
     fn num_leaves(&self) -> Result<usize> {
         if self.tree_height > MAX_TREE_HEIGHT {
             return Err(MerkleTreeError::TreeTooHigh);
@@ -336,55 +343,55 @@ where
     /// Compute all computable digests of the partial Merkle tree, modifying self. Returns an error if self is either
     /// - incomplete, _i.e._, does not contain all the nodes required to compute the root, or
     /// - not minimal, _i.e._, if it contains nodes that can be computed from other nodes.
-    ///
-    /// On success, [`root()`](Self::root) is guaranteed to return `Ok(…)`.
     pub fn fill(&mut self) -> Result<()> {
-        let num_leaves = self.num_leaves()?;
+        let mut parent_node_indices = self.first_layer_parent_node_indices()?;
 
-        // De-duplicate parent node indices to avoid hashing the same nodes twice,
-        // which happens when two leaves are siblings.
-        let mut parent_node_indices = self
-            .leaf_indices
-            .iter()
-            .map(|&leaf_index| (leaf_index + num_leaves) / 2)
-            .collect_vec();
-        parent_node_indices.sort_unstable();
-        parent_node_indices.dedup();
-
-        // hash the partial tree from the bottom up
         for _ in 0..self.tree_height {
-            for &parent_node_index in parent_node_indices.iter() {
-                let left_node_index = parent_node_index * 2;
-                let right_node_index = left_node_index ^ 1;
-
-                if self.nodes.contains_key(&parent_node_index) {
-                    return Err(MerkleTreeError::SpuriousNodeIndex(parent_node_index));
-                }
-
-                let &left_node = self
-                    .nodes
-                    .get(&left_node_index)
-                    .ok_or(MerkleTreeError::MissingNodeIndex(left_node_index))?;
-                let &right_node = self
-                    .nodes
-                    .get(&right_node_index)
-                    .ok_or(MerkleTreeError::MissingNodeIndex(right_node_index))?;
-
-                let parent_digest = H::hash_pair(left_node, right_node);
-                self.nodes.insert(parent_node_index, parent_digest);
+            for &parent_node_index in &parent_node_indices {
+                self.insert_digest_for_index(parent_node_index)?;
             }
-
-            // Move parent nodes indices one layer up,
-            // deduplicate to guarantee minimal number of hash operations.
-            parent_node_indices.iter_mut().for_each(|i| *i /= 2);
-            parent_node_indices.dedup();
-        }
-
-        if !self.nodes.contains_key(&ROOT_INDEX) {
-            return Err(MerkleTreeError::RootNotFound);
+            parent_node_indices = Self::move_indices_one_layer_up(parent_node_indices);
         }
 
         Ok(())
+    }
+
+    /// Any parent node index is included only once. This guarantees that the number of hash operations is minimal.
+    fn first_layer_parent_node_indices(&self) -> Result<Vec<usize>> {
+        let num_leaves = self.num_leaves()?;
+        let leaf_to_parent_node_index = |&leaf_index| (leaf_index + num_leaves) / 2;
+
+        let parent_node_indices = self.leaf_indices.iter().map(leaf_to_parent_node_index);
+        let mut parent_node_indices = parent_node_indices.collect_vec();
+        parent_node_indices.sort_unstable();
+        parent_node_indices.dedup();
+        Ok(parent_node_indices)
+    }
+
+    fn insert_digest_for_index(&mut self, parent_index: usize) -> Result<()> {
+        let (left_child, right_child) = self.children_of_node(parent_index)?;
+        let parent_digest = H::hash_pair(left_child, right_child);
+
+        match self.nodes.insert(parent_index, parent_digest) {
+            Some(_) => Err(MerkleTreeError::SpuriousNodeIndex(parent_index)),
+            None => Ok(()),
+        }
+    }
+
+    fn children_of_node(&self, parent_index: usize) -> Result<(Digest, Digest)> {
+        let left_child_index = parent_index * 2;
+        let right_child_index = left_child_index ^ 1;
+
+        let left_child = self.node(left_child_index)?;
+        let right_child = self.node(right_child_index)?;
+        Ok((left_child, right_child))
+    }
+
+    /// Indices are deduplicated to guarantee minimal number of hash operations.
+    fn move_indices_one_layer_up(mut indices: Vec<usize>) -> Vec<usize> {
+        indices.iter_mut().for_each(|i| *i /= 2);
+        indices.dedup();
+        indices
     }
 
     /// Collect all individual authentication paths for the indicated leaves.
@@ -404,10 +411,7 @@ where
         let mut node_index = leaf_index + num_leaves;
         while node_index > ROOT_INDEX {
             let sibling_index = node_index ^ 1;
-            let &sibling = self
-                .nodes
-                .get(&sibling_index)
-                .ok_or(MerkleTreeError::MissingNodeIndex(sibling_index))?;
+            let sibling = self.node(sibling_index)?;
             authentication_path.push(sibling);
             node_index /= 2;
         }
@@ -431,7 +435,7 @@ where
         };
 
         let num_leaves = partial_tree.num_leaves()?;
-        if proof.leaf_indices().any(|&i| i >= num_leaves) {
+        if partial_tree.leaf_indices.iter().any(|&i| i >= num_leaves) {
             return Err(MerkleTreeError::LeafIndexInvalid { num_leaves });
         }
 
