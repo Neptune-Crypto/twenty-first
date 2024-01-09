@@ -615,6 +615,14 @@ pub mod merkle_tree_test {
         assert_eq!(MerkleTreeError::TooFewLeaves, err);
     }
 
+    #[test]
+    fn merkle_tree_with_one_leaf_has_expected_height_and_number_of_leaves() {
+        let digest = Digest::default();
+        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&[digest]).unwrap();
+        assert_eq!(1, tree.num_leafs());
+        assert_eq!(0, tree.height());
+    }
+
     #[proptest]
     fn building_merkle_tree_from_one_digest_makes_that_digest_the_root(
         #[strategy(arb())] digest: Digest,
