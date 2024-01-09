@@ -1,7 +1,7 @@
 use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::merkle_tree::MerkleTree;
+use crate::util_types::merkle_tree::*;
 
 pub trait MerkleTreeMaker<H: AlgebraicHasher> {
-    fn from_digests(digests: &[Digest]) -> MerkleTree<H>;
+    fn from_digests(digests: &[Digest]) -> Result<MerkleTree<H>, MerkleTreeError>;
 }

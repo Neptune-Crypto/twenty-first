@@ -1,59 +1,89 @@
-use criterion::criterion_group;
-use criterion::criterion_main;
-use criterion::BenchmarkId;
-use criterion::Criterion;
-use itertools::Itertools;
+use criterion::*;
 use rand::rngs::StdRng;
-use rand::Rng;
-use rand::RngCore;
-use rand::SeedableRng;
+use rand::*;
 
+use twenty_first::shared_math::digest::Digest;
 use twenty_first::shared_math::tip5::Tip5;
 use twenty_first::util_types::algebraic_hasher::AlgebraicHasher;
-use twenty_first::util_types::merkle_tree::CpuParallel;
-use twenty_first::util_types::merkle_tree::MerkleTree;
+use twenty_first::util_types::merkle_tree::*;
 use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
 
-fn merkle_tree_authenticate(c: &mut Criterion) {
-    let mut rng = StdRng::seed_from_u64(0);
+criterion_main!(merkle_tree_authenticate);
+criterion_group!(
+    merkle_tree_authenticate,
+    gen_auth_structure,
+    verify_auth_structure
+);
 
-    let tree_height = 22;
-    let num_leaves = 1 << tree_height;
-    let leaves = (0..num_leaves).map(|_| rng.next_u64()).collect_vec();
-    let leaf_digests = leaves.iter().map(Tip5::hash).collect_vec();
-    let mt: MerkleTree<Tip5> = CpuParallel::from_digests(&leaf_digests);
-    let mt_root = mt.get_root();
+fn gen_auth_structure(c: &mut Criterion) {
+    let mut sampler = MerkleTreeSampler::default();
+    let tree = sampler.tree();
 
-    let num_opened_indices = 40;
-    let opened_indices = (0..num_opened_indices)
-        .map(|_| rng.gen_range(0..num_leaves))
-        .collect_vec();
-    let authentication_structure = mt.get_authentication_structure(&opened_indices);
-    let opened_leaves = opened_indices
-        .iter()
-        .map(|&i| leaf_digests[i])
-        .collect_vec();
-
-    let mut group = c.benchmark_group("merkle_tree_authenticate");
-    group.bench_function(
-        BenchmarkId::new("gen_auth_structure", num_leaves),
-        |bencher| bencher.iter(|| mt.get_authentication_structure(&opened_indices)),
-    );
-    group.bench_function(
-        BenchmarkId::new("verify_auth_structure", num_leaves),
-        |bencher| {
-            bencher.iter(|| {
-                MerkleTree::<Tip5>::verify_authentication_structure(
-                    mt_root,
-                    tree_height,
-                    &opened_indices,
-                    &opened_leaves,
-                    &authentication_structure,
-                )
-            });
-        },
-    );
+    c.bench_function("gen_auth_structure", |bencher| {
+        bencher.iter_batched(
+            || sampler.indices_to_open(),
+            |indices| tree.authentication_structure(&indices),
+            BatchSize::SmallInput,
+        )
+    });
 }
 
-criterion_group!(benches, merkle_tree_authenticate);
-criterion_main!(benches);
+fn verify_auth_structure(c: &mut Criterion) {
+    let mut sampler = MerkleTreeSampler::default();
+    let tree = sampler.tree();
+
+    c.bench_function("verify_auth_structure", |bencher| {
+        bencher.iter_batched(
+            || sampler.proof(&tree),
+            |proof| proof.verify(tree.root()),
+            BatchSize::SmallInput,
+        );
+    });
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MerkleTreeSampler {
+    rng: StdRng,
+    tree_height: usize,
+    num_opened_indices: usize,
+}
+
+impl Default for MerkleTreeSampler {
+    fn default() -> Self {
+        Self {
+            rng: StdRng::seed_from_u64(0),
+            tree_height: 22,
+            num_opened_indices: 40,
+        }
+    }
+}
+
+impl MerkleTreeSampler {
+    fn num_leaves(&self) -> usize {
+        1 << self.tree_height
+    }
+
+    fn leaf_digests(&mut self) -> Vec<Digest> {
+        (0..self.num_leaves())
+            .map(|_| self.rng.next_u64())
+            .map(|leaf| Tip5::hash(&leaf))
+            .collect()
+    }
+
+    fn tree(&mut self) -> MerkleTree<Tip5> {
+        let leaf_digests = self.leaf_digests();
+        CpuParallel::from_digests(&leaf_digests).unwrap()
+    }
+
+    fn indices_to_open(&mut self) -> Vec<usize> {
+        (0..self.num_opened_indices)
+            .map(|_| self.rng.gen_range(0..self.num_leaves()))
+            .collect()
+    }
+
+    fn proof(&mut self, tree: &MerkleTree<Tip5>) -> MerkleTreeInclusionProof<Tip5> {
+        let leaf_indices = self.indices_to_open();
+        tree.inclusion_proof_for_leaf_indices(&leaf_indices)
+            .unwrap()
+    }
+}
