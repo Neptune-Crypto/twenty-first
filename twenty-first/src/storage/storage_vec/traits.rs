@@ -5,7 +5,7 @@
 
 // use super::iterators::{ManyIterMut, StorageSetter};
 use super::{Index, ManyIterMut};
-use std::sync::{RwLockReadGuard, RwLockWriteGuard};
+use crate::sync::{AtomicRwReadGuard, AtomicRwWriteGuard};
 
 // re-export to make life easier for users of our API.
 pub use lending_iterator::LendingIterator;
@@ -412,10 +412,10 @@ pub(in super::super) trait StorageVecRwLock<T> {
     type LockedData;
 
     /// obtain write lock over mutable data.
-    fn write_lock(&self) -> RwLockWriteGuard<Self::LockedData>;
+    fn try_write_lock(&self) -> Option<AtomicRwWriteGuard<Self::LockedData>>;
 
     /// obtain read lock over mutable data.
-    fn read_lock(&self) -> RwLockReadGuard<Self::LockedData>;
+    fn try_read_lock(&self) -> Option<AtomicRwReadGuard<Self::LockedData>>;
 }
 
 pub(in super::super) trait StorageVecIterMut<T>: StorageVec<T> {}

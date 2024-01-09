@@ -2,12 +2,9 @@ use super::super::storage_vec::traits::*;
 use super::super::storage_vec::Index;
 use super::dbtvec_private::DbtVecPrivate;
 use super::{traits::*, RustyValue, VecWriteOperation, WriteOperation};
-use crate::sync::AtomicRw;
+use crate::sync::{AtomicRw, AtomicRwReadGuard, AtomicRwWriteGuard, LockCallbackFn};
 use serde::{de::DeserializeOwned, Serialize};
-use std::{
-    fmt::Debug,
-    sync::{Arc, RwLockReadGuard, RwLockWriteGuard},
-};
+use std::{fmt::Debug, sync::Arc};
 
 /// A DB-backed Vec for use with DBSchema
 ///
@@ -45,27 +42,40 @@ where
         reader: Arc<dyn StorageReader + Send + Sync>,
         key_prefix: u8,
         name: &str,
+        lock_name: String,
+        lock_callback_fn: Option<LockCallbackFn>,
     ) -> Self {
         let vec = DbtVecPrivate::<V>::new(reader, key_prefix, name);
 
         Self {
-            inner: AtomicRw::from(vec),
+            inner: AtomicRw::from((vec, Some(lock_name), lock_callback_fn)),
         }
     }
 }
 
-impl<V> StorageVecRwLock<V> for DbtVec<V> {
-    type LockedData = DbtVecPrivate<V>;
-
+impl<T> DbtVec<T> {
     #[inline]
-    fn write_lock(&self) -> RwLockWriteGuard<'_, Self::LockedData> {
+    pub(crate) fn write_lock(&self) -> AtomicRwWriteGuard<'_, DbtVecPrivate<T>> {
         self.inner.lock_guard_mut()
     }
 
-    // This is a private method, but we allow unit tests in super to use it.
     #[inline]
-    fn read_lock(&self) -> RwLockReadGuard<'_, Self::LockedData> {
+    pub(crate) fn read_lock(&self) -> AtomicRwReadGuard<'_, DbtVecPrivate<T>> {
         self.inner.lock_guard()
+    }
+}
+
+impl<T> StorageVecRwLock<T> for DbtVec<T> {
+    type LockedData = DbtVecPrivate<T>;
+
+    #[inline]
+    fn try_write_lock(&self) -> Option<AtomicRwWriteGuard<'_, Self::LockedData>> {
+        Some(self.write_lock())
+    }
+
+    #[inline]
+    fn try_read_lock(&self) -> Option<AtomicRwReadGuard<'_, Self::LockedData>> {
+        Some(self.read_lock())
     }
 }
 
