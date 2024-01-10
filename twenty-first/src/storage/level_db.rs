@@ -16,6 +16,8 @@ use leveldb::{
     options::{Options, ReadOptions, WriteOptions},
     snapshots::{Snapshot, Snapshots},
 };
+use rand::distributions::DistString;
+use rand_distr::Alphanumeric;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -113,9 +115,6 @@ impl DB {
         read_options: Option<ReadOptions>,
         write_options: Option<WriteOptions>,
     ) -> Result<Self, DbError> {
-        use rand::distributions::DistString;
-        use rand_distr::Alphanumeric;
-
         let path = std::env::temp_dir().join(format!(
             "test-db-{}",
             Alphanumeric.sample_string(&mut rand::thread_rng(), 10)
@@ -235,6 +234,28 @@ impl Drop for DB {
     #[inline]
     fn drop(&mut self) {
         if self.destroy_db_on_drop {
+            {
+                // note: this block is only needed on windows, though it works
+                // on other platforms.  Apparently windows holds the underlying
+                // DB file open until it is released when the rs_leveldb::DB is
+                // dropped -- which calls C API leveldb_close().
+                //
+                // So we must drop the DB within self, but to do that we must
+                // provide a fake DB to replace it so we can call
+                // std::mem::replace().
+                let path = std::env::temp_dir().join(format!(
+                    "tmp-db-{}",
+                    Alphanumeric.sample_string(&mut rand::thread_rng(), 10)
+                ));
+
+                let mut opt = Options::new();
+                opt.create_if_missing = true;
+                let fake_db = Arc::new(Database::open(&path, &opt).unwrap());
+                let self_db = std::mem::replace(&mut self.db, fake_db);
+
+                drop(self_db);
+            }
+
             // note: we do not panic if the database directory
             // cannot be removed.  Perhaps revisit later.
             let _ = self.destroy_db();
