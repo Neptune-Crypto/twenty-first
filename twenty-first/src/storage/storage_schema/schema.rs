@@ -38,13 +38,14 @@ use std::sync::Arc;
 /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
 /// use std::sync::{Arc, RwLock};
 /// let mut storage = SimpleRustyStorage::new(db);
-/// storage.restore_or_new();
 ///
 /// let tables = (
 ///     storage.schema.new_vec::<u16>("ages"),
 ///     storage.schema.new_vec::<String>("names"),
 ///     storage.schema.new_singleton::<bool>(12u64.into())
 /// );
+///
+/// storage.restore_or_new();  // populate tables.
 ///
 /// let atomic_tables = Arc::new(RwLock::new(tables));
 /// let mut lock = atomic_tables.write().unwrap();
@@ -71,7 +72,6 @@ use std::sync::Arc;
 /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{SimpleRustyStorage, traits::*}};
 /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
 /// let mut storage = SimpleRustyStorage::new(db);
-/// storage.restore_or_new();
 ///
 /// let atomic_tables = storage.schema.create_tables_rw(|s| {
 ///     (
@@ -80,6 +80,8 @@ use std::sync::Arc;
 ///         s.new_singleton::<bool>(12u64.into())
 ///     )
 /// });
+///
+/// storage.restore_or_new();  // populate tables.
 ///
 /// // these writes happen atomically.
 /// atomic_tables.lock_mut(|tables| {
@@ -197,7 +199,6 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{SimpleRustyStorage, traits::*}};
     /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
     /// let mut storage = SimpleRustyStorage::new(db);
-    /// storage.restore_or_new();
     ///
     /// let atomic_tables = storage.schema.create_tables_rw(|s| {
     ///     (
@@ -206,6 +207,8 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     ///         s.new_singleton::<bool>(12u64.into())
     ///     )
     /// });
+    ///
+    /// storage.restore_or_new();  // populate tables.
     ///
     /// // these writes happen atomically.
     /// atomic_tables.lock_mut(|tables| {
@@ -235,7 +238,6 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{SimpleRustyStorage, traits::*}};
     /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
     /// let mut storage = SimpleRustyStorage::new(db);
-    /// storage.restore_or_new();
     ///
     /// let atomic_tables = storage.schema.create_tables_mutex(|s| {
     ///     (
@@ -244,6 +246,8 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     ///         s.new_singleton::<bool>(12u64.into())
     ///     )
     /// });
+    ///
+    /// storage.restore_or_new();  // populate tables.
     ///
     /// // these writes happen atomically.
     /// atomic_tables.lock_mut(|tables| {
@@ -270,11 +274,12 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{DbtSchema, SimpleRustyStorage, traits::*}};
     /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
     /// let mut storage = SimpleRustyStorage::new(db);
-    /// storage.restore_or_new();
     ///
     /// let ages = storage.schema.new_vec::<u16>("ages");
     /// let names = storage.schema.new_vec::<String>("names");
     /// let proceed = storage.schema.new_singleton::<bool>(12u64.into());
+    ///
+    /// storage.restore_or_new();  // populate tables.
     ///
     /// let tables = (ages, names, proceed);
     /// let atomic_tables = storage.schema.atomic_rw(tables);
@@ -300,11 +305,12 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     /// # use twenty_first::storage::{level_db, storage_vec::traits::*, storage_schema::{DbtSchema, SimpleRustyStorage, traits::*}};
     /// # let db = level_db::DB::open_new_test_database(true, None, None, None).unwrap();
     /// let mut storage = SimpleRustyStorage::new(db);
-    /// storage.restore_or_new();
     ///
     /// let ages = storage.schema.new_vec::<u16>("ages");
     /// let names = storage.schema.new_vec::<String>("names");
     /// let proceed = storage.schema.new_singleton::<bool>(12u64.into());
+    ///
+    /// storage.restore_or_new();  // populate tables.
     ///
     /// let tables = (ages, names, proceed);
     /// let atomic_tables = storage.schema.atomic_mutex(tables);
