@@ -16,6 +16,8 @@ use leveldb::{
     options::{Options, ReadOptions, WriteOptions},
     snapshots::{Snapshot, Snapshots},
 };
+use rand::distributions::DistString;
+use rand_distr::Alphanumeric;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -30,7 +32,11 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct DB {
     // note: these must be private and unchanged after creation.
-    db: Arc<Database>, // Send + Sync.  Arc is so we can derive Clone.
+
+    // This Option is needed for the Drop impl.  See comments there.
+    // All other methods can call unwrap() because constructors always
+    // set Some(..)
+    db: Option<Arc<Database>>, // Send + Sync.  Arc is so we can derive Clone.
     path: std::path::PathBuf,
     destroy_db_on_drop: bool,
     read_options: ReadOptions,
@@ -46,7 +52,7 @@ impl DB {
     pub fn open(name: &Path, options: &Options) -> Result<Self, DbError> {
         let db = Database::open(name, options)?;
         Ok(Self {
-            db: Arc::new(db),
+            db: Some(Arc::new(db)),
             path: name.into(),
             destroy_db_on_drop: false,
             read_options: ReadOptions::new(),
@@ -67,7 +73,7 @@ impl DB {
     ) -> Result<Self, DbError> {
         let db = Database::open(name, options)?;
         Ok(Self {
-            db: Arc::new(db),
+            db: Some(Arc::new(db)),
             path: name.into(),
             destroy_db_on_drop: false,
             read_options,
@@ -91,7 +97,7 @@ impl DB {
     ) -> Result<Self, DbError> {
         let db = Database::open_with_comparator(name, options, comparator)?;
         Ok(Self {
-            db: Arc::new(db),
+            db: Some(Arc::new(db)),
             path: name.into(),
             destroy_db_on_drop: false,
             read_options: ReadOptions::new(),
@@ -113,9 +119,6 @@ impl DB {
         read_options: Option<ReadOptions>,
         write_options: Option<WriteOptions>,
     ) -> Result<Self, DbError> {
-        use rand::distributions::DistString;
-        use rand_distr::Alphanumeric;
-
         let path = std::env::temp_dir().join(format!(
             "test-db-{}",
             Alphanumeric.sample_string(&mut rand::thread_rng(), 10)
@@ -156,37 +159,46 @@ impl DB {
     /// Set a key/val in the database
     #[inline]
     pub fn put(&self, key: &dyn IntoLevelDBKey, value: &[u8]) -> Result<(), DbError> {
-        self.db.put(&self.write_options, key, value)
+        self.db
+            .as_ref()
+            .unwrap()
+            .put(&self.write_options, key, value)
     }
 
     /// Set a key/val in the database, with key as bytes.
     #[inline]
     pub fn put_u8(&self, key: &[u8], value: &[u8]) -> Result<(), DbError> {
-        self.db.put_u8(&self.write_options, key, value)
+        self.db
+            .as_ref()
+            .unwrap()
+            .put_u8(&self.write_options, key, value)
     }
 
     /// Get a value matching key from the database
     #[inline]
     pub fn get(&self, key: &dyn IntoLevelDBKey) -> Result<Option<Vec<u8>>, DbError> {
-        self.db.get(&self.read_options, key)
+        self.db.as_ref().unwrap().get(&self.read_options, key)
     }
 
     /// Get a value matching key from the database, with key as bytes
     #[inline]
     pub fn get_u8(&self, key: &[u8]) -> Result<Option<Vec<u8>>, DbError> {
-        self.db.get_u8(&self.read_options, key)
+        self.db.as_ref().unwrap().get_u8(&self.read_options, key)
     }
 
     /// Delete an entry matching key from the database
     #[inline]
     pub fn delete(&self, key: &dyn IntoLevelDBKey) -> Result<(), DbError> {
-        self.db.delete(&self.write_options, key)
+        self.db.as_ref().unwrap().delete(&self.write_options, key)
     }
 
     /// Delete an entry matching key from the database, with key as bytes
     #[inline]
     pub fn delete_u8(&self, key: &[u8]) -> Result<(), DbError> {
-        self.db.delete_u8(&self.write_options, key)
+        self.db
+            .as_ref()
+            .unwrap()
+            .delete_u8(&self.write_options, key)
     }
 
     /// Write the WriteBatch to database atomically
@@ -199,6 +211,8 @@ impl DB {
         const WO_NOSYNC: WriteOptions = WriteOptions { sync: false };
 
         self.db
+            .as_ref()
+            .unwrap()
             .write(if sync { &WO_SYNC } else { &WO_NOSYNC }, batch)
     }
 
@@ -207,7 +221,7 @@ impl DB {
     /// Sync behavior will be determined by the WriteOptions
     /// supplied at `DB` creation.
     pub fn write_auto(&self, batch: &WriteBatch) -> Result<(), DbError> {
-        self.db.write(&self.write_options, batch)
+        self.db.as_ref().unwrap().write(&self.write_options, batch)
     }
 
     /// returns the directory path of the database files on disk.
@@ -235,6 +249,34 @@ impl Drop for DB {
     #[inline]
     fn drop(&mut self) {
         if self.destroy_db_on_drop {
+            {
+                // note: this block is only needed on windows, though it works
+                // on other platforms.  Windows won't allow deletion of the
+                // underlying DB file while it remains open.  The file doesn't
+                // get closed until the the `rs_leveldb::DB` is dropped, which calls
+                // the C API leveldb_close().
+                //
+                // So we must drop the `DB` held by `self`, but to do that we must
+                // obtain ownership of the `Arc<DB>`.
+                //
+                // `Self::db` is an `Option` because `Option::take()` allows extracting
+                // an owned value with an `&mut` reference.  Whereas `Cell`, `Refcell`
+                // require a `self` (for `into_inner()`), but `impl Drop` provides us
+                // only an `&mut self` reference.
+                //
+                // `mem::replace()` is another way to do it, but then we must replace
+                // the `DB` with another `DB` which also opens a file, so we would
+                // just create the problem again.
+
+                // get `Arc<DB>` out of the `Option`, and replace with `None`.
+                let db_opt = self.db.take();
+
+                // now we own the `Arc`, so we can drop it, and `DB` with it.
+                if let Some(db_arc) = db_opt {
+                    drop(db_arc);
+                }
+            }
+
             // note: we do not panic if the database directory
             // cannot be removed.  Perhaps revisit later.
             let _ = self.destroy_db();
@@ -252,30 +294,30 @@ impl Drop for DB {
 impl<'a> Compaction<'a> for DB {
     #[inline]
     fn compact(&self, start: &'a [u8], limit: &'a [u8]) {
-        self.db.compact(start, limit)
+        self.db.as_ref().unwrap().compact(start, limit)
     }
 }
 
 impl<'a> Iterable<'a> for DB {
     #[inline]
     fn iter(&'a self, options: &ReadOptions) -> Iterator<'a> {
-        self.db.iter(options)
+        self.db.as_ref().unwrap().iter(options)
     }
 
     #[inline]
     fn keys_iter(&'a self, options: &ReadOptions) -> KeyIterator<'a> {
-        self.db.keys_iter(options)
+        self.db.as_ref().unwrap().keys_iter(options)
     }
 
     #[inline]
     fn value_iter(&'a self, options: &ReadOptions) -> ValueIterator<'a> {
-        self.db.value_iter(options)
+        self.db.as_ref().unwrap().value_iter(options)
     }
 }
 
 impl Snapshots for DB {
     fn snapshot(&self) -> Snapshot {
-        self.db.snapshot()
+        self.db.as_ref().unwrap().snapshot()
     }
 }
 
