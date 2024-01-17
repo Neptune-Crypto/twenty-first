@@ -32,7 +32,7 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
     }
 
     /// set all key/val pairs in `indices_and_vals`
-    pub fn batch_set(&self, indices_and_vals: &[(IndexType, T)]) {
+    pub fn batch_set(&mut self, indices_and_vals: &[(IndexType, T)]) {
         let indices: Vec<IndexType> = indices_and_vals.iter().map(|(index, _)| *index).collect();
         assert!(
             indices.iter().all(|index| *index < N),
@@ -84,7 +84,6 @@ impl<const N: IndexType, T: Serialize + DeserializeOwned + Default> DatabaseArra
 
 #[cfg(test)]
 mod database_array_tests {
-    use super::super::level_db::DB;
     use super::*;
 
     #[test]

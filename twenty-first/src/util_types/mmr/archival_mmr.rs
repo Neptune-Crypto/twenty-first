@@ -322,7 +322,6 @@ impl<H: AlgebraicHasher> ArchivalMmr<H, RustyLevelDbVec<Digest>> {
 
 #[cfg(test)]
 mod mmr_test {
-    use std::sync::Arc;
 
     use itertools::*;
     use leveldb::iterator::Iterable;
@@ -1060,8 +1059,7 @@ mod mmr_test {
     fn rust_leveldb_persist_test() {
         type H = blake3::Hasher;
 
-        let db = DB::open_new_test_database(true, None, None, None).unwrap();
-        let db = Arc::new(db);
+        let mut db = DB::open_new_test_database(true, None, None, None).unwrap();
         let persistent_vec_0 = RustyLevelDbVec::new(db.clone(), 0, "archival MMR for unit tests");
         let mut ammr0: ArchivalMmr<H, RustyLevelDbVec<Digest>> = ArchivalMmr::new(persistent_vec_0);
         let persistent_vec_1 = RustyLevelDbVec::new(db.clone(), 1, "archival MMR for unit tests");

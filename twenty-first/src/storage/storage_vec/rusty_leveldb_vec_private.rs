@@ -5,7 +5,6 @@ use itertools::Itertools;
 use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::sync::Arc;
 
 /// This is the private impl of RustyLevelDbVec.
 ///
@@ -20,7 +19,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct RustyLevelDbVecPrivate<T: Serialize + DeserializeOwned> {
     key_prefix: u8,
-    pub(super) db: Arc<DB>,
+    pub(super) db: DB,
     write_queue: VecDeque<WriteElement<T>>,
     length: Index,
     pub(super) cache: HashMap<Index, T>,
@@ -273,7 +272,7 @@ impl<T: Serialize + DeserializeOwned> RustyLevelDbVecPrivate<T> {
     }
 
     #[inline]
-    pub(crate) fn new(db: Arc<DB>, key_prefix: u8, name: &str) -> Self {
+    pub(crate) fn new(db: DB, key_prefix: u8, name: &str) -> Self {
         let length_key = Self::get_length_key(key_prefix);
         let length = match utils::get_u8_option(&db, &length_key, name) {
             Some(length_bytes) => utils::deserialize(&length_bytes),
