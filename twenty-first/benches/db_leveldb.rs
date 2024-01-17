@@ -102,7 +102,7 @@ mod write_100_entries {
         use super::*;
 
         fn put(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(
+            let mut db = DB::open_new_test_database(
                 true,
                 db_options(),
                 read_options_default(),
@@ -118,7 +118,7 @@ mod write_100_entries {
         }
 
         fn batch_put(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(
+            let mut db = DB::open_new_test_database(
                 true,
                 db_options(),
                 read_options_default(),
@@ -136,7 +136,7 @@ mod write_100_entries {
         }
 
         fn batch_put_write(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(
+            let mut db = DB::open_new_test_database(
                 true,
                 db_options(),
                 read_options_default(),
@@ -197,7 +197,7 @@ mod write_100_entries {
         use super::*;
 
         fn delete(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(
+            let mut db = DB::open_new_test_database(
                 true,
                 db_options(),
                 read_options_default(),
@@ -217,7 +217,7 @@ mod write_100_entries {
         }
 
         fn batch_delete(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(
+            let mut db = DB::open_new_test_database(
                 true,
                 db_options(),
                 read_options_default(),
@@ -244,7 +244,7 @@ mod write_100_entries {
         }
 
         fn batch_delete_write(bencher: Bencher, sync: bool) {
-            let db = DB::open_new_test_database(
+            let mut db = DB::open_new_test_database(
                 true,
                 db_options(),
                 read_options_default(),
@@ -319,7 +319,7 @@ mod read_100_entries {
         use super::*;
 
         fn get(bencher: Bencher, num_reads: usize, cache: bool, verify_checksum: bool) {
-            let db = DB::open_new_test_database(
+            let mut db = DB::open_new_test_database(
                 true,
                 db_options(),
                 read_options(verify_checksum, cache),

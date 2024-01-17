@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use itertools::Itertools;
 
@@ -21,7 +20,7 @@ use crate::utils::has_unique_elements;
 pub fn get_empty_rustyleveldb_ammr<H: AlgebraicHasher>() -> ArchivalMmr<H, RustyLevelDbVec<Digest>>
 {
     let db = DB::open_new_test_database(true, None, None, None).unwrap();
-    let pv = RustyLevelDbVec::new(Arc::new(db), 0, "AMMR for unit tests");
+    let pv = RustyLevelDbVec::new(db, 0, "AMMR for unit tests");
     ArchivalMmr::new(pv)
 }
 

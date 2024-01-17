@@ -30,7 +30,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     ///
     /// This function will panic if the database write fails
     #[inline]
-    fn set_length(&self, length: IndexType) {
+    fn set_length(&mut self, length: IndexType) {
         let length = utils::serialize(&length);
         self.db
             .put_u8(&LENGTH_KEY, &length)
@@ -43,7 +43,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     ///
     /// This function will panic if the index is not found
     #[inline]
-    fn delete(&self, index: IndexType) {
+    fn delete(&mut self, index: IndexType) {
         self.db
             .delete(&index)
             .expect("Deleting element must succeed");
@@ -99,7 +99,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// # Panics
     ///
     /// This function will panic if the DB batch write fails
-    pub fn overwrite_with_vec(&self, new_vector: Vec<T>) {
+    pub fn overwrite_with_vec(&mut self, new_vector: Vec<T>) {
         let old_length = self.len();
         let new_length = new_vector.len() as IndexType;
         self.set_length(new_length);
@@ -130,7 +130,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     /// This function will panic if the new Vec is not empty.
     #[inline]
     pub fn new(db: DB) -> Self {
-        let ret = DatabaseVector {
+        let mut ret = DatabaseVector {
             db,
             _type: PhantomData,
         };
@@ -186,7 +186,7 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
     ///
     /// This function will panic if any index is out of range
     /// or if any database write fails.
-    pub fn batch_set(&self, indices_and_vals: &[(IndexType, T)]) {
+    pub fn batch_set(&mut self, indices_and_vals: &[(IndexType, T)]) {
         let indices: Vec<IndexType> = indices_and_vals.iter().map(|(index, _)| *index).collect();
         let length = self.len();
         assert!(
@@ -245,7 +245,6 @@ impl<T: Serialize + DeserializeOwned> DatabaseVector<T> {
 
 #[cfg(test)]
 mod database_vector_tests {
-    use super::super::level_db::DB;
     use super::*;
 
     fn test_constructor() -> DatabaseVector<u64> {
