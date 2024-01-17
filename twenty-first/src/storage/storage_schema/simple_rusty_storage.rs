@@ -12,6 +12,7 @@ use std::sync::Arc;
 pub struct SimpleRustyStorage {
     /// dynamic DB Schema.  (new tables may be added)
     pub schema: DbtSchema<SimpleRustyReader>,
+    db: DB,
 }
 
 impl StorageWriter for SimpleRustyStorage {
@@ -28,7 +29,7 @@ impl StorageWriter for SimpleRustyStorage {
             }
         }
 
-        self.db()
+        self.db
             .write(&write_batch, true)
             .expect("Could not persist to database.");
     }
@@ -45,24 +46,22 @@ impl SimpleRustyStorage {
     /// Create a new SimpleRustyStorage
     #[inline]
     pub fn new(db: DB) -> Self {
-        let schema =
-            DbtSchema::<SimpleRustyReader>::new(Arc::new(SimpleRustyReader { db }), None, None);
-        Self { schema }
+        let schema = DbtSchema::<SimpleRustyReader>::new(
+            Arc::new(SimpleRustyReader { db: db.clone() }),
+            None,
+            None,
+        );
+        Self { schema, db }
     }
 
     /// Create a new SimpleRustyStorage and provide a
     /// name and lock acquisition callback for tracing
     pub fn new_with_callback(db: DB, storage_name: &str, lock_callback_fn: LockCallbackFn) -> Self {
         let schema = DbtSchema::<SimpleRustyReader>::new(
-            Arc::new(SimpleRustyReader { db }),
+            Arc::new(SimpleRustyReader { db: db.clone() }),
             Some(storage_name),
             Some(lock_callback_fn),
         );
-        Self { schema }
-    }
-
-    #[inline]
-    pub(crate) fn db(&self) -> &DB {
-        &self.schema.reader.db
+        Self { schema, db }
     }
 }

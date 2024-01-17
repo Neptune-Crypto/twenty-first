@@ -20,7 +20,6 @@ pub use {iterators::*, ordinary_vec::*, rusty_leveldb_vec::*};
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
 
     use crate::storage::level_db::DB;
 
@@ -33,20 +32,20 @@ mod tests {
 
     use leveldb::batch::WriteBatch;
 
-    pub(super) fn get_test_db(destroy_db_on_drop: bool) -> Arc<DB> {
-        Arc::new(DB::open_new_test_database(destroy_db_on_drop, None, None, None).unwrap())
+    pub(super) fn get_test_db(destroy_db_on_drop: bool) -> DB {
+        DB::open_new_test_database(destroy_db_on_drop, None, None, None).unwrap()
     }
 
-    fn open_test_db(path: &std::path::Path, destroy_db_on_drop: bool) -> Arc<DB> {
-        Arc::new(DB::open_test_database(path, destroy_db_on_drop, None, None, None).unwrap())
+    fn open_test_db(path: &std::path::Path, destroy_db_on_drop: bool) -> DB {
+        DB::open_test_database(path, destroy_db_on_drop, None, None, None).unwrap()
     }
 
     /// Return a persisted vector and a regular in-memory vector with the same elements
     fn get_persisted_vec_with_length(
         length: Index,
         name: &str,
-    ) -> (RustyLevelDbVec<u64>, Vec<u64>, Arc<DB>) {
-        let db = get_test_db(true);
+    ) -> (RustyLevelDbVec<u64>, Vec<u64>, DB) {
+        let mut db = get_test_db(true);
         let mut persisted_vec = RustyLevelDbVec::new(db.clone(), 0, name);
         let mut regular_vec = vec![];
 
@@ -128,7 +127,7 @@ mod tests {
     fn test_simple_prop() {
         let db = get_test_db(true);
         let delegated_db_vec: RustyLevelDbVec<[u8; 13]> =
-            RustyLevelDbVec::new(db, 0, "unit test vec 0");
+            RustyLevelDbVec::new(db.clone(), 0, "unit test vec 0");
         simple_prop(delegated_db_vec);
 
         let ordinary_vec = OrdinaryVec::<[u8; 13]>::from(vec![]);
@@ -137,7 +136,7 @@ mod tests {
 
     #[test]
     fn multiple_vectors_in_one_db() {
-        let db = get_test_db(true);
+        let mut db = get_test_db(true);
         let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
         let mut delegated_db_vec_b: RustyLevelDbVec<u128> =
@@ -177,7 +176,7 @@ mod tests {
 
     #[test]
     fn rusty_level_db_set_many() {
-        let db = get_test_db(true);
+        let mut db = get_test_db(true);
         let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
@@ -224,7 +223,7 @@ mod tests {
 
     #[test]
     fn rusty_level_db_set_all() {
-        let db = get_test_db(true);
+        let mut db = get_test_db(true);
         let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
@@ -271,7 +270,7 @@ mod tests {
 
         let write_batch = WriteBatch::new();
         vec.pull_queue(&write_batch);
-        assert!(vec.read_lock().db.write_auto(&write_batch).is_ok());
+        assert!(vec.write_lock().db.write_auto(&write_batch).is_ok());
 
         drop(vec); // this will drop (close) the Db
 
@@ -284,7 +283,7 @@ mod tests {
 
     #[test]
     fn get_many_ordering_of_outputs() {
-        let db = get_test_db(true);
+        let mut db = get_test_db(true);
         let mut delegated_db_vec_a: RustyLevelDbVec<u128> =
             RustyLevelDbVec::new(db.clone(), 0, "unit test vec a");
 
@@ -353,7 +352,7 @@ mod tests {
 
     #[test]
     fn delegated_vec_pbt() {
-        let (mut persisted_vector, mut normal_vector, db) =
+        let (mut persisted_vector, mut normal_vector, mut db) =
             get_persisted_vec_with_length(10000, "vec 1");
 
         let mut rng = rand::thread_rng();

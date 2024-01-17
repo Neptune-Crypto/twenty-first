@@ -4,7 +4,6 @@ use super::{traits::*, Index};
 use crate::sync::{AtomicRw, AtomicRwReadGuard, AtomicRwWriteGuard};
 use leveldb::batch::WriteBatch;
 use serde::{de::DeserializeOwned, Serialize};
-use std::sync::Arc;
 
 /// A concurrency safe database-backed Vec with in memory read/write caching for all operations.
 #[derive(Debug, Clone)]
@@ -171,7 +170,7 @@ impl<T: Serialize + DeserializeOwned + Clone> RustyLevelDbVec<T> {
     }
 
     #[inline]
-    pub fn new(db: Arc<DB>, key_prefix: u8, name: &str) -> Self {
+    pub fn new(db: DB, key_prefix: u8, name: &str) -> Self {
         Self {
             inner: AtomicRw::from(RustyLevelDbVecPrivate::<T>::new(db, key_prefix, name)),
         }
