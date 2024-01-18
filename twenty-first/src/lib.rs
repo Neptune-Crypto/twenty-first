@@ -19,6 +19,7 @@ pub mod utils;
 extern crate self as twenty_first;
 
 // re-export crates used in our public API
+pub use bfieldcodec_derive;
 pub use lending_iterator;
 pub use leveldb;
 pub use leveldb_sys; // for Compression, in leveldb::option::Option
