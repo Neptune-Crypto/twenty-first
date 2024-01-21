@@ -1,5 +1,6 @@
 use crate::leveldb::database::key::IntoLevelDBKey;
 use crate::leveldb::error::Error;
+use serde::{de::DeserializeOwned, Serialize};
 
 // Todo: consider making RustyKey a newtype for RustyValue and auto derive all its From impls
 //       using either `derive_more` or `newtype_derive` crate
@@ -7,6 +8,13 @@ use crate::leveldb::error::Error;
 /// Represents a database key as bytes
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RustyKey(pub Vec<u8>);
+
+impl From<&[u8]> for RustyKey {
+    #[inline]
+    fn from(value: &[u8]) -> Self {
+        Self(value.to_vec())
+    }
+}
 
 impl From<u8> for RustyKey {
     #[inline]
@@ -50,5 +58,30 @@ impl From<&dyn IntoLevelDBKey> for RustyKey {
             .unwrap()
             .unwrap();
         Self(vec_u8)
+    }
+}
+
+impl RustyKey {
+    /// serialize a value `T` that implements `serde::Serialize` into `RustyValue`
+    ///
+    /// This provides the serialization for `RustyValue` in the database
+    /// (or anywhere else it is stored)
+    ///
+    /// At present `bincode` is used for de/serialization, but this could
+    /// change in the future.  No guarantee is made as the to serialization format.
+    #[inline]
+    pub fn from_any<T: Serialize>(value: &T) -> Self {
+        Self(super::rusty_value::serialize(value))
+    }
+    /// Deserialize `RustyValue` into a value `T` that implements `serde::de::DeserializeOwned`
+    ///
+    /// This provides the deserialization for `RustyValue` from the database
+    /// (or anywhere else it is stored)
+    ///
+    /// At present `bincode` is used for de/serialization, but this could
+    /// change in the future.  No guarantee is made as the to serialization format.
+    #[inline]
+    pub fn into_any<T: DeserializeOwned>(&self) -> T {
+        super::rusty_value::deserialize(&self.0)
     }
 }

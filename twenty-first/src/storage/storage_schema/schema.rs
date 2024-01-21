@@ -1,7 +1,8 @@
 // use super::super::storage_vec::Index;
-use super::{traits::*, DbtSingleton, DbtVec, RustyKey};
+use super::{traits::*, DbtMap, DbtSingleton, DbtVec, RustyKey};
 use crate::sync::{AtomicMutex, AtomicRw, LockCallbackFn};
 use serde::{de::DeserializeOwned, Serialize};
+use std::hash::Hash;
 use std::sync::Arc;
 
 /// Provides a virtual database schema.
@@ -158,8 +159,37 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
         vector
     }
 
-    // possible future extension
-    // fn new_hashmap<K, V>(&self) -> Arc<RefCell<DbtHashMap<K, V>>> { }
+    /// Create a new DbtMap
+    ///
+    /// The `DbtSchema` will keep a reference to the `DbtMap`. In this way,
+    /// the Schema becomes aware of any write operations and later
+    /// a [`StorageWriter`] impl can write them all out.
+    ///
+    /// Atomicity: see [`DbtSchema`]
+    pub fn new_map<K, V>(&mut self, name: &str) -> DbtMap<K, V>
+    where
+        K: DeserializeOwned + Serialize + Eq + Hash + Clone + 'static,
+        V: DeserializeOwned + Serialize + Clone + 'static,
+        DbtMap<K, V>: DbTable + Send + Sync,
+    {
+        let lock_name = format!(
+            "{}-DbtMap - {}",
+            self.tables.name().unwrap_or("DbtSchema"),
+            name
+        );
+
+        let mut tables = self.tables.lock_guard_mut();
+        assert!(tables.len() < 255);
+        let reader = self.reader.clone();
+        let key_prefix = tables.len() as u8;
+        let map = DbtMap::<K, V>::new(reader, key_prefix, name, lock_name, self.lock_callback_fn);
+
+        // note: this clone only bumps internal ref-count.
+        let elem = Box::new(map.clone());
+
+        tables.push(elem);
+        map
+    }
 
     /// Create a new DbtSingleton
     ///
