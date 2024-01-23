@@ -1,8 +1,8 @@
 // use super::super::storage_vec::Index;
-use super::{traits::*, DbtSingleton, DbtVec, RustyKey};
+use super::{traits::*, DbtSingleton, DbtVec};
 use crate::sync::{AtomicMutex, AtomicRw, LockCallbackFn};
 use serde::{de::DeserializeOwned, Serialize};
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 
 /// Provides a virtual database schema.
 ///
@@ -42,7 +42,7 @@ use std::sync::Arc;
 /// let tables = (
 ///     storage.schema.new_vec::<u16>("ages"),
 ///     storage.schema.new_vec::<String>("names"),
-///     storage.schema.new_singleton::<bool>(12u64.into())
+///     storage.schema.new_singleton::<bool>("proceed")
 /// );
 ///
 /// storage.restore_or_new();  // populate tables.
@@ -77,7 +77,7 @@ use std::sync::Arc;
 ///     (
 ///         s.new_vec::<u16>("ages"),
 ///         s.new_vec::<String>("names"),
-///         s.new_singleton::<bool>(12u64.into())
+///         s.new_singleton::<bool>("proceed")
 ///     )
 /// });
 ///
@@ -167,23 +167,30 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     ///
     /// Atomicity: see [`DbtSchema`]
     #[inline]
-    pub fn new_singleton<V>(&mut self, key: RustyKey) -> DbtSingleton<V>
+    pub fn new_singleton<V>(&mut self, name: impl Into<String> + Display) -> DbtSingleton<V>
     where
         V: Default + Clone + 'static,
         V: Serialize + DeserializeOwned,
         DbtSingleton<V>: DbTable + Send + Sync,
     {
-        let key_name = String::from_utf8_lossy(&key.0).to_string();
         let lock_name = format!(
             "{}-DbtSingleton - {}",
             self.tables.name().unwrap_or("DbtSchema"),
-            key_name
+            name
         );
-        let singleton =
-            DbtSingleton::<V>::new(key, lock_name, self.reader.clone(), self.lock_callback_fn);
-        self.tables
-            .lock_mut(|t| t.push(Box::new(singleton.clone())));
-        singleton
+        self.tables.lock_mut(|t| {
+            assert!(t.len() < u8::MAX as usize);
+            let key = t.len() as u8;
+            let singleton = DbtSingleton::<V>::new(
+                key,
+                lock_name,
+                self.reader.clone(),
+                self.lock_callback_fn,
+                name.into(),
+            );
+            t.push(Box::new(singleton.clone()));
+            singleton
+        })
     }
 
     /// create tables and wrap in an [`AtomicRw<T>`]
@@ -204,7 +211,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     ///     (
     ///         s.new_vec::<u16>("ages"),
     ///         s.new_vec::<String>("names"),
-    ///         s.new_singleton::<bool>(12u64.into())
+    ///         s.new_singleton::<bool>("proceed")
     ///     )
     /// });
     ///
@@ -243,7 +250,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     ///     (
     ///         s.new_vec::<u16>("ages"),
     ///         s.new_vec::<String>("names"),
-    ///         s.new_singleton::<bool>(12u64.into())
+    ///         s.new_singleton::<bool>("proceed")
     ///     )
     /// });
     ///
@@ -277,7 +284,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     ///
     /// let ages = storage.schema.new_vec::<u16>("ages");
     /// let names = storage.schema.new_vec::<String>("names");
-    /// let proceed = storage.schema.new_singleton::<bool>(12u64.into());
+    /// let proceed = storage.schema.new_singleton::<bool>("proceed");
     ///
     /// storage.restore_or_new();  // populate tables.
     ///
@@ -308,7 +315,7 @@ impl<Reader: StorageReader + 'static + Sync + Send> DbtSchema<Reader> {
     ///
     /// let ages = storage.schema.new_vec::<u16>("ages");
     /// let names = storage.schema.new_vec::<String>("names");
-    /// let proceed = storage.schema.new_singleton::<bool>(12u64.into());
+    /// let proceed = storage.schema.new_singleton::<bool>("proceed");
     ///
     /// storage.restore_or_new();  // populate tables.
     ///

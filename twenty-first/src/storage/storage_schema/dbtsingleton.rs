@@ -1,8 +1,6 @@
 use std::{fmt::Debug, sync::Arc};
 
-use super::{
-    dbtsingleton_private::DbtSingletonPrivate, traits::*, RustyKey, RustyValue, WriteOperation,
-};
+use super::{dbtsingleton_private::DbtSingletonPrivate, traits::*, RustyValue, WriteOperation};
 use crate::sync::{AtomicRw, LockCallbackFn};
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -36,22 +34,18 @@ impl<V> Clone for DbtSingleton<V> {
 
 impl<V> DbtSingleton<V>
 where
-    V: Default,
+    V: Default + Clone,
 {
     // DbtSingleton can not be instantiated directly outside of this crate.
     #[inline]
     pub(crate) fn new(
-        key: RustyKey,
+        key: u8,
         lock_name: String,
         reader: Arc<dyn StorageReader + Sync + Send>,
         lock_callback_fn: Option<LockCallbackFn>,
+        name: String,
     ) -> Self {
-        let singleton = DbtSingletonPrivate::<V> {
-            current_value: Default::default(),
-            old_value: Default::default(),
-            key,
-            reader,
-        };
+        let singleton = DbtSingletonPrivate::<V>::new(key, reader, name);
         Self {
             inner: AtomicRw::from((singleton, Some(lock_name), lock_callback_fn)),
         }
@@ -87,7 +81,7 @@ where
             } else {
                 inner.old_value = inner.current_value.clone();
                 vec![WriteOperation::Write(
-                    inner.key.clone(),
+                    inner.key.into(),
                     RustyValue::from_any(&inner.current_value),
                 )]
             }
@@ -97,7 +91,7 @@ where
     #[inline]
     fn restore_or_new(&self) {
         self.inner.lock_mut(|inner| {
-            inner.current_value = match inner.reader.get(inner.key.clone()) {
+            inner.current_value = match inner.reader.get(inner.key.into()) {
                 Some(value) => value.into_any(),
                 None => V::default(),
             }
