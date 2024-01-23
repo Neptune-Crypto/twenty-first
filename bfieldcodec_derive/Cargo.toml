@@ -1,6 +1,6 @@
 [package]
 name = "bfieldcodec_derive"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2021"
 license = "GPL-2.0"
 description = "Derive macro for BFieldCodec."

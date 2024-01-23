@@ -1,3 +1,4 @@
+use twenty_first;
 use twenty_first::shared_math::bfield_codec::BFieldCodec;
 
 #[derive(BFieldCodec)]
