@@ -1,5 +1,7 @@
 #![deny(clippy::shadow_unrelated)]
 pub mod amount;
+pub mod error;
+pub mod prelude;
 pub mod shared_math;
 pub mod storage;
 pub mod sync;
