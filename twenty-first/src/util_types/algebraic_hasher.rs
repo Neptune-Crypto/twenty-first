@@ -37,10 +37,10 @@ pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
     fn init() -> Self::SpongeState;
 
     /// Absorb an array of [RATE] field elements into the sponge's state, mutating it.
-    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]);
+    fn absorb_once(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]);
 
     /// Squeeze an array of [RATE] field elements out from the sponge's state, mutating it.
-    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
+    fn squeeze_once(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
 
     /// Chunk `input` into arrays of [RATE] elements and repeatedly [SpongeHasher::absorb()].
     ///
@@ -55,8 +55,14 @@ pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
                 .collect::<Vec<_>>()
                 .try_into()
                 .expect("a multiple of RATE elements");
-            Self::absorb(sponge, &absorb_elems);
+            Self::absorb_once(sponge, &absorb_elems);
         }
+    }
+
+    fn pad_and_absorb_repeatedly(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
+        let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
+        let padding_iter = [BFIELD_ONE].iter().chain(iter::repeat(&BFIELD_ZERO));
+        Self::absorb_repeatedly(sponge, input.iter().chain(padding_iter).take(padded_length))
     }
 }
 
@@ -87,7 +93,7 @@ pub trait AlgebraicHasher: SpongeHasher {
 
         let mut sponge = Self::init();
         Self::absorb_repeatedly(&mut sponge, padded_input);
-        let produce: [BFieldElement; RATE] = Self::squeeze(&mut sponge);
+        let produce: [BFieldElement; RATE] = Self::squeeze_once(&mut sponge);
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
     }
@@ -112,7 +118,7 @@ pub trait AlgebraicHasher: SpongeHasher {
         let mut squeezed_elements = vec![];
         while indices.len() != num_indices {
             if squeezed_elements.is_empty() {
-                squeezed_elements = Self::squeeze(state).into_iter().rev().collect_vec();
+                squeezed_elements = Self::squeeze_once(state).into_iter().rev().collect_vec();
             }
             let element = squeezed_elements.pop().unwrap();
             if element != BFieldElement::new(BFieldElement::MAX) {
@@ -136,7 +142,7 @@ pub trait AlgebraicHasher: SpongeHasher {
             num_squeezes * Self::RATE
         );
         (0..num_squeezes)
-            .flat_map(|_| Self::squeeze(state))
+            .flat_map(|_| Self::squeeze_once(state))
             .collect_vec()
             .chunks(3)
             .take(num_elements)
@@ -210,7 +216,7 @@ mod algebraic_hasher_tests {
 
     fn seed_tip5(sponge: &mut Tip5State) {
         let mut rng = thread_rng();
-        Tip5::absorb(
+        Tip5::absorb_once(
             sponge,
             &(0..RATE)
                 .map(|_| BFieldElement::new(rng.next_u64()))

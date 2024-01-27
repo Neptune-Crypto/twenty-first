@@ -45,13 +45,13 @@ impl SpongeHasher for blake3::Hasher {
         Self::SpongeState::new()
     }
 
-    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]) {
+    fn absorb_once(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]) {
         for &elem in input.iter() {
             sponge.update(elem);
         }
     }
 
-    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE] {
+    fn squeeze_once(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE] {
         let digest_a = from_blake3_digest(&sponge.finalize());
 
         // There's at most 256 bits of entropy in a blake3::Hash; we stretch
