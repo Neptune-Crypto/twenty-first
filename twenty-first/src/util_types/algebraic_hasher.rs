@@ -60,6 +60,8 @@ pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
     }
 
     fn pad_and_absorb_repeatedly(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
+        // calculate padded length; padding is at least one element
+        // pad input with [1, 0, 0, ...]
         let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
         let padding_iter = [BFIELD_ONE].iter().chain(iter::repeat(&BFIELD_ZERO));
         Self::absorb_repeatedly(sponge, input.iter().chain(padding_iter).take(padded_length))
@@ -83,16 +85,8 @@ pub trait AlgebraicHasher: SpongeHasher {
     /// - [SpongeHasher::absorb_repeatedly()]
     /// - [SpongeHasher::squeeze()] once.
     fn hash_varlen(input: &[BFieldElement]) -> Digest {
-        // calculate padded length; padding is at least one element
-        let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
-
-        // pad input with [1, 0, 0, ...]
-        let input_iter = input.iter();
-        let padding_iter = [&BFIELD_ONE].into_iter().chain(iter::repeat(&BFIELD_ZERO));
-        let padded_input = input_iter.chain(padding_iter).take(padded_length);
-
         let mut sponge = Self::init();
-        Self::absorb_repeatedly(&mut sponge, padded_input);
+        Self::pad_and_absorb_repeatedly(&mut sponge, input);
         let produce: [BFieldElement; RATE] = Self::squeeze_once(&mut sponge);
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
