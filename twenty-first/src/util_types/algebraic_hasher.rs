@@ -43,13 +43,13 @@ pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
     fn squeeze_once(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
 
     /// Chunk `input` into arrays of [RATE] elements and repeatedly [SpongeHasher::absorb()].
-    ///
-    /// **Note:** This method panics if `input` does not contain a multiple of [RATE] elements.
-    fn absorb_repeatedly<'a, I>(sponge: &mut Self::SpongeState, input: I)
-    where
-        I: Iterator<Item = &'a BFieldElement>,
-    {
-        for chunk in input.chunks(RATE).into_iter() {
+    fn pad_and_absorb_all(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
+        // calculate padded length; padding is at least one element
+        // pad input with [1, 0, 0, ...]
+        let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
+        let padding_iter = [BFIELD_ONE].iter().chain(iter::repeat(&BFIELD_ZERO));
+        let padded_input = input.iter().chain(padding_iter).take(padded_length);
+        for chunk in padded_input.chunks(RATE).into_iter() {
             let absorb_elems: [BFieldElement; RATE] = chunk
                 .cloned()
                 .collect::<Vec<_>>()
@@ -57,14 +57,6 @@ pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
                 .expect("a multiple of RATE elements");
             Self::absorb_once(sponge, &absorb_elems);
         }
-    }
-
-    fn pad_and_absorb_all(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
-        // calculate padded length; padding is at least one element
-        // pad input with [1, 0, 0, ...]
-        let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
-        let padding_iter = [BFIELD_ONE].iter().chain(iter::repeat(&BFIELD_ZERO));
-        Self::absorb_repeatedly(sponge, input.iter().chain(padding_iter).take(padded_length))
     }
 }
 
