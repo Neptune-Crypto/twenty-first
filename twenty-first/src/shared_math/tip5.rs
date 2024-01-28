@@ -921,7 +921,7 @@ mod tip5_tests {
             let hash_varlen_digest = Tip5::hash_varlen(&preimage);
 
             let mut sponge = Tip5::init();
-            Tip5::pad_and_absorb_repeatedly(&mut sponge, &preimage);
+            Tip5::pad_and_absorb_all(&mut sponge, &preimage);
             let squeeze_result = Tip5::squeeze_once(&mut sponge);
             let digest_through_pad_squeeze_absorb =
                 Digest::new((&squeeze_result[..DIGEST_LENGTH]).try_into().unwrap());
@@ -936,7 +936,7 @@ mod tip5_tests {
         let hash_varlen_digest = Tip5::hash_varlen(&preimage);
 
         let mut sponge = Tip5::init();
-        Tip5::pad_and_absorb_repeatedly(&mut sponge, &preimage);
+        Tip5::pad_and_absorb_all(&mut sponge, &preimage);
         let squeeze_result = Tip5::squeeze_once(&mut sponge);
         let digest_through_pad_squeeze_absorb =
             Digest::new((&squeeze_result[..DIGEST_LENGTH]).try_into().unwrap());

@@ -59,7 +59,7 @@ pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
         }
     }
 
-    fn pad_and_absorb_repeatedly(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
+    fn pad_and_absorb_all(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
         // calculate padded length; padding is at least one element
         // pad input with [1, 0, 0, ...]
         let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
@@ -86,7 +86,7 @@ pub trait AlgebraicHasher: SpongeHasher {
     /// - [SpongeHasher::squeeze()] once.
     fn hash_varlen(input: &[BFieldElement]) -> Digest {
         let mut sponge = Self::init();
-        Self::pad_and_absorb_repeatedly(&mut sponge, input);
+        Self::pad_and_absorb_all(&mut sponge, input);
         let produce: [BFieldElement; RATE] = Self::squeeze_once(&mut sponge);
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
