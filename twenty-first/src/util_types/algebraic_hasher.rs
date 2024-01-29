@@ -1,7 +1,7 @@
-use arbitrary::Arbitrary;
 use std::fmt::Debug;
 use std::iter;
 
+use arbitrary::Arbitrary;
 use itertools::Itertools;
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
@@ -37,25 +37,24 @@ pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
     fn init() -> Self::SpongeState;
 
     /// Absorb an array of [RATE] field elements into the sponge's state, mutating it.
-    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]);
+    fn absorb(sponge: &mut Self::SpongeState, input: [BFieldElement; RATE]);
 
     /// Squeeze an array of [RATE] field elements out from the sponge's state, mutating it.
     fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
 
     /// Chunk `input` into arrays of [RATE] elements and repeatedly [SpongeHasher::absorb()].
-    ///
-    /// **Note:** This method panics if `input` does not contain a multiple of [RATE] elements.
-    fn absorb_repeatedly<'a, I>(sponge: &mut Self::SpongeState, input: I)
-    where
-        I: Iterator<Item = &'a BFieldElement>,
-    {
-        for chunk in input.chunks(RATE).into_iter() {
+    fn pad_and_absorb_all(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
+        // pad input with [1, 0, 0, ...] – padding is at least one element
+        let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
+        let padding_iter = [BFIELD_ONE].iter().chain(iter::repeat(&BFIELD_ZERO));
+        let padded_input = input.iter().chain(padding_iter).take(padded_length);
+        for chunk in padded_input.chunks(RATE).into_iter() {
             let absorb_elems: [BFieldElement; RATE] = chunk
                 .cloned()
                 .collect::<Vec<_>>()
                 .try_into()
                 .expect("a multiple of RATE elements");
-            Self::absorb(sponge, &absorb_elems);
+            Self::absorb(sponge, absorb_elems);
         }
     }
 }
@@ -77,16 +76,8 @@ pub trait AlgebraicHasher: SpongeHasher {
     /// - [SpongeHasher::absorb_repeatedly()]
     /// - [SpongeHasher::squeeze()] once.
     fn hash_varlen(input: &[BFieldElement]) -> Digest {
-        // calculate padded length; padding is at least one element
-        let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
-
-        // pad input with [1, 0, 0, ...]
-        let input_iter = input.iter();
-        let padding_iter = [&BFIELD_ONE].into_iter().chain(iter::repeat(&BFIELD_ZERO));
-        let padded_input = input_iter.chain(padding_iter).take(padded_length);
-
         let mut sponge = Self::init();
-        Self::absorb_repeatedly(&mut sponge, padded_input);
+        Self::pad_and_absorb_all(&mut sponge, input);
         let produce: [BFieldElement; RATE] = Self::squeeze(&mut sponge);
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
@@ -149,12 +140,15 @@ pub trait AlgebraicHasher: SpongeHasher {
 mod algebraic_hasher_tests {
     use std::ops::Mul;
 
-    use num_traits::{One, Zero};
-    use rand::{thread_rng, Rng, RngCore};
-    use rand_distr::{Distribution, Standard};
+    use num_traits::One;
+    use num_traits::Zero;
+    use rand::Rng;
+    use rand_distr::Distribution;
+    use rand_distr::Standard;
 
+    use crate::prelude::tip5::tip5_tests::seed_tip5;
     use crate::shared_math::digest::DIGEST_LENGTH;
-    use crate::shared_math::tip5::{Tip5, Tip5State};
+    use crate::shared_math::tip5::Tip5;
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;
@@ -206,18 +200,6 @@ mod algebraic_hasher_tests {
 
         // u128
         encode_prop(0u128, u128::MAX);
-    }
-
-    fn seed_tip5(sponge: &mut Tip5State) {
-        let mut rng = thread_rng();
-        Tip5::absorb(
-            sponge,
-            &(0..RATE)
-                .map(|_| BFieldElement::new(rng.next_u64()))
-                .collect_vec()
-                .try_into()
-                .unwrap(),
-        );
     }
 
     fn sample_indices_prop(max: u32, num_indices: usize) {

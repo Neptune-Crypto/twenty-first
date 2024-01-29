@@ -45,8 +45,8 @@ impl SpongeHasher for blake3::Hasher {
         Self::SpongeState::new()
     }
 
-    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]) {
-        for &elem in input.iter() {
+    fn absorb(sponge: &mut Self::SpongeState, input: [BFieldElement; RATE]) {
+        for elem in input {
             sponge.update(elem);
         }
     }

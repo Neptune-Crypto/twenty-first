@@ -3,16 +3,20 @@ use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use itertools::Itertools;
 use num_traits::Zero;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 
-use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
-pub use crate::shared_math::digest::{Digest, DIGEST_LENGTH};
-
-use crate::util_types::algebraic_hasher::{AlgebraicHasher, Domain, SpongeHasher};
-
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::b_field_element::BFIELD_ONE;
+use crate::shared_math::b_field_element::BFIELD_ZERO;
+pub use crate::shared_math::digest::Digest;
+pub use crate::shared_math::digest::DIGEST_LENGTH;
 use crate::shared_math::mds::generated_function;
 use crate::shared_math::x_field_element::XFieldElement;
 use crate::shared_math::x_field_element::EXTENSION_DEGREE;
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
+use crate::util_types::algebraic_hasher::Domain;
+use crate::util_types::algebraic_hasher::SpongeHasher;
 
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;
@@ -640,7 +644,7 @@ impl SpongeHasher for Tip5 {
         Tip5State::new(Domain::VariableLength)
     }
 
-    fn absorb(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]) {
+    fn absorb(sponge: &mut Self::SpongeState, input: [BFieldElement; RATE]) {
         // absorb
         sponge.state[..RATE]
             .iter_mut()
@@ -661,19 +665,26 @@ impl SpongeHasher for Tip5 {
 }
 
 #[cfg(test)]
-mod tip5_tests {
+pub(crate) mod tip5_tests {
+    use std::ops::Mul;
 
     use get_size::GetSize;
     use itertools::Itertools;
     use num_traits::One;
     use num_traits::Zero;
+    use proptest::prelude::*;
+    use proptest_arbitrary_interop::arb;
     use rand::thread_rng;
+    use rand::Rng;
     use rand::RngCore;
-    use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+    use rayon::prelude::IntoParallelIterator;
+    use rayon::prelude::ParallelIterator;
+    use test_strategy::proptest;
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::DIGEST_LENGTH;
     use crate::shared_math::other::random_elements;
+    use crate::shared_math::tip5::Digest;
     use crate::shared_math::tip5::Tip5;
     use crate::shared_math::tip5::LOOKUP_TABLE;
     use crate::shared_math::tip5::NUM_ROUNDS;
@@ -682,10 +693,15 @@ mod tip5_tests {
     use crate::shared_math::x_field_element::XFieldElement;
     use crate::util_types::algebraic_hasher::AlgebraicHasher;
     use crate::util_types::algebraic_hasher::SpongeHasher;
-    use std::ops::Mul;
 
     use super::Tip5State;
     use super::RATE;
+
+    pub(crate) fn seed_tip5(sponge: &mut Tip5State) {
+        let mut rng = thread_rng();
+        let seed = rng.gen();
+        Tip5::absorb(sponge, seed);
+    }
 
     #[test]
     fn get_size_test() {
@@ -909,6 +925,32 @@ mod tip5_tests {
         );
     }
 
+    fn manual_hash_varlen(preimage: &[BFieldElement]) -> Digest {
+        let mut sponge = Tip5::init();
+        Tip5::pad_and_absorb_all(&mut sponge, preimage);
+        let squeeze_result = Tip5::squeeze(&mut sponge);
+
+        Digest::new((&squeeze_result[..DIGEST_LENGTH]).try_into().unwrap())
+    }
+
+    #[test]
+    fn hash_var_len_equivalence_corner_cases() {
+        for preimage_length in 0..=11 {
+            let preimage = vec![BFieldElement::new(42); preimage_length];
+            let hash_varlen_digest = Tip5::hash_varlen(&preimage);
+
+            let digest_through_pad_squeeze_absorb = manual_hash_varlen(&preimage);
+            assert_eq!(digest_through_pad_squeeze_absorb, hash_varlen_digest);
+        }
+    }
+
+    #[proptest]
+    fn hash_var_len_equivalence(#[strategy(arb())] preimage: Vec<BFieldElement>) {
+        let hash_varlen_digest = Tip5::hash_varlen(&preimage);
+        let digest_through_pad_squeeze_absorb = manual_hash_varlen(&preimage);
+        prop_assert_eq!(digest_through_pad_squeeze_absorb, hash_varlen_digest);
+    }
+
     #[test]
     fn test_linearity_of_mds() {
         let mds_procedure = Tip5::mds_cyclomul;
@@ -1008,25 +1050,12 @@ mod tip5_tests {
         }
     }
 
-    fn seed_tip5(sponge: &mut Tip5State) {
-        let mut rng = thread_rng();
-        Tip5::absorb(
-            sponge,
-            &(0..RATE)
-                .map(|_| BFieldElement::new(rng.next_u64()))
-                .collect_vec()
-                .try_into()
-                .unwrap(),
-        );
-    }
-
     #[test]
     fn sample_scalars_test() {
-        let amounts = [0, 1, 2, 3, 4];
         let mut sponge = Tip5::init();
         seed_tip5(&mut sponge);
         let mut product = XFieldElement::one();
-        for amount in amounts {
+        for amount in 0..=4 {
             let scalars = Tip5::sample_scalars(&mut sponge, amount);
             assert_eq!(amount, scalars.len());
             product *= scalars
