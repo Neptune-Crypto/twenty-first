@@ -1,7 +1,7 @@
-use arbitrary::Arbitrary;
 use std::fmt::Debug;
 use std::iter;
 
+use arbitrary::Arbitrary;
 use itertools::Itertools;
 
 use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
@@ -37,15 +37,14 @@ pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
     fn init() -> Self::SpongeState;
 
     /// Absorb an array of [RATE] field elements into the sponge's state, mutating it.
-    fn absorb_once(sponge: &mut Self::SpongeState, input: &[BFieldElement; RATE]);
+    fn absorb(sponge: &mut Self::SpongeState, input: [BFieldElement; RATE]);
 
     /// Squeeze an array of [RATE] field elements out from the sponge's state, mutating it.
-    fn squeeze_once(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
+    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
 
     /// Chunk `input` into arrays of [RATE] elements and repeatedly [SpongeHasher::absorb()].
     fn pad_and_absorb_all(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
-        // calculate padded length; padding is at least one element
-        // pad input with [1, 0, 0, ...]
+        // pad input with [1, 0, 0, ...] – padding is at least one element
         let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
         let padding_iter = [BFIELD_ONE].iter().chain(iter::repeat(&BFIELD_ZERO));
         let padded_input = input.iter().chain(padding_iter).take(padded_length);
@@ -55,7 +54,7 @@ pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
                 .collect::<Vec<_>>()
                 .try_into()
                 .expect("a multiple of RATE elements");
-            Self::absorb_once(sponge, &absorb_elems);
+            Self::absorb(sponge, absorb_elems);
         }
     }
 }
@@ -79,7 +78,7 @@ pub trait AlgebraicHasher: SpongeHasher {
     fn hash_varlen(input: &[BFieldElement]) -> Digest {
         let mut sponge = Self::init();
         Self::pad_and_absorb_all(&mut sponge, input);
-        let produce: [BFieldElement; RATE] = Self::squeeze_once(&mut sponge);
+        let produce: [BFieldElement; RATE] = Self::squeeze(&mut sponge);
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
     }
@@ -104,7 +103,7 @@ pub trait AlgebraicHasher: SpongeHasher {
         let mut squeezed_elements = vec![];
         while indices.len() != num_indices {
             if squeezed_elements.is_empty() {
-                squeezed_elements = Self::squeeze_once(state).into_iter().rev().collect_vec();
+                squeezed_elements = Self::squeeze(state).into_iter().rev().collect_vec();
             }
             let element = squeezed_elements.pop().unwrap();
             if element != BFieldElement::new(BFieldElement::MAX) {
@@ -128,7 +127,7 @@ pub trait AlgebraicHasher: SpongeHasher {
             num_squeezes * Self::RATE
         );
         (0..num_squeezes)
-            .flat_map(|_| Self::squeeze_once(state))
+            .flat_map(|_| Self::squeeze(state))
             .collect_vec()
             .chunks(3)
             .take(num_elements)
@@ -141,12 +140,15 @@ pub trait AlgebraicHasher: SpongeHasher {
 mod algebraic_hasher_tests {
     use std::ops::Mul;
 
-    use num_traits::{One, Zero};
-    use rand::{thread_rng, Rng, RngCore};
-    use rand_distr::{Distribution, Standard};
+    use num_traits::One;
+    use num_traits::Zero;
+    use rand::Rng;
+    use rand_distr::Distribution;
+    use rand_distr::Standard;
 
+    use crate::prelude::tip5::tip5_tests::seed_tip5;
     use crate::shared_math::digest::DIGEST_LENGTH;
-    use crate::shared_math::tip5::{Tip5, Tip5State};
+    use crate::shared_math::tip5::Tip5;
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;
@@ -198,18 +200,6 @@ mod algebraic_hasher_tests {
 
         // u128
         encode_prop(0u128, u128::MAX);
-    }
-
-    fn seed_tip5(sponge: &mut Tip5State) {
-        let mut rng = thread_rng();
-        Tip5::absorb_once(
-            sponge,
-            &(0..RATE)
-                .map(|_| BFieldElement::new(rng.next_u64()))
-                .collect_vec()
-                .try_into()
-                .unwrap(),
-        );
     }
 
     fn sample_indices_prop(max: u32, num_indices: usize) {
