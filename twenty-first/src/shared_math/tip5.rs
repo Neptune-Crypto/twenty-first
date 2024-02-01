@@ -12,8 +12,6 @@ use crate::shared_math::b_field_element::BFIELD_ZERO;
 pub use crate::shared_math::digest::Digest;
 pub use crate::shared_math::digest::DIGEST_LENGTH;
 use crate::shared_math::mds::generated_function;
-use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::algebraic_hasher::Domain;
 use crate::util_types::algebraic_hasher::SpongeHasher;
@@ -607,32 +605,6 @@ impl AlgebraicHasher for Tip5 {
 
         let digest_values = sponge.state[..DIGEST_LENGTH].try_into().unwrap();
         Digest::new(digest_values)
-    }
-
-    /// Produce `num_elements` random [XFieldElement] values.
-    ///
-    /// - The randomness depends on `state`.
-    ///
-    /// Since [RATE] is not divisible by [EXTENSION_DEGREE], produce as many [XFieldElement] per
-    /// `squeeze` as possible, and spill the remaining element(s). This causes some internal
-    /// fragmentation, but it greatly simplifies building `AlgebraicHasher::sample_xfield()` on
-    /// Triton VM.
-    ///
-    fn sample_scalars(state: &mut Self::SpongeState, num_elements: usize) -> Vec<XFieldElement> {
-        let xfes_per_squeeze = Self::RATE / EXTENSION_DEGREE; // 3
-        let num_squeezes = (num_elements + xfes_per_squeeze - 1) / xfes_per_squeeze;
-        (0..num_squeezes)
-            .flat_map(|_| {
-                Self::squeeze(state)
-                    .into_iter()
-                    .take(xfes_per_squeeze * EXTENSION_DEGREE)
-                    .collect_vec()
-            })
-            .collect_vec()
-            .chunks(3)
-            .take(num_elements)
-            .map(|elem| XFieldElement::new([elem[0], elem[1], elem[2]]))
-            .collect_vec()
     }
 }
 
