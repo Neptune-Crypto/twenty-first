@@ -1,17 +1,16 @@
 use std::error::Error;
 use std::fmt::Debug;
 use std::fmt::Display;
-use std::fmt::Formatter;
 use std::marker::PhantomData;
 use std::slice::Iter;
-
-use itertools::Itertools;
-use num_traits::One;
-use num_traits::Zero;
 
 // Re-export the derive macro so that it can be used in other crates without having to add
 // an explicit dependency on `bfieldcodec_derive` to their Cargo.toml.
 pub use bfieldcodec_derive::BFieldCodec;
+use itertools::Itertools;
+use num_traits::One;
+use num_traits::Zero;
+use thiserror::Error;
 
 use super::b_field_element::BFieldElement;
 
@@ -29,37 +28,28 @@ pub trait BFieldCodec {
     fn static_length() -> Option<usize>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum BFieldCodecError {
+    #[error("empty sequence")]
     EmptySequence,
+
+    #[error("sequence too short")]
     SequenceTooShort,
+
+    #[error("sequence too long")]
     SequenceTooLong,
+
+    #[error("element out of range")]
     ElementOutOfRange,
+
+    #[error("missing length indicator")]
     MissingLengthIndicator,
+
+    #[error("invalid length indicator")]
     InvalidLengthIndicator,
-    InnerDecodingFailure(Box<dyn Error + Send + Sync>),
-}
 
-impl Display for BFieldCodecError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::EmptySequence => write!(f, "empty sequence"),
-            Self::SequenceTooShort => write!(f, "sequence too short"),
-            Self::SequenceTooLong => write!(f, "sequence too long"),
-            Self::ElementOutOfRange => write!(f, "element out of range"),
-            Self::MissingLengthIndicator => write!(f, "missing length indicator"),
-            Self::InvalidLengthIndicator => write!(f, "invalid length indicator"),
-            Self::InnerDecodingFailure(err) => write!(f, "inner decoding failure: {err}"),
-        }
-    }
-}
-
-impl Error for BFieldCodecError {}
-
-impl From<Box<dyn Error + Send + Sync>> for BFieldCodecError {
-    fn from(err: Box<dyn Error + Send + Sync>) -> Self {
-        Self::InnerDecodingFailure(err)
-    }
+    #[error("inner decoding error: {0}")]
+    InnerDecodingFailure(#[from] Box<dyn Error + Send + Sync>),
 }
 
 // The underlying type of a BFieldElement is a u64. A single u64 does not fit in one BFieldElement.
