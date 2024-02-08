@@ -52,7 +52,7 @@ pub enum BFieldCodecError {
     InnerDecodingFailure(#[from] Box<dyn Error + Send + Sync>),
 }
 
-// The underlying type of a BFieldElement is a u64. A single u64 does not fit in one BFieldElement.
+// The type underlying BFieldElement is u64. A single u64 does not fit in one BFieldElement.
 // Therefore, deriving the BFieldCodec for BFieldElement using the derive macro will result in a
 // BFieldCodec implementation that encodes a single BFieldElement as two BFieldElements.
 // This is not desired. Hence, BFieldCodec is implemented manually for BFieldElement.
@@ -207,6 +207,22 @@ impl BFieldCodec for u32 {
 
     fn static_length() -> Option<usize> {
         Some(1)
+    }
+}
+
+impl<T: BFieldCodec> BFieldCodec for Box<T> {
+    type Error = T::Error;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+        T::decode(sequence).map(Box::new)
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        self.as_ref().encode()
+    }
+
+    fn static_length() -> Option<usize> {
+        T::static_length()
     }
 }
 
@@ -468,7 +484,9 @@ mod tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::shared_math::{digest::Digest, tip5::Tip5, x_field_element::XFieldElement};
+    use crate::prelude::Digest;
+    use crate::prelude::Tip5;
+    use crate::prelude::XFieldElement;
 
     use super::*;
 
@@ -711,6 +729,30 @@ mod tests {
     }
 
     #[proptest]
+    fn test_boxed_u32s(test_data: BFieldCodecPropertyTestData<Box<u32>>) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_tuple_with_boxed_bfe(
+        test_data: BFieldCodecPropertyTestData<(u64, Box<BFieldElement>)>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_tuple_with_boxed_digest(test_data: BFieldCodecPropertyTestData<(u128, Box<Digest>)>) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
+    fn test_vec_of_boxed_tuple_of_u128_and_bfe(
+        test_data: BFieldCodecPropertyTestData<Vec<Box<(u128, BFieldElement)>>>,
+    ) {
+        test_data.assert_bfield_codec_properties()?;
+    }
+
+    #[proptest]
     fn test_encode_decode_random_vec_option_xfieldelement(
         test_data: BFieldCodecPropertyTestData<Vec<Option<XFieldElement>>>,
     ) {
@@ -791,16 +833,14 @@ mod tests {
     /// [^1]: almost-cyclic because the dependency would be a dev-dependency
     #[cfg(test)]
     pub mod derive_tests {
-
         use arbitrary::Arbitrary;
 
+        use crate::shared_math::digest::Digest;
+        use crate::shared_math::tip5::Tip5;
+        use crate::shared_math::x_field_element::XFieldElement;
+        use crate::util_types::algebraic_hasher::AlgebraicHasher;
         use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
-        use crate::{
-            shared_math::{digest::Digest, tip5::Tip5, x_field_element::XFieldElement},
-            util_types::{
-                algebraic_hasher::AlgebraicHasher, mmr::mmr_membership_proof::MmrMembershipProof,
-            },
-        };
+        use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
 
         use super::*;
 
@@ -1401,6 +1441,41 @@ mod tests {
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct StructWithBox {
+            a: Box<u64>,
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_struct_with_boxed_field(
+            test_data: BFieldCodecPropertyTestData<StructWithBox>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct TupleStructWithBox(Box<u64>);
+
+        #[proptest]
+        fn bfield_codec_derive_tuple_struct_with_boxed_field(
+            test_data: BFieldCodecPropertyTestData<TupleStructWithBox>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct StructWithBoxContainingStructWithBox {
+            a: Box<StructWithBox>,
+            b: Box<TupleStructWithBox>,
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_struct_with_boxed_field_containing_struct_with_boxed_field(
+            test_data: BFieldCodecPropertyTestData<StructWithBoxContainingStructWithBox>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         enum SimpleEnum {
             A,
             B(u32),
@@ -1532,6 +1607,32 @@ mod tests {
             assert_eq!(0, a.bfield_codec_discriminant());
             assert_eq!(1, b.bfield_codec_discriminant());
             assert_eq!(2, c.bfield_codec_discriminant());
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithBoxedVariant {
+            A(Box<u64>),
+            B(Box<u64>, Box<u64>),
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_enum_with_boxed_variant(
+            test_data: BFieldCodecPropertyTestData<EnumWithBoxedVariant>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        enum EnumWithBoxedVariantAndBoxedStruct {
+            A(Box<StructWithBox>),
+            B(Box<StructWithBox>, Box<TupleStructWithBox>),
+        }
+
+        #[proptest]
+        fn bfield_codec_derive_enum_with_boxed_variant_and_boxed_struct(
+            test_data: BFieldCodecPropertyTestData<EnumWithBoxedVariantAndBoxedStruct>,
+        ) {
+            test_data.assert_bfield_codec_properties()?;
         }
     }
 }

@@ -66,7 +66,20 @@ use syn::Variant;
 ///
 /// ### Known limitations
 ///
+/// - Enums whith variants that have named fields are currently not supported. Example:
+///      ```ignore
+///     #[derive(BFieldCodec)]  // Currently not supported.
+///     enum Foo {
+///        Bar { baz: u64 },
+///     }
+///     ```
+///
 /// - Enums with no variants are currently not supported. Consider using a unit struct instead.
+///     Example:
+///     ```ignore
+///     #[derive(BFieldCodec)]  // Currently not supported.
+///     enum Foo {}             // Consider `struct Foo;` instead.
+///     ```
 #[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
 pub fn bfieldcodec_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
