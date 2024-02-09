@@ -146,7 +146,6 @@ mod algebraic_hasher_tests {
     use rand_distr::Distribution;
     use rand_distr::Standard;
 
-    use crate::prelude::tip5::tip5_tests::seed_tip5;
     use crate::shared_math::digest::DIGEST_LENGTH;
     use crate::shared_math::tip5::Tip5;
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
@@ -203,8 +202,7 @@ mod algebraic_hasher_tests {
     }
 
     fn sample_indices_prop(max: u32, num_indices: usize) {
-        let mut sponge = Tip5::init();
-        seed_tip5(&mut sponge);
+        let mut sponge = Tip5::randomly_seeded();
         let indices = Tip5::sample_indices(&mut sponge, max, num_indices);
         assert_eq!(num_indices, indices.len());
         assert!(indices.into_iter().all(|index| index < max));
@@ -232,8 +230,7 @@ mod algebraic_hasher_tests {
     #[test]
     fn sample_scalars_test() {
         let amounts = [0, 1, 2, 3, 4];
-        let mut sponge = Tip5::init();
-        seed_tip5(&mut sponge);
+        let mut sponge = Tip5::randomly_seeded();
         let mut product = XFieldElement::one();
         for amount in amounts {
             let scalars = Tip5::sample_scalars(&mut sponge, amount);
