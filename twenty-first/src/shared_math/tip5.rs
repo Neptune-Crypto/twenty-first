@@ -14,7 +14,7 @@ pub use crate::shared_math::digest::DIGEST_LENGTH;
 use crate::shared_math::mds::generated_function;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::algebraic_hasher::Domain;
-use crate::util_types::algebraic_hasher::SpongeHasher;
+use crate::util_types::algebraic_hasher::Sponge;
 
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;
@@ -589,27 +589,25 @@ impl AlgebraicHasher for Tip5 {
     }
 }
 
-impl SpongeHasher for Tip5 {
+impl Sponge for Tip5 {
     const RATE: usize = RATE;
-    type SpongeState = Self;
 
-    fn init() -> Self::SpongeState {
+    fn init() -> Self {
         Self::new(Domain::VariableLength)
     }
 
-    fn absorb(sponge: &mut Self::SpongeState, input: [BFieldElement; RATE]) {
-        sponge.state[..RATE]
+    fn absorb(&mut self, input: [BFieldElement; RATE]) {
+        self.state[..RATE]
             .iter_mut()
-            .zip_eq(input.iter())
+            .zip_eq(&input)
             .for_each(|(a, &b)| *a = b);
 
-        sponge.permutation();
+        self.permutation();
     }
 
-    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE] {
-        let produce: [BFieldElement; RATE] = (&sponge.state[..RATE]).try_into().unwrap();
-
-        sponge.permutation();
+    fn squeeze(&mut self) -> [BFieldElement; RATE] {
+        let produce: [BFieldElement; RATE] = (&self.state[..RATE]).try_into().unwrap();
+        self.permutation();
 
         produce
     }
@@ -683,7 +681,7 @@ pub(crate) mod tip5_tests {
                 .sum::<u128>()
         };
         let round_constants = (0..NUM_ROUNDS * STATE_SIZE)
-            .map(|i| ["Tip5".to_string().as_bytes(), &[(i as u8)]].concat())
+            .map(|i| ["Tip5".to_string().as_bytes(), &[i as u8]].concat())
             .map(|bytes| blake3::hash(&bytes))
             .map(|hash| *hash.as_bytes())
             .map(|bytes| to_int(&bytes))
