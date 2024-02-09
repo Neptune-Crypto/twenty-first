@@ -747,7 +747,7 @@ mod tests {
 
     #[proptest]
     fn test_vec_of_boxed_tuple_of_u128_and_bfe(
-        test_data: BFieldCodecPropertyTestData<Vec<Box<(u128, BFieldElement)>>>,
+        test_data: BFieldCodecPropertyTestData<Vec<(u128, Box<BFieldElement>)>>,
     ) {
         test_data.assert_bfield_codec_properties()?;
     }
