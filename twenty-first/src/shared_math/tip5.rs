@@ -636,7 +636,7 @@ pub(crate) mod tip5_tests {
         pub(crate) fn randomly_seeded() -> Self {
             let mut sponge = Self::init();
             let mut rng = thread_rng();
-            Tip5::absorb(&mut sponge, rng.gen());
+            sponge.absorb(rng.gen());
             sponge
         }
     }
@@ -868,8 +868,8 @@ pub(crate) mod tip5_tests {
 
     fn manual_hash_varlen(preimage: &[BFieldElement]) -> Digest {
         let mut sponge = Tip5::init();
-        Tip5::pad_and_absorb_all(&mut sponge, preimage);
-        let squeeze_result = Tip5::squeeze(&mut sponge);
+        sponge.pad_and_absorb_all(preimage);
+        let squeeze_result = sponge.squeeze();
 
         Digest::new((&squeeze_result[..DIGEST_LENGTH]).try_into().unwrap())
     }
@@ -929,9 +929,7 @@ pub(crate) mod tip5_tests {
         sponge.state = [BFieldElement::zero(); STATE_SIZE];
         sponge.state[0] = BFieldElement::one();
 
-        let mds_procedure = Tip5::mds_generated;
-
-        mds_procedure(&mut sponge);
+        sponge.mds_generated();
 
         let mut mat_first_row = [BFieldElement::zero(); STATE_SIZE];
         mat_first_row[0] = sponge.state[0];
@@ -956,7 +954,7 @@ pub(crate) mod tip5_tests {
 
         let mut sponge_2 = Tip5::init();
         sponge_2.state = initial_state;
-        mds_procedure(&mut sponge_2);
+        sponge_2.mds_generated();
 
         assert_eq!(sponge_2.state, mv);
     }
@@ -997,7 +995,7 @@ pub(crate) mod tip5_tests {
         let mut sponge = Tip5::randomly_seeded();
         let mut product = XFieldElement::one();
         for amount in 0..=4 {
-            let scalars = Tip5::sample_scalars(&mut sponge, amount);
+            let scalars = sponge.sample_scalars(amount);
             assert_eq!(amount, scalars.len());
             product *= scalars
                 .into_iter()

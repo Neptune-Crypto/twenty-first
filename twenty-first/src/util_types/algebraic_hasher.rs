@@ -76,8 +76,8 @@ pub trait AlgebraicHasher: Sponge {
     /// - [Sponge::squeeze()] once.
     fn hash_varlen(input: &[BFieldElement]) -> Digest {
         let mut sponge = Self::init();
-        Self::pad_and_absorb_all(&mut sponge, input);
-        let produce: [BFieldElement; RATE] = Self::squeeze(&mut sponge);
+        sponge.pad_and_absorb_all(input);
+        let produce: [BFieldElement; RATE] = sponge.squeeze();
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
     }
@@ -196,7 +196,7 @@ mod algebraic_hasher_tests {
 
     fn sample_indices_prop(max: u32, num_indices: usize) {
         let mut sponge = Tip5::randomly_seeded();
-        let indices = Tip5::sample_indices(&mut sponge, max, num_indices);
+        let indices = sponge.sample_indices(max, num_indices);
         assert_eq!(num_indices, indices.len());
         assert!(indices.into_iter().all(|index| index < max));
     }
@@ -226,7 +226,7 @@ mod algebraic_hasher_tests {
         let mut sponge = Tip5::randomly_seeded();
         let mut product = XFieldElement::one();
         for amount in amounts {
-            let scalars = Tip5::sample_scalars(&mut sponge, amount);
+            let scalars = sponge.sample_scalars(amount);
             assert_eq!(amount, scalars.len());
             product *= scalars
                 .into_iter()
