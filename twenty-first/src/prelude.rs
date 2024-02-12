@@ -11,7 +11,7 @@ pub use crate::shared_math::traits::ModPowU32;
 pub use crate::shared_math::x_field_element;
 pub use crate::shared_math::x_field_element::XFieldElement;
 pub use crate::util_types::algebraic_hasher::AlgebraicHasher;
-pub use crate::util_types::algebraic_hasher::SpongeHasher;
+pub use crate::util_types::algebraic_hasher::Sponge;
 pub use crate::util_types::merkle_tree::CpuParallel;
 pub use crate::util_types::merkle_tree::MerkleTree;
 pub use crate::util_types::merkle_tree::MerkleTreeInclusionProof;

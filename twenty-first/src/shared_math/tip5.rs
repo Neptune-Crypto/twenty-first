@@ -14,7 +14,7 @@ pub use crate::shared_math::digest::DIGEST_LENGTH;
 use crate::shared_math::mds::generated_function;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::algebraic_hasher::Domain;
-use crate::util_types::algebraic_hasher::SpongeHasher;
+use crate::util_types::algebraic_hasher::Sponge;
 
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;
@@ -22,38 +22,6 @@ pub const LOG2_STATE_SIZE: usize = 4;
 pub const CAPACITY: usize = 6;
 pub const RATE: usize = 10;
 pub const NUM_ROUNDS: usize = 5;
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, Arbitrary)]
-pub struct Tip5State {
-    pub state: [BFieldElement; STATE_SIZE],
-}
-
-impl Tip5State {
-    #[inline]
-    pub const fn new(domain: Domain) -> Self {
-        use Domain::*;
-
-        let mut state = [BFIELD_ZERO; STATE_SIZE];
-
-        match domain {
-            VariableLength => (),
-            FixedLength => {
-                let mut i = RATE;
-                while i < STATE_SIZE {
-                    state[i] = BFIELD_ONE;
-                    i += 1;
-                }
-            }
-        }
-
-        Self { state }
-    }
-}
-
-#[derive(
-    Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary,
-)]
-pub struct Tip5 {}
 
 /// The lookup table with a high algebraic degree used in the TIP-5 permutation. To verify its
 /// correctness, see the test “lookup_table_is_correct.”
@@ -166,7 +134,34 @@ pub const MDS_MATRIX_FIRST_COLUMN: [i64; STATE_SIZE] = [
     26798, 17845,
 ];
 
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary,
+)]
+pub struct Tip5 {
+    pub state: [BFieldElement; STATE_SIZE],
+}
+
 impl Tip5 {
+    #[inline]
+    pub const fn new(domain: Domain) -> Self {
+        use Domain::*;
+
+        let mut state = [BFIELD_ZERO; STATE_SIZE];
+
+        match domain {
+            VariableLength => (),
+            FixedLength => {
+                let mut i = RATE;
+                while i < STATE_SIZE {
+                    state[i] = BFIELD_ONE;
+                    i += 1;
+                }
+            }
+        }
+
+        Self { state }
+    }
+
     #[inline]
     pub const fn offset_fermat_cube_map(x: u16) -> u16 {
         let xx = (x + 1) as u64;
@@ -467,12 +462,12 @@ impl Tip5 {
 
     #[inline(always)]
     #[allow(dead_code)]
-    fn mds_cyclomul(state: &mut [BFieldElement; STATE_SIZE]) {
+    fn mds_cyclomul(&mut self) {
         let mut result = [BFieldElement::zero(); STATE_SIZE];
 
         let mut lo: [i64; STATE_SIZE] = [0; STATE_SIZE];
         let mut hi: [i64; STATE_SIZE] = [0; STATE_SIZE];
-        for (i, b) in state.iter().enumerate() {
+        for (i, b) in self.state.iter().enumerate() {
             hi[i] = (b.raw_u64() >> 32) as i64;
             lo[i] = (b.raw_u64() as u32) as i64;
         }
@@ -491,15 +486,15 @@ impl Tip5 {
                 res.wrapping_add(0u32.wrapping_sub(over as u32) as u64),
             );
         }
-        *state = result;
+        self.state = result;
     }
 
     #[inline(always)]
-    fn mds_generated(state: &mut [BFieldElement; STATE_SIZE]) {
+    fn mds_generated(&mut self) {
         let mut lo: [u64; STATE_SIZE] = [0; STATE_SIZE];
         let mut hi: [u64; STATE_SIZE] = [0; STATE_SIZE];
         for i in 0..STATE_SIZE {
-            let b = state[i].raw_u64();
+            let b = self.state[i].raw_u64();
             hi[i] = b >> 32;
             lo[i] = b & 0xffffffffu64;
         }
@@ -515,64 +510,51 @@ impl Tip5 {
 
             let (res, over) = s_lo.overflowing_add(s_hi * 0xffffffffu64);
 
-            state[r] = BFieldElement::from_raw_u64(if over { res + 0xffffffffu64 } else { res });
+            self.state[r] =
+                BFieldElement::from_raw_u64(if over { res + 0xffffffffu64 } else { res });
         }
     }
 
     #[inline(always)]
     #[allow(clippy::needless_range_loop)]
-    fn sbox_layer(state: &mut [BFieldElement; STATE_SIZE]) {
-        // lookup
-        // state.iter_mut().take(NUM_SPLIT_AND_LOOKUP).for_each(|s| {
-        //     Self::split_and_lookup(s);
-        // });
+    fn sbox_layer(&mut self) {
         for i in 0..NUM_SPLIT_AND_LOOKUP {
-            Self::split_and_lookup(&mut state[i]);
+            Self::split_and_lookup(&mut self.state[i]);
         }
 
-        // power
-        // for st in state.iter_mut().skip(NUM_SPLIT_AND_LOOKUP) {
-        //     let sq = *st * *st;
-        //     let qu = sq * sq;
-        //     *st *= sq * qu;
-        // }
         for i in NUM_SPLIT_AND_LOOKUP..STATE_SIZE {
-            let sq = state[i] * state[i];
+            let sq = self.state[i] * self.state[i];
             let qu = sq * sq;
-            state[i] *= sq * qu;
+            self.state[i] *= sq * qu;
         }
     }
 
     #[inline(always)]
-    fn round(sponge: &mut Tip5State, round_index: usize) {
-        Self::sbox_layer(&mut sponge.state);
-
-        // Self::mds_cyclomul(&mut sponge.state);
-        Self::mds_generated(&mut sponge.state);
-
+    fn round(&mut self, round_index: usize) {
+        self.sbox_layer();
+        self.mds_generated();
         for i in 0..STATE_SIZE {
-            sponge.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
+            self.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
         }
     }
 
-    // permutation
     #[inline(always)]
-    pub fn permutation(sponge: &mut Tip5State) {
+    pub fn permutation(&mut self) {
         for i in 0..NUM_ROUNDS {
-            Self::round(sponge, i);
+            self.round(i);
         }
     }
 
     /// Functionally equivalent to [`permutation`](Self::permutation). Returns the trace of
     /// applying the permutation; that is, the initial state of the sponge as well as its state
     /// after each round.
-    pub fn trace(sponge: &mut Tip5State) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
+    pub fn trace(&mut self) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
         let mut trace = [[BFIELD_ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
 
-        trace[0] = sponge.state;
+        trace[0] = self.state;
         for i in 0..NUM_ROUNDS {
-            Self::round(sponge, i);
-            trace[1 + i] = sponge.state;
+            self.round(i);
+            trace[1 + i] = self.state;
         }
 
         trace
@@ -582,13 +564,12 @@ impl Tip5 {
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
     pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; DIGEST_LENGTH] {
-        let mut sponge = Tip5State::new(Domain::FixedLength);
+        let mut sponge = Self::new(Domain::FixedLength);
 
         // absorb once
         sponge.state[..10].copy_from_slice(input);
 
-        // apply permutation
-        Self::permutation(&mut sponge);
+        sponge.permutation();
 
         // squeeze once
         sponge.state[..DIGEST_LENGTH].try_into().unwrap()
@@ -597,40 +578,36 @@ impl Tip5 {
 
 impl AlgebraicHasher for Tip5 {
     fn hash_pair(left: Digest, right: Digest) -> Digest {
-        let mut sponge = Tip5State::new(Domain::FixedLength);
+        let mut sponge = Self::new(Domain::FixedLength);
         sponge.state[..DIGEST_LENGTH].copy_from_slice(&left.values());
         sponge.state[DIGEST_LENGTH..2 * DIGEST_LENGTH].copy_from_slice(&right.values());
 
-        Self::permutation(&mut sponge);
+        sponge.permutation();
 
         let digest_values = sponge.state[..DIGEST_LENGTH].try_into().unwrap();
         Digest::new(digest_values)
     }
 }
 
-impl SpongeHasher for Tip5 {
+impl Sponge for Tip5 {
     const RATE: usize = RATE;
-    type SpongeState = Tip5State;
 
-    fn init() -> Self::SpongeState {
-        Tip5State::new(Domain::VariableLength)
+    fn init() -> Self {
+        Self::new(Domain::VariableLength)
     }
 
-    fn absorb(sponge: &mut Self::SpongeState, input: [BFieldElement; RATE]) {
-        // absorb
-        sponge.state[..RATE]
+    fn absorb(&mut self, input: [BFieldElement; RATE]) {
+        self.state[..RATE]
             .iter_mut()
-            .zip_eq(input.iter())
+            .zip_eq(&input)
             .for_each(|(a, &b)| *a = b);
 
-        Tip5::permutation(sponge);
+        self.permutation();
     }
 
-    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE] {
-        // squeeze
-        let produce: [BFieldElement; RATE] = (&sponge.state[..RATE]).try_into().unwrap();
-
-        Tip5::permutation(sponge);
+    fn squeeze(&mut self) -> [BFieldElement; RATE] {
+        let produce: [BFieldElement; RATE] = (&self.state[..RATE]).try_into().unwrap();
+        self.permutation();
 
         produce
     }
@@ -640,10 +617,7 @@ impl SpongeHasher for Tip5 {
 pub(crate) mod tip5_tests {
     use std::ops::Mul;
 
-    use get_size::GetSize;
-    use itertools::Itertools;
     use num_traits::One;
-    use num_traits::Zero;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use rand::thread_rng;
@@ -653,31 +627,26 @@ pub(crate) mod tip5_tests {
     use rayon::prelude::ParallelIterator;
     use test_strategy::proptest;
 
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::digest::DIGEST_LENGTH;
     use crate::shared_math::other::random_elements;
-    use crate::shared_math::tip5::Digest;
-    use crate::shared_math::tip5::Tip5;
-    use crate::shared_math::tip5::LOOKUP_TABLE;
-    use crate::shared_math::tip5::NUM_ROUNDS;
-    use crate::shared_math::tip5::ROUND_CONSTANTS;
-    use crate::shared_math::tip5::STATE_SIZE;
     use crate::shared_math::x_field_element::XFieldElement;
-    use crate::util_types::algebraic_hasher::AlgebraicHasher;
-    use crate::util_types::algebraic_hasher::SpongeHasher;
 
-    use super::Tip5State;
-    use super::RATE;
+    use super::*;
 
-    pub(crate) fn seed_tip5(sponge: &mut Tip5State) {
-        let mut rng = thread_rng();
-        let seed = rng.gen();
-        Tip5::absorb(sponge, seed);
+    impl Tip5 {
+        pub(crate) fn randomly_seeded() -> Self {
+            let mut sponge = Self::init();
+            let mut rng = thread_rng();
+            sponge.absorb(rng.gen());
+            sponge
+        }
     }
 
     #[test]
     fn get_size_test() {
-        assert!(Tip5 {}.get_size().is_zero());
+        assert_eq!(
+            STATE_SIZE * BFieldElement::zero().get_size(),
+            Tip5::randomly_seeded().get_size()
+        );
     }
 
     #[test]
@@ -712,7 +681,7 @@ pub(crate) mod tip5_tests {
                 .sum::<u128>()
         };
         let round_constants = (0..NUM_ROUNDS * STATE_SIZE)
-            .map(|i| ["Tip5".to_string().as_bytes(), &[(i as u8)]].concat())
+            .map(|i| ["Tip5".to_string().as_bytes(), &[i as u8]].concat())
             .map(|bytes| blake3::hash(&bytes))
             .map(|hash| *hash.as_bytes())
             .map(|bytes| to_int(&bytes))
@@ -899,8 +868,8 @@ pub(crate) mod tip5_tests {
 
     fn manual_hash_varlen(preimage: &[BFieldElement]) -> Digest {
         let mut sponge = Tip5::init();
-        Tip5::pad_and_absorb_all(&mut sponge, preimage);
-        let squeeze_result = Tip5::squeeze(&mut sponge);
+        sponge.pad_and_absorb_all(preimage);
+        let squeeze_result = sponge.squeeze();
 
         Digest::new((&squeeze_result[..DIGEST_LENGTH]).try_into().unwrap())
     }
@@ -925,51 +894,47 @@ pub(crate) mod tip5_tests {
 
     #[test]
     fn test_linearity_of_mds() {
-        let mds_procedure = Tip5::mds_cyclomul;
-        // let mds_procedure = Tip5::mds_noswap;
+        type SpongeState = [BFieldElement; STATE_SIZE];
+
+        let mds_procedure = |state| {
+            let mut sponge = Tip5 { state };
+            sponge.mds_cyclomul();
+            sponge.state
+        };
+
         let a: BFieldElement = random_elements(1)[0];
         let b: BFieldElement = random_elements(1)[0];
-        let mut u: [BFieldElement; STATE_SIZE] = random_elements(STATE_SIZE).try_into().unwrap();
-        let mut v: [BFieldElement; STATE_SIZE] = random_elements(STATE_SIZE).try_into().unwrap();
 
-        let mut w: [BFieldElement; STATE_SIZE] = u
-            .iter()
-            .zip(v.iter())
-            .map(|(uu, vv)| a * *uu + b * *vv)
-            .collect::<Vec<BFieldElement>>()
-            .try_into()
-            .unwrap();
+        let mul_procedure = |u: SpongeState, v: SpongeState| -> SpongeState {
+            let mul_result = u.iter().zip(&v).map(|(&uu, &vv)| a * uu + b * vv);
+            mul_result.collect_vec().try_into().unwrap()
+        };
 
-        mds_procedure(&mut u);
-        mds_procedure(&mut v);
-        mds_procedure(&mut w);
+        let u: SpongeState = random_elements(STATE_SIZE).try_into().unwrap();
+        let v: SpongeState = random_elements(STATE_SIZE).try_into().unwrap();
+        let w = mul_procedure(u, v);
 
-        let w_: [BFieldElement; STATE_SIZE] = u
-            .iter()
-            .zip(v.iter())
-            .map(|(uu, vv)| a * *uu + b * *vv)
-            .collect::<Vec<BFieldElement>>()
-            .try_into()
-            .unwrap();
+        let u = mds_procedure(u);
+        let v = mds_procedure(v);
+        let w = mds_procedure(w);
+
+        let w_ = mul_procedure(u, v);
 
         assert_eq!(w, w_);
     }
 
     #[test]
     fn test_mds_circulancy() {
-        let mut e1 = [BFieldElement::zero(); STATE_SIZE];
-        e1[0] = BFieldElement::one();
+        let mut sponge = Tip5::init();
+        sponge.state = [BFieldElement::zero(); STATE_SIZE];
+        sponge.state[0] = BFieldElement::one();
 
-        // let mds_procedure = Tip5::mds_al_kindi;
-        // let mds_procedure = Tip5::mds_cyclomul;
-        let mds_procedure = Tip5::mds_generated;
-
-        mds_procedure(&mut e1);
+        sponge.mds_generated();
 
         let mut mat_first_row = [BFieldElement::zero(); STATE_SIZE];
-        mat_first_row[0] = e1[0];
-        for i in 1..STATE_SIZE {
-            mat_first_row[i] = e1[STATE_SIZE - i];
+        mat_first_row[0] = sponge.state[0];
+        for (i, first_row_elem) in mat_first_row.iter_mut().enumerate().skip(1) {
+            *first_row_elem = sponge.state[STATE_SIZE - i];
         }
 
         println!(
@@ -977,18 +942,21 @@ pub(crate) mod tip5_tests {
             mat_first_row.map(|b| b.value())
         );
 
-        let mut vec: [BFieldElement; STATE_SIZE] = random_elements(STATE_SIZE).try_into().unwrap();
+        let initial_state: [BFieldElement; STATE_SIZE] =
+            random_elements(STATE_SIZE).try_into().unwrap();
 
         let mut mv = [BFieldElement::zero(); STATE_SIZE];
         for i in 0..STATE_SIZE {
             for j in 0..STATE_SIZE {
-                mv[i] += mat_first_row[(STATE_SIZE - i + j) % STATE_SIZE] * vec[j];
+                mv[i] += mat_first_row[(STATE_SIZE - i + j) % STATE_SIZE] * initial_state[j];
             }
         }
 
-        mds_procedure(&mut vec);
+        let mut sponge_2 = Tip5::init();
+        sponge_2.state = initial_state;
+        sponge_2.mds_generated();
 
-        assert_eq!(vec, mv);
+        assert_eq!(sponge_2.state, mv);
     }
 
     #[test]
@@ -1024,11 +992,10 @@ pub(crate) mod tip5_tests {
 
     #[test]
     fn sample_scalars_test() {
-        let mut sponge = Tip5::init();
-        seed_tip5(&mut sponge);
+        let mut sponge = Tip5::randomly_seeded();
         let mut product = XFieldElement::one();
         for amount in 0..=4 {
-            let scalars = Tip5::sample_scalars(&mut sponge, amount);
+            let scalars = sponge.sample_scalars(amount);
             assert_eq!(amount, scalars.len());
             product *= scalars
                 .into_iter()
@@ -1040,30 +1007,28 @@ pub(crate) mod tip5_tests {
     #[test]
     fn test_mds_agree() {
         let mut rng = thread_rng();
-        // let vector: [i64; 16] = (0..16)
-        //     .map(|_| (rng.next_u64() & 0xffffffff) as i64)
-        //     .collect_vec()
-        //     .try_into()
-        //     .unwrap();
-        let vector: [BFieldElement; 16] = (0..16)
-            .map(|_| BFieldElement::new(rng.next_u64() % 10))
+        let initial_state: [BFieldElement; STATE_SIZE] = (0..STATE_SIZE)
+            .map(|_| BFieldElement::new(rng.gen_range(0..10)))
             .collect_vec()
             .try_into()
             .unwrap();
-        // let mut vector = [BFieldElement::zero(); 16];
-        // vector[0] = BFieldElement::one();
 
-        let mut cyclomul = vector;
-        Tip5::mds_cyclomul(&mut cyclomul);
-        let mut generated = vector;
-        Tip5::mds_generated(&mut generated);
+        let mut sponge_cyclomut = Tip5 {
+            state: initial_state,
+        };
+        let mut sponge_generated = Tip5 {
+            state: initial_state,
+        };
+
+        sponge_cyclomut.mds_cyclomul();
+        sponge_generated.mds_generated();
 
         assert_eq!(
-            cyclomul,
-            generated,
+            sponge_cyclomut,
+            sponge_generated,
             "cyclomul =/= generated\n{}\n{}",
-            cyclomul.map(|c| c.to_string()).join(","),
-            generated.map(|c| c.to_string()).join(",")
+            sponge_cyclomut.state.into_iter().join(","),
+            sponge_generated.state.into_iter().join(",")
         );
     }
 }

@@ -1,109 +1,101 @@
 use std::fmt::Debug;
 use std::iter;
 
-use arbitrary::Arbitrary;
 use itertools::Itertools;
 
-use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ONE, BFIELD_ZERO};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::b_field_element::BFIELD_ONE;
+use crate::shared_math::b_field_element::BFIELD_ZERO;
 use crate::shared_math::bfield_codec::BFieldCodec;
-use crate::shared_math::digest::{Digest, DIGEST_LENGTH};
-use crate::shared_math::other::{is_power_of_two, roundup_nearest_multiple};
-use crate::shared_math::x_field_element::{XFieldElement, EXTENSION_DEGREE};
+use crate::shared_math::digest::Digest;
+use crate::shared_math::digest::DIGEST_LENGTH;
+use crate::shared_math::other::is_power_of_two;
+use crate::shared_math::other::roundup_nearest_multiple;
+use crate::shared_math::x_field_element::XFieldElement;
+use crate::shared_math::x_field_element::EXTENSION_DEGREE;
 
 pub const RATE: usize = 10;
 
 /// The hasher [Domain] differentiates between the modes of hashing.
 ///
-/// The main purpose of declaring the domain is to prevent collisions between
-/// different types of hashing by introducing defining differences in the way
-/// the hash function's internal state (e.g. a sponge state's capacity) is
-/// initialized.
+/// The main purpose of declaring the domain is to prevent collisions between different types of
+/// hashing by introducing defining differences in the way the hash function's internal state
+/// (e.g. a sponge state's capacity) is initialized.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Domain {
-    /// The `VariableLength` domain is used for hashing objects that potentially
-    /// serialize to more than [RATE] number of field elements.
+    /// The `VariableLength` domain is used for hashing objects that potentially serialize to more
+    /// than [`RATE`] number of field elements.
     VariableLength,
 
-    /// The `FixedLength` domain is used for hashing objects that always fit
-    /// within [RATE] number of fields elements, e.g. a pair of [Digest].
+    /// The `FixedLength` domain is used for hashing objects that always fit within [RATE] number
+    /// of fields elements, e.g. a pair of [Digest].
     FixedLength,
 }
 
-pub trait SpongeHasher: Clone + Debug + Default + Send + Sync {
+/// A [cryptographic sponge][sponge]. Should only be based on a cryptographic permutation, e.g.,
+/// [`Tip5`][tip5].
+///
+/// [sponge]: https://keccak.team/files/CSF-0.1.pdf
+/// [tip5]: crate::prelude::Tip5
+pub trait Sponge: Clone + Debug + Default + Send + Sync {
     const RATE: usize;
-    type SpongeState: Clone + Debug + Default + for<'a> Arbitrary<'a>;
 
-    /// Initialize a sponge state
-    fn init() -> Self::SpongeState;
+    fn init() -> Self;
 
-    /// Absorb an array of [RATE] field elements into the sponge's state, mutating it.
-    fn absorb(sponge: &mut Self::SpongeState, input: [BFieldElement; RATE]);
+    fn absorb(&mut self, input: [BFieldElement; RATE]);
 
-    /// Squeeze an array of [RATE] field elements out from the sponge's state, mutating it.
-    fn squeeze(sponge: &mut Self::SpongeState) -> [BFieldElement; RATE];
+    fn squeeze(&mut self) -> [BFieldElement; RATE];
 
-    /// Chunk `input` into arrays of [RATE] elements and repeatedly [SpongeHasher::absorb()].
-    fn pad_and_absorb_all(sponge: &mut Self::SpongeState, input: &[BFieldElement]) {
-        // pad input with [1, 0, 0, ...] – padding is at least one element
+    fn pad_and_absorb_all(&mut self, input: &[BFieldElement]) {
+        // pad input with [1, 0, 0, …] – padding is at least one element
         let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
         let padding_iter = [BFIELD_ONE].iter().chain(iter::repeat(&BFIELD_ZERO));
         let padded_input = input.iter().chain(padding_iter).take(padded_length);
+
         for chunk in padded_input.chunks(RATE).into_iter() {
-            let absorb_elems: [BFieldElement; RATE] = chunk
-                .cloned()
-                .collect::<Vec<_>>()
-                .try_into()
-                .expect("a multiple of RATE elements");
-            Self::absorb(sponge, absorb_elems);
+            // the padded input has length some multiple of `RATE`
+            let absorb_elems = chunk.cloned().collect_vec().try_into().unwrap();
+            self.absorb(absorb_elems);
         }
     }
 }
 
-pub trait AlgebraicHasher: SpongeHasher {
-    /// Hash two [Digest]s into one.
+pub trait AlgebraicHasher: Sponge {
+    /// 2-to-1 hashing
     fn hash_pair(left: Digest, right: Digest) -> Digest;
 
-    /// Hash a `value: &T` to a [Digest].
-    ///
-    /// The `T` must implement BFieldCodec.
+    /// Thin wrapper around [`hash_varlen`](Self::hash_varlen).
     fn hash<T: BFieldCodec>(value: &T) -> Digest {
         Self::hash_varlen(&value.encode())
     }
 
-    /// Hash a variable-length sequence of [BFieldElement].
+    /// Hash a variable-length sequence of [`BFieldElement`].
     ///
     /// - Apply the correct padding
-    /// - [SpongeHasher::absorb_repeatedly()]
-    /// - [SpongeHasher::squeeze()] once.
+    /// - [Sponge::pad_and_absorb_all()]
+    /// - [Sponge::squeeze()] once.
     fn hash_varlen(input: &[BFieldElement]) -> Digest {
         let mut sponge = Self::init();
-        Self::pad_and_absorb_all(&mut sponge, input);
-        let produce: [BFieldElement; RATE] = Self::squeeze(&mut sponge);
+        sponge.pad_and_absorb_all(input);
+        let produce: [BFieldElement; RATE] = sponge.squeeze();
 
         Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
     }
 
-    /// Produce `num_indices` random integer values in the range `[0, upper_bound)`.
-    ///
-    /// - The randomness depends on `state`.
-    /// - `upper_bound` must be a power of 2.
+    /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
+    /// `upper_bound` must be a power of 2.
     ///
     /// This method uses von Neumann rejection sampling.
-    /// Specifically, if the top 32 bits of a BFieldElement are all
-    /// ones, then the bottom 32 bits are not uniformly distributed,
-    /// and so they are dropped. This method invokes squeeze until
+    /// Specifically, if the top 32 bits of a BFieldElement are all ones, then the bottom 32 bits
+    /// are not uniformly distributed, and so they are dropped. This method invokes squeeze until
     /// enough uniform u32s have been sampled.
-    fn sample_indices(
-        state: &mut Self::SpongeState,
-        upper_bound: u32,
-        num_indices: usize,
-    ) -> Vec<u32> {
+    fn sample_indices(&mut self, upper_bound: u32, num_indices: usize) -> Vec<u32> {
         debug_assert!(is_power_of_two(upper_bound));
         let mut indices = vec![];
         let mut squeezed_elements = vec![];
         while indices.len() != num_indices {
             if squeezed_elements.is_empty() {
-                squeezed_elements = Self::squeeze(state).into_iter().rev().collect_vec();
+                squeezed_elements = self.squeeze().into_iter().rev().collect_vec();
             }
             let element = squeezed_elements.pop().unwrap();
             if element != BFieldElement::new(BFieldElement::MAX) {
@@ -113,12 +105,13 @@ pub trait AlgebraicHasher: SpongeHasher {
         indices
     }
 
-    /// Produce `num_elements` random [XFieldElement] values.
+    /// Produce `num_elements` random [`XFieldElement`] values.
     ///
-    /// - The randomness depends on `state`.
+    /// If `num_elements` is not divisible by [`RATE`][rate], spill the remaining elements of the
+    /// last [`squeeze`][Sponge::squeeze].
     ///
-    /// If `num_elements` is not divisible by `RATE`, spill the remaining elements of the last `squeeze`.
-    fn sample_scalars(state: &mut Self::SpongeState, num_elements: usize) -> Vec<XFieldElement> {
+    /// [rate]: Sponge::RATE
+    fn sample_scalars(&mut self, num_elements: usize) -> Vec<XFieldElement> {
         let num_squeezes = (num_elements * EXTENSION_DEGREE + Self::RATE - 1) / Self::RATE;
         debug_assert!(
             num_elements * EXTENSION_DEGREE <= num_squeezes * Self::RATE,
@@ -127,7 +120,7 @@ pub trait AlgebraicHasher: SpongeHasher {
             num_squeezes * Self::RATE
         );
         (0..num_squeezes)
-            .flat_map(|_| Self::squeeze(state))
+            .flat_map(|_| self.squeeze())
             .collect_vec()
             .chunks(3)
             .take(num_elements)
@@ -146,7 +139,6 @@ mod algebraic_hasher_tests {
     use rand_distr::Distribution;
     use rand_distr::Standard;
 
-    use crate::prelude::tip5::tip5_tests::seed_tip5;
     use crate::shared_math::digest::DIGEST_LENGTH;
     use crate::shared_math::tip5::Tip5;
     use crate::shared_math::x_field_element::EXTENSION_DEGREE;
@@ -203,9 +195,8 @@ mod algebraic_hasher_tests {
     }
 
     fn sample_indices_prop(max: u32, num_indices: usize) {
-        let mut sponge = Tip5::init();
-        seed_tip5(&mut sponge);
-        let indices = Tip5::sample_indices(&mut sponge, max, num_indices);
+        let mut sponge = Tip5::randomly_seeded();
+        let indices = sponge.sample_indices(max, num_indices);
         assert_eq!(num_indices, indices.len());
         assert!(indices.into_iter().all(|index| index < max));
     }
@@ -232,11 +223,10 @@ mod algebraic_hasher_tests {
     #[test]
     fn sample_scalars_test() {
         let amounts = [0, 1, 2, 3, 4];
-        let mut sponge = Tip5::init();
-        seed_tip5(&mut sponge);
+        let mut sponge = Tip5::randomly_seeded();
         let mut product = XFieldElement::one();
         for amount in amounts {
-            let scalars = Tip5::sample_scalars(&mut sponge, amount);
+            let scalars = sponge.sample_scalars(amount);
             assert_eq!(amount, scalars.len());
             product *= scalars
                 .into_iter()
