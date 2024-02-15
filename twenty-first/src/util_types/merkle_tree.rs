@@ -248,12 +248,10 @@ where
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
         let height = u.int_in_range(0..=13)?;
         let num_leaves = 1 << height;
-        let mut leaves = Vec::with_capacity(num_leaves);
-        for _ in 0..num_leaves {
-            leaves.push(u.arbitrary()?);
-        }
+        let leaf_digests: arbitrary::Result<Vec<_>> =
+            (0..num_leaves).map(|_| u.arbitrary()).collect();
 
-        let tree = CpuParallel::from_digests(&leaves).unwrap();
+        let tree = CpuParallel::from_digests(&leaf_digests?).unwrap();
         Ok(tree)
     }
 }
