@@ -470,7 +470,13 @@ where
 pub struct CpuParallel;
 
 impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
-    /// Takes an array of digests and builds a MerkleTree over them. The digests are copied as the leaves of the tree.
+    /// Takes an array of digests and builds a MerkleTree over them. The digests are copied as the
+    /// leaves of the tree.
+    ///
+    /// # Errors
+    ///
+    /// - If the number of digests is 0.
+    /// - If the number of digests is not a power of two.
     fn from_digests(digests: &[Digest]) -> Result<MerkleTree<H>> {
         if digests.is_empty() {
             return Err(MerkleTreeError::TooFewLeaves);
