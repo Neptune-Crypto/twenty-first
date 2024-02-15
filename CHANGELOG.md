@@ -3,6 +3,77 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.37.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.36.0..v0.37.0) – 2024-02-15
+
+### ✨ Features
+
+- Allow (read-only) access to nodes of Merkle tree ([61e697c7](https://github.com/Neptune-Crypto/twenty-first/commit/61e697c7))
+- Derive `Eq` for `MerkleTree` ([1010d29e](https://github.com/Neptune-Crypto/twenty-first/commit/1010d29e))
+- Optionally set parallelization cutoff through environment variable ([350cd8f5](https://github.com/Neptune-Crypto/twenty-first/commit/350cd8f5))
+- Atomic lock event notification ([df8e99e8](https://github.com/Neptune-Crypto/twenty-first/commit/df8e99e8))
+- Make use of lock events in storage ([7e64e05b](https://github.com/Neptune-Crypto/twenty-first/commit/7e64e05b))
+- Implement `BFieldCodec` for `Box<_>` ([8bee834e](https://github.com/Neptune-Crypto/twenty-first/commit/8bee834e))
+- Remove dependency `anyhow`, use custom errors instead ([01ddae66](https://github.com/Neptune-Crypto/twenty-first/commit/01ddae66))
+
+### 🐛 Bug Fixes
+
+- Add StorageSetter::index() method ([#170](https://github.com/Neptune-Crypto/twenty-first/issues/170)) ([5797095d](https://github.com/Neptune-Crypto/twenty-first/commit/5797095d))
+- Make clippy v1.75 happy ([0374ce54](https://github.com/Neptune-Crypto/twenty-first/commit/0374ce54))
+- Implement, don't derive `Arbitrary` for Merkle tree ([6c3f7be7](https://github.com/Neptune-Crypto/twenty-first/commit/6c3f7be7))
+- Don't panic, return error if specified tree height is too large ([2bcdaf7a](https://github.com/Neptune-Crypto/twenty-first/commit/2bcdaf7a))
+- Don't panic constructing Merkle tree with wrong number of leaves ([f584a611](https://github.com/Neptune-Crypto/twenty-first/commit/f584a611))
+- Remove DB file on Drop, for windows. ([#176](https://github.com/Neptune-Crypto/twenty-first/issues/176)) ([d13af81e](https://github.com/Neptune-Crypto/twenty-first/commit/d13af81e))
+
+### 📚 Documentation
+
+- Document method `inclusion_proof_for_leaf_indices` ([dd7af2b9](https://github.com/Neptune-Crypto/twenty-first/commit/dd7af2b9))
+- Document new structs and constants ([035f08a7](https://github.com/Neptune-Crypto/twenty-first/commit/035f08a7))
+- Fix restore_or_new() placement in doctests ([#178](https://github.com/Neptune-Crypto/twenty-first/issues/178)) ([892015c2](https://github.com/Neptune-Crypto/twenty-first/commit/892015c2))
+- Document `MerkleTree` building errors ([9f7ad17c](https://github.com/Neptune-Crypto/twenty-first/commit/9f7ad17c))
+- Add changelog ([b765d144](https://github.com/Neptune-Crypto/twenty-first/commit/b765d144))
+- Add `git-cliff` config file ([544ffae0](https://github.com/Neptune-Crypto/twenty-first/commit/544ffae0))
+
+### ⚙️ Miscellaneous
+
+- *(doc)* Make doc-strings use and adhere to max line length ([5bd3dd36](https://github.com/Neptune-Crypto/twenty-first/commit/5bd3dd36))
+- Introduce struct `MerkleTreeInclusionProof` ([c4bd2bf0](https://github.com/Neptune-Crypto/twenty-first/commit/c4bd2bf0))
+- Add windows, mac to github CI tasks ([03cde76c](https://github.com/Neptune-Crypto/twenty-first/commit/03cde76c))
+- Re-export bfieldcodec_derive ([10afd069](https://github.com/Neptune-Crypto/twenty-first/commit/10afd069))
+- Bump `bfieldcodec_derive` version ([a97464b8](https://github.com/Neptune-Crypto/twenty-first/commit/a97464b8))
+- (!) Improve `SpongeHasher` trait ([5eb5dd39](https://github.com/Neptune-Crypto/twenty-first/commit/5eb5dd39))
+
+### ♻️ Refactor
+
+- Remove prefix `get_` from method's names ([cbf8ae5b](https://github.com/Neptune-Crypto/twenty-first/commit/cbf8ae5b))
+- Move test-helper method to corresponding test module ([51c75f94](https://github.com/Neptune-Crypto/twenty-first/commit/51c75f94))
+- Don't panic when requesting out-of-bounds leaf ([4e60a245](https://github.com/Neptune-Crypto/twenty-first/commit/4e60a245))
+- *(test)* Turn ad-hoc property tests into `proptest` ([4bfdb2e9](https://github.com/Neptune-Crypto/twenty-first/commit/4bfdb2e9), [46b30c67](https://github.com/Neptune-Crypto/twenty-first/commit/46b30c67), [b546dffc](https://github.com/Neptune-Crypto/twenty-first/commit/b546dffc))
+- *(test)* Translate more tests into `proptest`s ([b46307d2](https://github.com/Neptune-Crypto/twenty-first/commit/b46307d2), [f403dade](https://github.com/Neptune-Crypto/twenty-first/commit/f403dade))
+- Avoid collecting into vector where only iterator is needed ([26a2dd35](https://github.com/Neptune-Crypto/twenty-first/commit/26a2dd35))
+- Check all authentication paths for small trees ([cee2a9bf](https://github.com/Neptune-Crypto/twenty-first/commit/cee2a9bf))
+- *(test)* Remove randomness from static tests ([ad75bab3](https://github.com/Neptune-Crypto/twenty-first/commit/ad75bab3))
+- De-duplicate generation of static test Merkle trees ([d0e382f4](https://github.com/Neptune-Crypto/twenty-first/commit/d0e382f4))
+- *(test)* Root from arbitrary number of digests belongs to MMR ([7d4121dc](https://github.com/Neptune-Crypto/twenty-first/commit/7d4121dc))
+- (!) Improve `MerkleTree` implementation ([844f8723](https://github.com/Neptune-Crypto/twenty-first/commit/844f8723))
+- Make leveldb::DB take &mut self ([2e984fe2](https://github.com/Neptune-Crypto/twenty-first/commit/2e984fe2))
+- Add `prelude` to simplify `use`s downstream ([95d52acc](https://github.com/Neptune-Crypto/twenty-first/commit/95d52acc))
+- Allow repeated sponge-absorption without mutating a list ([59944288](https://github.com/Neptune-Crypto/twenty-first/commit/59944288))
+- Use `thiserror` to derive `BFieldCodecError` ([f0c5bf13](https://github.com/Neptune-Crypto/twenty-first/commit/f0c5bf13))
+- (!) Integrate `Tip5State` into `Tip5` ([8300e6af](https://github.com/Neptune-Crypto/twenty-first/commit/8300e6af))
+
+### 🛠 Build
+
+- Prefix macro use statements with crate:: ([#180](https://github.com/Neptune-Crypto/twenty-first/issues/180)) ([7c7a61f2](https://github.com/Neptune-Crypto/twenty-first/commit/7c7a61f2))
+
+### ✅ Testing
+
+- Add `proptest` for verifying honestly generated inclusion proof ([54e606c7](https://github.com/Neptune-Crypto/twenty-first/commit/54e606c7))
+- Add `proptest` for potential panics in `.height()`, `.num_leafs()` ([b61a1007](https://github.com/Neptune-Crypto/twenty-first/commit/b61a1007))
+- Add `proptest` for verification failure against incorrect root ([e69d74f5](https://github.com/Neptune-Crypto/twenty-first/commit/e69d74f5))
+- Add `proptest` verifying failure when supplying too many indices ([86238f47](https://github.com/Neptune-Crypto/twenty-first/commit/86238f47))
+- Add `proptest` verifying failure when supplying too few indices ([3b01c4a0](https://github.com/Neptune-Crypto/twenty-first/commit/3b01c4a0))
+- Test height and number of leaves for tree with one leaf ([55ef8463](https://github.com/Neptune-Crypto/twenty-first/commit/55ef8463))
+
 ## [0.36.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.34.0..v0.36.0) – 2023-12-22
 
 ### ✨ Features

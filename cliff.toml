@@ -53,6 +53,7 @@ commit_parsers = [
   { message = "^chore\\(pull\\)", skip = true },
   { message = "^chore|ci|misc",   group = "<!-- 40 --> ⚙️ Miscellaneous" },
   { message = "^refactor",        group = "<!-- 50 --> ♻️ Refactor" },
+  { message = "^build",           group = "<!-- 55 --> 🛠 Build" },
   { message = "^test",            group = "<!-- 60 --> ✅ Testing" },
   { body = ".*security",          group = "<!-- 70 --> 🔒️ Security" },
   { message = "^revert",          group = "<!-- 80 --> ⏪️ Revert" },
