@@ -628,9 +628,7 @@ pub mod merkle_tree_test {
     }
 
     #[proptest]
-    fn building_merkle_tree_from_one_digest_makes_that_digest_the_root(
-        #[strategy(arb())] digest: Digest,
-    ) {
+    fn building_merkle_tree_from_one_digest_makes_that_digest_the_root(digest: Digest) {
         let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&[digest]).unwrap();
         assert_eq!(digest, tree.root());
     }
@@ -757,7 +755,7 @@ pub mod merkle_tree_test {
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(vec(0..#test_tree.tree.num_leafs(), 1..=#test_tree.tree.num_leafs()))]
         spurious_indices: Vec<usize>,
-        #[strategy(vec(arb(), #spurious_indices.len()))] spurious_digests: Vec<Digest>,
+        #[strategy(vec(any::<Digest>(), #spurious_indices.len()))] spurious_digests: Vec<Digest>,
     ) {
         let spurious_leaves = spurious_indices
             .into_iter()

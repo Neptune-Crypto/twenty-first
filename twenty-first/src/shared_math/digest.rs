@@ -1,17 +1,21 @@
-use arbitrary::Arbitrary;
 use core::fmt;
 use std::str::FromStr;
 
+use arbitrary::Arbitrary;
 use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use itertools::Itertools;
-use num_bigint::{BigUint, TryFromBigIntError};
+use num_bigint::BigUint;
+use num_bigint::TryFromBigIntError;
 use num_traits::Zero;
 use rand::Rng;
-use rand_distr::{Distribution, Standard};
-use serde::{Deserialize, Serialize};
+use rand_distr::Distribution;
+use rand_distr::Standard;
+use serde::Deserialize;
+use serde::Serialize;
 
-use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::b_field_element::BFIELD_ZERO;
 use crate::shared_math::traits::FromVecu8;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::emojihash_trait::Emojihash;
@@ -224,12 +228,21 @@ impl Digest {
 pub(crate) mod digest_tests {
     use num_traits::One;
     use proptest::collection::vec;
-    use proptest::prelude::TestCaseError;
+    use proptest::prelude::Arbitrary as ProptestArbitrary;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use rand::{thread_rng, RngCore};
+    use test_strategy::proptest;
 
     use super::*;
+
+    impl ProptestArbitrary for Digest {
+        type Parameters = ();
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            arb().prop_map(|d| d).no_shrink().boxed()
+        }
+
+        type Strategy = BoxedStrategy<Self>;
+    }
 
     /// Test helper struct for corrupting digests. Primarily used for negative tests.
     #[derive(Debug, Clone, PartialEq, Eq, test_strategy::Arbitrary)]
@@ -258,22 +271,13 @@ pub(crate) mod digest_tests {
     }
 
     #[test]
-    pub fn get_size() {
+    fn get_size() {
         let stack = Digest::get_stack_size();
 
-        let bfe_vec = vec![
-            BFieldElement::new(12),
-            BFieldElement::new(24),
-            BFieldElement::new(36),
-            BFieldElement::new(48),
-            BFieldElement::new(60),
-        ];
-        let tip5_digest_type_from_array: Digest = bfe_vec.try_into().unwrap();
-
+        let bfes = [12, 24, 36, 48, 60].map(BFieldElement::new);
+        let tip5_digest_type_from_array: Digest = Digest::new(bfes);
         let heap = tip5_digest_type_from_array.get_heap_size();
-
         let total = tip5_digest_type_from_array.get_size();
-
         println!("stack: {stack} + heap: {heap} = {total}");
 
         assert_eq!(stack + heap, total)
@@ -297,58 +301,30 @@ pub(crate) mod digest_tests {
         assert!(second_invalid_digest.is_err());
     }
 
-    #[test]
-    pub fn test_reversed_involution() {
-        let digest: Digest = thread_rng().gen();
-        assert_eq!(digest, digest.reversed().reversed())
+    #[proptest]
+    fn test_reversed_involution(digest: Digest) {
+        prop_assert_eq!(digest, digest.reversed().reversed())
     }
 
     #[test]
     fn digest_biguint_conversion_simple_test() {
         let fourteen: BigUint = 14u128.into();
-        let fourteen_converted_expected: Digest = Digest([
-            BFieldElement::new(14),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-        ]);
+        let fourteen_converted_expected = Digest([14, 0, 0, 0, 0].map(BFieldElement::new));
 
         let bfe_max: BigUint = BFieldElement::MAX.into();
-        let bfe_max_converted_expected = Digest([
-            BFieldElement::new(BFieldElement::MAX),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-        ]);
+        let bfe_max_converted_expected =
+            Digest([BFieldElement::MAX, 0, 0, 0, 0].map(BFieldElement::new));
 
         let bfe_max_plus_one: BigUint = BFieldElement::P.into();
-        let bfe_max_plus_one_converted_expected = Digest([
-            BFieldElement::zero(),
-            BFieldElement::one(),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-        ]);
+        let bfe_max_plus_one_converted_expected = Digest([0, 1, 0, 0, 0].map(BFieldElement::new));
 
         let two_pow_64: BigUint = (1u128 << 64).into();
-        let two_pow_64_converted_expected = Digest([
-            BFieldElement::new((1u64 << 32) - 1),
-            BFieldElement::one(),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-        ]);
+        let two_pow_64_converted_expected =
+            Digest([(1u64 << 32) - 1, 1, 0, 0, 0].map(BFieldElement::new));
 
         let two_pow_123: BigUint = (1u128 << 123).into();
-        let two_pow_123_converted_expected = Digest([
-            BFieldElement::new(18446744069280366593),
-            BFieldElement::new(576460752437641215),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
-        ]);
+        let two_pow_123_converted_expected =
+            Digest([18446744069280366593, 576460752437641215, 0, 0, 0].map(BFieldElement::new));
 
         let two_pow_315: BigUint = BigUint::from(2u128).pow(315);
 
@@ -396,59 +372,34 @@ pub(crate) mod digest_tests {
         assert_eq!(two_pow_315, two_pow_315_converted_expected.into());
     }
 
-    #[test]
-    fn digest_biguint_conversion_pbt() {
-        let count = 100;
-        let mut rng = thread_rng();
-        for _ in 0..count {
-            // Generate a random BigUint that will fit into an ordered digest
-            let mut biguint: BigUint = BigUint::one();
-            for _ in 0..4 {
-                biguint *= rng.next_u64();
-            }
-            biguint *= rng.next_u32();
+    #[proptest]
+    fn digest_biguint_conversion_pbt(components_0: [u64; 4], component_1: u32) {
+        let big_uint = components_0
+            .into_iter()
+            .fold(BigUint::one(), |acc, x| acc * x);
+        let big_uint = big_uint * component_1;
 
-            // Verify that conversion back and forth is the identity operator
-            let as_digest: Digest = biguint.clone().try_into().unwrap();
-            let converted_back: BigUint = as_digest.into();
-            assert_eq!(biguint, converted_back);
-        }
+        let as_digest: Digest = big_uint.clone().try_into().unwrap();
+        let big_uint_again: BigUint = as_digest.into();
+        prop_assert_eq!(big_uint, big_uint_again);
     }
 
     #[test]
     fn digest_ordering() {
         let val0 = Digest::new([BFieldElement::new(0); DIGEST_LENGTH]);
-        let val1 = Digest::new([
-            BFieldElement::new(14),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-            BFieldElement::new(0),
-        ]);
-        assert!(val0 < val1);
+        let val1 = Digest::new([14, 0, 0, 0, 0].map(BFieldElement::new));
+        assert!(val1 > val0);
 
         let val2 = Digest::new([BFieldElement::new(14); DIGEST_LENGTH]);
         assert!(val2 > val1);
         assert!(val2 > val0);
 
-        let val3 = Digest::new([
-            BFieldElement::new(15),
-            BFieldElement::new(14),
-            BFieldElement::new(14),
-            BFieldElement::new(14),
-            BFieldElement::new(14),
-        ]);
+        let val3 = Digest::new([15, 14, 14, 14, 14].map(BFieldElement::new));
         assert!(val3 > val2);
         assert!(val3 > val1);
         assert!(val3 > val0);
 
-        let val4 = Digest::new([
-            BFieldElement::new(14),
-            BFieldElement::new(15),
-            BFieldElement::new(14),
-            BFieldElement::new(14),
-            BFieldElement::new(14),
-        ]);
+        let val4 = Digest::new([14, 15, 14, 14, 14].map(BFieldElement::new));
         assert!(val4 > val3);
         assert!(val4 > val2);
         assert!(val4 > val1);
@@ -456,10 +407,12 @@ pub(crate) mod digest_tests {
     }
 
     #[test]
-    #[should_panic(expected = "Overflow when converting from BigUint to Digest")]
     fn digest_biguint_overflow_test() {
         let mut two_pow_384: BigUint = (1u128 << 96).into();
         two_pow_384 = two_pow_384.pow(4);
-        let _failing_conversion: Digest = two_pow_384.try_into().unwrap();
+        let err = Digest::try_from(two_pow_384).unwrap_err();
+
+        let expected_err = "Overflow when converting from BigUint to Digest".to_string();
+        assert_eq!(expected_err, err);
     }
 }
