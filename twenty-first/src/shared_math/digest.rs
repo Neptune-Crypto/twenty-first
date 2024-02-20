@@ -6,7 +6,6 @@ use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use itertools::Itertools;
 use num_bigint::BigUint;
-use num_bigint::TryFromBigIntError;
 use num_traits::Zero;
 use rand::Rng;
 use rand_distr::Distribution;
@@ -14,6 +13,7 @@ use rand_distr::Standard;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::error::TryFromDigestError;
 use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::b_field_element::BFIELD_ZERO;
 use crate::shared_math::traits::FromVecu8;
@@ -103,42 +103,31 @@ impl Distribution<Digest> for Standard {
 }
 
 impl FromStr for Digest {
-    type Err = String;
+    type Err = TryFromDigestError;
 
     fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let parsed_u64s: Vec<Result<u64, _>> = string
-            .split(',')
-            .map(|substring| substring.parse::<u64>())
-            .collect();
-        if parsed_u64s.len() != DIGEST_LENGTH {
-            Err("Given invalid number of BFieldElements in string.".to_owned())
-        } else {
-            let mut bf_elms: Vec<BFieldElement> = Vec::with_capacity(DIGEST_LENGTH);
-            for parse_result in parsed_u64s {
-                if let Ok(content) = parse_result {
-                    bf_elms.push(BFieldElement::new(content));
-                } else {
-                    return Err("Given invalid BFieldElement in string.".to_owned());
-                }
-            }
-            Ok(bf_elms.try_into()?)
-        }
+        let maybe_parsed_bfes: Result<Vec<_>, _> =
+            string.split(',').map(str::parse::<BFieldElement>).collect();
+        let parsed_bfes = maybe_parsed_bfes?;
+        let invalid_len_err = Self::Err::InvalidLength(parsed_bfes.len());
+        let digest_innards = parsed_bfes.try_into().map_err(|_| invalid_len_err)?;
+
+        Ok(Digest(digest_innards))
     }
 }
 
 impl TryFrom<&[BFieldElement]> for Digest {
-    type Error = String;
+    type Error = TryFromDigestError;
 
     fn try_from(value: &[BFieldElement]) -> Result<Self, Self::Error> {
         let len = value.len();
-        value.try_into().map(Digest::new).map_err(|_| {
-            format!("Expected {DIGEST_LENGTH} BFieldElements for digest, but got {len}")
-        })
+        let maybe_digest = value.try_into().map(Digest::new);
+        maybe_digest.map_err(|_| Self::Error::InvalidLength(len))
     }
 }
 
 impl TryFrom<Vec<BFieldElement>> for Digest {
-    type Error = String;
+    type Error = TryFromDigestError;
 
     fn try_from(value: Vec<BFieldElement>) -> Result<Self, Self::Error> {
         Digest::try_from(value.as_ref())
@@ -176,37 +165,34 @@ impl From<[u8; Digest::BYTES]> for Digest {
 }
 
 impl TryFrom<BigUint> for Digest {
-    type Error = String;
+    type Error = TryFromDigestError;
 
     fn try_from(value: BigUint) -> Result<Self, Self::Error> {
         let mut remaining = value;
-        let mut ret = Digest::default();
+        let mut digest_innards = [BFIELD_ZERO; DIGEST_LENGTH];
         let modulus: BigUint = BFieldElement::P.into();
-        for i in 0..DIGEST_LENGTH {
-            let resulting_u64: u64 = (remaining.clone() % modulus.clone()).try_into().map_err(
-                |err: TryFromBigIntError<BigUint>| {
-                    format!("Could not convert remainder back to u64: {:?}", err)
-                },
-            )?;
-            ret.0[i] = BFieldElement::new(resulting_u64);
+        for digest_element in digest_innards.iter_mut() {
+            let element = u64::try_from(remaining.clone() % modulus.clone()).unwrap();
+            *digest_element = BFieldElement::new(element);
             remaining /= modulus.clone();
         }
 
         if !remaining.is_zero() {
-            return Err("Overflow when converting from BigUint to Digest".to_string());
+            return Err(Self::Error::Overflow);
         }
 
-        Ok(ret)
+        Ok(Digest::new(digest_innards))
     }
 }
 
 impl From<Digest> for BigUint {
     fn from(digest: Digest) -> Self {
+        let Digest(digest_innards) = digest;
         let mut ret = BigUint::zero();
         let modulus: BigUint = BFieldElement::P.into();
         for i in (0..DIGEST_LENGTH).rev() {
             ret *= modulus.clone();
-            let digest_element: BigUint = digest.0[i].value().into();
+            let digest_element: BigUint = digest_innards[i].value().into();
             ret += digest_element;
         }
 
@@ -412,7 +398,6 @@ pub(crate) mod digest_tests {
         two_pow_384 = two_pow_384.pow(4);
         let err = Digest::try_from(two_pow_384).unwrap_err();
 
-        let expected_err = "Overflow when converting from BigUint to Digest".to_string();
-        assert_eq!(expected_err, err);
+        assert_eq!(TryFromDigestError::Overflow, err);
     }
 }

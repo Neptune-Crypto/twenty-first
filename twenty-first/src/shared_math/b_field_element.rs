@@ -1,24 +1,46 @@
-use super::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
-use super::x_field_element::XFieldElement;
-use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
-use crate::util_types::emojihash_trait::{Emojihash, EMOJI_PER_ELEMENT};
-use get_size::GetSize;
-use num_traits::{One, Zero};
-use rand_distr::{Distribution, Standard};
+use std::convert::TryFrom;
+use std::convert::TryInto;
+use std::fmt;
 use std::hash::Hash;
-
-use arbitrary::{Arbitrary, Unstructured};
-use phf::phf_map;
-use rand::Rng;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::convert::{TryFrom, TryInto};
 use std::iter::Sum;
 use std::num::TryFromIntError;
-use std::ops::{AddAssign, MulAssign, SubAssign};
-use std::{
-    fmt::{self},
-    ops::{Add, Div, Mul, Neg, Sub},
-};
+use std::ops::Add;
+use std::ops::AddAssign;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::MulAssign;
+use std::ops::Neg;
+use std::ops::Sub;
+use std::ops::SubAssign;
+use std::str::FromStr;
+
+use arbitrary::Arbitrary;
+use arbitrary::Unstructured;
+use get_size::GetSize;
+use num_traits::One;
+use num_traits::Zero;
+use phf::phf_map;
+use rand::Rng;
+use rand_distr::Distribution;
+use rand_distr::Standard;
+use serde::Deserialize;
+use serde::Deserializer;
+use serde::Serialize;
+use serde::Serializer;
+
+use crate::error::ParseBFieldElementError;
+use crate::shared_math::traits::CyclicGroupGenerator;
+use crate::shared_math::traits::FiniteField;
+use crate::shared_math::traits::ModPowU32;
+use crate::shared_math::traits::ModPowU64;
+use crate::shared_math::traits::New;
+use crate::util_types::emojihash_trait::Emojihash;
+use crate::util_types::emojihash_trait::EMOJI_PER_ELEMENT;
+
+use super::traits::FromVecu8;
+use super::traits::Inverse;
+use super::traits::PrimitiveRootOfUnity;
+use super::x_field_element::XFieldElement;
 
 static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
     2u64 => 18446744069414584320,
@@ -289,6 +311,15 @@ impl fmt::Display for BFieldElement {
         } else {
             write!(f, "{canonical_value:>020}")
         }
+    }
+}
+
+impl FromStr for BFieldElement {
+    type Err = ParseBFieldElementError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parsed = s.parse().map_err(Self::Err::ParseU64Error)?;
+        Ok(BFieldElement::new(parsed))
     }
 }
 
@@ -569,14 +600,17 @@ mod b_prime_field_element_test {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::Hasher;
 
-    use crate::shared_math::b_field_element::*;
-    use crate::shared_math::other::{random_elements, random_elements_array, xgcd};
-    use crate::shared_math::polynomial::Polynomial;
     use itertools::izip;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use rand::thread_rng;
     use test_strategy::proptest;
+
+    use crate::shared_math::b_field_element::*;
+    use crate::shared_math::other::random_elements;
+    use crate::shared_math::other::random_elements_array;
+    use crate::shared_math::other::xgcd;
+    use crate::shared_math::polynomial::Polynomial;
 
     impl proptest::arbitrary::Arbitrary for BFieldElement {
         type Parameters = ();
