@@ -2,6 +2,7 @@ use std::str::FromStr;
 use thiserror::Error;
 
 use crate::prelude::tip5::DIGEST_LENGTH;
+use crate::prelude::x_field_element::EXTENSION_DEGREE;
 pub use crate::shared_math::bfield_codec::BFieldCodecError;
 pub use crate::util_types::merkle_tree::MerkleTreeError;
 
@@ -17,6 +18,16 @@ pub enum ParseBFieldElementError {
 pub enum TryFromU32sError {
     #[error("U32s<N>: `N` not big enough to hold the value")]
     InsufficientSize,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Error)]
+#[non_exhaustive]
+pub enum TryFromXFieldElementError {
+    #[error("expected {EXTENSION_DEGREE} elements for extension field element, but got {0}")]
+    InvalidLength(usize),
+
+    #[error("Digest is not an XFieldElement")]
+    InvalidDigest,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
