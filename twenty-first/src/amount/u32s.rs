@@ -1,19 +1,28 @@
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::iter::Sum;
-use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::ops::Add;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::Rem;
+use std::ops::Sub;
 
 use get_size::GetSize;
 use num_bigint::BigUint;
-use num_traits::{One, Zero};
+use num_traits::One;
+use num_traits::Zero;
 use rand::Rng;
-use rand_distr::{Distribution, Standard};
+use rand_distr::Distribution;
+use rand_distr::Standard;
 use serde_big_array;
 use serde_big_array::BigArray;
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::Deserialize;
+use serde_derive::Serialize;
 
+use crate::error::TryFromU32sError;
 use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::bfield_codec::{BFieldCodec, BFieldCodecError};
+use crate::shared_math::bfield_codec::BFieldCodec;
+use crate::shared_math::bfield_codec::BFieldCodecError;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, GetSize)]
 pub struct U32s<const N: usize> {
@@ -310,24 +319,30 @@ impl<const N: usize> From<u32> for U32s<N> {
 }
 
 impl<const N: usize> TryFrom<u64> for U32s<N> {
-    type Error = &'static str;
+    type Error = TryFromU32sError;
 
     fn try_from(value: u64) -> Result<Self, Self::Error> {
-        if N < 2 {
-            return Err("U32s<{N}>, N<=1 may not be big enough to hold a u64");
+        let err = Err(Self::Error::InsufficientSize);
+        match N {
+            0 => err,
+            1 if value > u64::from(u32::MAX) => err,
+            _ => Ok(U32s::from(BigUint::from(value))),
         }
-        Ok(U32s::<N>::from(BigUint::from(value)))
     }
 }
 
 impl<const N: usize> TryFrom<u128> for U32s<N> {
-    type Error = &'static str;
+    type Error = TryFromU32sError;
 
     fn try_from(value: u128) -> Result<Self, Self::Error> {
-        if N < 4 {
-            return Err("U32s<{N}>, N<=3 may not be big enough to hold a u128");
+        let err = Err(Self::Error::InsufficientSize);
+        match N {
+            0 => err,
+            1 if value > u128::from(u32::MAX) => err,
+            2 if value > u128::from(u64::MAX) => err,
+            3 if value > u128::from(u64::MAX) * u128::from(u32::MAX) => err,
+            _ => Ok(U32s::from(BigUint::from(value))),
         }
-        Ok(U32s::<N>::from(BigUint::from(value)))
     }
 }
 
@@ -369,7 +384,10 @@ impl<const N: usize> BFieldCodec for U32s<N> {
 
 #[cfg(test)]
 mod u32s_tests {
-    use rand::{random, thread_rng, Rng, RngCore};
+    use rand::random;
+    use rand::thread_rng;
+    use rand::Rng;
+    use rand::RngCore;
 
     use crate::shared_math::other::random_elements;
 

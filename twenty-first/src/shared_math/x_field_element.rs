@@ -1,19 +1,39 @@
-use arbitrary::Arbitrary;
-use bfieldcodec_derive::BFieldCodec;
-use num_traits::{One, Zero};
-use rand::Rng;
-use rand_distr::{Distribution, Standard};
-use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::iter::Sum;
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
+use std::ops::Add;
+use std::ops::AddAssign;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::MulAssign;
+use std::ops::Neg;
+use std::ops::Sub;
+use std::ops::SubAssign;
+
+use arbitrary::Arbitrary;
+use bfieldcodec_derive::BFieldCodec;
+use num_traits::One;
+use num_traits::Zero;
+use rand::Rng;
+use rand_distr::Distribution;
+use rand_distr::Standard;
+use serde::Deserialize;
+use serde::Serialize;
+
+use crate::error::TryFromXFieldElementError;
+use crate::shared_math::b_field_element::BFieldElement;
+use crate::shared_math::b_field_element::BFIELD_ZERO;
+use crate::shared_math::polynomial::Polynomial;
+use crate::shared_math::traits::CyclicGroupGenerator;
+use crate::shared_math::traits::FiniteField;
+use crate::shared_math::traits::FromVecu8;
+use crate::shared_math::traits::Inverse;
+use crate::shared_math::traits::ModPowU32;
+use crate::shared_math::traits::ModPowU64;
+use crate::shared_math::traits::New;
+use crate::shared_math::traits::PrimitiveRootOfUnity;
+use crate::util_types::emojihash_trait::Emojihash;
 
 use super::digest::Digest;
-use crate::shared_math::b_field_element::{BFieldElement, BFIELD_ZERO};
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::{CyclicGroupGenerator, FiniteField, ModPowU32, ModPowU64, New};
-use crate::shared_math::traits::{FromVecu8, Inverse, PrimitiveRootOfUnity};
-use crate::util_types::emojihash_trait::Emojihash;
 
 pub const EXTENSION_DEGREE: usize = 3;
 
@@ -31,27 +51,21 @@ impl From<XFieldElement> for Digest {
     /// by extension, allows building
     /// [`MerkleTree`](crate::util_types::merkle_tree::MerkleTree)s directly from `XFieldElement`s.
     fn from(xfe: XFieldElement) -> Self {
-        Digest::new([
-            xfe.coefficients[0],
-            xfe.coefficients[1],
-            xfe.coefficients[2],
-            BFIELD_ZERO,
-            BFIELD_ZERO,
-        ])
+        let [c0, c1, c2] = xfe.coefficients;
+        Digest::new([c0, c1, c2, BFIELD_ZERO, BFIELD_ZERO])
     }
 }
 
 impl TryFrom<Digest> for XFieldElement {
-    type Error = &'static str;
+    type Error = TryFromXFieldElementError;
 
     fn try_from(digest: Digest) -> Result<Self, Self::Error> {
-        let digest_values = digest.values();
-        let coefficients = digest_values[..EXTENSION_DEGREE].try_into().unwrap();
-        let xfe = Self { coefficients };
-        match digest_values[3] == BFIELD_ZERO && digest_values[4] == BFIELD_ZERO {
-            true => Ok(xfe),
-            false => Err("Digest is not an XFieldElement."),
+        let [c0, c1, c2, zero_0, zero_1] = digest.values();
+        if zero_0 != BFIELD_ZERO || zero_1 != BFIELD_ZERO {
+            return Err(TryFromXFieldElementError::InvalidDigest);
         }
+
+        Ok(Self::new([c0, c1, c2]))
     }
 }
 
@@ -99,18 +113,18 @@ impl From<Polynomial<BFieldElement>> for XFieldElement {
 }
 
 impl TryFrom<&[BFieldElement]> for XFieldElement {
-    type Error = String;
+    type Error = TryFromXFieldElementError;
 
     fn try_from(value: &[BFieldElement]) -> Result<Self, Self::Error> {
-        let len = value.len();
-        value.try_into().map(XFieldElement::new).map_err(|_| {
-            format!("Expected {EXTENSION_DEGREE} BFieldElements for digest, but got {len}")
-        })
+        value
+            .try_into()
+            .map(XFieldElement::new)
+            .map_err(|_| Self::Error::InvalidLength(value.len()))
     }
 }
 
 impl TryFrom<Vec<BFieldElement>> for XFieldElement {
-    type Error = String;
+    type Error = TryFromXFieldElementError;
 
     fn try_from(value: Vec<BFieldElement>) -> Result<Self, Self::Error> {
         XFieldElement::try_from(value.as_ref())
@@ -550,14 +564,19 @@ impl ModPowU32 for XFieldElement {
 
 #[cfg(test)]
 mod x_field_element_test {
-    use itertools::{izip, Itertools};
+    use itertools::izip;
+    use itertools::Itertools;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use rand::{random, thread_rng};
+    use rand::random;
+    use rand::thread_rng;
 
-    use crate::shared_math::ntt::{intt, ntt};
-    use crate::shared_math::other::{log_2_floor, random_elements};
-    use crate::shared_math::{b_field_element::*, x_field_element::*};
+    use crate::shared_math::b_field_element::*;
+    use crate::shared_math::ntt::intt;
+    use crate::shared_math::ntt::ntt;
+    use crate::shared_math::other::log_2_floor;
+    use crate::shared_math::other::random_elements;
+    use crate::shared_math::x_field_element::*;
 
     impl proptest::arbitrary::Arbitrary for XFieldElement {
         type Parameters = ();
