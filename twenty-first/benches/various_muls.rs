@@ -30,11 +30,15 @@ fn unsigned_mul(c: &mut Criterion) {
     }
 
     for size in sizes {
-        bfe_mul(&mut group, BenchmarkId::new("(BFE,BFE)->BFE", size), size);
+        bfe_bfe_mul(&mut group, BenchmarkId::new("(BFE,BFE)->BFE", size), size);
     }
 
     for size in sizes {
-        xfe_mul(&mut group, BenchmarkId::new("(XFE,XFE)->XFE", size), size);
+        xfe_xfe_mul(&mut group, BenchmarkId::new("(XFE,XFE)->XFE", size), size);
+    }
+
+    for size in sizes {
+        xfe_bfe_mul(&mut group, BenchmarkId::new("(XFE,BFE)->XFE", size), size);
     }
 
     group.finish();
@@ -45,7 +49,8 @@ fn nop(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: usize)
     group.bench_with_input(bench_id, &size, |b, _| {
         b.iter(|| {
             for _ in 0..size {
-                let _ = black_box(|| {});
+                #[allow(clippy::let_unit_value)]
+                let _ = black_box(());
             }
         })
     });
@@ -59,9 +64,7 @@ fn u32_mul(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: us
     group.bench_with_input(bench_id, &size, |b, _| {
         b.iter(|| {
             for i in 0..(size - 1) {
-                let _ = black_box(|| {
-                    let _ = xs[i] as u64 * xs[i + 1] as u64;
-                });
+                let _ = black_box(xs[i] as u64 * xs[i + 1] as u64);
             }
         })
     });
@@ -75,41 +78,50 @@ fn u64_mul(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: us
     group.bench_with_input(bench_id, &size, |b, _| {
         b.iter(|| {
             for i in 0..(size - 1) {
-                let _ = black_box(|| {
-                    let _ = xs[i] as u128 * xs[i + 1] as u128;
-                });
+                let _ = black_box(xs[i] as u128 * xs[i + 1] as u128);
             }
         })
     });
     group.sample_size(10);
 }
 
-fn bfe_mul(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: usize) {
+fn bfe_bfe_mul(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: usize) {
     let xs: Vec<BFieldElement> = random_elements(size);
 
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {
         b.iter(|| {
             for i in 0..(size - 1) {
-                let _ = black_box(|| {
-                    let _ = xs[i] * xs[i + 1];
-                });
+                let _ = black_box(xs[i] * xs[i + 1]);
             }
         })
     });
     group.sample_size(10);
 }
 
-fn xfe_mul(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: usize) {
+fn xfe_xfe_mul(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: usize) {
     let xs: Vec<XFieldElement> = random_elements(size);
 
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {
         b.iter(|| {
             for i in 0..(size - 1) {
-                let _ = black_box(|| {
-                    let _ = xs[i] * xs[i + 1];
-                });
+                let _ = black_box(xs[i] * xs[i + 1]);
+            }
+        })
+    });
+    group.sample_size(10);
+}
+
+fn xfe_bfe_mul(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: usize) {
+    let xs: Vec<XFieldElement> = random_elements(size);
+    let bs: Vec<BFieldElement> = random_elements(size);
+
+    group.throughput(Throughput::Elements(size as u64));
+    group.bench_with_input(bench_id, &size, |b, _| {
+        b.iter(|| {
+            for i in 0..(size - 1) {
+                let _ = black_box(xs[i] * bs[i]);
             }
         })
     });
