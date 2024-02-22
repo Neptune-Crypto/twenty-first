@@ -98,3 +98,7 @@ harness = false
 [[bench]]
 name = "sync_atomic"
 harness = false
+
+[[bench]]
+name = "unsigned_mul"
+harness = false
