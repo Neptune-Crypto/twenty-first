@@ -1,3 +1,5 @@
+use std::hint::black_box;
+
 use criterion::criterion_group;
 use criterion::criterion_main;
 use criterion::measurement::WallTime;
@@ -5,7 +7,7 @@ use criterion::BenchmarkGroup;
 use criterion::BenchmarkId;
 use criterion::Criterion;
 use criterion::Throughput;
-use std::hint::black_box;
+
 use twenty_first::shared_math::b_field_element::BFieldElement;
 use twenty_first::shared_math::other::random_elements;
 use twenty_first::shared_math::x_field_element::XFieldElement;
@@ -13,25 +15,41 @@ use twenty_first::shared_math::x_field_element::XFieldElement;
 fn unsigned_mul(c: &mut Criterion) {
     let mut group = c.benchmark_group("unsigned_mul");
 
-    let sizes: Vec<usize> = vec![10, 100, 1000, 1_000_000];
+    let sizes = [10, 100, 1000, 1_000_000];
 
-    for size in sizes.iter() {
-        u32_mul(&mut group, BenchmarkId::new("(u32,u32)->u64", size), *size);
+    for size in sizes {
+        nop(&mut group, BenchmarkId::new("nop", size), size);
     }
 
-    for size in sizes.iter() {
-        u64_mul(&mut group, BenchmarkId::new("(u64,u64)->u128", size), *size);
+    for size in sizes {
+        u32_mul(&mut group, BenchmarkId::new("(u32,u32)->u64", size), size);
     }
 
-    for size in sizes.iter() {
-        bfe_mul(&mut group, BenchmarkId::new("(BFE,BFE)->BFE", size), *size);
+    for size in sizes {
+        u64_mul(&mut group, BenchmarkId::new("(u64,u64)->u128", size), size);
     }
 
-    for size in sizes.iter() {
-        xfe_mul(&mut group, BenchmarkId::new("(XFE,XFE)->XFE", size), *size);
+    for size in sizes {
+        bfe_mul(&mut group, BenchmarkId::new("(BFE,BFE)->BFE", size), size);
+    }
+
+    for size in sizes {
+        xfe_mul(&mut group, BenchmarkId::new("(XFE,XFE)->XFE", size), size);
     }
 
     group.finish();
+}
+
+fn nop(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: usize) {
+    group.throughput(Throughput::Elements(size as u64));
+    group.bench_with_input(bench_id, &size, |b, _| {
+        b.iter(|| {
+            for _ in 0..size {
+                let _ = black_box(|| {});
+            }
+        })
+    });
+    group.sample_size(10);
 }
 
 fn u32_mul(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: usize) {
