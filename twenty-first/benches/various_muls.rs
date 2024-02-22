@@ -13,7 +13,7 @@ use twenty_first::shared_math::other::random_elements;
 use twenty_first::shared_math::x_field_element::XFieldElement;
 
 fn unsigned_mul(c: &mut Criterion) {
-    let mut group = c.benchmark_group("unsigned_mul");
+    let mut group = c.benchmark_group("mul");
 
     let sizes = [10, 100, 1000, 1_000_000];
 
