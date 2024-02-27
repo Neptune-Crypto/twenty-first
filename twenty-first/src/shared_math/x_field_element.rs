@@ -44,6 +44,14 @@ pub struct XFieldElement {
     pub coefficients: [BFieldElement; EXTENSION_DEGREE],
 }
 
+/// Simplifies constructing [extension field element][XFieldElement]s.
+#[macro_export]
+macro_rules! xfe {
+    ($value:expr) => {
+        XFieldElement::from($value)
+    };
+}
+
 impl From<XFieldElement> for Digest {
     /// Interpret the `XFieldElement` as a [`Digest`]. No hashing is performed. This
     /// interpretation can be useful for the
@@ -578,6 +586,7 @@ mod x_field_element_test {
     use rand::random;
     use rand::thread_rng;
 
+    use crate::bfe;
     use crate::shared_math::b_field_element::*;
     use crate::shared_math::ntt::intt;
     use crate::shared_math::ntt::ntt;
@@ -1277,5 +1286,16 @@ mod x_field_element_test {
             Ok(_) => panic!("Should not be able to convert a random digest to an XFieldElement."),
             Err(_) => println!("Conversion of random digest to XFieldElement failed as expected."),
         }
+    }
+
+    #[test]
+    fn xfe_macro_can_be_used() {
+        let x = xfe!(42);
+        let _ = xfe!(42u32);
+        let _ = xfe!(-1);
+        let _ = xfe!(x);
+        let _ = xfe!([x.coefficients[0], x.coefficients[1], x.coefficients[2]]);
+        let _ = xfe!(bfe!(42));
+        let _ = xfe!([bfe!(42), bfe!(43), bfe!(44)]);
     }
 }

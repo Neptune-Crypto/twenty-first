@@ -84,6 +84,14 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 #[derive(Debug, Copy, Clone, Default, Hash, PartialEq, Eq)]
 pub struct BFieldElement(u64);
 
+/// Simplifies constructing [base field element][BFieldElement]s.
+#[macro_export]
+macro_rules! bfe {
+    ($value:expr) => {
+        BFieldElement::from($value)
+    };
+}
+
 impl GetSize for BFieldElement {
     fn get_stack_size() -> usize {
         std::mem::size_of::<Self>()
@@ -1279,5 +1287,14 @@ mod b_prime_field_element_test {
             v if v >= 0 => prop_assert_eq!(u64::try_from(v).unwrap(), bfe.value()),
             v => prop_assert_eq!(u64::try_from(-v).unwrap(), BFieldElement::P - bfe.value()),
         }
+    }
+
+    #[test]
+    fn bfe_macro_can_be_used() {
+        let b = bfe!(42);
+        let _ = bfe!(42u32);
+        let _ = bfe!(-1);
+        let _ = bfe!(b);
+        let _ = bfe!(b.0);
     }
 }
