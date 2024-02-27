@@ -76,15 +76,21 @@ impl Sum for XFieldElement {
     }
 }
 
-impl From<u32> for XFieldElement {
-    fn from(value: u32) -> Self {
-        XFieldElement::new_const(value.into())
+impl<T> From<T> for XFieldElement
+where
+    T: Into<BFieldElement>,
+{
+    fn from(value: T) -> Self {
+        Self::new_const(value.into())
     }
 }
 
-impl From<BFieldElement> for XFieldElement {
-    fn from(bfe: BFieldElement) -> Self {
-        bfe.lift()
+impl<T> From<[T; EXTENSION_DEGREE]> for XFieldElement
+where
+    T: Into<BFieldElement>,
+{
+    fn from(value: [T; EXTENSION_DEGREE]) -> Self {
+        Self::new(value.map(Into::into))
     }
 }
 
@@ -127,7 +133,8 @@ impl TryFrom<Vec<BFieldElement>> for XFieldElement {
     type Error = TryFromXFieldElementError;
 
     fn try_from(value: Vec<BFieldElement>) -> Result<Self, Self::Error> {
-        XFieldElement::try_from(value.as_ref())
+        let value_ref: &[BFieldElement] = &value;
+        XFieldElement::try_from(value_ref)
     }
 }
 
