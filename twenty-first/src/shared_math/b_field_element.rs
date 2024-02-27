@@ -1297,4 +1297,9 @@ mod b_prime_field_element_test {
         let _ = bfe!(b);
         let _ = bfe!(b.0);
     }
+
+    #[proptest]
+    fn bfe_macro_produces_same_result_as_calling_new(value: u64) {
+        prop_assert_eq!(BFieldElement::new(value), bfe!(value));
+    }
 }
