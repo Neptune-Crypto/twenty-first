@@ -585,6 +585,7 @@ mod x_field_element_test {
     use proptest_arbitrary_interop::arb;
     use rand::random;
     use rand::thread_rng;
+    use test_strategy::proptest;
 
     use crate::bfe;
     use crate::shared_math::b_field_element::*;
@@ -1297,5 +1298,23 @@ mod x_field_element_test {
         let _ = xfe!([x.coefficients[0], x.coefficients[1], x.coefficients[2]]);
         let _ = xfe!(bfe!(42));
         let _ = xfe!([bfe!(42), bfe!(43), bfe!(44)]);
+    }
+
+    #[proptest]
+    fn xfe_macro_produces_same_result_as_calling_new(coeffs: [BFieldElement; EXTENSION_DEGREE]) {
+        let xfe = XFieldElement::new(coeffs);
+        prop_assert_eq!(xfe, xfe!(coeffs));
+    }
+
+    #[proptest]
+    fn xfe_macro_produces_same_result_as_calling_new_u64(coeffs: [u64; EXTENSION_DEGREE]) {
+        let xfe = XFieldElement::new_u64(coeffs);
+        prop_assert_eq!(xfe, xfe!(coeffs));
+    }
+
+    #[proptest]
+    fn xfe_macro_produces_same_result_as_calling_new_const(scalar: BFieldElement) {
+        let xfe = XFieldElement::new_const(scalar);
+        prop_assert_eq!(xfe, xfe!(scalar));
     }
 }
