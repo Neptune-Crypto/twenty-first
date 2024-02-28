@@ -84,6 +84,14 @@ static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 #[derive(Debug, Copy, Clone, Default, Hash, PartialEq, Eq)]
 pub struct BFieldElement(u64);
 
+/// Simplifies constructing [base field element][BFieldElement]s.
+#[macro_export]
+macro_rules! bfe {
+    ($value:expr) => {
+        BFieldElement::from($value)
+    };
+}
+
 impl GetSize for BFieldElement {
     fn get_stack_size() -> usize {
         std::mem::size_of::<Self>()
@@ -131,7 +139,7 @@ impl Sum for BFieldElement {
 impl BFieldElement {
     pub const BYTES: usize = 8;
 
-    // 2^64 - 2^32 + 1
+    /// The base field's prime, _i.e._, 2^64 - 2^32 + 1.
     pub const P: u64 = 0xffff_ffff_0000_0001u64;
     pub const MAX: u64 = Self::P - 1;
 
@@ -323,6 +331,18 @@ impl FromStr for BFieldElement {
     }
 }
 
+impl From<u8> for BFieldElement {
+    fn from(value: u8) -> Self {
+        Self::new(value.into())
+    }
+}
+
+impl From<u16> for BFieldElement {
+    fn from(value: u16) -> Self {
+        Self::new(value.into())
+    }
+}
+
 impl From<u32> for BFieldElement {
     fn from(value: u32) -> Self {
         Self::new(value.into())
@@ -332,6 +352,15 @@ impl From<u32> for BFieldElement {
 impl From<u64> for BFieldElement {
     fn from(value: u64) -> Self {
         Self::new(value)
+    }
+}
+
+impl From<i32> for BFieldElement {
+    fn from(value: i32) -> Self {
+        match value {
+            v if v >= 0 => Self::new(v as u64),
+            v => -Self::new(-v as u64),
+        }
     }
 }
 
@@ -1249,5 +1278,28 @@ mod b_prime_field_element_test {
             let expected = BFieldElement::new(18446744068340842497);
             assert_eq!(c, expected);
         }
+    }
+
+    #[proptest]
+    fn conversion_from_i32_to_bfe_is_correct(value: i32) {
+        let bfe = BFieldElement::from(value);
+        match value {
+            v if v >= 0 => prop_assert_eq!(u64::try_from(v).unwrap(), bfe.value()),
+            v => prop_assert_eq!(u64::try_from(-v).unwrap(), BFieldElement::P - bfe.value()),
+        }
+    }
+
+    #[test]
+    fn bfe_macro_can_be_used() {
+        let b = bfe!(42);
+        let _ = bfe!(42u32);
+        let _ = bfe!(-1);
+        let _ = bfe!(b);
+        let _ = bfe!(b.0);
+    }
+
+    #[proptest]
+    fn bfe_macro_produces_same_result_as_calling_new(value: u64) {
+        prop_assert_eq!(BFieldElement::new(value), bfe!(value));
     }
 }

@@ -44,6 +44,14 @@ pub struct XFieldElement {
     pub coefficients: [BFieldElement; EXTENSION_DEGREE],
 }
 
+/// Simplifies constructing [extension field element][XFieldElement]s.
+#[macro_export]
+macro_rules! xfe {
+    ($value:expr) => {
+        XFieldElement::from($value)
+    };
+}
+
 impl From<XFieldElement> for Digest {
     /// Interpret the `XFieldElement` as a [`Digest`]. No hashing is performed. This
     /// interpretation can be useful for the
@@ -76,15 +84,21 @@ impl Sum for XFieldElement {
     }
 }
 
-impl From<u32> for XFieldElement {
-    fn from(value: u32) -> Self {
-        XFieldElement::new_const(value.into())
+impl<T> From<T> for XFieldElement
+where
+    T: Into<BFieldElement>,
+{
+    fn from(value: T) -> Self {
+        Self::new_const(value.into())
     }
 }
 
-impl From<BFieldElement> for XFieldElement {
-    fn from(bfe: BFieldElement) -> Self {
-        bfe.lift()
+impl<T> From<[T; EXTENSION_DEGREE]> for XFieldElement
+where
+    T: Into<BFieldElement>,
+{
+    fn from(value: [T; EXTENSION_DEGREE]) -> Self {
+        Self::new(value.map(Into::into))
     }
 }
 
@@ -570,7 +584,9 @@ mod x_field_element_test {
     use proptest_arbitrary_interop::arb;
     use rand::random;
     use rand::thread_rng;
+    use test_strategy::proptest;
 
+    use crate::bfe;
     use crate::shared_math::b_field_element::*;
     use crate::shared_math::ntt::intt;
     use crate::shared_math::ntt::ntt;
@@ -1270,5 +1286,34 @@ mod x_field_element_test {
             Ok(_) => panic!("Should not be able to convert a random digest to an XFieldElement."),
             Err(_) => println!("Conversion of random digest to XFieldElement failed as expected."),
         }
+    }
+
+    #[test]
+    fn xfe_macro_can_be_used() {
+        let x = xfe!(42);
+        let _ = xfe!(42u32);
+        let _ = xfe!(-1);
+        let _ = xfe!(x);
+        let _ = xfe!([x.coefficients[0], x.coefficients[1], x.coefficients[2]]);
+        let _ = xfe!(bfe!(42));
+        let _ = xfe!([bfe!(42), bfe!(43), bfe!(44)]);
+    }
+
+    #[proptest]
+    fn xfe_macro_produces_same_result_as_calling_new(coeffs: [BFieldElement; EXTENSION_DEGREE]) {
+        let xfe = XFieldElement::new(coeffs);
+        prop_assert_eq!(xfe, xfe!(coeffs));
+    }
+
+    #[proptest]
+    fn xfe_macro_produces_same_result_as_calling_new_u64(coeffs: [u64; EXTENSION_DEGREE]) {
+        let xfe = XFieldElement::new_u64(coeffs);
+        prop_assert_eq!(xfe, xfe!(coeffs));
+    }
+
+    #[proptest]
+    fn xfe_macro_produces_same_result_as_calling_new_const(scalar: BFieldElement) {
+        let xfe = XFieldElement::new_const(scalar);
+        prop_assert_eq!(xfe, xfe!(scalar));
     }
 }
