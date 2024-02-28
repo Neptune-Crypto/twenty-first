@@ -3,6 +3,15 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.38.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.37.0..v0.38.0) – 2024-02-28
+
+### ✨ Features
+
+- (!) Use custom errors for fallible
+  conversions ([8be60133](https://github.com/Neptune-Crypto/twenty-first/commit/8be60133))
+- Simplify field element
+  construction ([b974d1e3](https://github.com/Neptune-Crypto/twenty-first/commit/b974d1e3))
+
 ## [0.37.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.36.0..v0.37.0) – 2024-02-15
 
 ### ✨ Features
