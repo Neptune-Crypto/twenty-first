@@ -580,16 +580,15 @@ mod mmr_membership_proof_test {
     use itertools::Itertools;
     use rand::{random, thread_rng, Rng, RngCore};
 
+    use crate::mock;
+    use crate::mock::mmr::get_mock_ammr_from_digests;
+    use crate::mock::mmr::MockMmr;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::Digest;
     use crate::shared_math::other::random_elements;
     use crate::shared_math::tip5::Tip5;
-    use crate::test_shared;
-    use crate::test_shared::mmr::get_rustyleveldb_ammr_from_digests;
-    use crate::util_types::mmr::archival_mmr::ArchivalMmr;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
     use crate::util_types::mmr::mmr_trait::Mmr;
-    use crate::util_types::storage_vec::RustyLevelDbVec;
 
     use super::*;
 
@@ -640,8 +639,7 @@ mod mmr_membership_proof_test {
         type H = blake3::Hasher;
 
         let leaf_hashes: Vec<Digest> = random_elements(8);
-        let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes);
+        let archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes);
         let (membership_proof, _peaks): (MmrMembershipProof<H>, Vec<Digest>) =
             archival_mmr.prove_membership(4);
         assert_eq!(vec![9, 13, 7], membership_proof.get_node_indices());
@@ -657,8 +655,7 @@ mod mmr_membership_proof_test {
 
         let mut mmr_size = 7;
         let leaf_digests: Vec<Digest> = random_elements(mmr_size);
-        let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_digests);
+        let mut archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_digests);
         let mut expected_peak_indices_and_heights: Vec<(u64, u32)> =
             vec![(7, 2), (7, 2), (7, 2), (7, 2), (10, 1), (10, 1), (11, 0)];
         for (leaf_index, expected_peak_index) in
@@ -721,8 +718,7 @@ mod mmr_membership_proof_test {
 
         let total_leaf_count = 8;
         let leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
-        let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+        let mut archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
         let mut membership_proofs: Vec<MmrMembershipProof<H>> = vec![];
         for i in 0..total_leaf_count {
             let leaf_index = i as u64;
@@ -760,11 +756,9 @@ mod mmr_membership_proof_test {
 
         let total_leaf_count = 268;
         let leaf_hashes_init: Vec<Digest> = random_elements(total_leaf_count);
-        let archival_mmr_init: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes_init);
+        let archival_mmr_init: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_init);
         let leaf_hashes_final: Vec<Digest> = random_elements(total_leaf_count);
-        let archival_mmr_final: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes_final.clone());
+        let archival_mmr_final: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_final.clone());
         let mut membership_proofs: Vec<MmrMembershipProof<H>> = (0..total_leaf_count as u64)
             .map(|leaf_index| archival_mmr_init.prove_membership(leaf_index).0)
             .collect();
@@ -806,8 +800,7 @@ mod mmr_membership_proof_test {
 
         let total_leaf_count = 34;
         let mut leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
-        let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+        let mut archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
         let mut rng = rand::thread_rng();
         for modified_leaf_count in 0..=total_leaf_count {
             // Pick a set of membership proofs that we want to batch-update
@@ -928,8 +921,7 @@ mod mmr_membership_proof_test {
         total_leaf_count: usize,
     ) -> (Vec<Digest>, Vec<MmrMembershipProof<H>>) {
         let leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
-        let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+        let archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
         let mut membership_proofs: Vec<MmrMembershipProof<H>> = vec![];
         for i in 0..total_leaf_count {
             let leaf_index = i as u64;
@@ -944,8 +936,7 @@ mod mmr_membership_proof_test {
 
         let total_leaf_count = 8;
         let leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
-        let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes);
+        let mut archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes);
         let modified_leaf_count: usize = 8;
         let mut membership_proofs: Vec<MmrMembershipProof<H>> = vec![];
         for i in 0..modified_leaf_count {
@@ -990,10 +981,8 @@ mod mmr_membership_proof_test {
         let mut accumulator_mmr = MmrAccumulator::<H>::new(leaf_hashes.clone());
 
         assert_eq!(8, accumulator_mmr.count_leaves());
-        let mut an_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
-        let original_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+        let mut an_archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
+        let original_archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
         let (mut membership_proof, _peaks): (MmrMembershipProof<H>, Vec<Digest>) =
             an_archival_mmr.prove_membership(4);
 
@@ -1047,8 +1036,7 @@ mod mmr_membership_proof_test {
 
         // 5. test batch update from leaf update
         for i in 0..8 {
-            let mut archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+            let mut archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
             let mut mps: Vec<MmrMembershipProof<H>> = vec![];
 
             for j in 0..8 {
@@ -1109,8 +1097,7 @@ mod mmr_membership_proof_test {
         for leaf_count in 0..=22 {
             let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
             let new_leaf: Digest = random();
-            let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+            let archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
 
             // Loop over all leaf indices that we want to modify in the MMR
             for i in 0..leaf_count {
@@ -1119,8 +1106,8 @@ mod mmr_membership_proof_test {
                     MmrMembershipProof<H>,
                     Vec<Digest>,
                 ) = archival_mmr.prove_membership(leaf_index_i);
-                let mut modified_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                    get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+                let mut modified_archival_mmr: MockMmr<H> =
+                    get_mock_ammr_from_digests(leaf_hashes.clone());
                 modified_archival_mmr.mutate_leaf_raw(leaf_index_i, new_leaf);
                 let new_peaks = modified_archival_mmr.get_peaks();
 
@@ -1184,7 +1171,7 @@ mod mmr_membership_proof_test {
             .zip_eq(random_elements(collected_values))
             .collect_vec();
         let (mut mmra, mut mps) =
-            test_shared::mmr::mmra_with_mps::<H>(original_leaf_count, specified_leafs.clone());
+            mock::mmr::mmra_with_mps::<H>(original_leaf_count, specified_leafs.clone());
 
         let new_leaf: Digest = random();
         let old_peaks = mmra.get_peaks();
@@ -1213,15 +1200,14 @@ mod mmr_membership_proof_test {
         let leaf_count = 7;
         let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
         let new_leaf: Digest = H::hash(&133337u64);
-        let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+        let archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
 
         for i in 0..leaf_count {
             let leaf_index = i as u64;
             let (mut membership_proof, old_peaks): (MmrMembershipProof<H>, Vec<Digest>) =
                 archival_mmr.prove_membership(leaf_index);
-            let mut appended_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+            let mut appended_archival_mmr: MockMmr<H> =
+                get_mock_ammr_from_digests(leaf_hashes.clone());
             // let mut appended_archival_mmr = archival_mmr.clone();
             appended_archival_mmr.append(new_leaf);
             let new_peaks = appended_archival_mmr.get_peaks();
@@ -1264,21 +1250,20 @@ mod mmr_membership_proof_test {
         type H = blake3::Hasher;
 
         for leaf_count in 0..68u64 {
-            // 1. Build an ArchivalMmr with a variable amount of leaves
+            // 1. Build a MockMmr with a variable amount of leaves
             let leaf_digests: Vec<Digest> = random_elements(leaf_count as usize);
             let new_leaf_digest: Digest = rand::thread_rng().gen();
-            let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(leaf_digests.clone());
+            let archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_digests.clone());
 
             // For every valid data index
             for leaf_index in 0..leaf_count {
-                // 2. Create an equivalent ArchivalMmr, but with `new_leaf_digest` appended
-                let mut appended_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                    get_rustyleveldb_ammr_from_digests(leaf_digests.clone());
+                // 2. Create an equivalent MockMmr, but with `new_leaf_digest` appended
+                let mut appended_archival_mmr: MockMmr<H> =
+                    get_mock_ammr_from_digests(leaf_digests.clone());
                 appended_archival_mmr.append(new_leaf_digest);
                 let new_peaks = appended_archival_mmr.get_peaks();
 
-                // 3. Create membership proof for ArchivalMmr from before `new_leaf_digest`
+                // 3. Create membership proof for MockMmr from before `new_leaf_digest`
                 let (original_membership_proof, original_peaks) =
                     archival_mmr.prove_membership(leaf_index);
 
@@ -1308,7 +1293,7 @@ mod mmr_membership_proof_test {
                     assert!(original_membership_proof_verifies,);
                 }
 
-                // 6. Assert that updating an old membership proof is equivalent to getting a proof for an appended ArchivalMmr
+                // 6. Assert that updating an old membership proof is equivalent to getting a proof for an appended MockMmr
                 let expected = (updated_membership_proof, new_peaks);
                 assert_eq!(expected, appended_archival_mmr.prove_membership(leaf_index));
             }
@@ -1326,9 +1311,9 @@ mod mmr_membership_proof_test {
                 assert!(membership_proof_verifies_before_batch_update);
             }
 
-            // ...and then create an equivalent ArchivalMmr, but with `new_leaf_digest` appended...
-            let mut appended_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(leaf_digests.clone());
+            // ...and then create an equivalent MockMmr, but with `new_leaf_digest` appended...
+            let mut appended_archival_mmr: MockMmr<H> =
+                get_mock_ammr_from_digests(leaf_digests.clone());
             appended_archival_mmr.append(new_leaf_digest);
             let new_peaks = appended_archival_mmr.get_peaks();
             let mut mutated_membership_proofs = original_membership_proofs.clone();
@@ -1380,16 +1365,15 @@ mod mmr_membership_proof_test {
         // append update.
         for leaf_count in 0..9 {
             let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
-            let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+            let archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
             let new_leaf = H::hash(&BFieldElement::new(13333337));
             for i in 0..leaf_count {
                 let leaf_index = i as u64;
                 let leaf_count_index = leaf_count as u64;
                 let (original_membership_proof, old_peaks): (MmrMembershipProof<H>, Vec<Digest>) =
                     archival_mmr.prove_membership(leaf_index);
-                let mut appended_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                    get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+                let mut appended_archival_mmr: MockMmr<H> =
+                    get_mock_ammr_from_digests(leaf_hashes.clone());
                 appended_archival_mmr.append(new_leaf);
                 let new_peaks = appended_archival_mmr.get_peaks();
 
@@ -1433,8 +1417,7 @@ mod mmr_membership_proof_test {
         type H = Tip5;
 
         let leaf_hashes: Vec<Digest> = random_elements(3);
-        let archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+        let archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
         let mp: MmrMembershipProof<H> = archival_mmr.prove_membership(1).0;
         let json = serde_json::to_string(&mp).unwrap();
         let s_back = serde_json::from_str::<MmrMembershipProof<H>>(&json).unwrap();
@@ -1452,7 +1435,7 @@ mod mmr_membership_proof_test {
         for _ in 0..100 {
             let num_leafs = 2 + (rng.next_u32() as usize % 1000);
             let leaf_hashes = random_elements(num_leafs);
-            let archival_mmr = get_rustyleveldb_ammr_from_digests::<H>(leaf_hashes);
+            let archival_mmr = get_mock_ammr_from_digests::<H>(leaf_hashes);
             let leaf_index = (rng.next_u32() as usize % num_leafs) as u64;
             let mp = archival_mmr.prove_membership(leaf_index).0;
             let mp_encoded = mp.encode();

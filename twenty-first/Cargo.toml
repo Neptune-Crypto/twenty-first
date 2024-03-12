@@ -14,6 +14,10 @@ readme = "../README.md"
 keywords = ["polynomial", "merkle-tree", "post-quantum", "algebra", "tip5"]
 categories = ["cryptography", "mathematics"]
 
+[features]
+# include mock module
+mock = []
+
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 pretty_assertions = "1.4"

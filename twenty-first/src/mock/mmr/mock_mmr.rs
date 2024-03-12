@@ -1,33 +1,41 @@
 use std::marker::PhantomData;
 
-use leveldb::batch::WriteBatch;
-
 use crate::shared_math::digest::Digest;
-use crate::storage::storage_vec::traits::*;
-use crate::storage::storage_vec::RustyLevelDbVec;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::shared::bag_peaks;
 use crate::utils::has_unique_elements;
 
-use super::mmr_accumulator::MmrAccumulator;
-use super::mmr_membership_proof::MmrMembershipProof;
-use super::mmr_trait::Mmr;
-use super::shared_advanced;
-use super::shared_basic;
+use crate::util_types::mmr::{
+    mmr_accumulator::MmrAccumulator, mmr_membership_proof::MmrMembershipProof, mmr_trait::Mmr,
+    shared_advanced, shared_basic,
+};
 
+/// MockMmr is available for feature `mock` and for unit tests.
+///
+/// It implements an in-memory Archival-Mmr using a Vec<Digest> as the data
+/// store.
+///
+/// Archival-Mmr vs Accumulator-Mmr:
+///
+///   An Archival-MMR stores all nodes in multiple trees whereas an
+///   Accumulator-MMR only stores the roots of the binary trees.
+///
+/// MockMmr is not intended or tested for any kind of production usage.
+///
 /// A Merkle Mountain Range is a datastructure for storing a list of hashes.
 ///
-/// Merkle Mountain Ranges only know about hashes. When values are to be associated with
-/// MMRs, these values must be stored by the caller, or in a wrapper to this data structure.
-pub struct ArchivalMmr<H: AlgebraicHasher, Storage: StorageVec<Digest>> {
-    digests: Storage,
+/// Merkle Mountain Ranges only know about hashes. When values are to be
+/// associated with MMRs, these values must be stored by the caller, or in a
+/// wrapper to this data structure.
+#[derive(Debug, Clone)]
+pub struct MockMmr<H: AlgebraicHasher> {
+    digests: MyVec<Digest>,
     _hasher: PhantomData<H>,
 }
 
-impl<H, Storage> Mmr<H> for ArchivalMmr<H, Storage>
+impl<H> Mmr<H> for MockMmr<H>
 where
-    H: AlgebraicHasher + Send + Sync,
-    Storage: StorageVec<Digest>,
+    H: AlgebraicHasher,
 {
     /// Calculate the root for the entire MMR
     fn bag_peaks(&self) -> Digest {
@@ -59,7 +67,7 @@ where
         acc
     }
 
-    /// Append an element to the archival MMR, return the membership proof of the newly added leaf.
+    /// Append an element to the MockMmr, return the membership proof of the newly added leaf.
     /// The membership proof is returned here since the accumulater MMR has no other way of
     /// retrieving a membership proof for a leaf. And the archival and accumulator MMR share
     /// this interface.
@@ -127,11 +135,11 @@ where
     }
 }
 
-impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
-    /// Create a new archival MMR, or restore one from a database.
-    pub fn new(pv: Storage) -> Self {
+impl<H: AlgebraicHasher> MockMmr<H> {
+    /// Create a new MockMmr
+    pub fn new(pv: Vec<Digest>) -> Self {
         let mut ret = Self {
-            digests: pv,
+            digests: MyVec::from(pv),
             _hasher: PhantomData,
         };
         ret.fix_dummy();
@@ -155,7 +163,7 @@ impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
         self.digests.get(node_index)
     }
 
-    /// Update a hash in the existing archival MMR
+    /// Update a hash in the existing MockMmr
     pub fn mutate_leaf_raw(&mut self, leaf_index: u64, new_leaf: Digest) {
         // 1. change the leaf value
         let mut node_index = shared_advanced::leaf_index_to_node_index(leaf_index);
@@ -278,7 +286,7 @@ impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
         peaks_and_heights
     }
 
-    /// Append an element to the archival MMR
+    /// Append an element to the MockMmr
     pub fn append_raw(&mut self, new_leaf: Digest) {
         let node_index = self.digests.len();
         self.digests.push(new_leaf);
@@ -295,7 +303,7 @@ impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
         }
     }
 
-    /// Remove the last leaf from the archival MMR
+    /// Remove the last leaf from the MockMmr
     pub fn remove_last_leaf(&mut self) -> Option<Digest> {
         if self.is_empty() {
             return None;
@@ -313,10 +321,39 @@ impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
     }
 }
 
-impl<H: AlgebraicHasher> ArchivalMmr<H, RustyLevelDbVec<Digest>> {
-    /// Add write queue to referenced write batch. Leaves cache and write queue empty.
-    pub fn persist(&mut self, write_batch: &mut WriteBatch) {
-        self.digests.pull_queue(write_batch);
+// a tiny wrapper around Vec<T> to make it compatible with
+// StorageVec trait, as used by MockMmr.
+//
+// note: we do NOT impl StorageVec trait, as that is going
+// to become async and we want to remain sync here.
+#[derive(Debug, Clone, Default)]
+struct MyVec<T>(Vec<T>);
+
+impl<T> From<Vec<T>> for MyVec<T> {
+    fn from(vec: Vec<T>) -> Self {
+        Self(vec)
+    }
+}
+
+impl<T: Clone> MyVec<T> {
+    fn len(&self) -> u64 {
+        self.0.len() as u64
+    }
+
+    fn get(&self, index: u64) -> T {
+        self.0.get(index as usize).unwrap().clone()
+    }
+
+    fn set(&mut self, index: u64, value: T) {
+        self.0[index as usize] = value;
+    }
+
+    fn push(&mut self, value: T) {
+        self.0.push(value)
+    }
+
+    fn pop(&mut self) -> Option<T> {
+        self.0.pop()
     }
 }
 
@@ -324,27 +361,24 @@ impl<H: AlgebraicHasher> ArchivalMmr<H, RustyLevelDbVec<Digest>> {
 mod mmr_test {
 
     use itertools::*;
-    use leveldb::iterator::Iterable;
-    use leveldb::options::ReadOptions;
+
     use rand::random;
     use test_strategy::proptest;
 
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::*;
     use crate::shared_math::tip5::Tip5;
-    use crate::storage::level_db::DB;
-    use crate::test_shared::mmr::*;
+
+    use crate::mock::mmr::*;
     use crate::util_types::merkle_tree::merkle_tree_test::MerkleTreeToTest;
     use crate::util_types::merkle_tree::*;
     use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
-    use crate::util_types::mmr::archival_mmr::ArchivalMmr;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
     use crate::util_types::mmr::shared_advanced::get_peak_heights_and_peak_node_indices;
-    use crate::util_types::storage_schema::*;
 
     use super::*;
 
-    impl<H: AlgebraicHasher, Storage: StorageVec<Digest>> ArchivalMmr<H, Storage> {
+    impl<H: AlgebraicHasher> MockMmr<H> {
         /// Return the number of nodes in all the trees in the MMR
         fn count_nodes(&mut self) -> u64 {
             self.digests.len() - 1
@@ -384,9 +418,8 @@ mod mmr_test {
     #[test]
     fn empty_mmr_behavior_test() {
         type H = blake3::Hasher;
-        type Storage = RustyLevelDbVec<Digest>;
 
-        let mut archival_mmr: ArchivalMmr<H, Storage> = get_empty_rustyleveldb_ammr();
+        let mut archival_mmr: MockMmr<H> = get_empty_mock_ammr();
         let mut accumulator_mmr: MmrAccumulator<H> = MmrAccumulator::<H>::new(vec![]);
 
         assert_eq!(0, archival_mmr.count_leaves());
@@ -406,7 +439,7 @@ mod mmr_test {
         // Test behavior of appending to an empty MMR
         let new_leaf = random();
 
-        let mut archival_mmr_appended = get_empty_rustyleveldb_ammr();
+        let mut archival_mmr_appended = get_empty_mock_ammr();
         {
             let archival_membership_proof = archival_mmr_appended.append(new_leaf);
 
@@ -434,7 +467,7 @@ mod mmr_test {
             archival_mmr_appended.get_peaks()
         );
 
-        // Verify that the appended value matches the one stored in the archival MMR
+        // Verify that the appended value matches the one stored in the MockMmr
         assert_eq!(new_leaf, archival_mmr.get_leaf(0));
 
         // Verify that the membership proofs for the inserted leafs are valid and that they agree
@@ -466,8 +499,8 @@ mod mmr_test {
         // This error was fixed and this test fails without that fix.
         let leaf_hashes: Vec<Digest> = random_elements(3);
 
-        // let archival_mmr = ArchivalMmr::<Hasher>::new(leaf_hashes.clone());
-        let archival_mmr = get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+        // let archival_mmr = MockMmr::<Hasher>::new(leaf_hashes.clone());
+        let archival_mmr = get_mock_ammr_from_digests(leaf_hashes.clone());
         let (mut membership_proof, peaks): (MmrMembershipProof<H>, Vec<Digest>) =
             archival_mmr.prove_membership(0);
 
@@ -505,11 +538,11 @@ mod mmr_test {
     fn mutate_leaf_archival_test() {
         type H = Tip5;
 
-        // Create ArchivalMmr
+        // Create MockMmr
 
         let leaf_count = 3;
         let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
-        let mut archival_mmr = get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+        let mut archival_mmr = get_mock_ammr_from_digests(leaf_hashes.clone());
 
         let leaf_index: usize = 2;
         let (mp1, old_peaks): (MmrMembershipProof<H>, Vec<Digest>) =
@@ -521,10 +554,9 @@ mod mmr_test {
             mp1.verify(&old_peaks, leaf_hashes[leaf_index], leaf_count as u64);
         assert!(mp1_verifies);
 
-        // Create copy of ArchivalMmr, recreate membership proof
+        // Create copy of MockMmr, recreate membership proof
 
-        let mut other_archival_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes.clone());
+        let mut other_archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
 
         let (mp2, _acc_hash_2) = other_archival_mmr.prove_membership(leaf_index as u64);
 
@@ -558,11 +590,10 @@ mod mmr_test {
             mp2.verify(&new_peaks_two, mutated_leaf, leaf_count as u64);
         assert!(mp2_verifies_mutated_leaf);
 
-        // Create a new archival MMR with the same leaf hashes as in the
+        // Create a new MockMmr with the same leaf hashes as in the
         // modified MMR, and verify that the two MMRs are equivalent
 
-        let archival_mmr_new: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes);
+        let archival_mmr_new: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes);
         assert_eq!(archival_mmr.digests.len(), archival_mmr_new.digests.len());
 
         for i in 0..leaf_count {
@@ -576,8 +607,7 @@ mod mmr_test {
     fn bag_peaks_gen<H: AlgebraicHasher>() {
         // Verify that archival and accumulator MMR produce the same root
         let leaf_hashes_blake3: Vec<Digest> = random_elements(3);
-        let archival_mmr_small: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(leaf_hashes_blake3.clone());
+        let archival_mmr_small: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_blake3.clone());
         let accumulator_mmr_small = MmrAccumulator::<H>::new(leaf_hashes_blake3);
         assert_eq!(
             archival_mmr_small.bag_peaks(),
@@ -610,10 +640,8 @@ mod mmr_test {
             let leaf_hashes_blake3: Vec<Digest> = random_elements(size);
 
             let mut acc = MmrAccumulator::<H>::new(leaf_hashes_blake3.clone());
-            let mut archival: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(leaf_hashes_blake3.clone());
-            let archival_end_state: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(vec![new_leaf; size]);
+            let mut archival: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_blake3.clone());
+            let archival_end_state: MockMmr<H> = get_mock_ammr_from_digests(vec![new_leaf; size]);
             for i in 0..size {
                 let i = i as u64;
                 let (mp, _archival_peaks) = archival.prove_membership(i);
@@ -637,10 +665,8 @@ mod mmr_test {
             let bad_leaf: Digest = random();
             let leaf_hashes_blake3: Vec<Digest> = random_elements(size);
             let mut acc = MmrAccumulator::<H>::new(leaf_hashes_blake3.clone());
-            let mut archival: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(leaf_hashes_blake3.clone());
-            let archival_end_state: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(vec![new_leaf; size]);
+            let mut archival: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_blake3.clone());
+            let archival_end_state: MockMmr<H> = get_mock_ammr_from_digests(vec![new_leaf; size]);
             for i in 0..size {
                 let i = i as u64;
                 let (mp, peaks_before_update) = archival.prove_membership(i);
@@ -674,10 +700,8 @@ mod mmr_test {
         // Verify that building an MMR iteratively or in *one* function call results in the same MMR
         for size in 1..260 {
             let leaf_hashes_blake3: Vec<Digest> = random_elements(size);
-            let mut archival_iterative: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(vec![]);
-            let archival_batch: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(leaf_hashes_blake3.clone());
+            let mut archival_iterative: MockMmr<H> = get_mock_ammr_from_digests(vec![]);
+            let archival_batch: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_blake3.clone());
             let mut accumulator_iterative = MmrAccumulator::<H>::new(vec![]);
             let accumulator_batch = MmrAccumulator::<H>::new(leaf_hashes_blake3.clone());
             for (leaf_index, leaf_hash) in leaf_hashes_blake3.clone().into_iter().enumerate() {
@@ -700,7 +724,7 @@ mod mmr_test {
                         .0
                 );
 
-                // Verify that membership proofs are the same as generating them from an archival MMR
+                // Verify that membership proofs are the same as generating them from a MockMmr
                 let archival_membership_proof_direct =
                     archival_iterative.prove_membership(leaf_index as u64).0;
                 assert_eq!(archival_membership_proof_direct, archival_membership_proof);
@@ -737,12 +761,10 @@ mod mmr_test {
 
         let input_hash = H::hash(&BFieldElement::new(14));
         let new_input_hash = H::hash(&BFieldElement::new(201));
-        let mut mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(vec![input_hash]);
-        let original_mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(vec![input_hash]);
-        let mmr_after_append: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(vec![input_hash, new_input_hash]);
+        let mut mmr: MockMmr<H> = get_mock_ammr_from_digests(vec![input_hash]);
+        let original_mmr: MockMmr<H> = get_mock_ammr_from_digests(vec![input_hash]);
+        let mmr_after_append: MockMmr<H> =
+            get_mock_ammr_from_digests(vec![input_hash, new_input_hash]);
         assert_eq!(1, mmr.count_leaves());
         assert_eq!(1, mmr.count_nodes());
 
@@ -804,8 +826,7 @@ mod mmr_test {
         let num_leaves: u64 = 3;
         let input_digests: Vec<Digest> = random_elements(num_leaves as usize);
 
-        let mut mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(input_digests.clone());
+        let mut mmr: MockMmr<H> = get_mock_ammr_from_digests(input_digests.clone());
         assert_eq!(num_leaves, mmr.count_leaves());
         assert_eq!(1 + num_leaves, mmr.count_nodes());
 
@@ -865,8 +886,7 @@ mod mmr_test {
 
         for (leaf_count, node_count, peak_count) in izip!(leaf_counts, node_counts, peak_counts) {
             let input_hashes: Vec<Digest> = random_elements(leaf_count as usize);
-            let mut mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(input_hashes.clone());
+            let mut mmr: MockMmr<H> = get_mock_ammr_from_digests(input_hashes.clone());
 
             assert_eq!(leaf_count, mmr.count_leaves());
             assert_eq!(node_count, mmr.count_nodes());
@@ -921,8 +941,7 @@ mod mmr_test {
         type H = blake3::Hasher;
 
         let input_digests: Vec<Digest> = random_elements(12);
-        let mut mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(input_digests.clone());
+        let mut mmr: MockMmr<H> = get_mock_ammr_from_digests(input_digests.clone());
         assert_eq!(22, mmr.count_nodes());
         assert_eq!(Some(input_digests[11]), mmr.remove_last_leaf());
         assert_eq!(19, mmr.count_nodes());
@@ -961,10 +980,8 @@ mod mmr_test {
         let input_digests_big: Vec<Digest> = random_elements(big_size);
         let input_digests_small: Vec<Digest> = input_digests_big[0..small_size].to_vec();
 
-        let mut mmr_small: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(input_digests_small);
-        let mut mmr_big: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-            get_rustyleveldb_ammr_from_digests(input_digests_big);
+        let mut mmr_small: MockMmr<H> = get_mock_ammr_from_digests(input_digests_small);
+        let mut mmr_big: MockMmr<H> = get_mock_ammr_from_digests(input_digests_big);
 
         for _ in 0..(big_size - small_size) {
             mmr_big.remove_last_leaf();
@@ -992,10 +1009,8 @@ mod mmr_test {
         for (leaf_count, node_count, peak_count) in izip!(leaf_counts, node_counts, peak_counts) {
             let size = leaf_count as u64;
             let input_digests: Vec<Digest> = random_elements(leaf_count);
-            let mut mmr: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(input_digests.clone());
-            let mmr_original: ArchivalMmr<H, RustyLevelDbVec<Digest>> =
-                get_rustyleveldb_ammr_from_digests(input_digests.clone());
+            let mut mmr: MockMmr<H> = get_mock_ammr_from_digests(input_digests.clone());
+            let mmr_original: MockMmr<H> = get_mock_ammr_from_digests(input_digests.clone());
             assert_eq!(size, mmr.count_leaves());
             assert_eq!(node_count, mmr.count_nodes());
             let original_peaks_and_heights: Vec<(Digest, u32)> = mmr.get_peaks_with_heights();
@@ -1053,72 +1068,5 @@ mod mmr_test {
             mmr.append(new_leaf_hash);
             assert!(mmr_original.verify_batch_update(&mmr.get_peaks(), &[new_leaf_hash], &[]));
         }
-    }
-
-    #[test]
-    fn rust_leveldb_persist_test() {
-        type H = blake3::Hasher;
-
-        let mut db = DB::open_new_test_database(true, None, None, None).unwrap();
-        let persistent_vec_0 = RustyLevelDbVec::new(db.clone(), 0, "archival MMR for unit tests");
-        let mut ammr0: ArchivalMmr<H, RustyLevelDbVec<Digest>> = ArchivalMmr::new(persistent_vec_0);
-        let persistent_vec_1 = RustyLevelDbVec::new(db.clone(), 1, "archival MMR for unit tests");
-        let mut ammr1: ArchivalMmr<H, RustyLevelDbVec<Digest>> = ArchivalMmr::new(persistent_vec_1);
-
-        let digest0: Digest = random();
-        ammr0.append(digest0);
-
-        let digest1: Digest = random();
-        ammr1.append(digest1);
-        // Verify that DB is still empty
-        let mut db_iter = db.iter(&ReadOptions::new());
-        assert!(db_iter.next().is_none());
-
-        let mut write_batch = WriteBatch::new();
-        ammr0.persist(&mut write_batch);
-
-        // Verify that DB is still empty, as the write batch hasn't been applied yet
-        let mut db_iter2 = db.iter(&ReadOptions::new());
-        assert!(db_iter2.next().is_none());
-
-        ammr1.persist(&mut write_batch);
-
-        // Verify that DB is still empty, as the write batch hasn't been applied yet
-        let mut db_iter3 = db.iter(&ReadOptions::new());
-        assert!(db_iter3.next().is_none());
-
-        db.write_auto(&write_batch).unwrap();
-
-        // Verify that DB is not empty
-        let mut db_iter4 = db.iter(&ReadOptions::new());
-        assert!(db_iter4.next().is_some());
-
-        assert_eq!(digest0, ammr0.get_leaf(0));
-        assert_eq!(digest1, ammr1.get_leaf(0));
-    }
-
-    #[test]
-    fn rust_leveldb_persist_storage_schema_test() {
-        type H = blake3::Hasher;
-
-        let db = DB::open_new_test_database(true, None, None, None).unwrap();
-        let mut storage = SimpleRustyStorage::new(db);
-        storage.restore_or_new();
-        let ammr0 = storage.schema.new_vec::<Digest>("ammr-nodes-digests-0");
-        let mut ammr0: ArchivalMmr<H, _> = ArchivalMmr::new(ammr0);
-        let ammr1 = storage.schema.new_vec::<Digest>("ammr-nodes-digests-1");
-        let mut ammr1: ArchivalMmr<H, _> = ArchivalMmr::new(ammr1);
-
-        let digest0: Digest = random();
-        ammr0.append(digest0);
-
-        let digest1: Digest = random();
-        ammr1.append(digest1);
-        assert_eq!(digest0, ammr0.get_leaf(0));
-        assert_eq!(digest1, ammr1.get_leaf(0));
-        storage.persist();
-
-        assert_eq!(digest0, ammr0.get_leaf(0));
-        assert_eq!(digest1, ammr1.get_leaf(0));
     }
 }
