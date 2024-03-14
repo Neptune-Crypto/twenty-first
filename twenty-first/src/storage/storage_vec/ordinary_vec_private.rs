@@ -6,7 +6,16 @@ pub(crate) struct OrdinaryVecPrivate<T>(pub(super) Vec<T>);
 impl<T: Clone> StorageVecLockedData<T> for OrdinaryVecPrivate<T> {
     #[inline]
     fn get(&self, index: Index) -> T {
-        self.0.get(index as usize).unwrap().clone()
+        self.0
+            .get(index as usize)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Out-of-bounds. Got index {} but length was {}.",
+                    index,
+                    self.0.len(),
+                )
+            })
+            .clone()
     }
 
     #[inline]

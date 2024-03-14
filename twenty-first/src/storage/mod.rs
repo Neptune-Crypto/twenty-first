@@ -5,12 +5,10 @@
 //! Thread-safe collection types backed by levelDB.
 //!
 //! In particular:
-//!  - [`RustyLevelDbVec`](storage_vec::RustyLevelDbVec) provides a database-backed Vec with
-//!    read/write cache and atomic writes.
+//!  - [`OrdinaryVec`](storage_vec::OrdinaryVec) provides a standard (in-memory) Vec
+//!    that implements the StorageVec trait.  It is mainly useful for tests and doctests.
 //!  - [`SimpleRustyStorage`](storage_schema::SimpleRustyStorage) provides atomic DB writes across
 //!    any number of [`DbtVec`](storage_schema::DbtVec) or [`DbtSingleton`](storage_schema::DbtSingleton) "tables".
-//!  - [`DatabaseArray`](database_array::DatabaseArray) and [`DatabaseVector`](database_vector::DatabaseVector) provide uncached
-//!    and non-atomic writes.
 //!  - [`DB`](level_db::DB) provides a convenient wrapper for the LevelDB API.
 
 // For anyone reading this code and trying to understand the StorageVec trait and the DbSchema
@@ -56,10 +54,6 @@
 //     per operation.  The disadvantage is that caller must keep track of the created tables
 //     and pass them to StorageWriter::persist() as Vec<&type as &dyn DbTable>, which is ugly.
 
-pub mod database_array;
-pub mod database_vector;
 pub mod level_db;
 pub mod storage_schema;
 pub mod storage_vec;
-
-mod utils;
