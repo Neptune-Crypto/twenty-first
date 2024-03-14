@@ -1,6 +1,6 @@
 use crate::shared_math::ntt::{intt, ntt};
 use crate::shared_math::other::{log_2_floor, roundup_npo2};
-use crate::shared_math::traits::{FiniteField, ModPowU32};
+use crate::shared_math::traits::FiniteField;
 use crate::utils::has_unique_elements;
 use arbitrary::Arbitrary;
 use itertools::EitherOrBoth::{Both, Left, Right};
@@ -268,11 +268,15 @@ where
         root_order: usize,
     ) -> Self {
         assert!(
-            primitive_root.mod_pow_u32(root_order as u32).is_one(),
+            primitive_root
+                .mod_pow(root_order.try_into().unwrap())
+                .is_one(),
             "provided primitive root must have the provided power."
         );
         assert!(
-            !primitive_root.mod_pow_u32(root_order as u32 / 2).is_one(),
+            !primitive_root
+                .mod_pow((root_order / 2).try_into().unwrap())
+                .is_one(),
             "provided primitive root must be primitive in the right power."
         );
 
@@ -407,7 +411,7 @@ where
             "Domain and values lengths must match"
         );
         debug_assert_eq!(
-            primitive_root.mod_pow_u32(root_order as u32),
+            primitive_root.mod_pow(root_order.try_into().unwrap()),
             BFieldElement::one(),
             "Supplied element “primitive_root” must have supplied order.\
             Supplied element was: {primitive_root:?}\
@@ -474,7 +478,7 @@ where
         root_order: usize,
     ) -> Vec<Self> {
         debug_assert_eq!(
-            primitive_root.mod_pow_u32(root_order as u32),
+            primitive_root.mod_pow(root_order.try_into().unwrap()),
             BFieldElement::one(),
             "Supplied element “primitive_root” must have supplied order.\
             Supplied element was: {primitive_root:?}\

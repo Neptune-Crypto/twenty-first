@@ -12,6 +12,7 @@ use std::ops::SubAssign;
 use arbitrary::Arbitrary;
 use bfieldcodec_derive::BFieldCodec;
 use num_traits::One;
+use num_traits::Pow;
 use num_traits::Zero;
 use rand::Rng;
 use rand_distr::Distribution;
@@ -27,8 +28,6 @@ use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::traits::FiniteField;
 use crate::shared_math::traits::FromVecu8;
 use crate::shared_math::traits::Inverse;
-use crate::shared_math::traits::ModPowU32;
-use crate::shared_math::traits::ModPowU64;
 use crate::shared_math::traits::New;
 use crate::shared_math::traits::PrimitiveRootOfUnity;
 use crate::util_types::emojihash_trait::Emojihash;
@@ -549,10 +548,11 @@ impl Div for XFieldElement {
     }
 }
 
-impl ModPowU64 for XFieldElement {
-    #[inline]
-    fn mod_pow_u64(&self, exponent: u64) -> Self {
-        let mut x = *self;
+impl Pow<u64> for XFieldElement {
+    type Output = Self;
+
+    fn pow(self, exponent: u64) -> Self {
+        let mut x = self;
         let mut result = Self::one();
         let mut i = exponent;
 
@@ -569,10 +569,27 @@ impl ModPowU64 for XFieldElement {
     }
 }
 
-impl ModPowU32 for XFieldElement {
-    #[inline]
-    fn mod_pow_u32(&self, exp: u32) -> Self {
-        self.mod_pow_u64(exp as u64)
+impl Pow<u32> for XFieldElement {
+    type Output = Self;
+
+    fn pow(self, exp: u32) -> Self {
+        self.pow(u64::from(exp))
+    }
+}
+
+impl Pow<u16> for XFieldElement {
+    type Output = Self;
+
+    fn pow(self, exp: u16) -> Self {
+        self.pow(u64::from(exp))
+    }
+}
+
+impl Pow<u8> for XFieldElement {
+    type Output = Self;
+
+    fn pow(self, exp: u8) -> Self {
+        self.pow(u64::from(exp))
     }
 }
 
@@ -1114,19 +1131,19 @@ mod x_field_element_test {
     #[test]
     fn xfe_mod_pow_zero_test() {
         assert!(
-            XFieldElement::zero().mod_pow_u32(0).is_one(),
+            XFieldElement::zero().pow(0u32).is_one(),
             "0^0 must be 1 for XFE"
         );
         assert!(
-            XFieldElement::zero().mod_pow_u64(0).is_one(),
+            XFieldElement::zero().pow(0u64).is_one(),
             "0^0 must be 1 for XFE"
         );
         assert!(
-            XFieldElement::one().mod_pow_u32(0).is_one(),
+            XFieldElement::one().pow(0u32).is_one(),
             "0^0 must be 1 for XFE"
         );
         assert!(
-            XFieldElement::one().mod_pow_u64(0).is_one(),
+            XFieldElement::one().pow(0u64).is_one(),
             "0^0 must be 1 for XFE"
         );
     }
@@ -1140,7 +1157,7 @@ mod x_field_element_test {
             let mut acc = XFieldElement::one();
 
             for i in 0..exponent {
-                assert_eq!(acc, base.mod_pow_u32(i));
+                assert_eq!(acc, base.pow(i));
                 acc *= base;
             }
         }
@@ -1148,23 +1165,11 @@ mod x_field_element_test {
 
     #[test]
     fn x_field_mod_pow_test() {
-        let const_poly = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
+        let three = xfe!(3);
+        let actual = [0u64, 1, 2, 3, 4, 5].map(|n| three.pow(n));
 
-        let expecteds = [1u64, 3, 9, 27, 81, 243].iter().map(|&x| {
-            XFieldElement::new([
-                BFieldElement::new(x),
-                BFieldElement::zero(),
-                BFieldElement::zero(),
-            ])
-        });
-
-        let actuals = [0u64, 1, 2, 3, 4, 5]
-            .iter()
-            .map(|&n| const_poly.mod_pow_u64(n));
-
-        for (expected, actual) in izip!(expecteds, actuals) {
-            assert_eq!(expected, actual);
-        }
+        let expected = [1, 3, 9, 27, 81, 243].map(|b| xfe!(b));
+        assert_eq!(expected, actual);
     }
 
     #[test]

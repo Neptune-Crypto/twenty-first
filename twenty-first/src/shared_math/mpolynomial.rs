@@ -587,9 +587,7 @@ impl<FF: FiniteField> MPolynomial<FF> {
                 if k[i] == 0 {
                     continue;
                 }
-                // FIXME: We really don't want to cast to 'u32' here, but
-                // refactoring k: Vec<u32> is a bit of a task, too. See issue ...
-                prod *= point[i].mod_pow_u32(k[i] as u32);
+                prod *= point[i].pow(k[i]);
             }
             prod *= *v;
             acc += prod;

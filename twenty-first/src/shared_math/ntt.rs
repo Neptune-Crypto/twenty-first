@@ -1,14 +1,14 @@
 use std::ops::MulAssign;
 
+use num_traits::Pow;
 use num_traits::Zero;
 use rand_distr::num_traits::One;
 
-use crate::shared_math::traits::{FiniteField, ModPowU32};
+use crate::shared_math::traits::FiniteField;
 
-use super::{
-    b_field_element::BFieldElement,
-    traits::{Inverse, New},
-};
+use super::b_field_element::BFieldElement;
+use super::traits::Inverse;
+use super::traits::New;
 
 /// ## Perform NTT on slices of prime-field elements
 ///
@@ -52,7 +52,7 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
     omega: BFieldElement,
     log_2_of_n: u32,
 ) {
-    let n = x.len() as u32;
+    let n = u32::try_from(x.len()).unwrap();
 
     // `n` must be a power of 2, or be zero
     debug_assert!(
@@ -62,10 +62,10 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
 
     // `omega` must be a primitive root of unity of order `n`
     debug_assert!(
-        omega.mod_pow_u32(n).is_one(),
+        omega.pow(n).is_one(),
         "Got {omega} which is not a {n}th root of 1"
     );
-    debug_assert!(!omega.mod_pow_u32(n / 2).is_one() || n == 0 || n == 1);
+    debug_assert!(!omega.pow(n / 2).is_one() || n == 0 || n == 1);
 
     for k in 0..n {
         let rk = bitreverse(k, log_2_of_n);
@@ -76,7 +76,7 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
 
     let mut m = 1;
     for _ in 0..log_2_of_n {
-        let w_m = omega.mod_pow_u32(n / (2 * m));
+        let w_m = omega.mod_pow(u64::from(n / (2 * m)));
         let mut k = 0;
         while k < n {
             let mut w = BFieldElement::one();
@@ -163,10 +163,10 @@ pub fn ntt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], omeg
 
     // `omega` must be a primitive root of unity of order `n`
     debug_assert!(
-        omega.mod_pow_u32(n as u32).is_one(),
+        omega.pow(u32::try_from(n).unwrap()).is_one(),
         "Got {omega} which is not a {n}th root of 1"
     );
-    debug_assert!(!omega.mod_pow_u32((n / 2).try_into().unwrap()).is_one());
+    debug_assert!(!omega.pow(u32::try_from(n / 2).unwrap()).is_one());
 
     let mut logn: usize = 0;
     while (1 << logn) < x.len() {
@@ -211,12 +211,10 @@ pub fn intt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], ome
 
     // `omega` must be a primitive root of unity of order `n`
     debug_assert!(
-        omega_inverse.mod_pow_u32(n.try_into().unwrap()).is_one(),
+        omega_inverse.pow(u32::try_from(n).unwrap()).is_one(),
         "Got {omega_inverse} which is not a {n}th root of 1"
     );
-    debug_assert!(!omega_inverse
-        .mod_pow_u32((n / 2).try_into().unwrap())
-        .is_one());
+    debug_assert!(!omega_inverse.pow(u32::try_from(n / 2).unwrap()).is_one());
 
     let mut logn: usize = 0;
     while (1 << logn) < x.len() {
@@ -225,7 +223,7 @@ pub fn intt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], ome
 
     let mut m = 1;
     for _ in 0..logn {
-        let w_m = omega_inverse.mod_pow_u32((n / (2 * m)).try_into().unwrap());
+        let w_m = omega_inverse.mod_pow((n / (2 * m)).try_into().unwrap());
         let mut k = 0;
         while k < n {
             let mut w = BFieldElement::one();

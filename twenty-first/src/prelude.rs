@@ -8,7 +8,6 @@ pub use crate::shared_math::tip5;
 pub use crate::shared_math::tip5::Digest;
 pub use crate::shared_math::tip5::Tip5;
 pub use crate::shared_math::traits::Inverse;
-pub use crate::shared_math::traits::ModPowU32;
 pub use crate::shared_math::x_field_element;
 pub use crate::shared_math::x_field_element::XFieldElement;
 pub use crate::util_types::algebraic_hasher::AlgebraicHasher;

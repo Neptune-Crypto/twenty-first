@@ -1,9 +1,20 @@
-use num_traits::{One, Zero};
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::hash::Hash;
+use std::ops::Add;
+use std::ops::AddAssign;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::MulAssign;
+use std::ops::Neg;
+use std::ops::Sub;
+use std::ops::SubAssign;
+
+use num_traits::One;
+use num_traits::Pow;
+use num_traits::Zero;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
 pub trait CyclicGroupGenerator
 where
@@ -33,16 +44,6 @@ where
     Self: Sized,
 {
     fn primitive_root_of_unity(n: u64) -> Option<Self>;
-}
-
-pub trait ModPowU64 {
-    #[must_use]
-    fn mod_pow_u64(&self, pow: u64) -> Self;
-}
-
-pub trait ModPowU32 {
-    #[must_use]
-    fn mod_pow_u32(&self, exp: u32) -> Self;
 }
 
 // We **cannot** use the std library From/Into traits as they cannot
@@ -79,7 +80,8 @@ pub trait FiniteField:
     + FromVecu8
     + New
     + CyclicGroupGenerator
-    + ModPowU32
+    + Pow<u8, Output = Self>
+    + Pow<u32, Output = Self>
     + PrimitiveRootOfUnity
     + Send
     + Sync

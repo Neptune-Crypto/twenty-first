@@ -18,6 +18,7 @@ use arbitrary::Arbitrary;
 use arbitrary::Unstructured;
 use get_size::GetSize;
 use num_traits::One;
+use num_traits::Pow;
 use num_traits::Zero;
 use phf::phf_map;
 use rand::Rng;
@@ -31,8 +32,6 @@ use serde::Serializer;
 use crate::error::ParseBFieldElementError;
 use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::traits::FiniteField;
-use crate::shared_math::traits::ModPowU32;
-use crate::shared_math::traits::ModPowU64;
 use crate::shared_math::traits::New;
 use crate::util_types::emojihash_trait::Emojihash;
 use crate::util_types::emojihash_trait::EMOJI_PER_ELEMENT;
@@ -437,10 +436,35 @@ impl Inverse for BFieldElement {
     }
 }
 
-impl ModPowU32 for BFieldElement {
-    #[inline]
-    fn mod_pow_u32(&self, exp: u32) -> Self {
-        self.mod_pow(exp as u64)
+impl Pow<u64> for BFieldElement {
+    type Output = Self;
+
+    fn pow(self, exp: u64) -> Self::Output {
+        self.mod_pow(exp)
+    }
+}
+
+impl Pow<u32> for BFieldElement {
+    type Output = Self;
+
+    fn pow(self, exp: u32) -> Self {
+        self.mod_pow(u64::from(exp))
+    }
+}
+
+impl Pow<u16> for BFieldElement {
+    type Output = Self;
+
+    fn pow(self, exp: u16) -> Self {
+        self.mod_pow(u64::from(exp))
+    }
+}
+
+impl Pow<u8> for BFieldElement {
+    type Output = Self;
+
+    fn pow(self, exp: u8) -> Self {
+        self.mod_pow(u64::from(exp))
     }
 }
 
@@ -603,24 +627,13 @@ impl Div for BFieldElement {
     }
 }
 
-// TODO: We probably wanna make use of Rust's Pow, but for now we copy from ...big:
-impl ModPowU64 for BFieldElement {
-    #[inline]
-    fn mod_pow_u64(&self, pow: u64) -> Self {
-        self.mod_pow(pow)
-    }
-}
-
 impl PrimitiveRootOfUnity for BFieldElement {
     fn primitive_root_of_unity(n: u64) -> Option<BFieldElement> {
-        // Check if n is one of the values for which we have pre-calculated roots
-        if PRIMITIVE_ROOTS.contains_key(&n) {
-            Some(BFieldElement::new(PRIMITIVE_ROOTS[&n]))
-        } else if n <= 1 {
-            Some(BFieldElement::one())
-        } else {
-            None
+        if n <= 1 {
+            return Some(BFieldElement::one());
         }
+
+        PRIMITIVE_ROOTS.get(&n).map(|&x| BFieldElement::new(x))
     }
 }
 
@@ -693,7 +706,6 @@ mod b_prime_field_element_test {
     }
 
     #[proptest]
-
     fn addition_is_associative(
         element_0: BFieldElement,
         element_1: BFieldElement,
@@ -861,10 +873,7 @@ mod b_prime_field_element_test {
     fn decrement(mut bfe: BFieldElement) {
         let old_value = bfe.value();
         bfe.decrement();
-        let expected_value = match old_value.checked_sub(1) {
-            Some(value) => value,
-            None => BFieldElement::P - 1,
-        };
+        let expected_value = old_value.checked_sub(1).unwrap_or(BFieldElement::P - 1);
         prop_assert_eq!(expected_value, bfe.value());
     }
 
@@ -1258,7 +1267,7 @@ mod b_prime_field_element_test {
         let exponent = 16608971246357572739u64;
         let base = BFieldElement::new(7808276826625786800);
         let expected = BFieldElement::new(2288673415394035783);
-        assert_eq!(base.mod_pow_u64(exponent), expected);
+        assert_eq!(base.pow(exponent), expected);
     }
 
     #[test]
