@@ -6,6 +6,4 @@ pub mod merkle_tree_maker;
 pub mod mmr;
 pub mod proof_stream_typed;
 pub mod shared;
-pub mod storage_schema;
-pub mod storage_vec;
 pub mod tree_m_ary;

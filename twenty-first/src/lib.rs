@@ -3,8 +3,6 @@ pub mod amount;
 pub mod error;
 pub mod prelude;
 pub mod shared_math;
-pub mod storage;
-pub mod sync;
 pub mod timing_reporter;
 pub mod util_types;
 pub mod utils;
@@ -24,6 +22,3 @@ extern crate self as twenty_first;
 
 // re-export crates used in our public API
 pub use bfieldcodec_derive;
-pub use lending_iterator;
-pub use leveldb;
-pub use leveldb_sys; // for Compression, in leveldb::option::Option

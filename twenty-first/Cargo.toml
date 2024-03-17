@@ -44,15 +44,15 @@ hashbrown = "0.14"
 itertools = "0.12"
 keccak = "0.1.5"
 lazy_static = "1.4.0"
-lending-iterator = "0.1.7"
-leveldb-sys = "2.0.9"
+#lending-iterator = "0.1.7"
+#leveldb-sys = "2.0.9"
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
 phf = { version = "0.11", features = ["macros"] }
 rand = { version = "0.8", features = ["min_const_gen"] }
 rand_distr = "0.4"
 rayon = "1.9"
-rs-leveldb = "0.1.5"
+#rs-leveldb = "0.1.5"
 serde = { version = "1.0", features = ["derive"] }
 serde-big-array = "0"
 serde_derive = "1"
