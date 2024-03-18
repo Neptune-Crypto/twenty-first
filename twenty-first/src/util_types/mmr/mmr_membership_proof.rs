@@ -580,13 +580,12 @@ mod mmr_membership_proof_test {
     use itertools::Itertools;
     use rand::{random, thread_rng, Rng, RngCore};
 
-    use crate::mock;
-    use crate::mock::mmr::get_mock_ammr_from_digests;
-    use crate::mock::mmr::MockMmr;
+    use crate::mock::mmr::{get_mock_ammr_from_digests, MockMmr};
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::digest::Digest;
     use crate::shared_math::other::random_elements;
     use crate::shared_math::tip5::Tip5;
+    use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
     use crate::util_types::mmr::mmr_trait::Mmr;
 
@@ -1170,8 +1169,7 @@ mod mmr_membership_proof_test {
             .into_iter()
             .zip_eq(random_elements(collected_values))
             .collect_vec();
-        let (mut mmra, mut mps) =
-            mock::mmr::mmra_with_mps::<H>(original_leaf_count, specified_leafs.clone());
+        let (mut mmra, mut mps) = mmra_with_mps::<H>(original_leaf_count, specified_leafs.clone());
 
         let new_leaf: Digest = random();
         let old_peaks = mmra.get_peaks();
