@@ -6,7 +6,6 @@ use twenty_first::shared_math::digest::Digest;
 use twenty_first::shared_math::tip5::Tip5;
 use twenty_first::util_types::algebraic_hasher::AlgebraicHasher;
 use twenty_first::util_types::merkle_tree::*;
-use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
 
 criterion_main!(merkle_tree_authenticate);
 criterion_group!(
@@ -72,7 +71,7 @@ impl MerkleTreeSampler {
 
     fn tree(&mut self) -> MerkleTree<Tip5> {
         let leaf_digests = self.leaf_digests();
-        CpuParallel::from_digests(&leaf_digests).unwrap()
+        MerkleTree::<Tip5>::new::<CpuParallel>(&leaf_digests).unwrap()
     }
 
     fn indices_to_open(&mut self) -> Vec<usize> {

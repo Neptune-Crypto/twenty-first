@@ -359,7 +359,6 @@ impl<T: Clone> MyVec<T> {
 
 #[cfg(test)]
 mod mmr_test {
-
     use itertools::*;
 
     use rand::random;
@@ -372,7 +371,6 @@ mod mmr_test {
     use crate::mock::mmr::*;
     use crate::util_types::merkle_tree::merkle_tree_test::MerkleTreeToTest;
     use crate::util_types::merkle_tree::*;
-    use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
     use crate::util_types::mmr::shared_advanced::get_peak_heights_and_peak_node_indices;
 
@@ -393,7 +391,7 @@ mod mmr_test {
             let num_leaves_in_tree = 1 << tree_height;
             let leaf_digests =
                 &digests[num_processed_digests..num_processed_digests + num_leaves_in_tree];
-            let tree: MerkleTree<H> = CpuParallel::from_digests(leaf_digests).unwrap();
+            let tree = MerkleTree::<H>::new::<CpuParallel>(leaf_digests).unwrap();
             num_processed_digests += num_leaves_in_tree;
             trees.push(tree);
         }
@@ -447,14 +445,14 @@ mod mmr_test {
             assert!(archival_mmr.verify_batch_update(
                 &archival_mmr_appended.get_peaks(),
                 &[new_leaf],
-                &[]
+                &[],
             ));
 
             // Verify that failing MMR update for empty MMR fails gracefully
             assert!(!archival_mmr.verify_batch_update(
                 &archival_mmr_appended.get_peaks(),
                 &[],
-                &[(new_leaf, archival_membership_proof)]
+                &[(new_leaf, archival_membership_proof)],
             ));
         }
 
@@ -480,7 +478,7 @@ mod mmr_test {
                 .verify(
                     &archival_mmr.get_peaks(),
                     new_leaf,
-                    archival_mmr.count_leaves()
+                    archival_mmr.count_leaves(),
                 )
                 .0,
             "membership proof from arhival MMR must validate"
@@ -506,9 +504,9 @@ mod mmr_test {
 
         // Verify that the accumulated hash in the verifier is compared against the **correct** hash,
         // not just **any** hash in the peaks list.
-        assert!(membership_proof.verify(&peaks, leaf_hashes[0], 3,).0);
+        assert!(membership_proof.verify(&peaks, leaf_hashes[0], 3).0);
         membership_proof.leaf_index = 2;
-        assert!(!membership_proof.verify(&peaks, leaf_hashes[0], 3,).0);
+        assert!(!membership_proof.verify(&peaks, leaf_hashes[0], 3).0);
         membership_proof.leaf_index = 0;
 
         // verify the same behavior in the accumulator MMR
@@ -518,7 +516,7 @@ mod mmr_test {
                 .verify(
                     &accumulator_mmr.get_peaks(),
                     leaf_hashes[0],
-                    accumulator_mmr.count_leaves()
+                    accumulator_mmr.count_leaves(),
                 )
                 .0
         );
@@ -528,7 +526,7 @@ mod mmr_test {
                 .verify(
                     &accumulator_mmr.get_peaks(),
                     leaf_hashes[0],
-                    accumulator_mmr.count_leaves()
+                    accumulator_mmr.count_leaves(),
                 )
                 .0
         );
@@ -719,7 +717,7 @@ mod mmr_test {
                         .verify(
                             &archival_iterative.get_peaks(),
                             leaf_hash,
-                            archival_iterative.count_leaves()
+                            archival_iterative.count_leaves(),
                         )
                         .0
                 );

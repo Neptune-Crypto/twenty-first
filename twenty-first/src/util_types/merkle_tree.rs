@@ -103,10 +103,14 @@ impl<H> MerkleTree<H>
 where
     H: AlgebraicHasher,
 {
-    /// Given a list of leaf indices, return the indices of exactly those nodes that are needed to prove (or verify)
-    /// that the indicated leaves are in the Merkle tree.
-    // This function is not defined as a method (taking self as argument) since it's needed by the verifier, who does
-    // not have access to the Merkle tree.
+    pub fn new<Maker: MerkleTreeMaker<H>>(leafs: &[Digest]) -> Result<Self> {
+        Maker::from_digests(leafs)
+    }
+
+    /// Given a list of leaf indices, return the indices of exactly those nodes that are needed to
+    /// prove (or verify) that the indicated leaves are in the Merkle tree.
+    // This function is not defined as a method (taking self as argument) since it's needed by the
+    // verifier, who does not have access to the Merkle tree.
     fn authentication_structure_node_indices(
         num_leaves: usize,
         leaf_indices: &[usize],
@@ -251,7 +255,7 @@ where
         let leaf_digests: arbitrary::Result<Vec<_>> =
             (0..num_leaves).map(|_| u.arbitrary()).collect();
 
-        let tree = CpuParallel::from_digests(&leaf_digests?).unwrap();
+        let tree = Self::new::<CpuParallel>(&leaf_digests?).unwrap();
         Ok(tree)
     }
 }
@@ -573,7 +577,7 @@ pub mod merkle_tree_test {
             let num_leaves = 1 << tree_height;
             let leaves = (0..num_leaves).map(BFieldElement::new);
             let leaf_digests = leaves.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
-            let tree = CpuParallel::from_digests(&leaf_digests).unwrap();
+            let tree = Self::new::<CpuParallel>(&leaf_digests).unwrap();
             assert!(leaf_digests.iter().all_unique());
             tree
         }
@@ -614,7 +618,7 @@ pub mod merkle_tree_test {
 
     #[test]
     fn building_merkle_tree_from_empty_list_of_digests_fails_with_expected_error() {
-        let maybe_tree: Result<MerkleTree<Tip5>> = CpuParallel::from_digests(&[]);
+        let maybe_tree = MerkleTree::<Tip5>::new::<CpuParallel>(&[]);
         let err = maybe_tree.unwrap_err();
         assert_eq!(MerkleTreeError::TooFewLeaves, err);
     }
@@ -622,14 +626,14 @@ pub mod merkle_tree_test {
     #[test]
     fn merkle_tree_with_one_leaf_has_expected_height_and_number_of_leaves() {
         let digest = Digest::default();
-        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&[digest]).unwrap();
+        let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&[digest]).unwrap();
         assert_eq!(1, tree.num_leafs());
         assert_eq!(0, tree.height());
     }
 
     #[proptest]
     fn building_merkle_tree_from_one_digest_makes_that_digest_the_root(digest: Digest) {
-        let tree: MerkleTree<Tip5> = CpuParallel::from_digests(&[digest]).unwrap();
+        let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&[digest]).unwrap();
         assert_eq!(digest, tree.root());
     }
 
@@ -641,7 +645,7 @@ pub mod merkle_tree_test {
     ) {
         let digest = Digest::default();
         let digests = vec![digest; num_leaves];
-        let maybe_tree: Result<MerkleTree<Tip5>> = CpuParallel::from_digests(&digests);
+        let maybe_tree = MerkleTree::<Tip5>::new::<CpuParallel>(&digests);
         let err = maybe_tree.unwrap_err();
         assert_eq!(MerkleTreeError::IncorrectNumberOfLeaves, err);
     }

@@ -1,10 +1,15 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::time::Duration;
+
+use criterion::criterion_group;
+use criterion::criterion_main;
+use criterion::BenchmarkId;
+use criterion::Criterion;
+
 use twenty_first::shared_math::digest::Digest;
 use twenty_first::shared_math::other::random_elements;
 use twenty_first::shared_math::tip5::Tip5;
-use twenty_first::util_types::merkle_tree::{CpuParallel, MerkleTree};
-use twenty_first::util_types::merkle_tree_maker::MerkleTreeMaker;
+use twenty_first::util_types::merkle_tree::CpuParallel;
+use twenty_first::util_types::merkle_tree::MerkleTree;
 
 fn merkle_tree(c: &mut Criterion) {
     type H = Tip5;
@@ -18,7 +23,7 @@ fn merkle_tree(c: &mut Criterion) {
     let elements: Vec<Digest> = random_elements(size);
 
     group.bench_function(BenchmarkId::new("merkle_tree", size), |bencher| {
-        bencher.iter(|| -> MerkleTree<H> { CpuParallel::from_digests(&elements[..]).unwrap() });
+        bencher.iter(|| MerkleTree::<H>::new::<CpuParallel>(&elements).unwrap());
     });
 }
 
