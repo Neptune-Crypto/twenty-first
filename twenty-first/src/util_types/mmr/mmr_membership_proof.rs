@@ -108,7 +108,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
     }
 
     /// Return the node indices for the hash values that can be derived from this proof
-    pub(crate) fn get_direct_path_indices(&self) -> Vec<u64> {
+    pub fn get_direct_path_indices(&self) -> Vec<u64> {
         let mut node_index = shared_advanced::leaf_index_to_node_index(self.leaf_index);
         let mut node_indices = vec![node_index];
         for _ in 0..self.authentication_path.len() {
