@@ -64,12 +64,11 @@ fn ntt_based_fast_interpolate(
     let size: usize = 1 << log2_of_size;
     let xs: Vec<BFieldElement> = random_elements(size);
     let ys: Vec<BFieldElement> = random_elements(size);
-    let omega = BFieldElement::primitive_root_of_unity(size as u64).unwrap();
 
     group.sample_size(10);
     group.throughput(Throughput::Elements(size as u64));
     group.bench_with_input(bench_id, &size, |b, _| {
-        b.iter(|| polynomial::Polynomial::fast_interpolate(&xs, &ys, omega, size))
+        b.iter(|| polynomial::Polynomial::fast_interpolate(&xs, &ys))
     });
 }
 

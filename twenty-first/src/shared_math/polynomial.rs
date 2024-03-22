@@ -385,28 +385,35 @@ where
         left
     }
 
-    pub fn fast_interpolate(
+    /// # Panics
+    ///
+    /// - Panics if the provided domain is empty.
+    /// - Panics if the provided domain and values are not of the same length.
+    pub fn fast_interpolate(domain: &[FF], values: &[FF]) -> Self {
+        assert_eq!(domain.len(), values.len());
+        assert!(
+            !domain.is_empty(),
+            "Cannot interpolate through zero points.",
+        );
+
+        let root_order = (domain.len() + 1).next_power_of_two();
+        let root_order_u64 = u64::try_from(root_order).unwrap();
+        let primitive_root = BFieldElement::primitive_root_of_unity(root_order_u64).unwrap();
+        Self::fast_interpolate_inner(domain, values, primitive_root, root_order)
+    }
+
+    fn fast_interpolate_inner(
         domain: &[FF],
         values: &[FF],
         primitive_root: BFieldElement,
         root_order: usize,
     ) -> Self {
-        assert_eq!(
-            domain.len(),
-            values.len(),
-            "Domain and values lengths must match"
-        );
         debug_assert_eq!(
             primitive_root.mod_pow_u32(root_order as u32),
             BFieldElement::one(),
             "Supplied element “primitive_root” must have supplied order.\
             Supplied element was: {primitive_root:?}\
             Supplied order was: {root_order:?}"
-        );
-
-        assert!(
-            !domain.is_empty(),
-            "Cannot fast interpolate through zero points.",
         );
 
         const CUTOFF_POINT_FOR_FAST_INTERPOLATION: usize = 1024;
@@ -437,10 +444,18 @@ where
             .map(|(n, d)| n.to_owned() * d)
             .collect();
 
-        let left_interpolant =
-            Self::fast_interpolate(&domain[..half], &left_targets, primitive_root, root_order);
-        let right_interpolant =
-            Self::fast_interpolate(&domain[half..], &right_targets, primitive_root, root_order);
+        let left_interpolant = Self::fast_interpolate_inner(
+            &domain[..half],
+            &left_targets,
+            primitive_root,
+            root_order,
+        );
+        let right_interpolant = Self::fast_interpolate_inner(
+            &domain[half..],
+            &right_targets,
+            primitive_root,
+            root_order,
+        );
 
         let left_term = Self::fast_multiply(
             &left_interpolant,
@@ -1839,8 +1854,7 @@ mod test_polynomials {
     #[test]
     #[should_panic(expected = "zero points")]
     fn fast_interpolation_through_no_points_is_impossible() {
-        let root_of_unity = BFieldElement::primitive_root_of_unity(1).unwrap();
-        let _ = Polynomial::<BFieldElement>::fast_interpolate(&[], &[], root_of_unity, 1);
+        let _ = Polynomial::<BFieldElement>::fast_interpolate(&[], &[]);
     }
 
     #[proptest(cases = 10)]
@@ -1851,11 +1865,7 @@ mod test_polynomials {
         #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
     ) {
         let lagrange_interpolant = Polynomial::lagrange_interpolate(&domain, &values);
-
-        let root_order = domain.len().next_power_of_two();
-        let root_of_unity = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-        let fast_interpolant =
-            Polynomial::fast_interpolate(&domain, &values, root_of_unity, root_order);
+        let fast_interpolant = Polynomial::fast_interpolate(&domain, &values);
         prop_assert_eq!(lagrange_interpolant, fast_interpolant);
     }
 
@@ -1866,9 +1876,7 @@ mod test_polynomials {
         domain: Vec<BFieldElement>,
         #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
     ) {
-        let root_order = domain.len().next_power_of_two();
-        let root_of_unity = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-        let interpolant = Polynomial::fast_interpolate(&domain, &values, root_of_unity, root_order);
+        let interpolant = Polynomial::fast_interpolate(&domain, &values);
         let evaluations = interpolant.fast_evaluate(&domain);
         prop_assert_eq!(values, evaluations);
     }
@@ -1885,7 +1893,7 @@ mod test_polynomials {
 
         let interpolants = value_vecs
             .iter()
-            .map(|values| Polynomial::fast_interpolate(&domain, values, root_of_unity, root_order))
+            .map(|values| Polynomial::fast_interpolate(&domain, values))
             .collect_vec();
 
         let batched_interpolants =
@@ -1936,8 +1944,7 @@ mod test_polynomials {
         let domain =
             coset_domain_of_size_from_generator_with_offset(root_order, root_of_unity, offset);
 
-        let fast_interpolant =
-            Polynomial::fast_interpolate(&domain, &values, root_of_unity, root_order);
+        let fast_interpolant = Polynomial::fast_interpolate(&domain, &values);
         let fast_coset_interpolant =
             Polynomial::fast_coset_interpolate(offset, root_of_unity, &values);
         prop_assert_eq!(fast_interpolant, fast_coset_interpolant);
