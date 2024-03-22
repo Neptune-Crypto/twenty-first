@@ -1,72 +1,35 @@
-use crate::shared_math::ntt::{intt, ntt};
-use crate::shared_math::other::{log_2_floor, roundup_npo2};
-use crate::shared_math::traits::{FiniteField, ModPowU32};
-use crate::utils::has_unique_elements;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::hash::Hash;
+use std::ops::Add;
+use std::ops::AddAssign;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::MulAssign;
+use std::ops::Rem;
+use std::ops::Sub;
+
 use arbitrary::Arbitrary;
-use itertools::EitherOrBoth::{Both, Left, Right};
+use itertools::EitherOrBoth;
 use itertools::Itertools;
 use num_bigint::BigInt;
-use num_traits::{One, Zero};
-use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use std::collections::HashMap;
-use std::convert::From;
-use std::fmt::{Debug, Display, Formatter};
-use std::hash::Hash;
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Rem, Sub};
+use num_traits::One;
+use num_traits::Zero;
+use rayon::prelude::IndexedParallelIterator;
+use rayon::prelude::IntoParallelRefIterator;
+use rayon::prelude::ParallelIterator;
+
+use crate::shared_math::ntt::intt;
+use crate::shared_math::ntt::ntt;
+use crate::shared_math::traits::FiniteField;
+use crate::shared_math::traits::ModPowU32;
 
 use super::b_field_element::BFieldElement;
-use super::other::{self, log_2_ceil};
-use super::traits::{Inverse, PrimitiveRootOfUnity};
-
-fn degree_raw<T: Add + Div + Mul + Sub + Display + Zero>(coefficients: &[T]) -> isize {
-    let mut deg = coefficients.len() as isize - 1;
-    while deg >= 0 && coefficients[deg as usize].is_zero() {
-        deg -= 1;
-    }
-
-    deg // -1 for the zero polynomial
-}
-
-fn pretty_print_coefficients_generic<FF: FiniteField>(coefficients: &[FF]) -> String {
-    let degree = degree_raw(coefficients);
-    if degree == -1 {
-        return String::from("0");
-    }
-
-    // for every nonzero term, in descending order
-    let mut outputs: Vec<String> = Vec::new();
-    let pol_degree = degree as usize;
-    for i in 0..=pol_degree {
-        let pow = pol_degree - i;
-        if coefficients[pow].is_zero() {
-            continue;
-        }
-
-        outputs.push(format!(
-            "{}{}{}", // { + } { 7 } { x^3 }
-            if i == 0 { "" } else { " + " },
-            if coefficients[pow].is_one() {
-                String::from("")
-            } else {
-                coefficients[pow].to_string()
-            },
-            if pow == 0 && coefficients[pow].is_one() {
-                let one: FF = FF::one();
-                one.to_string()
-            } else if pow == 0 {
-                String::from("")
-            } else if pow == 1 {
-                String::from("x")
-            } else {
-                let mut result = "x^".to_owned();
-                let borrowed_string = pow.to_string().to_owned();
-                result.push_str(&borrowed_string);
-                result
-            }
-        ));
-    }
-    outputs.join("")
-}
+use super::other;
+use super::traits::Inverse;
+use super::traits::PrimitiveRootOfUnity;
 
 impl<FF: FiniteField> Zero for Polynomial<FF> {
     fn zero() -> Self {
@@ -113,11 +76,31 @@ impl<FF: FiniteField> Hash for Polynomial<FF> {
 
 impl<FF: FiniteField> Display for Polynomial<FF> {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            pretty_print_coefficients_generic::<FF>(&self.coefficients)
-        )
+        let degree = match self.degree() {
+            -1 => return write!(f, "0"),
+            d => d as usize,
+        };
+
+        for pow in (0..=degree).rev() {
+            let coeff = self.coefficients[pow];
+            if coeff.is_zero() {
+                continue;
+            }
+
+            if pow != degree {
+                write!(f, " + ")?;
+            }
+            if !coeff.is_one() || pow == 0 {
+                write!(f, "{coeff}")?;
+            }
+            match pow {
+                0 => (),
+                1 => write!(f, "x")?,
+                _ => write!(f, "x^{pow}")?,
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -140,9 +123,9 @@ impl<FF> Polynomial<FF>
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    // Return the polynomial which corresponds to the transformation `x -> alpha * x`
-    // Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x)
-    // then corresponds to evaluating P(alpha * x).
+    /// Return the polynomial which corresponds to the transformation `x -> alpha * x`
+    /// Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x) then corresponds to
+    /// evaluating P(alpha * x).
     #[must_use]
     pub fn scale(&self, alpha: BFieldElement) -> Self {
         let mut acc = FF::one();
@@ -157,9 +140,8 @@ where
         }
     }
 
-    // It is the caller's responsibility that this function
-    // is called with sufficiently large input to be safe
-    // and to be faster than `square`.
+    /// It is the caller's responsibility that this function is called with sufficiently large input
+    /// to be safe and to be faster than `square`.
     #[must_use]
     pub fn fast_square(&self) -> Self {
         let degree = self.degree();
@@ -171,7 +153,7 @@ where
         }
 
         let result_degree: u64 = 2 * self.degree() as u64;
-        let order = roundup_npo2(result_degree + 1);
+        let order = (result_degree + 1).next_power_of_two();
         let root_res = BFieldElement::primitive_root_of_unity(order);
         let root = match root_res {
             Some(n) => n,
@@ -180,7 +162,7 @@ where
 
         let mut coefficients = self.coefficients.to_vec();
         coefficients.resize(order as usize, FF::zero());
-        let log_2_of_n = log_2_floor(coefficients.len() as u128) as u32;
+        let log_2_of_n = coefficients.len().ilog2();
         ntt::<FF>(&mut coefficients, root, log_2_of_n);
 
         for element in coefficients.iter_mut() {
@@ -200,9 +182,8 @@ where
             return Self::zero();
         }
 
-        // A benchmark run on sword_smith's PC revealed that
-        // `fast_square` was faster when the input size exceeds
-        // a length of 64.
+        // A benchmark run on sword_smith's PC revealed that `fast_square` was faster when the input
+        // size exceeds a length of 64.
         let squared_coefficient_len = self.degree() as usize * 2 + 1;
         if squared_coefficient_len > 64 {
             return self.fast_square();
@@ -304,8 +285,8 @@ where
             rhs_coefficients.push(FF::zero());
         }
 
-        let lhs_log_2_of_n = log_2_floor(lhs_coefficients.len() as u128) as u32;
-        let rhs_log_2_of_n = log_2_floor(rhs_coefficients.len() as u128) as u32;
+        let lhs_log_2_of_n = lhs_coefficients.len().ilog2();
+        let rhs_log_2_of_n = rhs_coefficients.len().ilog2();
         ntt::<FF>(&mut lhs_coefficients, root, lhs_log_2_of_n);
         ntt::<FF>(&mut rhs_coefficients, root, rhs_log_2_of_n);
 
@@ -315,7 +296,7 @@ where
             .map(|(r, l)| r * l)
             .collect();
 
-        let log_2_of_n = log_2_floor(hadamard_product.len() as u128) as u32;
+        let log_2_of_n = hadamard_product.len().ilog2();
         intt::<FF>(&mut hadamard_product, root, log_2_of_n);
         hadamard_product.truncate(degree + 1);
 
@@ -327,13 +308,15 @@ where
     /// Extracted from `cargo bench --bench zerofier` on mjolnir.
     const CUTOFF_POINT_FOR_FAST_ZEROFIER: usize = 200;
 
+    /// Compute the lowest degree polynomial with the provided roots.
+    ///
     /// Uses the fastest version of zerofier available, depending on the size of the domain.
     /// Should be preferred over [`Self::fast_zerofier`] and [`Self::naive_zerofier`].
-    pub fn zerofier(domain: &[FF]) -> Self {
-        if domain.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
-            return Self::naive_zerofier(domain);
+    pub fn zerofier(roots: &[FF]) -> Self {
+        if roots.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
+            return Self::naive_zerofier(roots);
         }
-        Self::fast_zerofier(domain)
+        Self::fast_zerofier(roots)
     }
 
     pub fn fast_zerofier(domain: &[FF]) -> Self {
@@ -675,11 +658,8 @@ where
     ) -> Self {
         let length = values.len();
         let mut mut_values = values.to_vec();
-        intt(
-            &mut mut_values,
-            generator,
-            log_2_ceil(length as u128) as u32,
-        );
+
+        intt(&mut mut_values, generator, length.ilog2());
         let poly = Polynomial::new(mut_values);
 
         poly.scale(offset.inverse())
@@ -896,7 +876,7 @@ impl<FF: FiniteField> Polynomial<FF> {
             .unwrap_or_else(Self::one)
     }
 
-    // Slow square implementation that does not use NTT
+    /// Slow square implementation that does not use NTT
     #[must_use]
     pub fn slow_square(&self) -> Self {
         let degree = self.degree();
@@ -934,7 +914,7 @@ impl<FF: FiniteField> Polynomial<FF> {
             return false;
         }
 
-        if !has_unique_elements(points.iter().map(|p| p.0)) {
+        if !points.iter().map(|p| p.0).all_unique() {
             println!("Non-unique element spotted Got: {points:?}");
             return false;
         }
@@ -968,14 +948,14 @@ impl<FF: FiniteField> Polynomial<FF> {
         true
     }
 
-    // Any fast interpolation will use NTT, so this is mainly used for testing/integrity
-    // purposes. This also means that it is not pivotal that this function has an optimal
-    // runtime.
+    /// Any fast interpolation will use NTT, so this is mainly used for testing/integrity
+    /// purposes. This also means that it is not pivotal that this function has an optimal
+    /// runtime.
     pub fn lagrange_interpolate_zipped(points: &[(FF, FF)]) -> Self {
         if points.is_empty() {
             panic!("Cannot interpolate through zero points.");
         }
-        if !has_unique_elements(points.iter().map(|x| x.0)) {
+        if !points.iter().map(|x| x.0).all_unique() {
             panic!("Repeated x values received. Got: {points:?}");
         }
 
@@ -1105,7 +1085,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         let mut i = 0;
         while i + degree_rhs <= degree_lhs {
             // calculate next quotient coefficient, and set leading coefficient
-            // of remainder remainder is 0 by removing it
+            // of remainder is 0 by removing it
             let rlc: FF = remainder.coefficients.last().unwrap().to_owned();
             let q: FF = rlc * inv;
             quotient.push(q);
@@ -1156,30 +1136,15 @@ impl<FF: FiniteField> Rem for Polynomial<FF> {
 impl<FF: FiniteField> Add for Polynomial<FF> {
     type Output = Self;
 
-    // fn add(self, other: Self) -> Self {
-    //     let (mut longest, mut shortest) = if self.coefficients.len() < other.coefficients.len() {
-    //         (other, self)
-    //     } else {
-    //         (self, other)
-    //     };
-
-    //     let mut summed = longest.clone();
-    //     for i in 0..shortest.coefficients.len() {
-    //         summed.coefficients[i] += shortest.coefficients[i];
-    //     }
-
-    //     summed
-    // }
-
     fn add(self, other: Self) -> Self {
         let summed: Vec<FF> = self
             .coefficients
             .into_iter()
             .zip_longest(other.coefficients)
-            .map(|a: itertools::EitherOrBoth<FF, FF>| match a {
-                Both(l, r) => l.to_owned() + r.to_owned(),
-                Left(l) => l.to_owned(),
-                Right(r) => r.to_owned(),
+            .map(|a| match a {
+                EitherOrBoth::Both(l, r) => l.to_owned() + r.to_owned(),
+                EitherOrBoth::Left(l) => l.to_owned(),
+                EitherOrBoth::Right(r) => r.to_owned(),
             })
             .collect();
 
@@ -1208,20 +1173,18 @@ impl<FF: FiniteField> Sub for Polynomial<FF> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
-        let summed: Vec<FF> = self
+        let coefficients = self
             .coefficients
             .into_iter()
             .zip_longest(other.coefficients)
-            .map(|a: itertools::EitherOrBoth<FF, FF>| match a {
-                Both(l, r) => l - r,
-                Left(l) => l,
-                Right(r) => FF::zero() - r,
+            .map(|a| match a {
+                EitherOrBoth::Both(l, r) => l - r,
+                EitherOrBoth::Left(l) => l,
+                EitherOrBoth::Right(r) => FF::zero() - r,
             })
             .collect();
 
-        Self {
-            coefficients: summed,
-        }
+        Self { coefficients }
     }
 }
 
@@ -1261,7 +1224,12 @@ impl<FF: FiniteField> Polynomial<FF> {
 
 impl<FF: FiniteField> Polynomial<FF> {
     pub fn degree(&self) -> isize {
-        degree_raw(&self.coefficients)
+        let mut deg = self.coefficients.len() as isize - 1;
+        while deg >= 0 && self.coefficients[deg as usize].is_zero() {
+            deg -= 1;
+        }
+
+        deg // -1 for the zero polynomial
     }
 
     pub fn formal_derivative(&self) -> Self {
