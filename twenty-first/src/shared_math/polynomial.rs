@@ -344,7 +344,14 @@ where
         Self::fast_multiply(&left, &right, primitive_root, root_order)
     }
 
-    pub fn fast_evaluate(
+    pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        let root_order = (domain.len() + 1).next_power_of_two();
+        let root_order_u64 = u64::try_from(root_order).unwrap();
+        let primitive_root = BFieldElement::primitive_root_of_unity(root_order_u64).unwrap();
+        self.fast_evaluate_inner(domain, primitive_root, root_order)
+    }
+
+    fn fast_evaluate_inner(
         &self,
         domain: &[FF],
         primitive_root: BFieldElement,
@@ -363,12 +370,12 @@ where
         let left_zerofier = Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
         let right_zerofier = Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
 
-        let mut left = (self.clone() % left_zerofier).fast_evaluate(
+        let mut left = (self.clone() % left_zerofier).fast_evaluate_inner(
             &domain[..half],
             primitive_root,
             root_order,
         );
-        let mut right = (self.clone() % right_zerofier).fast_evaluate(
+        let mut right = (self.clone() % right_zerofier).fast_evaluate_inner(
             &domain[half..],
             primitive_root,
             root_order,
@@ -413,9 +420,9 @@ where
         let right_zerofier = Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
 
         let left_offset: Vec<FF> =
-            Self::fast_evaluate(&right_zerofier, &domain[..half], primitive_root, root_order);
+            Self::fast_evaluate_inner(&right_zerofier, &domain[..half], primitive_root, root_order);
         let right_offset: Vec<FF> =
-            Self::fast_evaluate(&left_zerofier, &domain[half..], primitive_root, root_order);
+            Self::fast_evaluate_inner(&left_zerofier, &domain[half..], primitive_root, root_order);
 
         let left_offset_inverse = FF::batch_inversion(left_offset);
         let right_offset_inverse = FF::batch_inversion(right_offset);
@@ -527,7 +534,7 @@ where
         let left_offset_inverse = match offset_inverse_dictionary.get(&left_key) {
             Some(vector) => vector.to_owned(),
             None => {
-                let left_offset: Vec<FF> = Self::fast_evaluate(
+                let left_offset: Vec<FF> = Self::fast_evaluate_inner(
                     &right_zerofier,
                     &domain[..half],
                     primitive_root,
@@ -541,7 +548,7 @@ where
         let right_offset_inverse = match offset_inverse_dictionary.get(&right_key) {
             Some(vector) => vector.to_owned(),
             None => {
-                let right_offset: Vec<FF> = Self::fast_evaluate(
+                let right_offset: Vec<FF> = Self::fast_evaluate_inner(
                     &left_zerofier,
                     &domain[half..],
                     primitive_root,
@@ -1794,9 +1801,7 @@ mod test_polynomials {
         // x^5 + x^3
         let poly = polynomial(&[0, 0, 0, 1, 0, 1]);
         let domain = [6, 12].map(BFieldElement::new);
-
-        let root_of_unity = BFieldElement::primitive_root_of_unity(16).unwrap();
-        let evaluation = poly.fast_evaluate(&domain, root_of_unity, 16);
+        let evaluation = poly.fast_evaluate(&domain);
 
         let expected_0 = domain[0].mod_pow(5u64) + domain[0].mod_pow(3u64);
         assert_eq!(expected_0, evaluation[0]);
@@ -1811,9 +1816,7 @@ mod test_polynomials {
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
     ) {
         let evaluations = domain.iter().map(|x| poly.evaluate(x)).collect_vec();
-        let root_order = domain.len().next_power_of_two();
-        let omega = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-        let fast_evaluations = poly.fast_evaluate(&domain, omega, root_order);
+        let fast_evaluations = poly.fast_evaluate(&domain);
         prop_assert_eq!(evaluations, fast_evaluations);
     }
 
@@ -1866,7 +1869,7 @@ mod test_polynomials {
         let root_order = domain.len().next_power_of_two();
         let root_of_unity = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
         let interpolant = Polynomial::fast_interpolate(&domain, &values, root_of_unity, root_order);
-        let evaluations = interpolant.fast_evaluate(&domain, root_of_unity, root_order);
+        let evaluations = interpolant.fast_evaluate(&domain);
         prop_assert_eq!(values, evaluations);
     }
 
@@ -1916,7 +1919,7 @@ mod test_polynomials {
         let domain =
             coset_domain_of_size_from_generator_with_offset(root_order, root_of_unity, offset);
 
-        let fast_values = polynomial.fast_evaluate(&domain, root_of_unity, root_order);
+        let fast_values = polynomial.fast_evaluate(&domain);
         let fast_coset_values = polynomial.fast_coset_evaluate(offset, root_of_unity, root_order);
         prop_assert_eq!(fast_values, fast_coset_values);
     }
