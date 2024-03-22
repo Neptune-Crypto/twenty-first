@@ -95,22 +95,22 @@ pub fn div_rem<T: Div<Output = T> + Rem<Output = T> + Copy>(x: T, y: T) -> (T, T
     (quot, rem)
 }
 
+/// Extended Euclidean Algorithm.
 #[inline]
-/// Extended Euclid's Algorithm.
 pub fn xgcd<
     T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone + Display,
 >(
     mut x: T,
     mut y: T,
 ) -> (T, T, T) {
-    let (mut a_factor, mut a1, mut b_factor, mut b1) = (T::one(), T::zero(), T::zero(), T::one());
+    let (mut a_factor, mut a1) = (T::one(), T::zero());
+    let (mut b_factor, mut b1) = (T::zero(), T::one());
 
     while !y.is_zero() {
-        let (quotient, remainder) = (x.clone() / y.clone(), x.clone() % y.clone());
-        let (c, d) = (
-            a_factor - quotient.clone() * a1.clone(),
-            b_factor.clone() - quotient * b1.clone(),
-        );
+        let quotient = x.clone() / y.clone();
+        let remainder = x % y.clone();
+        let c = a_factor - quotient.clone() * a1.clone();
+        let d = b_factor - quotient * b1.clone();
 
         x = y;
         y = remainder;
