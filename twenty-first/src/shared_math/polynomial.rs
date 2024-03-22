@@ -1229,6 +1229,18 @@ impl<FF: FiniteField> Polynomial<FF> {
     /// Extended Euclidean algorithm with polynomials. Computes the greatest
     /// common divisor `gcd` as a monic polynomial, as well as the corresponding
     /// Bézout coefficients `a` and `b`, satisfying `gcd = a·x + b·y`
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use twenty_first::shared_math::polynomial::Polynomial;
+    /// # use twenty_first::shared_math::b_field_element::BFieldElement;
+    /// # use twenty_first::bfe;
+    /// let x = Polynomial::new(vec![bfe!(1), bfe!(0), bfe!(1)]);
+    /// let y = Polynomial::new(vec![bfe!(1), bfe!(1)]);
+    /// let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
+    /// assert_eq!(gcd, a * x + b * y);
+    /// ```
     pub fn xgcd(
         x: Polynomial<FF>,
         y: Polynomial<FF>,
