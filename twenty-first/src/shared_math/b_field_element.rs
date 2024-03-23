@@ -1046,23 +1046,9 @@ mod b_prime_field_element_test {
 
     #[test]
     fn create_polynomial_test() {
-        let a: Polynomial<BFieldElement> = Polynomial::new(vec![
-            BFieldElement::new(1),
-            BFieldElement::new(3),
-            BFieldElement::new(7),
-        ]);
-
-        let b: Polynomial<BFieldElement> = Polynomial::new(vec![
-            BFieldElement::new(2),
-            BFieldElement::new(5),
-            BFieldElement::new(BFieldElement::MAX),
-        ]);
-
-        let expected: Polynomial<BFieldElement> = Polynomial::new(vec![
-            BFieldElement::new(3),
-            BFieldElement::new(8),
-            BFieldElement::new(6),
-        ]);
+        let a = Polynomial::from([1, 3, 7]);
+        let b = Polynomial::from([2, 5, -1]);
+        let expected = Polynomial::<BFieldElement>::from([3, 8, 6]);
 
         assert_eq!(expected, a + b);
     }

@@ -511,11 +511,11 @@ mod fast_ntt_attempt_tests {
     }
 
     #[test]
-    pub fn test_compare_ntt_to_eval() {
+    fn test_compare_ntt_to_eval() {
         for log_size in 1..10 {
             let size = 1 << log_size;
             let mut array: Vec<BFieldElement> = random_elements(size);
-            let polynomial = Polynomial::new(array.to_vec());
+            let polynomial = Polynomial::from(&array);
 
             let omega = BFieldElement::primitive_root_of_unity(size.try_into().unwrap()).unwrap();
             ntt(&mut array, omega, log_size.try_into().unwrap());

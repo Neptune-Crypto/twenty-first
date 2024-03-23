@@ -304,9 +304,7 @@ where
         intt::<FF>(&mut hadamard_product, root, log_2_of_n);
         hadamard_product.truncate(degree + 1);
 
-        Polynomial {
-            coefficients: hadamard_product,
-        }
+        Self::new(hadamard_product)
     }
 
     /// Extracted from `cargo bench --bench zerofier` on mjolnir.
@@ -707,8 +705,8 @@ where
     ///
     /// ```
     /// # use twenty_first::prelude::*;
-    /// let a = Polynomial::new(vec![bfe!(1), bfe!(2), bfe!(3)]);
-    /// let b = Polynomial::new(vec![bfe!(42), bfe!(53)]);
+    /// let a = Polynomial::<BFieldElement>::from([1, 2, 3]);
+    /// let b = Polynomial::from([42, 53]);
     /// let c = a.fast_divide(&b);
     /// ```
     ///
@@ -820,6 +818,46 @@ where
 
         intt(&mut quotient_codeword, root, order.ilog2());
         Self::new(quotient_codeword).scale(offset.inverse())
+    }
+}
+
+impl<const N: usize, FF, E> From<[E; N]> for Polynomial<FF>
+where
+    FF: FiniteField,
+    E: Into<FF>,
+{
+    fn from(coefficients: [E; N]) -> Self {
+        Self::new(coefficients.into_iter().map(|x| x.into()).collect())
+    }
+}
+
+impl<FF, E> From<&[E]> for Polynomial<FF>
+where
+    FF: FiniteField,
+    E: Into<FF> + Clone,
+{
+    fn from(coefficients: &[E]) -> Self {
+        Self::from(coefficients.to_vec())
+    }
+}
+
+impl<FF, E> From<Vec<E>> for Polynomial<FF>
+where
+    FF: FiniteField,
+    E: Into<FF>,
+{
+    fn from(coefficients: Vec<E>) -> Self {
+        Self::new(coefficients.into_iter().map(|c| c.into()).collect())
+    }
+}
+
+impl<FF, E> From<&Vec<E>> for Polynomial<FF>
+where
+    FF: FiniteField,
+    E: Into<FF> + Clone,
+{
+    fn from(coefficients: &Vec<E>) -> Self {
+        Self::from(coefficients.to_vec())
     }
 }
 
@@ -1273,30 +1311,23 @@ impl<FF: FiniteField> Polynomial<FF> {
     ///
     /// # Example
     ///
-    /// ```rust
-    /// # use twenty_first::shared_math::polynomial::Polynomial;
-    /// # use twenty_first::shared_math::b_field_element::BFieldElement;
-    /// # use twenty_first::bfe;
-    /// let x = Polynomial::new(vec![bfe!(1), bfe!(0), bfe!(1)]);
-    /// let y = Polynomial::new(vec![bfe!(1), bfe!(1)]);
+    /// ```
+    /// # use twenty_first::prelude::Polynomial;
+    /// # use twenty_first::prelude::BFieldElement;
+    /// let x = Polynomial::<BFieldElement>::from([1, 0, 1]);
+    /// let y = Polynomial::<BFieldElement>::from([1, 1]);
     /// let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
     /// assert_eq!(gcd, a * x + b * y);
     /// ```
-    pub fn xgcd(
-        x: Polynomial<FF>,
-        y: Polynomial<FF>,
-    ) -> (Polynomial<FF>, Polynomial<FF>, Polynomial<FF>) {
-        let (x, a_factor, b_factor) = other::xgcd(x, y);
+    pub fn xgcd(x: Self, y: Self) -> (Self, Self, Self) {
+        let (x, a, b) = other::xgcd(x, y);
 
-        // The result is valid up to a coefficient, so we normalize the result,
-        // to ensure that x has a leading coefficient of 1.
+        // normalize result to ensure `x` has leading coefficient 1
         let lc = x.leading_coefficient().unwrap_or_else(FF::one);
-        let scale = lc.inverse();
-        (
-            x.scalar_mul(scale),
-            a_factor.scalar_mul(scale),
-            b_factor.scalar_mul(scale),
-        )
+        let normalize = |poly: Self| poly.scalar_mul(lc.inverse());
+
+        let [x, a, b] = [x, a, b].map(normalize);
+        (x, a, b)
     }
 }
 
@@ -1367,8 +1398,7 @@ mod test_polynomials {
 
     #[test]
     fn polynomial_display_test() {
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
+        let polynomial = |cs: &[u64]| Polynomial::<BFieldElement>::from(cs);
 
         assert_eq!("0", polynomial(&[]).to_string());
         assert_eq!("0", polynomial(&[0]).to_string());
@@ -1568,11 +1598,8 @@ mod test_polynomials {
     fn shifting_polynomial_one_is_equivalent_to_raising_polynomial_x_to_the_power_of_the_shift(
         #[strategy(0usize..30)] shift: usize,
     ) {
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
-
         let shifted_one = Polynomial::one().shift_coefficients(shift);
-        let x_to_the_shift = polynomial(&[0, 1]).mod_pow(shift.into());
+        let x_to_the_shift = Polynomial::<BFieldElement>::from([0, 1]).mod_pow(shift.into());
         prop_assert_eq!(shifted_one, x_to_the_shift);
     }
 
@@ -1580,7 +1607,7 @@ mod test_polynomials {
     fn polynomial_shift_test() {
         let to_bfe_vec = |a: &[u64]| a.iter().copied().map(BFieldElement::new).collect_vec();
 
-        let polynomial = Polynomial::new(to_bfe_vec(&[17, 14]));
+        let polynomial = Polynomial::<BFieldElement>::from([17, 14]);
         assert_eq!(
             to_bfe_vec(&[17, 14]),
             polynomial.shift_coefficients(0).coefficients
@@ -1626,8 +1653,7 @@ mod test_polynomials {
 
     #[test]
     fn mod_pow_test() {
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
+        let polynomial = |cs: &[u64]| Polynomial::<BFieldElement>::from(cs);
 
         let pol = polynomial(&[0, 14, 0, 4, 0, 8, 0, 3]);
         let pol_squared = polynomial(&[0, 0, 196, 0, 112, 0, 240, 0, 148, 0, 88, 0, 48, 0, 9]);
@@ -1753,12 +1779,10 @@ mod test_polynomials {
 
     #[test]
     fn leading_zeros_dont_affect_polynomial_division() {
-        // This test was used to catch a bug where the polynomial division
-        // was wrong when the divisor has a leading zero coefficient, i.e.
-        // when it was not normalized
+        // This test was used to catch a bug where the polynomial division was wrong when the
+        // divisor has a leading zero coefficient, i.e. when it was not normalized
 
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
+        let polynomial = |cs: &[u64]| Polynomial::<BFieldElement>::from(cs);
 
         // x^3 - x + 1 / y = x
         let numerator = polynomial(&[1, BFieldElement::P - 1, 0, 1]);
@@ -1866,11 +1890,8 @@ mod test_polynomials {
 
     #[test]
     fn fast_evaluate_on_hardcoded_domain_and_polynomial() {
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
-
         // x^5 + x^3
-        let poly = polynomial(&[0, 0, 0, 1, 0, 1]);
+        let poly = Polynomial::<BFieldElement>::from([0, 0, 0, 1, 0, 1]);
         let domain = [6, 12].map(BFieldElement::new);
         let evaluation = poly.fast_evaluate(&domain);
 
@@ -2045,15 +2066,14 @@ mod test_polynomials {
         a: Polynomial<BFieldElement>,
         #[filter(!#b.is_zero())] b: BFieldElement,
     ) {
-        let b_poly = Polynomial::new(vec![b]);
+        let b_poly = Polynomial::from_constant(b);
         let (_, remainder) = a.divide(b_poly);
         prop_assert_eq!(Polynomial::zero(), remainder);
     }
 
     #[test]
     fn polynomial_division_by_and_with_shah_polynomial() {
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
+        let polynomial = |cs: &[u64]| Polynomial::<BFieldElement>::from(cs);
 
         let shah = XFieldElement::shah_polynomial();
         let x_to_the_3 = polynomial(&[1]).shift_coefficients(3);
@@ -2108,8 +2128,7 @@ mod test_polynomials {
 
     #[test]
     fn only_monic_polynomial_of_degree_1_is_x() {
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
+        let polynomial = |cs: &[u64]| Polynomial::<BFieldElement>::from(cs);
 
         assert!(polynomial(&[0, 1]).is_x());
         assert!(polynomial(&[0, 1, 0]).is_x());
@@ -2125,8 +2144,7 @@ mod test_polynomials {
 
     #[test]
     fn hardcoded_polynomial_squaring() {
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
+        let polynomial = |cs: &[u64]| Polynomial::<BFieldElement>::from(cs);
 
         assert_eq!(Polynomial::zero(), polynomial(&[]).square());
 
@@ -2179,11 +2197,11 @@ mod test_polynomials {
     fn zero_polynomial_is_zero_independent_of_spurious_leading_zeros(
         #[strategy(..500usize)] num_zeros: usize,
     ) {
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
-
         let coefficients = vec![0; num_zeros];
-        prop_assert_eq!(Polynomial::zero(), polynomial(&coefficients));
+        prop_assert_eq!(
+            Polynomial::zero(),
+            Polynomial::<BFieldElement>::from(coefficients)
+        );
     }
 
     #[proptest]
@@ -2212,13 +2230,13 @@ mod test_polynomials {
     fn one_polynomial_is_one_independent_of_spurious_leading_zeros(
         #[strategy(..500usize)] num_leading_zeros: usize,
     ) {
-        let polynomial =
-            |cs: &[u64]| Polynomial::new(cs.iter().copied().map(BFieldElement::new).collect());
-
         let spurious_leading_zeros = vec![0; num_leading_zeros];
         let mut coefficients = vec![1];
         coefficients.extend(spurious_leading_zeros);
-        prop_assert_eq!(Polynomial::one(), polynomial(&coefficients));
+        prop_assert_eq!(
+            Polynomial::one(),
+            Polynomial::<BFieldElement>::from(coefficients)
+        );
     }
 
     #[proptest]

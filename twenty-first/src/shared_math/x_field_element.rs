@@ -1184,7 +1184,7 @@ mod x_field_element_test {
 
             // The output should be equivalent to evaluating root^i, i = [0..4]
             // over the polynomial with coefficients 1, 2, 3, 4
-            let pol_degree_i_minus_1: Polynomial<XFieldElement> = Polynomial::new(inputs.to_vec());
+            let pol_degree_i_minus_1: Polynomial<XFieldElement> = Polynomial::from(&inputs);
             let x_domain = root.get_cyclic_group_elements(None);
             for i in 0..inputs.len() {
                 assert_eq!(pol_degree_i_minus_1.evaluate(&x_domain[i]), rv[i]);
