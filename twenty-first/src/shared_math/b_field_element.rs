@@ -42,7 +42,9 @@ use super::traits::Inverse;
 use super::traits::PrimitiveRootOfUnity;
 use super::x_field_element::XFieldElement;
 
-static PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
+const PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
+    0u64 => 1,
+    1u64 => 1,
     2u64 => 18446744069414584320,
     4u64 => 281474976710656,
     8u64 => 18446744069397807105,
@@ -613,14 +615,7 @@ impl ModPowU64 for BFieldElement {
 
 impl PrimitiveRootOfUnity for BFieldElement {
     fn primitive_root_of_unity(n: u64) -> Option<BFieldElement> {
-        // Check if n is one of the values for which we have pre-calculated roots
-        if PRIMITIVE_ROOTS.contains_key(&n) {
-            Some(BFieldElement::new(PRIMITIVE_ROOTS[&n]))
-        } else if n <= 1 {
-            Some(BFieldElement::one())
-        } else {
-            None
-        }
+        PRIMITIVE_ROOTS.get(&n).map(|&r| BFieldElement::new(r))
     }
 }
 
