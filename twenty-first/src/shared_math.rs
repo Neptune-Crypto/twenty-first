@@ -4,7 +4,6 @@ pub mod digest;
 pub mod fips202;
 pub mod lattice;
 pub mod mds;
-pub mod mpolynomial;
 pub mod ntt;
 pub mod other;
 pub mod polynomial;
