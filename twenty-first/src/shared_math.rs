@@ -1,6 +1,5 @@
 pub mod b_field_element;
 pub mod bfield_codec;
-pub mod circuit;
 pub mod digest;
 pub mod fips202;
 pub mod lattice;
