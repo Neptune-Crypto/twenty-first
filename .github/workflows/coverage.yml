@@ -1,0 +1,40 @@
+name: Coverage
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Collect coverage data
+        run: cargo llvm-cov nextest --all-targets --lcov --output-path lcov.info
+
+      - name: Upload coverage to coveralls.io
+        uses: coverallsapp/github-action@v2
+
+      - name: Archive coverage results
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: lcov.info
