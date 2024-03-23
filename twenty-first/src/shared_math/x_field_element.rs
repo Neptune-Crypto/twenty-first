@@ -162,6 +162,7 @@ impl XFieldElement {
     }
 
     #[inline]
+    #[deprecated(since = "0.39.0", note = "use `xfe!` or `from` instead")]
     pub const fn new_u64(coeffs: [u64; EXTENSION_DEGREE]) -> Self {
         Self {
             coefficients: [
@@ -197,6 +198,7 @@ impl XFieldElement {
     /// more efficient `sample_weights()` implementation:
     ///
     /// <https://github.com/Neptune-Crypto/twenty-first/pull/66#discussion_r1049771105>
+    #[deprecated(since = "0.39.0", note = "unused and obscure")]
     pub fn sample(digest: Digest) -> Self {
         let elements = digest.values();
         XFieldElement::new([elements[2], elements[3], elements[4]])
@@ -267,15 +269,12 @@ impl CyclicGroupGenerator for XFieldElement {
 
 impl Display for XFieldElement {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if self.coefficients[2].is_zero() && self.coefficients[1].is_zero() {
-            write!(f, "{}_xfe", self.coefficients[0])
-        } else {
-            write!(
-                f,
-                "({:>020}·x² + {:>020}·x + {:>020})",
-                self.coefficients[2], self.coefficients[1], self.coefficients[0],
-            )
+        if let Some(bfe) = self.unlift() {
+            return write!(f, "{bfe}_xfe");
         }
+
+        let [c0, c1, c2] = self.coefficients;
+        write!(f, "({c2:>020}·x² + {c1:>020}·x + {c0:>020})")
     }
 }
 
@@ -296,9 +295,8 @@ impl FromVecu8 for XFieldElement {
 
 impl Zero for XFieldElement {
     fn zero() -> Self {
-        Self {
-            coefficients: [BFieldElement::zero(); EXTENSION_DEGREE],
-        }
+        let coefficients = [BFieldElement::zero(); EXTENSION_DEGREE];
+        Self { coefficients }
     }
 
     fn is_zero(&self) -> bool {
@@ -308,19 +306,14 @@ impl Zero for XFieldElement {
 
 impl One for XFieldElement {
     fn one() -> Self {
-        Self {
-            coefficients: [
-                BFieldElement::one(),
-                BFieldElement::zero(),
-                BFieldElement::zero(),
-            ],
-        }
+        let coefficients = [1, 0, 0].map(BFieldElement::new);
+        Self { coefficients }
     }
 
     fn is_one(&self) -> bool {
         self.coefficients[0].is_one()
-            & self.coefficients[1].is_zero()
-            & self.coefficients[2].is_zero()
+            && self.coefficients[1].is_zero()
+            && self.coefficients[2].is_zero()
     }
 }
 
@@ -339,13 +332,10 @@ impl Add<XFieldElement> for XFieldElement {
 
     #[inline]
     fn add(self, other: Self) -> Self {
-        Self {
-            coefficients: [
-                self.coefficients[0] + other.coefficients[0],
-                self.coefficients[1] + other.coefficients[1],
-                self.coefficients[2] + other.coefficients[2],
-            ],
-        }
+        let [s0, s1, s2] = self.coefficients;
+        let [o0, o1, o2] = other.coefficients;
+        let coefficients = [s0 + o0, s1 + o1, s2 + o2];
+        Self { coefficients }
     }
 }
 
@@ -353,14 +343,9 @@ impl Add<BFieldElement> for XFieldElement {
     type Output = Self;
 
     #[inline]
-    fn add(self, other: BFieldElement) -> Self {
-        Self {
-            coefficients: [
-                self.coefficients[0] + other,
-                self.coefficients[1],
-                self.coefficients[2],
-            ],
-        }
+    fn add(mut self, other: BFieldElement) -> Self {
+        self.coefficients[0] += other;
+        self
     }
 }
 
@@ -369,49 +354,35 @@ impl Add<XFieldElement> for BFieldElement {
     type Output = XFieldElement;
 
     #[inline]
-    fn add(self, other: XFieldElement) -> XFieldElement {
-        XFieldElement {
-            coefficients: [
-                other.coefficients[0] + self,
-                other.coefficients[1],
-                other.coefficients[2],
-            ],
-        }
+    fn add(self, mut other: XFieldElement) -> XFieldElement {
+        other.coefficients[0] += self;
+        other
     }
 }
 
-/// XField * XField means:
-///
-/// (ax^2 + bx + c) * (dx^2 + ex + f)   (mod x^3 - x + 1)
-///
-/// =   adx^4 + aex^3 + afx^2
-///   + bdx^3 + bex^2 + bfx
-///   + cdx^2 + cex   + cf
-///
-/// = adx^4 + (ae + bd)x^3 + (af + be + cd)x^2 + (bf + ce)x + cf   (mod x^3 - x + 1)
 impl Mul<XFieldElement> for XFieldElement {
     type Output = Self;
 
     #[inline]
     fn mul(self, other: Self) -> Self {
-        // a_0 * x^2 + b_0 * x + c_0
-        let a0 = self.coefficients[2];
-        let b0 = self.coefficients[1];
-        let c0 = self.coefficients[0];
+        // XField * XField means:
+        //
+        // (ax^2 + bx + c) * (dx^2 + ex + f)   (mod x^3 - x + 1)
+        //
+        // =   adx^4 + aex^3 + afx^2
+        //   + bdx^3 + bex^2 + bfx
+        //   + cdx^2 + cex   + cf
+        //
+        // = adx^4 + (ae + bd)x^3 + (af + be + cd)x^2 + (bf + ce)x + cf   (mod x^3 - x + 1)
 
-        // a_1 * x^2 + b_1 * x + c_1
-        let a1 = other.coefficients[2];
-        let b1 = other.coefficients[1];
-        let c1 = other.coefficients[0];
+        let [c, b, a] = self.coefficients;
+        let [f, e, d] = other.coefficients;
 
-        // (a_0 * x^2 + b_0 * x + c_0) * (a_1 * x^2 + b_1 * x + c_1)
-        Self {
-            coefficients: [
-                c0 * c1 - a0 * b1 - b0 * a1,                     // * x^0
-                b0 * c1 + c0 * b1 - a0 * a1 + a0 * b1 + b0 * a1, // * x^1
-                a0 * c1 + b0 * b1 + c0 * a1 + a0 * a1,           // * x^2
-            ],
-        }
+        let r0 = c * f - a * e - b * d;
+        let r1 = b * f + c * e - a * d + a * e + b * d;
+        let r2 = a * f + b * e + c * d + a * d;
+
+        Self::new([r0, r1, r2])
     }
 }
 
@@ -422,13 +393,8 @@ impl Mul<BFieldElement> for XFieldElement {
 
     #[inline]
     fn mul(self, other: BFieldElement) -> Self {
-        Self {
-            coefficients: [
-                self.coefficients[0] * other,
-                self.coefficients[1] * other,
-                self.coefficients[2] * other,
-            ],
-        }
+        let coefficients = self.coefficients.map(|c| c * other);
+        Self { coefficients }
     }
 }
 
@@ -437,13 +403,8 @@ impl Mul<XFieldElement> for BFieldElement {
 
     #[inline]
     fn mul(self, other: XFieldElement) -> XFieldElement {
-        XFieldElement {
-            coefficients: [
-                other.coefficients[0] * self,
-                other.coefficients[1] * self,
-                other.coefficients[2] * self,
-            ],
-        }
+        let coefficients = other.coefficients.map(|c| c * self);
+        XFieldElement { coefficients }
     }
 }
 
@@ -452,13 +413,8 @@ impl Neg for XFieldElement {
 
     #[inline]
     fn neg(self) -> Self {
-        Self {
-            coefficients: [
-                -self.coefficients[0],
-                -self.coefficients[1],
-                -self.coefficients[2],
-            ],
-        }
+        let coefficients = self.coefficients.map(Neg::neg);
+        Self { coefficients }
     }
 }
 
@@ -471,11 +427,6 @@ impl Sub<XFieldElement> for XFieldElement {
     }
 }
 
-/// Subtracting a BFieldElement from an XFieldElement
-///
-/// self - other = self + (-other)
-///
-/// This overloads to Add and Neg
 impl Sub<BFieldElement> for XFieldElement {
     type Output = Self;
 
@@ -1307,6 +1258,7 @@ mod x_field_element_test {
 
     #[proptest]
     fn xfe_macro_produces_same_result_as_calling_new_u64(coeffs: [u64; EXTENSION_DEGREE]) {
+        #[allow(deprecated)] // temporary, until the deprecated function is removed
         let xfe = XFieldElement::new_u64(coeffs);
         prop_assert_eq!(xfe, xfe!(coeffs));
     }

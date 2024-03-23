@@ -1297,6 +1297,7 @@ mod test_mpolynomials {
     use crate::shared_math::other::random_elements;
     use crate::shared_math::other::random_elements_range;
     use crate::shared_math::x_field_element::XFieldElement;
+    use crate::xfe;
 
     use super::*;
 
@@ -2341,10 +2342,10 @@ mod test_mpolynomials {
     fn print_display_xfield_test() {
         let mut mcoef: MCoefficients<XFieldElement> = HashMap::new();
 
-        mcoef.insert(vec![0, 0], XFieldElement::new_u64([5, 6, 7]));
-        mcoef.insert(vec![0, 1], XFieldElement::new_u64([8, 9, 10]));
-        mcoef.insert(vec![2, 0], XFieldElement::new_u64([11, 12, 13]));
-        mcoef.insert(vec![3, 4], XFieldElement::new_u64([14, 15, 16]));
+        mcoef.insert(vec![0, 0], xfe!([5, 6, 7]));
+        mcoef.insert(vec![0, 1], xfe!([8, 9, 10]));
+        mcoef.insert(vec![2, 0], xfe!([11, 12, 13]));
+        mcoef.insert(vec![3, 4], xfe!([14, 15, 16]));
 
         let mpoly = MPolynomial {
             variable_count: 2,
