@@ -27,6 +27,7 @@ use crate::shared_math::traits::FiniteField;
 use crate::shared_math::traits::ModPowU32;
 
 use super::b_field_element::BFieldElement;
+use super::b_field_element::BFIELD_ONE;
 use super::other;
 use super::traits::Inverse;
 use super::traits::PrimitiveRootOfUnity;
@@ -123,6 +124,11 @@ impl<FF> Polynomial<FF>
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
+    /// Fast division ([`Self::fast_divide`] and [`Self::fast_coset_divide`]) is slower for
+    /// polynomials of degree less than this threshold.
+    /// todo: Benchmark and find the optimal value.
+    const FAST_DIVIDE_CUTOFF_THRESHOLD: isize = 8;
+
     /// Return the polynomial which corresponds to the transformation `x -> alpha * x`
     /// Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x) then corresponds to
     /// evaluating P(alpha * x).
@@ -135,9 +141,7 @@ where
             acc *= alpha;
         }
 
-        Self {
-            coefficients: return_coefficients,
-        }
+        Self::new(return_coefficients)
     }
 
     /// It is the caller's responsibility that this function is called with sufficiently large input
@@ -687,83 +691,135 @@ where
         poly.scale(offset.inverse())
     }
 
-    /// Divide two polynomials under the homomorphism of evaluation for a N^2 -> N*log(N) speedup
-    /// Since we often want to use this fast division for numerators and divisors that evaluate
-    /// to zero in their domain, we do the division with an offset from the polynomials' original
-    /// domains. The issue of zero in the numerator and divisor arises when we divide a transition
-    /// polynomial with a zerofier.
+    /// Divide `self` by some `divisor`.
     ///
-    /// ### Current limitations
+    /// As the name implies, the advantage of this method over [`divide`](Self::divide) is runtime
+    /// complexity. Concretely, this method has time complexity in O(n·log(n)), whereas
+    /// [`divide`](Self::divide) has time complexity in O(n^2).
     ///
-    /// - The order of the domain must be greater than the degree of the `numerator`.
-    pub fn fast_coset_divide(
-        numerator: &Polynomial<FF>,
-        denominator: &Polynomial<FF>,
-        offset: BFieldElement,
-        primitive_root: BFieldElement,
-        root_order: usize,
-    ) -> Polynomial<FF> {
-        assert!(!denominator.is_zero(), "cannot divide by zero polynomial");
+    /// The disadvantage of this method is its incompleteness. In some very specific cases, the
+    /// division cannot be performed and `panic!`s. More concretely:
+    /// Let `r` be the [root of unity][root_unit] of order `n`, where `n` is the next power of two
+    /// of ([`self.degree()`](Self::degree) `+ 1`).
+    /// If the `divisor` has any root equal to any power of `r`, this method will panic.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let a = Polynomial::new(vec![bfe!(1), bfe!(2), bfe!(3)]);
+    /// let b = Polynomial::new(vec![bfe!(42), bfe!(53)]);
+    /// let c = a.fast_divide(&b);
+    /// ```
+    ///
+    /// ## Incompleteness
+    ///
+    /// The divisor `(x - 1)` has [root of unity][root_unit] `1` as its root, triggering a panic.
+    ///
+    /// ```should_panic
+    /// # use twenty_first::prelude::*;
+    /// # // surpass `Polynomial::FAST_DIVIDE_CUTOFF_THRESHOLD`
+    /// # const DEGREE: u64 = 8;
+    /// # let roots = (0..DEGREE).map(BFieldElement::new).collect::<Vec<_>>();
+    /// # let dividend = Polynomial::zerofier(&roots);
+    /// let divisor = Polynomial::zerofier(&[bfe!(1)]);
+    /// let quotient = dividend.fast_divide(&divisor); // panic!
+    /// ```
+    ///
+    /// Should speed be of no concern, for example because the degrees of the polynomials involved
+    /// are known to be small, use [`divide`](Self::divide) instead.
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// # // surpass `Polynomial::FAST_DIVIDE_CUTOFF_THRESHOLD`
+    /// # const DEGREE: u64 = 8;
+    /// # let roots = (0..DEGREE).map(BFieldElement::new).collect::<Vec<_>>();
+    /// # let dividend = Polynomial::zerofier(&roots);
+    /// # let divisor = Polynomial::zerofier(&[bfe!(1)]);
+    /// let quotient = dividend / divisor;
+    /// ```
+    ///
+    /// Alternatively, if the roots of the divisor are known or can be anticipated, _and_ are known
+    /// to be problematic, use [`fast_coset_divide`](Self::fast_coset_divide) to perform division in
+    /// a coset.
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// # // surpass `Polynomial::FAST_DIVIDE_CUTOFF_THRESHOLD`
+    /// # const DEGREE: u64 = 8;
+    /// # let roots = (0..DEGREE).map(BFieldElement::new).collect::<Vec<_>>();
+    /// # let dividend = Polynomial::zerofier(&roots);
+    /// # let divisor = Polynomial::zerofier(&[bfe!(1)]);
+    /// let quotient = dividend.fast_coset_divide(&divisor, bfe!(7));
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// - if the `divisor` is zero
+    /// - if the degree of the `divisor` is greater than the degree of `self`
+    /// - if the `divisor` has a [root of unity][root_unit] as a root, as discussed above
+    ///
+    /// [root_unit]: BFieldElement::primitive_root_of_unity
+    pub fn fast_divide(&self, divisor: &Self) -> Self {
+        self.fast_coset_divide(divisor, BFIELD_ONE)
+    }
 
-        if numerator.is_zero() {
-            return Polynomial {
-                coefficients: vec![],
-            };
+    /// Divide `self` by some `divisor`.
+    /// Generally like [`fast_divide`](Self::fast_divide).
+    ///
+    /// The additional `offset` grants finer control over the coset domain used internally to
+    /// perform the divison. Intimate understanding of [roots of unity][root_unit], cosets, and the
+    /// `divisor`'s shape are required to select an appropriate `offset`. For a discussion, see
+    /// [`fast_divide`](Self::fast_divide).
+    ///
+    /// # Panics
+    ///
+    /// - if the `divisor` is zero
+    /// - if the `offset` is zero
+    /// - if the degree of the `divisor` is greater than the degree of `self`
+    /// - if the offset `divisor` has a [root of unity][root_unit] as a root
+    ///
+    /// [root_unit]: BFieldElement::primitive_root_of_unity
+    pub fn fast_coset_divide(&self, divisor: &Self, offset: BFieldElement) -> Self {
+        // Uses the homomorphism of evaluation, i.e., NTT + batch inversion + iNTT.
+
+        assert!(!divisor.is_zero(), "divisor must be non-zero");
+        if self.is_zero() {
+            return Self::zero();
         }
 
         assert!(
-            denominator.degree() <= numerator.degree(),
-            "in polynomial division, denominator degree must be at most that of numerator"
+            divisor.degree() <= self.degree(),
+            "divisor degree must be at most that of dividend"
         );
 
-        // See the comment in `fast_coset_evaluate` for why this is necessary.
-        assert!(
-            (root_order as isize) > numerator.degree(),
-            "`Polynomial::fast_coset_divide` is currently limited to domains of order \
-            greater than the degree of the numerator."
-        );
+        // See the comment in `fast_coset_evaluate` why this bound is necessary.
+        let order = (self.degree() as usize + 1).next_power_of_two();
+        let order_u64 = u64::try_from(order).unwrap();
+        let root = BFieldElement::primitive_root_of_unity(order_u64).unwrap();
 
-        if numerator.degree() < 8 {
-            return numerator.to_owned() / denominator.to_owned();
+        if self.degree() < Self::FAST_DIVIDE_CUTOFF_THRESHOLD {
+            return self.to_owned() / divisor.to_owned();
         }
 
-        let mut root: BFieldElement = primitive_root;
-        let mut order = root_order;
-        let degree: usize = numerator.degree() as usize;
+        let mut dividend_coefficients = self.scale(offset).coefficients;
+        let mut divisor_coefficients = divisor.scale(offset).coefficients;
 
-        // shrink the size of the domain as much as possible
-        while degree < order / 2 {
-            root *= root;
-            order /= 2;
-        }
+        dividend_coefficients.resize(order, FF::zero());
+        divisor_coefficients.resize(order, FF::zero());
 
-        let mut scaled_lhs_coefficients: Vec<FF> = numerator.scale(offset).coefficients;
-        let mut scaled_rhs_coefficients: Vec<FF> = denominator.scale(offset).coefficients;
+        ntt(&mut dividend_coefficients, root, order.ilog2());
+        ntt(&mut divisor_coefficients, root, order.ilog2());
 
-        scaled_lhs_coefficients.resize(order, FF::zero());
-        scaled_rhs_coefficients.resize(order, FF::zero());
+        let divisor_inverses = FF::batch_inversion(divisor_coefficients);
+        let mut quotient_codeword = dividend_coefficients
+            .into_iter()
+            .zip(divisor_inverses)
+            .map(|(l, r)| l * r)
+            .collect_vec();
 
-        let lhs_log_2_of_n = scaled_lhs_coefficients.len().ilog2();
-        let rhs_log_2_of_n = scaled_rhs_coefficients.len().ilog2();
-
-        ntt::<FF>(&mut scaled_lhs_coefficients, root, lhs_log_2_of_n);
-        ntt::<FF>(&mut scaled_rhs_coefficients, root, rhs_log_2_of_n);
-
-        let rhs_inverses = FF::batch_inversion(scaled_rhs_coefficients);
-        let mut quotient_codeword: Vec<FF> = scaled_lhs_coefficients
-            .iter()
-            .zip(rhs_inverses)
-            .map(|(l, r)| l.to_owned() * r)
-            .collect();
-
-        let log_2_of_n = quotient_codeword.len().ilog2();
-        intt::<FF>(&mut quotient_codeword, root, log_2_of_n);
-
-        let scaled_quotient = Polynomial {
-            coefficients: quotient_codeword,
-        };
-
-        scaled_quotient.scale(offset.inverse())
+        intt(&mut quotient_codeword, root, order.ilog2());
+        Self::new(quotient_codeword).scale(offset.inverse())
     }
 }
 
@@ -1955,18 +2011,22 @@ mod test_polynomials {
         a: Polynomial<BFieldElement>,
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
         #[filter(!#offset.is_zero())] offset: BFieldElement,
-        #[strategy(0..8usize)]
-        #[map(|x: usize| 1 << x)]
-        // due to current limitation in `Polynomial::fast_coset_divide`
-        #[filter((#root_order as isize) > (#a * #b).degree())]
-        root_order: usize,
     ) {
-        let primitive_root = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-
         let product = a.clone() * b.clone();
-        let quotient =
-            Polynomial::fast_coset_divide(&product, &b, offset, primitive_root, root_order);
+        let quotient = product.fast_coset_divide(&b, offset);
         prop_assert_eq!(product / b, quotient);
+    }
+
+    #[proptest]
+    fn fast_coset_division_and_fast_division_are_equivalent(
+        a: Polynomial<BFieldElement>,
+        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
+        #[filter(!#offset.is_zero())] offset: BFieldElement,
+    ) {
+        let product = a.clone() * b.clone();
+        let quotient_0 = product.fast_divide(&b);
+        let quotient_1 = product.fast_coset_divide(&b, offset);
+        prop_assert_eq!(quotient_0, quotient_1);
     }
 
     #[proptest]
