@@ -40,13 +40,13 @@ mod shared_tests_tests {
     #[should_panic]
     #[test]
     fn disallow_repeated_leaf_indices_in_construction() {
-        type H = blake3::Hasher;
+        type H = Tip5;
         mmra_with_mps::<H>(14, vec![(0, random()), (0, random())]);
     }
 
     #[test]
     fn mmra_and_mps_construct_test_cornercases() {
-        type H = blake3::Hasher;
+        type H = Tip5;
         let mut rng = rand::thread_rng();
         for leaf_count in 0..5 {
             let (_mmra, _mps) = mmra_with_mps::<H>(leaf_count, vec![]);
@@ -88,7 +88,7 @@ mod shared_tests_tests {
 
     #[test]
     fn mmra_and_mps_construct_test_small() {
-        type H = blake3::Hasher;
+        type H = Tip5;
         let mut rng = rand::thread_rng();
         let some_digest: Digest = rng.gen();
         let other_digest: Digest = rng.gen();

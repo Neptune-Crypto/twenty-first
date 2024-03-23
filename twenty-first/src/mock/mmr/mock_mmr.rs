@@ -416,7 +416,7 @@ mod mmr_test {
 
     #[test]
     fn empty_mmr_behavior_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let mut archival_mmr: MockMmr<H> = get_empty_mock_ammr();
         let mut accumulator_mmr: MmrAccumulator<H> = MmrAccumulator::<H>::new(vec![]);
@@ -488,7 +488,7 @@ mod mmr_test {
 
     #[test]
     fn verify_against_correct_peak_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         // This test addresses a bug that was discovered late in the development process
         // where it was possible to fake a verification proof by providing a valid leaf
@@ -603,11 +603,13 @@ mod mmr_test {
         }
     }
 
-    fn bag_peaks_gen<H: AlgebraicHasher>() {
-        // Verify that archival and accumulator MMR produce the same root
-        let leaf_hashes_blake3: Vec<Digest> = random_elements(3);
-        let archival_mmr_small: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_blake3.clone());
-        let accumulator_mmr_small = MmrAccumulator::<H>::new(leaf_hashes_blake3);
+    #[test]
+    fn bagging_peaks_is_equivalent_for_archival_and_accumulator_mmrs() {
+        type H = Tip5;
+
+        let leaf_digests: Vec<Digest> = random_elements(3);
+        let archival_mmr_small: MockMmr<H> = get_mock_ammr_from_digests(leaf_digests.clone());
+        let accumulator_mmr_small = MmrAccumulator::<H>::new(leaf_digests);
         assert_eq!(
             archival_mmr_small.bag_peaks(),
             accumulator_mmr_small.bag_peaks()
@@ -623,23 +625,17 @@ mod mmr_test {
     }
 
     #[test]
-    fn bag_peaks_blake3_test() {
-        bag_peaks_gen::<blake3::Hasher>();
-        bag_peaks_gen::<Tip5>();
-    }
-
-    #[test]
     fn accumulator_mmr_mutate_leaf_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         // Verify that upating leafs in archival and in accumulator MMR results in the same peaks
         // and verify that updating all leafs in an MMR results in the expected MMR
         for size in 1..150 {
             let new_leaf: Digest = random();
-            let leaf_hashes_blake3: Vec<Digest> = random_elements(size);
+            let leaf_digests: Vec<Digest> = random_elements(size);
 
-            let mut acc = MmrAccumulator::<H>::new(leaf_hashes_blake3.clone());
-            let mut archival: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_blake3.clone());
+            let mut acc = MmrAccumulator::<H>::new(leaf_digests.clone());
+            let mut archival: MockMmr<H> = get_mock_ammr_from_digests(leaf_digests.clone());
             let archival_end_state: MockMmr<H> = get_mock_ammr_from_digests(vec![new_leaf; size]);
             for i in 0..size {
                 let i = i as u64;
@@ -657,14 +653,14 @@ mod mmr_test {
 
     #[test]
     fn mmr_prove_verify_leaf_mutation_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         for size in 1..150 {
             let new_leaf: Digest = random();
             let bad_leaf: Digest = random();
-            let leaf_hashes_blake3: Vec<Digest> = random_elements(size);
-            let mut acc = MmrAccumulator::<H>::new(leaf_hashes_blake3.clone());
-            let mut archival: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_blake3.clone());
+            let leaf_digests: Vec<Digest> = random_elements(size);
+            let mut acc = MmrAccumulator::<H>::new(leaf_digests.clone());
+            let mut archival: MockMmr<H> = get_mock_ammr_from_digests(leaf_digests.clone());
             let archival_end_state: MockMmr<H> = get_mock_ammr_from_digests(vec![new_leaf; size]);
             for i in 0..size {
                 let i = i as u64;
@@ -694,16 +690,16 @@ mod mmr_test {
 
     #[test]
     fn mmr_append_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         // Verify that building an MMR iteratively or in *one* function call results in the same MMR
         for size in 1..260 {
-            let leaf_hashes_blake3: Vec<Digest> = random_elements(size);
+            let leaf_digests: Vec<Digest> = random_elements(size);
             let mut archival_iterative: MockMmr<H> = get_mock_ammr_from_digests(vec![]);
-            let archival_batch: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_blake3.clone());
+            let archival_batch: MockMmr<H> = get_mock_ammr_from_digests(leaf_digests.clone());
             let mut accumulator_iterative = MmrAccumulator::<H>::new(vec![]);
-            let accumulator_batch = MmrAccumulator::<H>::new(leaf_hashes_blake3.clone());
-            for (leaf_index, leaf_hash) in leaf_hashes_blake3.clone().into_iter().enumerate() {
+            let accumulator_batch = MmrAccumulator::<H>::new(leaf_digests.clone());
+            for (leaf_index, leaf_hash) in leaf_digests.clone().into_iter().enumerate() {
                 let archival_membership_proof: MmrMembershipProof<H> =
                     archival_iterative.append(leaf_hash);
                 let accumulator_membership_proof = accumulator_iterative.append(leaf_hash);
@@ -748,7 +744,7 @@ mod mmr_test {
             let empty_accumulator = MmrAccumulator::<H>::new(vec![]);
             assert!(empty_accumulator.verify_batch_update(
                 &archival_batch.get_peaks(),
-                &leaf_hashes_blake3,
+                &leaf_digests,
                 &[],
             ));
         }
@@ -937,7 +933,7 @@ mod mmr_test {
 
     #[test]
     fn remove_last_leaf_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let input_digests: Vec<Digest> = random_elements(12);
         let mut mmr: MockMmr<H> = get_mock_ammr_from_digests(input_digests.clone());
@@ -972,7 +968,7 @@ mod mmr_test {
 
     #[test]
     fn remove_last_leaf_pbt() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let small_size: usize = 100;
         let big_size: usize = 350;
@@ -993,8 +989,8 @@ mod mmr_test {
     }
 
     #[test]
-    fn variable_size_blake3_mmr_test() {
-        type H = blake3::Hasher;
+    fn variable_size_mmr_test() {
+        type H = Tip5;
 
         let node_counts: Vec<u64> = vec![
             1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41, 42,

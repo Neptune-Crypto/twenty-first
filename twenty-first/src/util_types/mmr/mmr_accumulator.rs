@@ -465,7 +465,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn conversion_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf_hashes: Vec<Digest> = random_elements(3);
         let mock_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes);
@@ -481,7 +481,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_single_append_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf_hashes_start: Vec<Digest> = random_elements(3);
         let appended_leaf: Digest = random();
@@ -502,7 +502,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_single_mutate_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf0: Digest = random();
         let leaf1: Digest = random();
@@ -541,7 +541,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_two_append_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf_hashes_start: Vec<Digest> = random_elements(3);
         let appended_leafs: Vec<Digest> = random_elements(2);
@@ -560,7 +560,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_two_mutate_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf14: Digest = random();
         let leaf15: Digest = random();
@@ -591,7 +591,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn batch_mutate_leaf_and_update_mps_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let mut rng = rand::thread_rng();
         for mmr_leaf_count in 1..100 {
@@ -694,7 +694,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_pbt() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         for start_size in 1..35 {
             let leaf_hashes_start: Vec<Digest> = random_elements(start_size);
@@ -815,7 +815,7 @@ mod accumulator_mmr_tests {
 
         let json = serde_json::to_string(&mmra).unwrap();
         let s_back = serde_json::from_str::<Mmr>(&json).unwrap();
-        assert!(mmra.bag_peaks() == s_back.bag_peaks());
+        assert_eq!(mmra.bag_peaks(), s_back.bag_peaks());
         assert_eq!(1, mmra.count_leaves());
     }
 
