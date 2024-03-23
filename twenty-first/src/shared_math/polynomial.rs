@@ -245,19 +245,41 @@ where
         acc
     }
 
+    /// Multiply `self` by `other`.
+    ///
+    /// This method is asymptotically faster than the naive multiplication method. For small
+    /// instances, _i.e._, polynomials of low degree, it might be slower.
+    ///
+    /// The time complexity of this method is in O(n·log(n)), where `n` is the sum of the degrees
+    /// of the operands. The time complexity of [the naive multiplication](Self::multiply) is in
+    /// O(n^2).
+    #[must_use]
+    pub fn fast_multiply(&self, other: &Self) -> Self {
+        if self.is_zero() || other.is_zero() {
+            return Self::zero();
+        }
+
+        let degree = (self.degree() + other.degree()) as usize;
+        let order = (degree + 1).next_power_of_two();
+        let order_u64 = u64::try_from(order).unwrap();
+        let root = BFieldElement::primitive_root_of_unity(order_u64).unwrap();
+
+        Self::fast_multiply_inner(self, other, root, order)
+    }
+
     // FIXME: lhs -> &self. FIXME: Change root_order: usize into : u32.
-    pub fn fast_multiply(
+    fn fast_multiply_inner(
         lhs: &Self,
         rhs: &Self,
         primitive_root: BFieldElement,
         root_order: usize,
     ) -> Self {
-        assert!(
+        debug_assert!(
             primitive_root.mod_pow_u32(root_order as u32).is_one(),
             "provided primitive root must have the provided power."
         );
-        assert!(
-            !primitive_root.mod_pow_u32(root_order as u32 / 2).is_one(),
+        debug_assert!(
+            !primitive_root.mod_pow_u32(root_order as u32 / 2).is_one() || root_order <= 1,
             "provided primitive root must be primitive in the right power."
         );
 
@@ -280,19 +302,14 @@ where
             order /= 2;
         }
 
-        let mut lhs_coefficients: Vec<FF> = lhs.coefficients[0..lhs_degree + 1].to_vec();
-        let mut rhs_coefficients: Vec<FF> = rhs.coefficients[0..rhs_degree + 1].to_vec();
-        while lhs_coefficients.len() < order {
-            lhs_coefficients.push(FF::zero());
-        }
-        while rhs_coefficients.len() < order {
-            rhs_coefficients.push(FF::zero());
-        }
+        let mut lhs_coefficients = lhs.coefficients.to_vec();
+        let mut rhs_coefficients = rhs.coefficients.to_vec();
 
-        let lhs_log_2_of_n = lhs_coefficients.len().ilog2();
-        let rhs_log_2_of_n = rhs_coefficients.len().ilog2();
-        ntt::<FF>(&mut lhs_coefficients, root, lhs_log_2_of_n);
-        ntt::<FF>(&mut rhs_coefficients, root, rhs_log_2_of_n);
+        lhs_coefficients.resize(order, FF::zero());
+        rhs_coefficients.resize(order, FF::zero());
+
+        ntt::<FF>(&mut lhs_coefficients, root, order.ilog2());
+        ntt::<FF>(&mut rhs_coefficients, root, order.ilog2());
 
         let mut hadamard_product: Vec<FF> = rhs_coefficients
             .into_iter()
@@ -300,10 +317,8 @@ where
             .map(|(r, l)| r * l)
             .collect();
 
-        let log_2_of_n = hadamard_product.len().ilog2();
-        intt::<FF>(&mut hadamard_product, root, log_2_of_n);
+        intt::<FF>(&mut hadamard_product, root, order.ilog2());
         hadamard_product.truncate(degree + 1);
-
         Self::new(hadamard_product)
     }
 
@@ -343,7 +358,7 @@ where
         let mid_point = domain.len() / 2;
         let left = Self::fast_zerofier_inner(&domain[..mid_point], primitive_root, root_order);
         let right = Self::fast_zerofier_inner(&domain[mid_point..], primitive_root, root_order);
-        Self::fast_multiply(&left, &right, primitive_root, root_order)
+        Self::fast_multiply_inner(&left, &right, primitive_root, root_order)
     }
 
     pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
@@ -459,13 +474,13 @@ where
             root_order,
         );
 
-        let left_term = Self::fast_multiply(
+        let left_term = Self::fast_multiply_inner(
             &left_interpolant,
             &right_zerofier,
             primitive_root,
             root_order,
         );
-        let right_term = Self::fast_multiply(
+        let right_term = Self::fast_multiply_inner(
             &right_interpolant,
             &left_zerofier,
             primitive_root,
@@ -622,13 +637,13 @@ where
             .par_iter()
             .zip(right_interpolants.par_iter())
             .map(|(left_interpolant, right_interpolant)| {
-                let left_term = Self::fast_multiply(
+                let left_term = Self::fast_multiply_inner(
                     left_interpolant,
                     &right_zerofier,
                     primitive_root,
                     root_order,
                 );
-                let right_term = Self::fast_multiply(
+                let right_term = Self::fast_multiply_inner(
                     right_interpolant,
                     &left_zerofier,
                     primitive_root,
@@ -1813,15 +1828,13 @@ mod test_polynomials {
 
     #[proptest]
     fn fast_multiplication_by_zero_gives_zero(poly: Polynomial<BFieldElement>) {
-        let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
-        let product = Polynomial::fast_multiply(&Polynomial::zero(), &poly, primitive_root, 32);
+        let product = poly.fast_multiply(&Polynomial::zero());
         prop_assert_eq!(Polynomial::zero(), product);
     }
 
     #[proptest]
     fn fast_multiplication_by_one_gives_self(poly: Polynomial<BFieldElement>) {
-        let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
-        let product = Polynomial::fast_multiply(&Polynomial::one(), &poly, primitive_root, 32);
+        let product = poly.fast_multiply(&Polynomial::one());
         prop_assert_eq!(poly, product);
     }
 
@@ -1830,10 +1843,7 @@ mod test_polynomials {
         a: Polynomial<BFieldElement>,
         b: Polynomial<BFieldElement>,
     ) {
-        let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
-        let product = Polynomial::fast_multiply(&a, &b, primitive_root, 32);
-        let product_commutative = Polynomial::fast_multiply(&b, &a, primitive_root, 32);
-        prop_assert_eq!(product, product_commutative);
+        prop_assert_eq!(a.fast_multiply(&b), b.fast_multiply(&a));
     }
 
     #[proptest]
@@ -1841,8 +1851,7 @@ mod test_polynomials {
         a: Polynomial<BFieldElement>,
         b: Polynomial<BFieldElement>,
     ) {
-        let primitive_root = BFieldElement::primitive_root_of_unity(32).unwrap();
-        let product = Polynomial::fast_multiply(&a, &b, primitive_root, 32);
+        let product = a.fast_multiply(&b);
         prop_assert_eq!(a * b, product);
     }
 
