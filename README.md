@@ -1,7 +1,8 @@
 # twenty-first
 
-![GitHub CI](https://github.com/Neptune-Crypto/twenty-first/actions/workflows/main.yml/badge.svg)
-![crates.io](https://img.shields.io/crates/v/twenty-first.svg)
+[![GitHub CI](https://github.com/Neptune-Crypto/twenty-first/actions/workflows/main.yml/badge.svg)](https://github.com/Neptune-Crypto/twenty-first/actions)
+[![crates.io](https://img.shields.io/crates/v/twenty-first.svg)](https://crates.io/crates/twenty-first)
+[![Coverage Status](https://coveralls.io/repos/github/Neptune-Crypto/twenty-first/badge.svg?branch=master)](https://coveralls.io/github/Neptune-Crypto/twenty-first?branch=master)
 
 A collection of cryptography primitives written in Rust.
 
