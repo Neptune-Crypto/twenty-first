@@ -1,18 +1,22 @@
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::marker::PhantomData;
+
 use arbitrary::Arbitrary;
 use get_size::GetSize;
-use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
-use std::{collections::HashMap, fmt::Debug};
+use itertools::Itertools;
+use serde::Deserialize;
+use serde::Serialize;
 
-use super::mmr_membership_proof::MmrMembershipProof;
-use super::mmr_trait::Mmr;
-use super::shared_basic;
 use crate::shared_math::bfield_codec::BFieldCodec;
 use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::mmr::shared_advanced;
 use crate::util_types::shared::bag_peaks;
-use crate::utils::has_unique_elements;
+
+use super::mmr_membership_proof::MmrMembershipProof;
+use super::mmr_trait::Mmr;
+use super::shared_basic;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary)]
 pub struct MmrAccumulator<H>
@@ -101,7 +105,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         // not exceed the total leaf count
         let manipulated_leaf_indices: Vec<u64> =
             leaf_mutations.iter().map(|x| x.1.leaf_index).collect();
-        if !has_unique_elements(manipulated_leaf_indices.clone()) {
+        if !manipulated_leaf_indices.iter().all_unique() {
             return false;
         }
 
@@ -276,13 +280,14 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
 }
 
 pub mod util {
+    use itertools::Itertools;
 
-    use super::*;
     use crate::shared_math::other::log_2_ceil;
     use crate::shared_math::other::random_elements;
     use crate::util_types::mmr::shared_advanced::right_lineage_length_from_node_index;
     use crate::util_types::mmr::shared_basic::leaf_index_to_mt_index_and_peak_index;
-    use itertools::Itertools;
+
+    use super::*;
 
     /// Get an MMR accumulator with a requested number of leafs, and requested leaf digests at specified indices
     /// Also returns the MMR membership proofs for the specified leafs.
@@ -291,7 +296,7 @@ pub mod util {
         specified_leafs: Vec<(u64, Digest)>,
     ) -> (MmrAccumulator<H>, Vec<MmrMembershipProof<H>>) {
         assert!(
-            has_unique_elements(specified_leafs.iter().map(|x| x.0)),
+            specified_leafs.iter().map(|&(idx, _)| idx).all_unique(),
             "Specified leaf indices must be unique"
         );
 
@@ -421,16 +426,20 @@ pub mod util {
 mod accumulator_mmr_tests {
     use std::cmp;
 
-    use itertools::{izip, Itertools};
+    use itertools::izip;
+    use itertools::Itertools;
     use num_traits::Zero;
-    use rand::{random, thread_rng, Rng, RngCore};
-
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::other::{random_elements, random_elements_range};
-    use crate::shared_math::tip5::Tip5;
+    use rand::random;
+    use rand::thread_rng;
+    use rand::Rng;
+    use rand::RngCore;
 
     use crate::mock::mmr::get_mock_ammr_from_digests;
     use crate::mock::mmr::MockMmr;
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::other::random_elements;
+    use crate::shared_math::other::random_elements_range;
+    use crate::shared_math::tip5::Tip5;
 
     use super::*;
 

@@ -1,14 +1,15 @@
+use itertools::Itertools;
 use std::marker::PhantomData;
 
 use crate::shared_math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::shared::bag_peaks;
-use crate::utils::has_unique_elements;
 
-use crate::util_types::mmr::{
-    mmr_accumulator::MmrAccumulator, mmr_membership_proof::MmrMembershipProof, mmr_trait::Mmr,
-    shared_advanced, shared_basic,
-};
+use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
+use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
+use crate::util_types::mmr::mmr_trait::Mmr;
+use crate::util_types::mmr::shared_advanced;
+use crate::util_types::mmr::shared_basic;
 
 /// MockMmr is available for feature `mock` and for unit tests.
 ///
@@ -99,7 +100,7 @@ where
         mutation_data: Vec<(MmrMembershipProof<H>, Digest)>,
     ) -> Vec<usize> {
         assert!(
-            has_unique_elements(mutation_data.iter().map(|md| md.0.leaf_index)),
+            mutation_data.iter().map(|(p, _)| p.leaf_index).all_unique(),
             "Duplicated leaves are not allowed in membership proof updater"
         );
 
