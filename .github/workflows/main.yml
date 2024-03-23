@@ -1,3 +1,5 @@
+name: Rust
+
 on:
   push:
     branches:
@@ -6,42 +8,43 @@ on:
     branches:
       - master
 
-name: Rust
-
 jobs:
-  runner-matrix:
-    name: format, lint, test
+  rust:
+    name: Build, lint, test
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
           components: rustfmt, clippy
 
-      - name: Run cargo fmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
 
-      - name: Run cargo clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+      - name: Run fmt
+        run: cargo fmt --all -- --check
 
-      - name: Run cargo test without benches
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: -- --skip benches
+      - name: Build documentation
+        run: cargo doc --no-deps --workspace
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo nextest run --no-fail-fast --all-targets
+
+        # doctests are special [^1] but this step does not incur a performance penalty [^2]
+        #
+        # [^1]: https://nexte.st/book/usage.html#limitations
+        # [^2]: https://github.com/nextest-rs/nextest/issues/16
+      - name: Run documentation tests
+        run: cargo test --doc
