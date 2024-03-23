@@ -1169,10 +1169,86 @@ mod tests {
     use super::*;
 
     #[test]
-    fn macro_compiles_when_expanding_unit_struct() {
+    fn unit_struct() {
         let ast = parse_quote! {
             #[derive(BFieldCodec)]
             struct UnitStruct;
+        };
+        let _rust_code = BFieldCodecDeriveBuilder::new(ast).build();
+    }
+
+    #[test]
+    fn tuple_struct() {
+        let ast = parse_quote! {
+            #[derive(BFieldCodec)]
+            struct TupleStruct(u64, u32);
+        };
+        let _rust_code = BFieldCodecDeriveBuilder::new(ast).build();
+    }
+
+    #[test]
+    fn struct_with_named_fields() {
+        let ast = parse_quote! {
+            #[derive(BFieldCodec)]
+            struct StructWithNamedFields {
+                field1: u64,
+                field2: u32,
+                #[bfield_codec(ignore)]
+                ignored_field: bool,
+            }
+        };
+        let _rust_code = BFieldCodecDeriveBuilder::new(ast).build();
+    }
+
+    #[test]
+    fn enum_with_tuple_variants() {
+        let ast = parse_quote! {
+            #[derive(BFieldCodec)]
+            enum Enum {
+                Variant1,
+                Variant2(u64),
+                Variant3(u64, u32),
+                #[bfield_codec(ignore)]
+                IgnoredVariant,
+            }
+        };
+        let _rust_code = BFieldCodecDeriveBuilder::new(ast).build();
+    }
+
+    #[test]
+    fn generic_tuple_struct() {
+        let ast = parse_quote! {
+            #[derive(BFieldCodec)]
+            struct TupleStruct<T>(T, (T, T));
+        };
+        let _rust_code = BFieldCodecDeriveBuilder::new(ast).build();
+    }
+
+    #[test]
+    fn generic_struct_with_named_fields() {
+        let ast = parse_quote! {
+            #[derive(BFieldCodec)]
+            struct StructWithNamedFields<T> {
+                field1: T,
+                field2: (T, T),
+                #[bfield_codec(ignore)]
+                ignored_field: bool,
+            }
+        };
+        let _rust_code = BFieldCodecDeriveBuilder::new(ast).build();
+    }
+
+    #[test]
+    fn generic_enum() {
+        let ast = parse_quote! {
+            #[derive(BFieldCodec)]
+            enum Enum<T> {
+                Variant1,
+                Variant2(T),
+                Variant3(T, T),
+                #[bfield_codec(ignore)]
+                IgnoredVariant,
+            }
         };
         let _rust_code = BFieldCodecDeriveBuilder::new(ast).build();
     }
