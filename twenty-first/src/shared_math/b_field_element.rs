@@ -34,8 +34,6 @@ use crate::shared_math::traits::FiniteField;
 use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::traits::ModPowU64;
 use crate::shared_math::traits::New;
-use crate::util_types::emojihash_trait::Emojihash;
-use crate::util_types::emojihash_trait::EMOJI_PER_ELEMENT;
 
 use super::traits::FromVecu8;
 use super::traits::Inverse;
@@ -349,15 +347,6 @@ impl BFieldElement {
     #[inline]
     pub fn raw_u64(&self) -> u64 {
         self.0
-    }
-}
-
-impl Emojihash for BFieldElement {
-    fn emojihash(&self) -> String {
-        emojihash::hash(&self.canonical_representation().to_be_bytes())
-            .chars()
-            .take(EMOJI_PER_ELEMENT)
-            .collect::<String>()
     }
 }
 
@@ -1184,23 +1173,6 @@ mod b_prime_field_element_test {
             let converted_0 = TryInto::<u32>::try_into(invalid_val_0);
             assert!(converted_0.is_err());
         }
-    }
-
-    #[test]
-    fn uniqueness_of_consecutive_emojis_bfe() {
-        let mut prev = BFieldElement::zero().emojihash();
-        for n in 1..256 {
-            let curr = BFieldElement::new(n).emojihash();
-            println!("{curr}, n: {n}");
-            assert_ne!(curr, prev);
-            prev = curr
-        }
-
-        // Verify that emojihash is independent of representation
-        let val = BFieldElement::new(6672);
-        let same_val = BFieldElement::new(6672 + BFieldElement::P);
-        assert_eq!(val, same_val);
-        assert_eq!(val.emojihash(), same_val.emojihash());
     }
 
     #[test]

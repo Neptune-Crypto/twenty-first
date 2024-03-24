@@ -18,7 +18,6 @@ use crate::shared_math::b_field_element::BFieldElement;
 use crate::shared_math::b_field_element::BFIELD_ZERO;
 use crate::shared_math::traits::FromVecu8;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::emojihash_trait::Emojihash;
 
 pub const DIGEST_LENGTH: usize = 5;
 
@@ -68,12 +67,6 @@ impl Digest {
     /// This function is an involutive endomorphism.
     pub const fn reversed(self) -> Digest {
         Digest([self.0[4], self.0[3], self.0[2], self.0[1], self.0[0]])
-    }
-}
-
-impl Emojihash for Digest {
-    fn emojihash(&self) -> String {
-        self.0.emojihash()
     }
 }
 

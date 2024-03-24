@@ -31,7 +31,6 @@ use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::traits::ModPowU64;
 use crate::shared_math::traits::New;
 use crate::shared_math::traits::PrimitiveRootOfUnity;
-use crate::util_types::emojihash_trait::Emojihash;
 
 use super::digest::Digest;
 
@@ -290,12 +289,6 @@ impl XFieldElement {
 
     pub fn decrement(&mut self, index: usize) {
         self.coefficients[index].decrement();
-    }
-}
-
-impl Emojihash for XFieldElement {
-    fn emojihash(&self) -> String {
-        self.coefficients.emojihash()
     }
 }
 
@@ -1232,18 +1225,6 @@ mod x_field_element_test {
     }
 
     #[test]
-    fn uniqueness_of_consecutive_emojis_xfe() {
-        let rand_xs: Vec<XFieldElement> = random_elements(14);
-        let mut prev = XFieldElement::zero().emojihash();
-        for xfe in rand_xs {
-            let curr = xfe.emojihash();
-            println!("{curr}");
-            assert_ne!(curr, prev);
-            prev = curr
-        }
-    }
-
-    #[test]
     fn inverse_or_zero_xfe() {
         let zero = XFieldElement::zero();
         assert_eq!(zero, zero.inverse_or_zero());
@@ -1258,50 +1239,11 @@ mod x_field_element_test {
         }
     }
 
-    fn emojihash_equivalence_prop(elem: XFieldElement) {
-        let expected = elem.emojihash();
-
-        let array: [BFieldElement; EXTENSION_DEGREE] = elem.coefficients;
-        assert_eq!(expected, array.emojihash());
-
-        let array_slice: &[BFieldElement] = array.as_ref();
-        assert_eq!(expected, array_slice.emojihash());
-
-        let vector: Vec<BFieldElement> = elem.coefficients.to_vec();
-        assert_eq!(expected, vector.emojihash());
-
-        let vector_slice: &[BFieldElement] = vector.as_ref();
-        assert_eq!(expected, vector_slice.emojihash());
-
-        let vector_ref: &Vec<BFieldElement> = vector.as_ref();
-        assert_eq!(expected, vector_ref.emojihash());
-    }
-
-    #[test]
-    fn emojihash_test() {
-        emojihash_equivalence_prop(XFieldElement::zero());
-
-        let mut rng = rand::thread_rng();
-        emojihash_equivalence_prop(rng.gen());
-
-        let bfes: Vec<BFieldElement> = random_elements(9);
-        let xfes: Vec<XFieldElement> = vec![
-            XFieldElement::new([bfes[0], bfes[1], bfes[2]]),
-            XFieldElement::new([bfes[3], bfes[4], bfes[5]]),
-            XFieldElement::new([bfes[6], bfes[7], bfes[8]]),
-        ];
-
-        assert_eq!(
-            bfes.emojihash().replace(['[', ']', '|'], ""),
-            xfes.emojihash().replace(['[', ']', '|'], ""),
-        );
-    }
-
     #[test]
     #[should_panic(expected = "Cannot invert the zero element in the extension field.")]
     fn multiplicative_inverse_of_zero() {
         let zero = XFieldElement::zero();
-        zero.inverse();
+        let _ = zero.inverse();
     }
 
     #[test]
