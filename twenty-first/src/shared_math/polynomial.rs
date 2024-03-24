@@ -28,7 +28,6 @@ use crate::shared_math::traits::ModPowU32;
 
 use super::b_field_element::BFieldElement;
 use super::b_field_element::BFIELD_ONE;
-use super::other;
 use super::traits::Inverse;
 use super::traits::PrimitiveRootOfUnity;
 
@@ -1334,14 +1333,29 @@ impl<FF: FiniteField> Polynomial<FF> {
     /// let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
     /// assert_eq!(gcd, a * x + b * y);
     /// ```
-    pub fn xgcd(x: Self, y: Self) -> (Self, Self, Self) {
-        let (x, a, b) = other::xgcd(x, y);
+    pub fn xgcd(mut x: Self, mut y: Self) -> (Self, Self, Self) {
+        let (mut a_factor, mut a1) = (Self::one(), Self::zero());
+        let (mut b_factor, mut b1) = (Self::zero(), Self::one());
 
-        // normalize result to ensure `x` has leading coefficient 1
+        while !y.is_zero() {
+            let quotient = x.clone() / y.clone();
+            let remainder = x % y.clone();
+            let c = a_factor - quotient.clone() * a1.clone();
+            let d = b_factor - quotient * b1.clone();
+
+            x = y;
+            y = remainder;
+            a_factor = a1;
+            a1 = c;
+            b_factor = b1;
+            b1 = d;
+        }
+
+        // normalize result to ensure the gcd, _i.e._, `x` has leading coefficient 1
         let lc = x.leading_coefficient().unwrap_or_else(FF::one);
         let normalize = |poly: Self| poly.scalar_mul(lc.inverse());
 
-        let [x, a, b] = [x, a, b].map(normalize);
+        let [x, a, b] = [x, a_factor, b_factor].map(normalize);
         (x, a, b)
     }
 }

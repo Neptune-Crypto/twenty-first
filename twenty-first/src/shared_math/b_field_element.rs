@@ -673,7 +673,6 @@ mod b_prime_field_element_test {
     use crate::shared_math::b_field_element::*;
     use crate::shared_math::other::random_elements;
     use crate::shared_math::other::random_elements_array;
-    use crate::shared_math::other::xgcd;
     use crate::shared_math::polynomial::Polynomial;
 
     impl proptest::arbitrary::Arbitrary for BFieldElement {
@@ -1091,19 +1090,6 @@ mod b_prime_field_element_test {
         let expected = Polynomial::<BFieldElement>::from([3, 8, 6]);
 
         assert_eq!(expected, a + b);
-    }
-
-    #[test]
-    fn b_field_xgcd_test() {
-        let a = 15;
-        let b = 25;
-        let expected_gcd_ab = 5;
-        let (actual_gcd_ab, a_factor, b_factor) = xgcd(a, b);
-
-        assert_eq!(expected_gcd_ab, actual_gcd_ab);
-        assert_eq!(2, a_factor);
-        assert_eq!(-1, b_factor);
-        assert_eq!(expected_gcd_ab, a_factor * a + b_factor * b);
     }
 
     #[test]

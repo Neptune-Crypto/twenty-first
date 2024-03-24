@@ -1,9 +1,13 @@
-use num_traits::{One, Zero};
+use std::ops::BitAnd;
+use std::ops::Sub;
+
+use num_traits::One;
+use num_traits::Zero;
+use rand::distributions::Distribution;
+use rand::distributions::Standard;
+use rand::distributions::Uniform;
 use rand::Rng;
 use rand_distr::uniform::SampleUniform;
-use rand_distr::{Distribution, Standard, Uniform};
-use std::fmt::Display;
-use std::ops::{BitAnd, Div, Rem, Shl, Sub};
 
 // Function for creating a bigint from an i128
 
@@ -30,15 +34,6 @@ pub fn is_power_of_two<T: Zero + One + Sub<Output = T> + BitAnd<Output = T> + Co
     !n.is_zero() && (n & (n - T::one())).is_zero()
 }
 
-pub fn powers_of_two_below<T>(max: T, bits: u32) -> impl Iterator<Item = T>
-where
-    T: One + PartialOrd + Shl<u32, Output = T> + Copy,
-{
-    (0..bits)
-        .map(|i: u32| T::one() << i)
-        .take_while(move |&x| x < max)
-}
-
 /// Round up to the nearest power of 2
 pub fn roundup_npo2(x: u64) -> u64 {
     1 << log_2_ceil(x as u128)
@@ -50,68 +45,6 @@ pub fn roundup_nearest_multiple(mut x: usize, multiple: usize) -> usize {
         x += multiple - remainder;
     }
     x
-}
-
-/// Simultaneously perform division and remainder.
-///
-/// While there is apparently no built-in Rust function for this,
-/// the optimizer will still compile this to a single instruction
-/// on x86.
-pub fn div_rem<T: Div<Output = T> + Rem<Output = T> + Copy>(x: T, y: T) -> (T, T) {
-    let quot = x / y;
-    let rem = x % y;
-    (quot, rem)
-}
-
-/// Extended Euclidean Algorithm.
-#[inline]
-pub fn xgcd<
-    T: Zero + One + Rem<Output = T> + Div<Output = T> + Sub<Output = T> + Clone + Display,
->(
-    mut x: T,
-    mut y: T,
-) -> (T, T, T) {
-    let (mut a_factor, mut a1) = (T::one(), T::zero());
-    let (mut b_factor, mut b1) = (T::zero(), T::one());
-
-    while !y.is_zero() {
-        let quotient = x.clone() / y.clone();
-        let remainder = x % y.clone();
-        let c = a_factor - quotient.clone() * a1.clone();
-        let d = b_factor - quotient * b1.clone();
-
-        x = y;
-        y = remainder;
-        a_factor = a1;
-        a1 = c;
-        b_factor = b1;
-        b1 = d;
-    }
-
-    // x is the gcd
-    (x, a_factor, b_factor)
-}
-
-/// Matrix transpose
-///
-/// ```py
-/// [a b c]
-/// [d e f]
-/// ```
-///
-/// returns
-///
-/// ```py
-/// [a d]
-/// [b e]
-/// [c f]
-/// ```
-///
-/// Assumes that input is regular.
-pub fn transpose<P: Copy>(codewords: &[Vec<P>]) -> Vec<Vec<P>> {
-    (0..codewords[0].len())
-        .map(|col_idx| codewords.iter().map(|row| row[col_idx]).collect())
-        .collect()
 }
 
 /// Generate `n` random elements using `rand::thread_rng()`.
@@ -209,41 +142,6 @@ mod test_other {
                 assert!(!is_power_of_two(i));
             }
         }
-    }
-
-    #[test]
-    fn powers_of_two_below_test() {
-        for i in powers_of_two_below::<u32>(u32::MAX, u32::BITS) {
-            assert!(is_power_of_two(i));
-        }
-
-        // TODO: Test that it can be empty.
-        // TODO: Test that no powers of below max are missing.
-    }
-
-    #[test]
-    fn transpose_test() {
-        let input = vec![vec![1, 2, 3], vec![4, 5, 6]];
-        let expected = vec![vec![1, 4], vec![2, 5], vec![3, 6]];
-        let actual = transpose(&input);
-        assert_eq!(expected, actual);
-
-        let mut rng = rand::thread_rng();
-        let n = rng.gen_range(1..10);
-        let m = rng.gen_range(1..10);
-        let random_matrix: Vec<Vec<u64>> = (0..n)
-            .map(|_| (0..m).map(|_| rng.gen()).collect())
-            .collect();
-
-        assert_eq!(n, random_matrix.len());
-        assert_eq!(m, random_matrix[0].len());
-
-        let transposed = transpose(&random_matrix);
-        assert_eq!(m, transposed.len());
-        assert_eq!(n, transposed[0].len());
-
-        let transposed_transposed = transpose(&transposed);
-        assert_eq!(random_matrix, transposed_transposed);
     }
 
     #[test]
