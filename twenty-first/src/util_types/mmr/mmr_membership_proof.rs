@@ -10,7 +10,6 @@ use std::{fmt::Debug, iter::FromIterator};
 use super::{shared_advanced, shared_basic};
 use crate::shared_math::bfield_codec::BFieldCodec;
 use crate::shared_math::digest::Digest;
-use crate::shared_math::other::log_2_floor;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[derive(Debug, Clone, Serialize, Deserialize, GetSize, BFieldCodec, Arbitrary)]
@@ -55,7 +54,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
         // Verify that authentication path has correct length to fail gracefully when fed
         // a too short authentication path.
-        if log_2_floor(mt_index as u128) != self.authentication_path.len() as u64 {
+        if mt_index.ilog2() as u64 != self.authentication_path.len() as u64 {
             return (false, None);
         }
 

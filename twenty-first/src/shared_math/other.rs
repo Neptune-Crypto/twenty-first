@@ -9,42 +9,36 @@ use rand::distributions::Uniform;
 use rand::Rng;
 use rand_distr::uniform::SampleUniform;
 
-// Function for creating a bigint from an i128
-
-const fn num_bits<T>() -> u64 {
-    std::mem::size_of::<T>() as u64 * 8
-}
-
+#[deprecated(since = "0.39.0", note = "use `.ilog2()` instead")]
 pub fn log_2_floor(x: u128) -> u64 {
-    assert!(x > 0);
-    num_bits::<u128>() - x.leading_zeros() as u64 - 1
+    x.ilog2().into()
 }
 
 pub fn log_2_ceil(x: u128) -> u64 {
-    if is_power_of_two(x) {
-        log_2_floor(x)
+    let log = x.ilog2().into();
+    if x.is_power_of_two() {
+        log
     } else {
-        log_2_floor(x) + 1
+        log + 1
     }
 }
 
 /// Check if the number is a power of two: { 1,2,4 .. }
 /// [Bit Twiddling Hacks]: <https://graphics.stanford.edu/~seander/bithacks.html#DetermineIfPowerOf2>
+#[deprecated(since = "0.39.0", note = "use `.is_power_of_two()` instead")]
 pub fn is_power_of_two<T: Zero + One + Sub<Output = T> + BitAnd<Output = T> + Copy>(n: T) -> bool {
     !n.is_zero() && (n & (n - T::one())).is_zero()
 }
 
 /// Round up to the nearest power of 2
+#[deprecated(since = "0.39.0", note = "use `.next_power_of_two()` instead")]
 pub fn roundup_npo2(x: u64) -> u64 {
-    1 << log_2_ceil(x as u128)
+    x.next_power_of_two()
 }
 
-pub fn roundup_nearest_multiple(mut x: usize, multiple: usize) -> usize {
-    let remainder = x % multiple;
-    if remainder != 0 {
-        x += multiple - remainder;
-    }
-    x
+#[deprecated(since = "0.39.0", note = "use `.next_multiple_of(…)` instead")]
+pub fn roundup_nearest_multiple(x: usize, multiple: usize) -> usize {
+    x.next_multiple_of(multiple)
 }
 
 /// Generate `n` random elements using `rand::thread_rng()`.
@@ -114,6 +108,7 @@ mod test_other {
     use super::*;
 
     #[test]
+    #[allow(deprecated)] // until removal of `log_2_floor`
     fn log_2_ceil_test() {
         assert_eq!(4, log_2_floor(16));
         assert_eq!(1, log_2_floor(2));
@@ -133,6 +128,7 @@ mod test_other {
     }
 
     #[test]
+    #[allow(deprecated)] // until removal of `is_power_of_two`
     fn is_power_of_two_test() {
         let powers_of_two: Vec<u8> = vec![1, 2, 4, 8, 16, 32, 64, 128];
         for i in 0..u8::MAX {
@@ -145,18 +141,7 @@ mod test_other {
     }
 
     #[test]
-    fn binary_tree_properties() {
-        for height in 0..4 {
-            let leaf_count = 2usize.pow(height);
-
-            assert!(
-                is_power_of_two(leaf_count),
-                "The leaf count should be a power of two."
-            );
-        }
-    }
-
-    #[test]
+    #[allow(deprecated)] // until removal of `roundup_nearest_multiple`
     fn roundup_nearest_multiple_test() {
         let cases = [(0, 10, 0), (1, 10, 10), (10, 10, 10), (11, 10, 20)];
         for (x, multiple, expected) in cases {

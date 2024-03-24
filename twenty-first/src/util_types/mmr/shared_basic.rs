@@ -1,6 +1,5 @@
 use super::mmr_membership_proof::MmrMembershipProof;
 use crate::shared_math::digest::Digest;
-use crate::shared_math::other::log_2_floor;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[inline]
@@ -37,8 +36,8 @@ pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u64, leaf_count: u64) -
 
     // a) Get the index as if this was a Merkle tree
     let discrepancies = leaf_index ^ leaf_count;
-    let local_mt_height = log_2_floor(discrepancies as u128);
-    let local_mt_leaf_count = 2u64.pow(local_mt_height as u32);
+    let local_mt_height = discrepancies.ilog2();
+    let local_mt_leaf_count = 2u64.pow(local_mt_height);
     let remainder_bitmask = local_mt_leaf_count - 1;
     let local_leaf_index = remainder_bitmask & leaf_index;
     let mt_index = local_leaf_index + local_mt_leaf_count;

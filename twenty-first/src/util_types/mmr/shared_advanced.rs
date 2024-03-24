@@ -1,5 +1,3 @@
-use crate::shared_math::other::log_2_floor;
-
 use super::shared_basic::*;
 
 /// Get (index, height) of leftmost ancestor
@@ -83,8 +81,7 @@ pub fn right_sibling(node_index: u64, height: u32) -> u64 {
 }
 
 pub fn get_height_from_leaf_index(leaf_index: u64) -> u32 {
-    // This should be a safe cast as 2^(u32::MAX) is a *very* big number
-    log_2_floor(leaf_index as u128 + 1) as u32
+    (leaf_index + 1).ilog2()
 }
 
 /// The number of nodes in an MMR with `leaf_count` leaves.

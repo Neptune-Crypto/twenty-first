@@ -613,7 +613,6 @@ mod x_field_element_test {
     use crate::shared_math::b_field_element::*;
     use crate::shared_math::ntt::intt;
     use crate::shared_math::ntt::ntt;
-    use crate::shared_math::other::log_2_floor;
     use crate::shared_math::other::random_elements;
     use crate::shared_math::x_field_element::*;
 
@@ -1201,7 +1200,7 @@ mod x_field_element_test {
                 .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
                 .collect();
             let root = XFieldElement::primitive_root_of_unity(root_order).unwrap();
-            let log_2_of_n = log_2_floor(inputs.len() as u128) as u32;
+            let log_2_of_n = inputs.len().ilog2();
             let mut rv = inputs.clone();
             ntt::<XFieldElement>(&mut rv, root.unlift().unwrap(), log_2_of_n);
 
