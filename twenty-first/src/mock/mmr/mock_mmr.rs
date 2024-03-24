@@ -373,6 +373,7 @@ mod mmr_test {
     use crate::util_types::merkle_tree::merkle_tree_test::MerkleTreeToTest;
     use crate::util_types::merkle_tree::*;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
+    use crate::util_types::mmr::shared_advanced::get_peak_heights;
     use crate::util_types::mmr::shared_advanced::get_peak_heights_and_peak_node_indices;
 
     use super::*;
@@ -388,7 +389,7 @@ mod mmr_test {
     pub fn root_from_arbitrary_number_of_digests<H: AlgebraicHasher>(digests: &[Digest]) -> Digest {
         let mut trees = vec![];
         let mut num_processed_digests = 0;
-        for tree_height in indices_of_set_bits(digests.len() as u64) {
+        for tree_height in get_peak_heights(digests.len() as u64) {
             let num_leaves_in_tree = 1 << tree_height;
             let leaf_digests =
                 &digests[num_processed_digests..num_processed_digests + num_leaves_in_tree];

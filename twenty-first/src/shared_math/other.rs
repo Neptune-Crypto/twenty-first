@@ -24,38 +24,6 @@ pub fn log_2_ceil(x: u128) -> u64 {
     }
 }
 
-/// The indices of the bits that are set in the binary representation of the argument.
-/// Can be used to get a Merkle Mountain Range's peak heights from the total number of leaves.
-///
-/// Returns the empty vector on input 0.
-///
-/// # Examples
-///
-/// ```
-/// # use twenty_first::shared_math::other::indices_of_set_bits;
-/// assert_eq!(indices_of_set_bits(0b1010), vec![3, 1]);
-/// assert_eq!(indices_of_set_bits(0b1011), vec![3, 1, 0]);
-/// ```
-pub fn indices_of_set_bits(x: u64) -> Vec<u8> {
-    if x == 0 {
-        return vec![];
-    }
-
-    let mut indices_of_set_bits = vec![];
-    let num_bits_in_x = x.ilog2();
-    for bit_index in 0..=num_bits_in_x {
-        let bit_mask = 1 << bit_index;
-        let is_set_bit_in_x = bit_mask & x != 0;
-        if is_set_bit_in_x {
-            indices_of_set_bits.push(bit_index as u8);
-        }
-    }
-
-    // put highest index first
-    indices_of_set_bits.reverse();
-    indices_of_set_bits
-}
-
 /// Check if the number is a power of two: { 1,2,4 .. }
 /// [Bit Twiddling Hacks]: <https://graphics.stanford.edu/~seander/bithacks.html#DetermineIfPowerOf2>
 pub fn is_power_of_two<T: Zero + One + Sub<Output = T> + BitAnd<Output = T> + Copy>(n: T) -> bool {
@@ -276,21 +244,6 @@ mod test_other {
 
         let transposed_transposed = transpose(&transposed);
         assert_eq!(random_matrix, transposed_transposed);
-    }
-
-    #[test]
-    fn indices_of_set_bits_test() {
-        let empty_vec: Vec<u8> = vec![];
-        assert_eq!(empty_vec, indices_of_set_bits(0b0));
-        assert_eq!(vec![0], indices_of_set_bits(0b1));
-        assert_eq!(vec![1], indices_of_set_bits(0b10));
-        assert_eq!(vec![1, 0], indices_of_set_bits(0b11));
-        assert_eq!(vec![3, 2], indices_of_set_bits(0b1100));
-        assert_eq!(vec![4, 0], indices_of_set_bits(0b10001));
-        assert_eq!(
-            vec![23, 7, 5, 4, 3, 2, 1, 0],
-            indices_of_set_bits(0b100000000000000010111111)
-        );
     }
 
     #[test]
