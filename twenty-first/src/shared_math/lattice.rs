@@ -1,10 +1,15 @@
-use std::ops::{Add, AddAssign, Mul, Sub};
+use std::ops::Add;
+use std::ops::AddAssign;
+use std::ops::Mul;
+use std::ops::Sub;
 
 use itertools::Itertools;
 use num_traits::Zero;
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use rayon::prelude::IntoParallelIterator;
+use rayon::prelude::ParallelIterator;
 use serde_big_array::BigArray;
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::Deserialize;
+use serde_derive::Serialize;
 
 use super::b_field_element::BFieldElement;
 
@@ -624,18 +629,19 @@ impl<const N: usize> Zero for ModuleElement<N> {
 }
 
 pub mod kem {
-
     use itertools::Itertools;
-    use serde_derive::{Deserialize, Serialize};
+    use serde_derive::Deserialize;
+    use serde_derive::Serialize;
 
-    use super::{
-        embed_msg, extract_msg, CyclotomicRingElement, ModuleElement,
-        CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES,
-    };
-    use crate::shared_math::{
-        b_field_element::BFieldElement,
-        fips202::{sha3_256, shake256},
-    };
+    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::shared_math::fips202::sha3_256;
+    use crate::shared_math::fips202::shake256;
+
+    use super::embed_msg;
+    use super::extract_msg;
+    use super::CyclotomicRingElement;
+    use super::ModuleElement;
+    use super::CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES;
 
     #[derive(PartialEq, Eq, Copy, Clone, Debug, Serialize, Deserialize)]
     pub struct SecretKey {
@@ -801,20 +807,24 @@ pub mod kem {
 #[cfg(test)]
 mod lattice_test {
     use itertools::Itertools;
-    use num_traits::{One, Zero};
-    use rand::{thread_rng, RngCore};
+    use num_traits::One;
+    use num_traits::Zero;
+    use rand::random;
+    use rand::thread_rng;
+    use rand::RngCore;
 
     use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::lattice::kem::{Ciphertext, PublicKey};
+    use crate::shared_math::lattice::kem::Ciphertext;
+    use crate::shared_math::lattice::kem::PublicKey;
     use crate::shared_math::lattice::*;
-    use crate::shared_math::other::{random_elements, random_elements_array};
 
-    use super::kem::{SecretKey, CIPHERTEXT_SIZE_IN_BFES};
+    use super::kem::SecretKey;
+    use super::kem::CIPHERTEXT_SIZE_IN_BFES;
 
     #[test]
     fn test_fast_mul() {
-        let a: [BFieldElement; 64] = random_elements_array();
-        let b: [BFieldElement; 64] = random_elements_array();
+        let a: [BFieldElement; 64] = random();
+        let b: [BFieldElement; 64] = random();
 
         let mut c_schoolbook = [BFieldElement::zero(); 64];
         for i in 0..64 {
@@ -914,8 +924,7 @@ mod lattice_test {
 
     #[test]
     fn test_ciphertext_conversion() {
-        let bfes: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] =
-            random_elements(CIPHERTEXT_SIZE_IN_BFES).try_into().unwrap();
+        let bfes: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] = random();
         let ciphertext: Ciphertext = bfes.into();
         let bfes_again: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] = ciphertext.into();
         let ciphertext_again: Ciphertext = bfes_again.into();

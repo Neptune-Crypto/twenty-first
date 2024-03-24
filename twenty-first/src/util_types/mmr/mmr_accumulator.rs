@@ -429,6 +429,7 @@ mod accumulator_mmr_tests {
     use itertools::izip;
     use itertools::Itertools;
     use num_traits::Zero;
+    use rand::distributions::Uniform;
     use rand::random;
     use rand::thread_rng;
     use rand::Rng;
@@ -438,7 +439,6 @@ mod accumulator_mmr_tests {
     use crate::mock::mmr::MockMmr;
     use crate::shared_math::b_field_element::BFieldElement;
     use crate::shared_math::other::random_elements;
-    use crate::shared_math::other::random_elements_range;
     use crate::shared_math::tip5::Tip5;
 
     use super::*;
@@ -722,12 +722,12 @@ mod accumulator_mmr_tests {
 
                     // Ensure that indices are unique since batch updating cannot update
                     // the same leaf twice in one go
-                    let mutated_indices: Vec<u64> =
-                        random_elements_range(mutate_size, 0..start_size as u64)
-                            .into_iter()
-                            .sorted()
-                            .unique()
-                            .collect();
+                    let mutated_indices: Vec<u64> = thread_rng()
+                        .sample_iter(Uniform::new(0, start_size as u64))
+                        .take(mutate_size)
+                        .sorted()
+                        .unique()
+                        .collect();
 
                     // Create the expected MMRs
                     let mut leaf_hashes_mutated = leaf_hashes_start.clone();

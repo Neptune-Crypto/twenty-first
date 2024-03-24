@@ -5,9 +5,7 @@ use num_traits::One;
 use num_traits::Zero;
 use rand::distributions::Distribution;
 use rand::distributions::Standard;
-use rand::distributions::Uniform;
 use rand::Rng;
-use rand_distr::uniform::SampleUniform;
 
 #[deprecated(since = "0.39.0", note = "use `.ilog2()` instead")]
 pub fn log_2_floor(x: u128) -> u64 {
@@ -41,66 +39,18 @@ pub fn roundup_nearest_multiple(x: usize, multiple: usize) -> usize {
     x.next_multiple_of(multiple)
 }
 
-/// Generate `n` random elements using `rand::thread_rng()`.
+/// Generate `n` random elements using [`rand::thread_rng()`].
 ///
-/// This requires the trait instance `Standard: Distribution<T>`.
+/// For example implementations of the [`Distribution`] trait for [`Standard`], see
+/// [`BFieldElement`][bfe] or [`XFieldElement`][xfe].
 ///
-/// See trait instances for BFieldElement or XFieldElement for examples.
+/// [bfe]: crate::prelude::BFieldElement
+/// [xfe]: crate::prelude::XFieldElement
 pub fn random_elements<T>(n: usize) -> Vec<T>
 where
     Standard: Distribution<T>,
 {
     rand::thread_rng().sample_iter(Standard).take(n).collect()
-}
-
-pub fn random_elements_distinct<T>(n: usize) -> Vec<T>
-where
-    T: PartialEq,
-    Standard: Distribution<T>,
-{
-    let mut sampler = rand::thread_rng().sample_iter(Standard);
-    let mut distinct_elements = Vec::with_capacity(n);
-    while distinct_elements.len() < n {
-        let sample = sampler.next().expect("Random sampler ran out of elements");
-        if !distinct_elements.contains(&sample) {
-            distinct_elements.push(sample);
-        }
-    }
-    distinct_elements
-}
-
-pub fn random_elements_range<T, R>(n: usize, range: R) -> Vec<T>
-where
-    T: SampleUniform,
-    R: Into<Uniform<T>>,
-    Standard: Distribution<T>,
-{
-    let mut rng = rand::thread_rng();
-    range.into().sample_iter(&mut rng).take(n).collect()
-}
-
-pub fn random_elements_distinct_range<T, R>(n: usize, range: R) -> Vec<T>
-where
-    T: SampleUniform + PartialEq,
-    R: Into<Uniform<T>>,
-    Standard: Distribution<T>,
-{
-    let mut sampler = rand::thread_rng().sample_iter(range.into());
-    let mut distinct_elements = Vec::with_capacity(n);
-    while distinct_elements.len() < n {
-        let sample = sampler.next().expect("Random sampler ran out of elements");
-        if !distinct_elements.contains(&sample) {
-            distinct_elements.push(sample);
-        }
-    }
-    distinct_elements
-}
-
-pub fn random_elements_array<T, const N: usize>() -> [T; N]
-where
-    Standard: Distribution<T>,
-{
-    rand::thread_rng().sample::<[T; N], Standard>(Standard)
 }
 
 #[cfg(test)]

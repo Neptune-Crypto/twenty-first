@@ -667,12 +667,12 @@ mod b_prime_field_element_test {
     use itertools::izip;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
+    use rand::random;
     use rand::thread_rng;
     use test_strategy::proptest;
 
     use crate::shared_math::b_field_element::*;
     use crate::shared_math::other::random_elements;
-    use crate::shared_math::other::random_elements_array;
     use crate::shared_math::polynomial::Polynomial;
 
     impl proptest::arbitrary::Arbitrary for BFieldElement {
@@ -948,7 +948,7 @@ mod b_prime_field_element_test {
     #[test]
     fn mul_div_plus_minus_neg_property_based_test() {
         let elements: Vec<BFieldElement> = random_elements(300);
-        let power_input_b: [BFieldElement; 6] = random_elements_array();
+        let power_input_b: [BFieldElement; 6] = random();
         for i in 1..elements.len() {
             let a = elements[i - 1];
             let b = elements[i];
