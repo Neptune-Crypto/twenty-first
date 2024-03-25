@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use std::marker::PhantomData;
 
-use crate::shared_math::digest::Digest;
+use crate::math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::shared::bag_peaks;
 
@@ -365,9 +365,9 @@ mod mmr_test {
     use rand::random;
     use test_strategy::proptest;
 
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::other::*;
-    use crate::shared_math::tip5::Tip5;
+    use crate::math::b_field_element::BFieldElement;
+    use crate::math::other::*;
+    use crate::math::tip5::Tip5;
 
     use crate::mock::mmr::*;
     use crate::util_types::merkle_tree::merkle_tree_test::MerkleTreeToTest;

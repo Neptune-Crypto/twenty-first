@@ -8,8 +8,8 @@ use std::marker::PhantomData;
 use std::{fmt::Debug, iter::FromIterator};
 
 use super::{shared_advanced, shared_basic};
-use crate::shared_math::bfield_codec::BFieldCodec;
-use crate::shared_math::digest::Digest;
+use crate::math::bfield_codec::BFieldCodec;
+use crate::math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[derive(Debug, Clone, Serialize, Deserialize, GetSize, BFieldCodec, Arbitrary)]
@@ -579,11 +579,11 @@ mod mmr_membership_proof_test {
     use itertools::Itertools;
     use rand::{random, thread_rng, Rng, RngCore};
 
+    use crate::math::b_field_element::BFieldElement;
+    use crate::math::digest::Digest;
+    use crate::math::other::random_elements;
+    use crate::math::tip5::Tip5;
     use crate::mock::mmr::{get_mock_ammr_from_digests, MockMmr};
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::digest::Digest;
-    use crate::shared_math::other::random_elements;
-    use crate::shared_math::tip5::Tip5;
     use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
     use crate::util_types::mmr::mmr_trait::Mmr;

@@ -1,10 +1,10 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::{thread_rng, Rng};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
-use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::digest::DIGEST_LENGTH;
-use twenty_first::shared_math::other::random_elements;
-use twenty_first::shared_math::tip5::Tip5;
+use twenty_first::math::b_field_element::BFieldElement;
+use twenty_first::math::digest::DIGEST_LENGTH;
+use twenty_first::math::other::random_elements;
+use twenty_first::math::tip5::Tip5;
 use twenty_first::util_types::algebraic_hasher::AlgebraicHasher;
 
 fn bench_10(c: &mut Criterion) {

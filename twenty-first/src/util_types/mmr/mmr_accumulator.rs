@@ -8,8 +8,8 @@ use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::shared_math::bfield_codec::BFieldCodec;
-use crate::shared_math::digest::Digest;
+use crate::math::bfield_codec::BFieldCodec;
+use crate::math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::mmr::shared_advanced;
 use crate::util_types::shared::bag_peaks;
@@ -282,8 +282,8 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
 pub mod util {
     use itertools::Itertools;
 
-    use crate::shared_math::other::log_2_ceil;
-    use crate::shared_math::other::random_elements;
+    use crate::math::other::log_2_ceil;
+    use crate::math::other::random_elements;
     use crate::util_types::mmr::shared_advanced::right_lineage_length_from_node_index;
     use crate::util_types::mmr::shared_basic::leaf_index_to_mt_index_and_peak_index;
 
@@ -435,11 +435,11 @@ mod accumulator_mmr_tests {
     use rand::Rng;
     use rand::RngCore;
 
+    use crate::math::b_field_element::BFieldElement;
+    use crate::math::other::random_elements;
+    use crate::math::tip5::Tip5;
     use crate::mock::mmr::get_mock_ammr_from_digests;
     use crate::mock::mmr::MockMmr;
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::other::random_elements;
-    use crate::shared_math::tip5::Tip5;
 
     use super::*;
 

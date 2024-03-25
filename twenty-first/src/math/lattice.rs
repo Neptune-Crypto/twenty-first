@@ -633,9 +633,9 @@ pub mod kem {
     use serde_derive::Deserialize;
     use serde_derive::Serialize;
 
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::fips202::sha3_256;
-    use crate::shared_math::fips202::shake256;
+    use crate::math::b_field_element::BFieldElement;
+    use crate::math::fips202::sha3_256;
+    use crate::math::fips202::shake256;
 
     use super::embed_msg;
     use super::extract_msg;
@@ -813,10 +813,10 @@ mod lattice_test {
     use rand::thread_rng;
     use rand::RngCore;
 
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::lattice::kem::Ciphertext;
-    use crate::shared_math::lattice::kem::PublicKey;
-    use crate::shared_math::lattice::*;
+    use crate::math::b_field_element::BFieldElement;
+    use crate::math::lattice::kem::Ciphertext;
+    use crate::math::lattice::kem::PublicKey;
+    use crate::math::lattice::*;
 
     use super::kem::SecretKey;
     use super::kem::CIPHERTEXT_SIZE_IN_BFES;

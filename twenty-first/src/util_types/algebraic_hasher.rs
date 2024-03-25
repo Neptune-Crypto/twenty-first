@@ -3,14 +3,14 @@ use std::iter;
 
 use itertools::Itertools;
 
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::b_field_element::BFIELD_ONE;
-use crate::shared_math::b_field_element::BFIELD_ZERO;
-use crate::shared_math::bfield_codec::BFieldCodec;
-use crate::shared_math::digest::Digest;
-use crate::shared_math::digest::DIGEST_LENGTH;
-use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::x_field_element::EXTENSION_DEGREE;
+use crate::math::b_field_element::BFieldElement;
+use crate::math::b_field_element::BFIELD_ONE;
+use crate::math::b_field_element::BFIELD_ZERO;
+use crate::math::bfield_codec::BFieldCodec;
+use crate::math::digest::Digest;
+use crate::math::digest::DIGEST_LENGTH;
+use crate::math::x_field_element::XFieldElement;
+use crate::math::x_field_element::EXTENSION_DEGREE;
 
 pub const RATE: usize = 10;
 
@@ -137,9 +137,9 @@ mod algebraic_hasher_tests {
     use rand_distr::Distribution;
     use rand_distr::Standard;
 
-    use crate::shared_math::digest::DIGEST_LENGTH;
-    use crate::shared_math::tip5::Tip5;
-    use crate::shared_math::x_field_element::EXTENSION_DEGREE;
+    use crate::math::digest::DIGEST_LENGTH;
+    use crate::math::tip5::Tip5;
+    use crate::math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;
 

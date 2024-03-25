@@ -14,8 +14,8 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::error::TryFromDigestError;
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::b_field_element::BFIELD_ZERO;
+use crate::math::b_field_element::BFieldElement;
+use crate::math::b_field_element::BFIELD_ZERO;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 pub const DIGEST_LENGTH: usize = 5;

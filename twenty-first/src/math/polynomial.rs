@@ -21,10 +21,10 @@ use rayon::prelude::IndexedParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
 use rayon::prelude::ParallelIterator;
 
-use crate::shared_math::ntt::intt;
-use crate::shared_math::ntt::ntt;
-use crate::shared_math::traits::FiniteField;
-use crate::shared_math::traits::ModPowU32;
+use crate::math::ntt::intt;
+use crate::math::ntt::ntt;
+use crate::math::traits::FiniteField;
+use crate::math::traits::ModPowU32;
 
 use super::b_field_element::BFieldElement;
 use super::b_field_element::BFIELD_ONE;
@@ -1401,7 +1401,7 @@ mod test_polynomials {
     use test_strategy::proptest;
 
     use crate::bfe_vec;
-    use crate::shared_math::x_field_element::XFieldElement;
+    use crate::math::x_field_element::XFieldElement;
 
     use super::*;
 

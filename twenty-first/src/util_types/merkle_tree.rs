@@ -11,7 +11,7 @@ use lazy_static::lazy_static;
 use rayon::prelude::*;
 use thiserror::Error;
 
-use crate::shared_math::digest::Digest;
+use crate::math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 
@@ -566,9 +566,9 @@ pub mod merkle_tree_test {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::digest::digest_tests::DigestCorruptor;
-    use crate::shared_math::tip5::Tip5;
+    use crate::math::b_field_element::BFieldElement;
+    use crate::math::digest::digest_tests::DigestCorruptor;
+    use crate::math::tip5::Tip5;
 
     use super::*;
 

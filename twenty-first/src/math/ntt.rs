@@ -3,7 +3,7 @@ use std::ops::MulAssign;
 use num_traits::Zero;
 use rand_distr::num_traits::One;
 
-use crate::shared_math::traits::{FiniteField, ModPowU32};
+use crate::math::traits::{FiniteField, ModPowU32};
 
 use super::{
     b_field_element::BFieldElement,
@@ -274,10 +274,10 @@ mod fast_ntt_attempt_tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
+    use crate::math::other::random_elements;
+    use crate::math::traits::PrimitiveRootOfUnity;
+    use crate::math::x_field_element::EXTENSION_DEGREE;
     use crate::prelude::*;
-    use crate::shared_math::other::random_elements;
-    use crate::shared_math::traits::PrimitiveRootOfUnity;
-    use crate::shared_math::x_field_element::EXTENSION_DEGREE;
     use crate::xfe;
 
     use super::*;

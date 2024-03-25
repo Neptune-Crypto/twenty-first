@@ -835,9 +835,9 @@ mod tests {
     pub mod derive_tests {
         use arbitrary::Arbitrary;
 
-        use crate::shared_math::digest::Digest;
-        use crate::shared_math::tip5::Tip5;
-        use crate::shared_math::x_field_element::XFieldElement;
+        use crate::math::digest::Digest;
+        use crate::math::tip5::Tip5;
+        use crate::math::x_field_element::XFieldElement;
         use crate::util_types::algebraic_hasher::AlgebraicHasher;
         use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
         use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;

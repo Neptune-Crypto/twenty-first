@@ -3,10 +3,10 @@ use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
 };
 use num_traits::Pow;
-use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::other::random_elements;
-use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
-use twenty_first::shared_math::{ntt, polynomial};
+use twenty_first::math::b_field_element::BFieldElement;
+use twenty_first::math::other::random_elements;
+use twenty_first::math::traits::PrimitiveRootOfUnity;
+use twenty_first::math::{ntt, polynomial};
 
 fn lagrange_interpolation(c: &mut Criterion) {
     let mut group = c.benchmark_group("lagrange_interpolation");

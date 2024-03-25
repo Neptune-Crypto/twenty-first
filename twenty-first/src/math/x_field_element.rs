@@ -20,16 +20,16 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::error::TryFromXFieldElementError;
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::b_field_element::BFIELD_ZERO;
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::CyclicGroupGenerator;
-use crate::shared_math::traits::FiniteField;
-use crate::shared_math::traits::Inverse;
-use crate::shared_math::traits::ModPowU32;
-use crate::shared_math::traits::ModPowU64;
-use crate::shared_math::traits::New;
-use crate::shared_math::traits::PrimitiveRootOfUnity;
+use crate::math::b_field_element::BFieldElement;
+use crate::math::b_field_element::BFIELD_ZERO;
+use crate::math::polynomial::Polynomial;
+use crate::math::traits::CyclicGroupGenerator;
+use crate::math::traits::FiniteField;
+use crate::math::traits::Inverse;
+use crate::math::traits::ModPowU32;
+use crate::math::traits::ModPowU64;
+use crate::math::traits::New;
+use crate::math::traits::PrimitiveRootOfUnity;
 
 use super::digest::Digest;
 
@@ -594,11 +594,11 @@ mod x_field_element_test {
     use test_strategy::proptest;
 
     use crate::bfe;
-    use crate::shared_math::b_field_element::*;
-    use crate::shared_math::ntt::intt;
-    use crate::shared_math::ntt::ntt;
-    use crate::shared_math::other::random_elements;
-    use crate::shared_math::x_field_element::*;
+    use crate::math::b_field_element::*;
+    use crate::math::ntt::intt;
+    use crate::math::ntt::ntt;
+    use crate::math::other::random_elements;
+    use crate::math::x_field_element::*;
 
     impl proptest::arbitrary::Arbitrary for XFieldElement {
         type Parameters = ();

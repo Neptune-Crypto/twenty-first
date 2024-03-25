@@ -2,7 +2,7 @@ mod mock_mmr;
 
 pub use mock_mmr::MockMmr;
 
-use crate::shared_math::digest::Digest;
+use crate::math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 /// Return an empty in-memory archival MMR for testing purposes.
@@ -30,9 +30,9 @@ mod shared_tests_tests {
     use hashbrown::HashSet;
     use rand::{random, Rng};
 
-    use crate::shared_math::other::random_elements;
+    use crate::math::other::random_elements;
     use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
-    use crate::{shared_math::tip5::Tip5, util_types::mmr::mmr_trait::Mmr};
+    use crate::{math::tip5::Tip5, util_types::mmr::mmr_trait::Mmr};
     use itertools::Itertools;
 
     use super::*;

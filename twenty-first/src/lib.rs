@@ -1,8 +1,8 @@
 #![deny(clippy::shadow_unrelated)]
 pub mod amount;
 pub mod error;
+pub mod math;
 pub mod prelude;
-pub mod shared_math;
 pub mod util_types;
 
 #[cfg(any(test, feature = "mock"))]

@@ -8,9 +8,9 @@ use criterion::BenchmarkId;
 use criterion::Criterion;
 use criterion::Throughput;
 
-use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::other::random_elements;
-use twenty_first::shared_math::x_field_element::XFieldElement;
+use twenty_first::math::b_field_element::BFieldElement;
+use twenty_first::math::other::random_elements;
+use twenty_first::math::x_field_element::XFieldElement;
 
 fn unsigned_mul(c: &mut Criterion) {
     let mut group = c.benchmark_group("mul");

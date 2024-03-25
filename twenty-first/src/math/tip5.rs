@@ -6,12 +6,12 @@ use num_traits::Zero;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::b_field_element::BFIELD_ONE;
-use crate::shared_math::b_field_element::BFIELD_ZERO;
-pub use crate::shared_math::digest::Digest;
-pub use crate::shared_math::digest::DIGEST_LENGTH;
-use crate::shared_math::mds::generated_function;
+use crate::math::b_field_element::BFieldElement;
+use crate::math::b_field_element::BFIELD_ONE;
+use crate::math::b_field_element::BFIELD_ZERO;
+pub use crate::math::digest::Digest;
+pub use crate::math::digest::DIGEST_LENGTH;
+use crate::math::mds::generated_function;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::algebraic_hasher::Domain;
 use crate::util_types::algebraic_hasher::Sponge;
@@ -627,8 +627,8 @@ pub(crate) mod tip5_tests {
     use rayon::prelude::ParallelIterator;
     use test_strategy::proptest;
 
-    use crate::shared_math::other::random_elements;
-    use crate::shared_math::x_field_element::XFieldElement;
+    use crate::math::other::random_elements;
+    use crate::math::x_field_element::XFieldElement;
 
     use super::*;
 

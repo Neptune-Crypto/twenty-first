@@ -128,7 +128,7 @@ pub fn sha3_512(input: &[u8]) -> [u8; 64] {
 
 #[cfg(test)]
 mod fips202_test {
-    use crate::shared_math::fips202::*;
+    use crate::math::fips202::*;
 
     #[test]
     fn test_kats() {
