@@ -44,11 +44,90 @@ pub struct XFieldElement {
     pub coefficients: [BFieldElement; EXTENSION_DEGREE],
 }
 
-/// Simplifies constructing [extension field element][XFieldElement]s.
+/// Simplifies constructing [extension field element](XFieldElement)s.
+///
+/// The type [`XFieldElement`] must be in scope for this macro to work.
+/// See [`XFieldElement::from`] for supported types.
+///
+/// # Examples
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = xfe!(1);
+/// let b = xfe!([2, 0, 5]);
+/// let c = xfe!([3, 0, 2 + 3]);
+/// assert_eq!(a + b, c);
+/// ```
 #[macro_export]
 macro_rules! xfe {
     ($value:expr) => {
         XFieldElement::from($value)
+    };
+}
+
+/// Simplifies constructing vectors of [extension field element][XFieldElement]s.
+///
+/// The type [`XFieldElement`] must be in scope for this macro to work. See also [`xfe!`].
+///
+/// # Examples
+///
+/// Vector of [constants](XFieldElement::new_const).
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = xfe_vec![1, 2, 3];
+/// let b = vec![xfe!(1), xfe!(2), xfe!(3)];
+/// assert_eq!(a, b);
+/// ```
+///
+/// Vector of general [extension field element](XFieldElement)s.
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = xfe_vec![[1, 0, 0], [0, 2, 0], [0, 0, 3]];
+/// let b = vec![xfe!([1, 0, 0]), xfe!([0, 2, 0]), xfe!([0, 0, 3])];
+/// assert_eq!(a, b);
+/// ```
+#[macro_export]
+macro_rules! xfe_vec {
+    ($($x:expr),* $(,)?) => {
+        vec![$(XFieldElement::from($x)),*]
+    };
+    ($([$c0:expr, $c1:expr, $c2:expr]),* $(,)?) => {
+        vec![$(XFieldElement::from([$c0, $c1, $c2])),*]
+    };
+}
+
+/// Simplifies constructing arrays of [extension field element][XFieldElement]s.
+///
+/// The type [`XFieldElement`] must be in scope for this macro to work. See also [`xfe!`].
+///
+/// # Examples
+///
+/// Array of [constants](XFieldElement::new_const).
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = xfe_array![1, 2, 3];
+/// let b = [xfe!(1), xfe!(2), xfe!(3)];
+/// assert_eq!(a, b);
+/// ```
+///
+/// Array of general [extension field element](XFieldElement)s.
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = xfe_array![[1, 0, 0], [0, 2, 0], [0, 0, 3]];
+/// let b = [xfe!([1, 0, 0]), xfe!([0, 2, 0]), xfe!([0, 0, 3])];
+/// assert_eq!(a, b);
+/// ```
+#[macro_export]
+macro_rules! xfe_array {
+    ($($x:expr),* $(,)?) => {
+        [$(XFieldElement::from($x)),*]
+    };
+    ($([$c0:expr, $c1:expr, $c2:expr]),* $(,)?) => {
+        [$(XFieldElement::from([$c0, $c1, $c2])),*]
     };
 }
 
@@ -1246,8 +1325,16 @@ mod x_field_element_test {
         let _ = xfe!(-1);
         let _ = xfe!(x);
         let _ = xfe!([x.coefficients[0], x.coefficients[1], x.coefficients[2]]);
-        let _ = xfe!(bfe!(42));
-        let _ = xfe!([bfe!(42), bfe!(43), bfe!(44)]);
+        let y = xfe!(bfe!(42));
+        assert_eq!(x, y);
+
+        let a = xfe!([bfe!(42), bfe!(43), bfe!(44)]);
+        let b = xfe!([42, 43, 44]);
+        assert_eq!(a, b);
+
+        let m: [XFieldElement; 3] = xfe_array![[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+        let n: Vec<XFieldElement> = xfe_vec![[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+        assert_eq!(m.to_vec(), n);
     }
 
     #[proptest]
