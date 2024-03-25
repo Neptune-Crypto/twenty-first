@@ -219,10 +219,8 @@ pub(crate) mod digest_tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::bfe;
-    use crate::bfe_array;
-
     use super::*;
+    use crate::prelude::*;
 
     impl ProptestArbitrary for Digest {
         type Parameters = ();
@@ -257,6 +255,17 @@ pub(crate) mod digest_tests {
 
             Ok(corrupt_digest)
         }
+    }
+
+    #[test]
+    fn digest_corruptor_rejects_uncorrupting_corruption() {
+        let digest = Digest(bfe_array![1, 2, 3, 4, 5]);
+        let corruptor = DigestCorruptor {
+            corrupt_indices: vec![0],
+            corrupt_elements: bfe_vec![1],
+        };
+        let err = corruptor.corrupt_digest(digest).unwrap_err();
+        assert!(matches!(err, TestCaseError::Reject(_)));
     }
 
     #[test]
