@@ -25,7 +25,6 @@ use crate::shared_math::b_field_element::BFIELD_ZERO;
 use crate::shared_math::polynomial::Polynomial;
 use crate::shared_math::traits::CyclicGroupGenerator;
 use crate::shared_math::traits::FiniteField;
-use crate::shared_math::traits::FromVecu8;
 use crate::shared_math::traits::Inverse;
 use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::traits::ModPowU64;
@@ -347,21 +346,6 @@ impl Display for XFieldElement {
 
         let [c0, c1, c2] = self.coefficients;
         write!(f, "({c2:>020}·x² + {c1:>020}·x + {c0:>020})")
-    }
-}
-
-impl FromVecu8 for XFieldElement {
-    fn from_vecu8(bytes: Vec<u8>) -> Self {
-        // TODO: See note in BFieldElement's From<Vec<u8>>.
-        let bytesize = std::mem::size_of::<u64>();
-        let (first_eight_bytes, rest) = bytes.as_slice().split_at(bytesize);
-        let (second_eight_bytes, rest2) = rest.split_at(bytesize);
-        let (third_eight_bytes, _rest3) = rest2.split_at(bytesize);
-
-        let coefficient0 = BFieldElement::from_vecu8(first_eight_bytes.to_vec());
-        let coefficient1 = BFieldElement::from_vecu8(second_eight_bytes.to_vec());
-        let coefficient2 = BFieldElement::from_vecu8(third_eight_bytes.to_vec());
-        XFieldElement::new([coefficient0, coefficient1, coefficient2])
     }
 }
 

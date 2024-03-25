@@ -1,5 +1,4 @@
 use std::convert::TryFrom;
-use std::convert::TryInto;
 use std::fmt;
 use std::hash::Hash;
 use std::iter::Sum;
@@ -35,7 +34,6 @@ use crate::shared_math::traits::ModPowU32;
 use crate::shared_math::traits::ModPowU64;
 use crate::shared_math::traits::New;
 
-use super::traits::FromVecu8;
 use super::traits::Inverse;
 use super::traits::PrimitiveRootOfUnity;
 use super::x_field_element::XFieldElement;
@@ -428,17 +426,17 @@ impl TryFrom<BFieldElement> for u32 {
 
 /// Convert a B-field element to a byte array.
 /// The client uses this for its database.
-impl From<BFieldElement> for [u8; 8] {
+impl From<BFieldElement> for [u8; BFieldElement::BYTES] {
     fn from(bfe: BFieldElement) -> Self {
-        // It's crucial to map this to the canonical representation
-        // before converting. Otherwise the representation is degenerate.
+        // It's crucial to map this to the canonical representation before converting.
+        // Otherwise, the representation is degenerate.
         bfe.canonical_representation().to_le_bytes()
     }
 }
 
-impl From<[u8; 8]> for BFieldElement {
-    fn from(array: [u8; 8]) -> Self {
-        let n: u64 = u64::from_le_bytes(array);
+impl From<[u8; BFieldElement::BYTES]> for BFieldElement {
+    fn from(array: [u8; BFieldElement::BYTES]) -> Self {
+        let n = u64::from_le_bytes(array);
         BFieldElement::new(n)
     }
 }
@@ -511,15 +509,6 @@ impl Distribution<BFieldElement> for Standard {
 impl New for BFieldElement {
     fn new_from_usize(&self, value: usize) -> Self {
         Self::new(value as u64)
-    }
-}
-
-// This is used for: Convert a hash value to a BFieldElement. Consider making From<Blake3Hash> trait
-impl FromVecu8 for BFieldElement {
-    fn from_vecu8(bytes: Vec<u8>) -> Self {
-        let (eight_bytes, _rest) = bytes.as_slice().split_at(std::mem::size_of::<u64>());
-        let coerced: [u8; 8] = eight_bytes.try_into().unwrap();
-        coerced.into()
     }
 }
 

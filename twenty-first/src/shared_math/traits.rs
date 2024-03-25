@@ -52,12 +52,6 @@ pub trait New {
     fn new_from_usize(&self, value: usize) -> Self;
 }
 
-pub trait FromVecu8 {
-    #[must_use]
-    #[allow(clippy::wrong_self_convention)]
-    fn from_vecu8(bytes: Vec<u8>) -> Self;
-}
-
 pub trait FiniteField:
     Clone
     + Eq
@@ -76,7 +70,6 @@ pub trait FiniteField:
     + AddAssign
     + MulAssign
     + SubAssign
-    + FromVecu8
     + New
     + CyclicGroupGenerator
     + ModPowU32
