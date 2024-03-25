@@ -1,5 +1,7 @@
 pub use crate::amount::u32s::U32s;
 pub use crate::bfe;
+pub use crate::bfe_array;
+pub use crate::bfe_vec;
 pub use crate::shared_math::b_field_element;
 pub use crate::shared_math::b_field_element::BFieldElement;
 pub use crate::shared_math::bfield_codec::BFieldCodec;

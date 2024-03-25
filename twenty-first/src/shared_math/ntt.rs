@@ -267,17 +267,18 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
 #[cfg(test)]
 mod fast_ntt_attempt_tests {
     use itertools::Itertools;
-    use num_traits::{One, Zero};
+    use num_traits::One;
+    use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::shared_math::b_field_element::BFieldElement;
+    use crate::prelude::*;
     use crate::shared_math::other::random_elements;
-    use crate::shared_math::polynomial::Polynomial;
     use crate::shared_math::traits::PrimitiveRootOfUnity;
-    use crate::shared_math::x_field_element::XFieldElement;
+    use crate::shared_math::x_field_element::EXTENSION_DEGREE;
+    use crate::xfe;
 
     use super::*;
 
@@ -294,7 +295,7 @@ mod fast_ntt_attempt_tests {
                 intt::<BFieldElement>(&mut values, omega, log_2_n);
                 assert_eq!(original_values, values);
 
-                values[0] = BFieldElement::new(BFieldElement::MAX);
+                values[0] = bfe!(BFieldElement::MAX);
                 let original_values_with_max_element = values.clone();
                 ntt::<BFieldElement>(&mut values, omega, log_2_n);
                 assert_ne!(original_values, values);
@@ -325,11 +326,7 @@ mod fast_ntt_attempt_tests {
                         || !original_values[1].coefficients[2].is_zero()
                 );
 
-                values[0] = XFieldElement::new([
-                    BFieldElement::new(BFieldElement::MAX),
-                    BFieldElement::new(BFieldElement::MAX),
-                    BFieldElement::new(BFieldElement::MAX),
-                ]);
+                values[0] = xfe!([BFieldElement::MAX; EXTENSION_DEGREE]);
                 let original_values_with_max_element = values.clone();
                 ntt::<XFieldElement>(&mut values, omega.unlift().unwrap(), log_2_n);
                 assert_ne!(original_values, values);
@@ -456,35 +453,33 @@ mod fast_ntt_attempt_tests {
 
     #[test]
     fn b_field_ntt_with_length_32() {
-        let mut input_output = [
+        let mut input_output = bfe_vec![
             1, 4, 0, 0, 0, 0, 0, 0, 1, 4, 0, 0, 0, 0, 0, 0, 1, 4, 0, 0, 0, 0, 0, 0, 1, 4, 0, 0, 0,
             0, 0, 0,
-        ]
-        .map(BFieldElement::new)
-        .to_vec();
+        ];
         let original_input = input_output.clone();
         let omega = BFieldElement::primitive_root_of_unity(32).unwrap();
         ntt::<BFieldElement>(&mut input_output, omega, 5);
         // let actual_output = ntt(&mut input_output, &omega, 5);
         println!("actual_output = {input_output:?}");
-        let expected = [
+        let expected = bfe_vec![
             20,
             0,
             0,
             0,
-            18446744069146148869,
+            18446744069146148869_u64,
             0,
             0,
             0,
-            4503599627370500,
+            4503599627370500_u64,
             0,
             0,
             0,
-            18446726477228544005,
+            18446726477228544005_u64,
             0,
             0,
             0,
-            18446744069414584309,
+            18446744069414584309_u64,
             0,
             0,
             0,
@@ -492,17 +487,15 @@ mod fast_ntt_attempt_tests {
             0,
             0,
             0,
-            18442240469787213829,
+            18442240469787213829_u64,
             0,
             0,
             0,
-            17592186040324,
+            17592186040324_u64,
             0,
             0,
             0,
-        ]
-        .map(BFieldElement::new)
-        .to_vec();
+        ];
         assert_eq!(expected, input_output);
 
         // Verify that INTT(NTT(x)) = x

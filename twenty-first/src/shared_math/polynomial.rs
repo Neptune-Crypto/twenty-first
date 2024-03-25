@@ -1386,7 +1386,7 @@ mod test_polynomials {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::shared_math::traits::PrimitiveRootOfUnity;
+    use crate::bfe_vec;
     use crate::shared_math::x_field_element::XFieldElement;
 
     use super::*;
@@ -1620,19 +1620,17 @@ mod test_polynomials {
 
     #[test]
     fn polynomial_shift_test() {
-        let to_bfe_vec = |a: &[u64]| a.iter().copied().map(BFieldElement::new).collect_vec();
-
         let polynomial = Polynomial::<BFieldElement>::from([17, 14]);
         assert_eq!(
-            to_bfe_vec(&[17, 14]),
+            bfe_vec![17, 14],
             polynomial.shift_coefficients(0).coefficients
         );
         assert_eq!(
-            to_bfe_vec(&[0, 17, 14]),
+            bfe_vec![0, 17, 14],
             polynomial.shift_coefficients(1).coefficients
         );
         assert_eq!(
-            to_bfe_vec(&[0, 0, 0, 0, 17, 14]),
+            bfe_vec![0, 0, 0, 0, 17, 14],
             polynomial.shift_coefficients(4).coefficients
         );
     }

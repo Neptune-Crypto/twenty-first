@@ -87,10 +87,61 @@ const PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 pub struct BFieldElement(u64);
 
 /// Simplifies constructing [base field element][BFieldElement]s.
+///
+/// The type [`BFieldElement`] must be in scope for this macro to work.
+/// See [`BFieldElement::from`] for supported types.
+///
+/// # Examples
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = bfe!(42);
+/// let b = bfe!(-12); // correctly translates to `BFieldElement::P - 12`
+/// let c = bfe!(42 - 12);
+/// assert_eq!(a + b, c);
+///```
 #[macro_export]
 macro_rules! bfe {
     ($value:expr) => {
         BFieldElement::from($value)
+    };
+}
+
+/// Simplifies constructing vectors of [base field element][BFieldElement]s.
+///
+/// The type [`BFieldElement`] must be in scope for this macro to work. See also [`bfe!`].
+///
+/// # Examples
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = bfe_vec![1, 2, 3];
+/// let b = vec![bfe!(1), bfe!(2), bfe!(3)];
+/// assert_eq!(a, b);
+/// ```
+///
+#[macro_export]
+macro_rules! bfe_vec {
+    ($($b:expr),* $(,)?) => {
+        vec![$(BFieldElement::from($b)),*]
+    };
+}
+
+/// Simplifies constructing arrays of [base field element][BFieldElement]s.
+///
+/// The type [`BFieldElement`] must be in scope for this macro to work. See also [`bfe!`].
+///
+/// # Examples
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = bfe_array![1, 2, 3];
+/// let b = [bfe!(1), bfe!(2), bfe!(3)];
+/// assert_eq!(a, b);
+#[macro_export]
+macro_rules! bfe_array {
+    ($($b:expr),* $(,)?) => {
+        [$(BFieldElement::from($b)),*]
     };
 }
 
@@ -1170,10 +1221,10 @@ mod b_prime_field_element_test {
     #[test]
     fn test_random_squares() {
         let mut rng = thread_rng();
-        let p = 0xffff_ffff_0000_0001u128;
+        let p = BFieldElement::P;
         for _ in 0..100 {
-            let a = rng.next_u64() % (p as u64);
-            let asq = (((a as u128) * (a as u128)) % p) as u64;
+            let a = rng.gen_range(0..p);
+            let asq = (((a as u128) * (a as u128)) % (p as u128)) as u64;
             let b = BFieldElement::new(a);
             let bsq = BFieldElement::new(asq);
             assert_eq!(bsq, b * b);
@@ -1188,8 +1239,7 @@ mod b_prime_field_element_test {
     #[test]
     fn equals() {
         let a = BFieldElement::one();
-        let b = BFieldElement::new(0xffff_ffff_0000_0001u64 - 1)
-            * BFieldElement::new(0xffff_ffff_0000_0001u64 - 1);
+        let b = bfe!(BFieldElement::MAX) * bfe!(BFieldElement::MAX);
 
         // elements are equal
         assert_eq!(a, b);
@@ -1199,13 +1249,12 @@ mod b_prime_field_element_test {
     #[test]
     fn test_random_raw() {
         let mut rng = thread_rng();
-        let p = 0xffff_ffff_0000_0001u128;
         for _ in 0..100 {
-            let a = rng.next_u64() % (p as u64);
-            let e = BFieldElement::new(a);
+            let e: BFieldElement = rng.gen();
             let bytes = e.raw_bytes();
             let c = BFieldElement::from_raw_bytes(&bytes);
             assert_eq!(e, c);
+
             let mut f = 0u64;
             for (i, b) in bytes.iter().enumerate() {
                 f += (*b as u64) << (8 * i);
@@ -1215,6 +1264,7 @@ mod b_prime_field_element_test {
             let chunks = e.raw_u16s();
             let g = BFieldElement::from_raw_u16s(&chunks);
             assert_eq!(e, g);
+
             let mut h = 0u64;
             for (i, ch) in chunks.iter().enumerate() {
                 h += (*ch as u64) << (16 * i);
@@ -1277,6 +1327,10 @@ mod b_prime_field_element_test {
         let _ = bfe!(-1);
         let _ = bfe!(b);
         let _ = bfe!(b.0);
+
+        let c: Vec<BFieldElement> = bfe_vec![1, 2, 3];
+        let d: [BFieldElement; 3] = bfe_array![1, 2, 3];
+        assert_eq!(c, d);
     }
 
     #[proptest]

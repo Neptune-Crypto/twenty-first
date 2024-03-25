@@ -219,6 +219,9 @@ pub(crate) mod digest_tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
+    use crate::bfe;
+    use crate::bfe_array;
+
     use super::*;
 
     impl ProptestArbitrary for Digest {
@@ -260,7 +263,7 @@ pub(crate) mod digest_tests {
     fn get_size() {
         let stack = Digest::get_stack_size();
 
-        let bfes = [12, 24, 36, 48, 60].map(BFieldElement::new);
+        let bfes = bfe_array![12, 24, 36, 48, 60];
         let tip5_digest_type_from_array: Digest = Digest::new(bfes);
         let heap = tip5_digest_type_from_array.get_heap_size();
         let total = tip5_digest_type_from_array.get_size();
@@ -271,17 +274,18 @@ pub(crate) mod digest_tests {
 
     #[test]
     pub fn digest_from_str() {
-        // This tests a valid digest. It will fail if DIGEST_LENGTH is changed.
-        let valid_digest_string = "12063201067205522823,1529663126377206632,2090171368883726200,12975872837767296928,11492877804687889759";
+        let valid_digest_string = "12063201067205522823,\
+            1529663126377206632,\
+            2090171368883726200,\
+            12975872837767296928,\
+            11492877804687889759";
         let valid_digest = Digest::from_str(valid_digest_string);
         assert!(valid_digest.is_ok());
 
-        // This ensures that it can fail when given a wrong number of BFieldElements.
         let invalid_digest_string = "00059361073062755064,05168490802189810700";
         let invalid_digest = Digest::from_str(invalid_digest_string);
         assert!(invalid_digest.is_err());
 
-        // This ensures that it can fail if given something that isn't a valid string of a BFieldElement.
         let second_invalid_digest_string = "this_is_not_a_bfield_element,05168490802189810700";
         let second_invalid_digest = Digest::from_str(second_invalid_digest_string);
         assert!(second_invalid_digest.is_err());
@@ -295,18 +299,16 @@ pub(crate) mod digest_tests {
     #[test]
     fn digest_biguint_conversion_simple_test() {
         let fourteen: BigUint = 14u128.into();
-        let fourteen_converted_expected = Digest([14, 0, 0, 0, 0].map(BFieldElement::new));
+        let fourteen_converted_expected = Digest(bfe_array![14, 0, 0, 0, 0]);
 
         let bfe_max: BigUint = BFieldElement::MAX.into();
-        let bfe_max_converted_expected =
-            Digest([BFieldElement::MAX, 0, 0, 0, 0].map(BFieldElement::new));
+        let bfe_max_converted_expected = Digest(bfe_array![BFieldElement::MAX, 0, 0, 0, 0]);
 
         let bfe_max_plus_one: BigUint = BFieldElement::P.into();
-        let bfe_max_plus_one_converted_expected = Digest([0, 1, 0, 0, 0].map(BFieldElement::new));
+        let bfe_max_plus_one_converted_expected = Digest(bfe_array![0, 1, 0, 0, 0]);
 
         let two_pow_64: BigUint = (1u128 << 64).into();
-        let two_pow_64_converted_expected =
-            Digest([(1u64 << 32) - 1, 1, 0, 0, 0].map(BFieldElement::new));
+        let two_pow_64_converted_expected = Digest(bfe_array![(1u64 << 32) - 1, 1, 0, 0, 0]);
 
         let two_pow_123: BigUint = (1u128 << 123).into();
         let two_pow_123_converted_expected =
@@ -315,12 +317,12 @@ pub(crate) mod digest_tests {
         let two_pow_315: BigUint = BigUint::from(2u128).pow(315);
 
         // Result calculated on Wolfram alpha
-        let two_pow_315_converted_expected = Digest([
-            BFieldElement::new(18446744069280366593),
-            BFieldElement::new(1729382257312923647),
-            BFieldElement::new(13258597298683772929),
-            BFieldElement::new(3458764513015234559),
-            BFieldElement::new(576460752840294400),
+        let two_pow_315_converted_expected = Digest(bfe_array![
+            18446744069280366593_u64,
+            1729382257312923647_u64,
+            13258597298683772929_u64,
+            3458764513015234559_u64,
+            576460752840294400_u64,
         ]);
 
         // Verify conversion from BigUint to Digest
@@ -372,20 +374,20 @@ pub(crate) mod digest_tests {
 
     #[test]
     fn digest_ordering() {
-        let val0 = Digest::new([BFieldElement::new(0); DIGEST_LENGTH]);
-        let val1 = Digest::new([14, 0, 0, 0, 0].map(BFieldElement::new));
+        let val0 = Digest::new([bfe!(0); DIGEST_LENGTH]);
+        let val1 = Digest::new(bfe_array![14, 0, 0, 0, 0]);
         assert!(val1 > val0);
 
-        let val2 = Digest::new([BFieldElement::new(14); DIGEST_LENGTH]);
+        let val2 = Digest::new([bfe!(14); DIGEST_LENGTH]);
         assert!(val2 > val1);
         assert!(val2 > val0);
 
-        let val3 = Digest::new([15, 14, 14, 14, 14].map(BFieldElement::new));
+        let val3 = Digest::new(bfe_array![15, 14, 14, 14, 14]);
         assert!(val3 > val2);
         assert!(val3 > val1);
         assert!(val3 > val0);
 
-        let val4 = Digest::new([14, 15, 14, 14, 14].map(BFieldElement::new));
+        let val4 = Digest::new(bfe_array![14, 15, 14, 14, 14]);
         assert!(val4 > val3);
         assert!(val4 > val2);
         assert!(val4 > val1);
