@@ -357,13 +357,12 @@ impl BFieldCodecDeriveBuilder {
             .map(|(field_name, field_type)| {
                 quote! {
                     let #field_name:
-                        ::std::vec::Vec<
-                            crate::twenty_first::shared_math::b_field_element::BFieldElement
-                        > = self.#field_name.encode();
-                    if <#field_type as crate::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                        ::std::vec::Vec<crate::twenty_first::prelude::BFieldElement>
+                            = self.#field_name.encode();
+                    if <#field_type as crate::twenty_first::prelude::BFieldCodec>
                         ::static_length().is_none() {
                         elements.push(
-                            crate::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                            crate::twenty_first::prelude::BFieldElement::new(
                                 #field_name.len() as u64
                             )
                         );
@@ -391,13 +390,12 @@ impl BFieldCodecDeriveBuilder {
             .map(|((idx, field_type), field_name)| {
                 quote! {
                     let #field_name:
-                        ::std::vec::Vec<
-                            crate::twenty_first::shared_math::b_field_element::BFieldElement
-                        > = self.#idx.encode();
-                    if <#field_type as crate::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                        ::std::vec::Vec<crate::twenty_first::prelude::BFieldElement>
+                            = self.#idx.encode();
+                    if <#field_type as crate::twenty_first::prelude::BFieldCodec>
                         ::static_length().is_none() {
                         elements.push(
-                            crate::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                            crate::twenty_first::prelude::BFieldElement::new(
                                 #field_name.len() as u64
                             )
                         );
@@ -432,7 +430,7 @@ impl BFieldCodecDeriveBuilder {
         if associated_data.is_empty() {
             return quote! {
                 Self::#variant_name => {
-                    elements.push(crate::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                    elements.push(crate::twenty_first::prelude::BFieldElement::new(
                         #discriminant as u64)
                     );
                 }
@@ -447,12 +445,12 @@ impl BFieldCodecDeriveBuilder {
                 quote::format_ident!("variant_{}_field_{}_encoding", discriminant, field_index);
             quote! {
                 let #field_encoding:
-                    ::std::vec::Vec<crate::twenty_first::shared_math::b_field_element::BFieldElement> =
+                    ::std::vec::Vec<crate::twenty_first::prelude::BFieldElement> =
                         #field_name.encode();
-                if <#field_type as crate::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                if <#field_type as crate::twenty_first::prelude::BFieldCodec>
                     ::static_length().is_none() {
                     elements.push(
-                        crate::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                        crate::twenty_first::prelude::BFieldElement::new(
                             #field_encoding.len() as u64
                         )
                     );
@@ -469,7 +467,7 @@ impl BFieldCodecDeriveBuilder {
         quote! {
             Self::#variant_name ( #( #field_names , )* ) => {
                 elements.push(
-                    crate::twenty_first::shared_math::b_field_element::BFieldElement::new(
+                    crate::twenty_first::prelude::BFieldElement::new(
                         #discriminant as u64
                     )
                 );
@@ -557,7 +555,7 @@ impl BFieldCodecDeriveBuilder {
         quote! {
             let (#field_name, sequence) = {
                 let maybe_fields_static_length =
-                    <#field_type as crate::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                    <#field_type as crate::twenty_first::prelude::BFieldCodec>
                         ::static_length();
                 let field_has_dynamic_length = maybe_fields_static_length.is_none();
                 if sequence.is_empty() && field_has_dynamic_length {
@@ -575,7 +573,7 @@ impl BFieldCodecDeriveBuilder {
                     ));
                 }
                 let decoded =
-                    *<#field_type as crate::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                    *<#field_type as crate::twenty_first::prelude::BFieldCodec>
                         ::decode(&sequence[..len]).map_err(|err|
                             -> ::std::boxed::Box<
                                     dyn ::std::error::Error
@@ -645,7 +643,7 @@ impl BFieldCodecDeriveBuilder {
                 quote! {
                     let (#field_value, sequence) = {
                         let maybe_fields_static_length =
-                            <#field_type as crate::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                            <#field_type as crate::twenty_first::prelude::BFieldCodec>
                                 ::static_length();
                         let field_has_dynamic_length = maybe_fields_static_length.is_none();
                         if sequence.is_empty() && field_has_dynamic_length {
@@ -665,7 +663,7 @@ impl BFieldCodecDeriveBuilder {
                             );
                         }
                         let decoded =
-                            *<#field_type as crate::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                            *<#field_type as crate::twenty_first::prelude::BFieldCodec>
                                 ::decode(
                                     &sequence[..len]
                                 ).map_err(|err|
@@ -712,7 +710,7 @@ impl BFieldCodecDeriveBuilder {
             let field_lengths : [::core::option::Option<usize>; #num_fields] = [
                 #(
                     <#field_types as
-                    crate::twenty_first::shared_math::bfield_codec::BFieldCodec>::static_length(),
+                    crate::twenty_first::prelude::BFieldCodec>::static_length(),
                 )*
             ];
             if field_lengths.iter().all(|fl| fl.is_some() ) {
@@ -746,7 +744,7 @@ impl BFieldCodecDeriveBuilder {
                 let fields = variant.fields.clone();
                 let field_lengths = fields.iter().map(|f| {
                     quote! {
-                        <#f as crate::twenty_first::shared_math::bfield_codec::BFieldCodec>
+                        <#f as crate::twenty_first::prelude::BFieldCodec>
                             ::static_length()
                     }
                 });
@@ -824,18 +822,18 @@ impl BFieldCodecDeriveBuilder {
         quote! {
             #maybe_impl_enum_discriminants
             #errors
-            impl #impl_generics crate::twenty_first::shared_math::bfield_codec::BFieldCodec
+            impl #impl_generics crate::twenty_first::prelude::BFieldCodec
             for #name #ty_generics #where_clause {
                 type Error = #error_enum_name;
 
                 fn decode(
-                    sequence: &[crate::twenty_first::shared_math::b_field_element::BFieldElement],
+                    sequence: &[crate::twenty_first::prelude::BFieldElement],
                 ) -> ::core::result::Result<::std::boxed::Box<Self>, Self::Error> {
                     #decode_function_body
                 }
 
                 fn encode(&self) -> ::std::vec::Vec<
-                    crate::twenty_first::shared_math::b_field_element::BFieldElement
+                    crate::twenty_first::prelude::BFieldElement
                 > {
                     let mut elements = ::std::vec::Vec::new();
                     #(#encode_statements)*
