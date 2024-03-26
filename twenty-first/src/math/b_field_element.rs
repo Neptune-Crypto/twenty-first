@@ -32,7 +32,6 @@ use crate::math::traits::CyclicGroupGenerator;
 use crate::math::traits::FiniteField;
 use crate::math::traits::ModPowU32;
 use crate::math::traits::ModPowU64;
-use crate::math::traits::New;
 
 use super::traits::Inverse;
 use super::traits::PrimitiveRootOfUnity;
@@ -503,12 +502,6 @@ impl CyclicGroupGenerator for BFieldElement {
 impl Distribution<BFieldElement> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BFieldElement {
         BFieldElement::new(rng.gen_range(0..=BFieldElement::MAX))
-    }
-}
-
-impl New for BFieldElement {
-    fn new_from_usize(&self, value: usize) -> Self {
-        Self::new(value as u64)
     }
 }
 

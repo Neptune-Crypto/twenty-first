@@ -1371,14 +1371,12 @@ impl<FF: FiniteField> Polynomial<FF> {
     }
 
     pub fn formal_derivative(&self) -> Self {
-        let coefficients = self
-            .clone()
-            .coefficients
-            .iter()
-            .enumerate()
-            .map(|(i, &coefficient)| FF::new_from_usize(&coefficient, i) * coefficient)
+        // not `enumerate()`ing: `FiniteField` is trait-bound to `From<u64>` but not `From<usize>`
+        let coefficients = (0..)
+            .zip(&self.coefficients)
+            .map(|(i, &coefficient)| FF::from(i) * coefficient)
             .skip(1)
-            .collect_vec();
+            .collect();
 
         Self { coefficients }
     }

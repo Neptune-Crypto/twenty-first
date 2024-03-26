@@ -45,21 +45,14 @@ pub trait ModPowU32 {
     fn mod_pow_u32(&self, exp: u32) -> Self;
 }
 
-// We **cannot** use the std library From/Into traits as they cannot
-// capture which field the new element is a member of.
-pub trait New {
-    #[must_use]
-    fn new_from_usize(&self, value: usize) -> Self;
-}
-
 pub trait FiniteField:
-    Clone
-    + Eq
+    Copy
+    + Debug
     + Display
+    + Eq
     + Serialize
     + DeserializeOwned
-    + PartialEq
-    + Debug
+    + Hash
     + Zero
     + One
     + Add<Output = Self>
@@ -70,15 +63,13 @@ pub trait FiniteField:
     + AddAssign
     + MulAssign
     + SubAssign
-    + New
     + CyclicGroupGenerator
-    + ModPowU32
     + PrimitiveRootOfUnity
+    + Inverse
+    + ModPowU32
+    + From<u64>
     + Send
     + Sync
-    + Copy
-    + Hash
-    + Inverse
 {
     /// Montgomery Batch Inversion
     // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion

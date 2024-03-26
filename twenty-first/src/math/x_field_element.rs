@@ -28,7 +28,6 @@ use crate::math::traits::FiniteField;
 use crate::math::traits::Inverse;
 use crate::math::traits::ModPowU32;
 use crate::math::traits::ModPowU64;
-use crate::math::traits::New;
 use crate::math::traits::PrimitiveRootOfUnity;
 
 use super::digest::Digest;
@@ -374,14 +373,6 @@ impl One for XFieldElement {
 }
 
 impl FiniteField for XFieldElement {}
-
-// TODO: Replace this with a From<usize> trait
-// This trait is used by INTT
-impl New for XFieldElement {
-    fn new_from_usize(&self, value: usize) -> Self {
-        Self::new_const(BFieldElement::new(value as u64))
-    }
-}
 
 impl Add<XFieldElement> for XFieldElement {
     type Output = Self;

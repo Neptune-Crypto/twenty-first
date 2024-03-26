@@ -3,12 +3,10 @@ use std::ops::MulAssign;
 use num_traits::Zero;
 use rand_distr::num_traits::One;
 
-use crate::math::traits::{FiniteField, ModPowU32};
-
-use super::{
-    b_field_element::BFieldElement,
-    traits::{Inverse, New},
-};
+use super::b_field_element::BFieldElement;
+use super::traits::FiniteField;
+use super::traits::Inverse;
+use super::traits::ModPowU32;
 
 /// ## Perform NTT on slices of prime-field elements
 ///
@@ -115,7 +113,7 @@ pub fn intt<FF: FiniteField + MulAssign<BFieldElement>>(
     omega: BFieldElement,
     log_2_of_n: u32,
 ) {
-    let n: BFieldElement = omega.new_from_usize(x.len());
+    let n = BFieldElement::new(u64::try_from(x.len()).unwrap());
     let n_inv_or_zero = n.inverse_or_zero();
     ntt::<FF>(x, omega.inverse(), log_2_of_n);
     for elem in x.iter_mut() {
