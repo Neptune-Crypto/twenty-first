@@ -632,10 +632,13 @@ pub mod kem {
     use itertools::Itertools;
     use serde_derive::Deserialize;
     use serde_derive::Serialize;
+    use sha3::digest::ExtendableOutput;
+    use sha3::digest::Update;
+    use sha3::Digest as Sha3Digest;
+    use sha3::Sha3_256;
+    use sha3::Shake256;
 
     use crate::math::b_field_element::BFieldElement;
-    use crate::math::fips202::sha3_256;
-    use crate::math::fips202::shake256;
 
     use super::embed_msg;
     use super::extract_msg;
@@ -716,15 +719,27 @@ pub mod kem {
         }
     }
 
+    /// randomness extension
+    pub(super) fn shake256<const NUM_OUT_BYTES: usize>(
+        randomness: impl AsRef<[u8]>,
+    ) -> [u8; NUM_OUT_BYTES] {
+        let mut hasher = Shake256::default();
+        hasher.update(randomness.as_ref());
+
+        let mut result = [0u8; NUM_OUT_BYTES];
+        hasher.finalize_xof_into(&mut result);
+        result
+    }
+
     fn derive_public_matrix(seed: &[u8; 32]) -> ModuleElement<16> {
         const NUM_BYTES: usize = 9 * 64 * 16;
-        let randomness = shake256(seed, NUM_BYTES);
+        let randomness = shake256::<NUM_BYTES>(seed);
         ModuleElement::<16>::sample_uniform(&randomness)
     }
 
     fn derive_secret_vectors(seed: &[u8; 32]) -> (ModuleElement<4>, ModuleElement<4>) {
         const NUM_BYTES: usize = 2 * 4 * 64 * 8;
-        let randomness = shake256(seed, NUM_BYTES);
+        let randomness = shake256::<NUM_BYTES>(seed);
         let a = ModuleElement::<4>::sample_short(&randomness[0..(NUM_BYTES / 2)]);
         let b = ModuleElement::<4>::sample_short(&randomness[(NUM_BYTES / 2)..]);
         (a, b)
@@ -733,15 +748,8 @@ pub mod kem {
     /// Generate a public-secret key pair for key encapsulation.
     pub fn keygen(randomness: [u8; 32]) -> (SecretKey, PublicKey) {
         const OUTPUT_LENGTH: usize = 32;
-        let seed: [u8; OUTPUT_LENGTH] =
-            shake256(&[randomness.to_vec(), vec![0u8]].concat(), OUTPUT_LENGTH)
-                .try_into()
-                .unwrap();
-
-        let key: [u8; OUTPUT_LENGTH] =
-            shake256(&[randomness.to_vec(), vec![1u8]].concat(), OUTPUT_LENGTH)
-                .try_into()
-                .unwrap();
+        let seed: [u8; OUTPUT_LENGTH] = shake256([randomness.to_vec(), vec![0u8]].concat());
+        let key: [u8; OUTPUT_LENGTH] = shake256([randomness.to_vec(), vec![1u8]].concat());
 
         let sk = SecretKey { key, seed };
 
@@ -777,9 +785,9 @@ pub mod kem {
     /// symmetric key.
     pub fn enc(pk: PublicKey, randomness: [u8; 32]) -> ([u8; 32], Ciphertext) {
         const OUTPUT_LENGTH: usize = 32;
-        let payload: [u8; OUTPUT_LENGTH] = shake256(&randomness, OUTPUT_LENGTH).try_into().unwrap();
+        let payload: [u8; OUTPUT_LENGTH] = shake256(randomness);
         let ciphertext = generate_ciphertext_derandomized(pk, payload);
-        let shared_key: [u8; 32] = sha3_256(&payload);
+        let shared_key: [u8; 32] = Sha3_256::digest(payload).into();
 
         (shared_key, ciphertext)
     }
@@ -799,7 +807,7 @@ pub mod kem {
             return None;
         }
 
-        let shared_key = sha3_256(&payload);
+        let shared_key = Sha3_256::digest(payload).into();
         Some(shared_key)
     }
 }
@@ -812,14 +820,32 @@ mod lattice_test {
     use rand::random;
     use rand::thread_rng;
     use rand::RngCore;
+    use sha3::Digest as Sha3Digest;
+    use sha3::Sha3_256;
 
     use crate::math::b_field_element::BFieldElement;
     use crate::math::lattice::kem::Ciphertext;
     use crate::math::lattice::kem::PublicKey;
     use crate::math::lattice::*;
 
+    use super::kem::shake256;
     use super::kem::SecretKey;
     use super::kem::CIPHERTEXT_SIZE_IN_BFES;
+
+    #[test]
+    fn test_kats() {
+        // KATs lifted from
+        // https://github.com/XKCP/XKCP/blob/master/tests/UnitTests/main.c
+        // starting at line 446.
+        let input = b"\x21\xF1\x34\xAC\x57";
+        let expected_output_shake256 = b"\xBB\x8A\x84\x47\x51\x7B\xA9\xCA\x7F\xA3\x4E\xC9\x9A\x80\x00\x4F\x22\x8A\xB2\x82\x47\x28\x41\xEB\x3D\x3A\x76\x22\x5C\x9D\xBE\x77\xF7\xE4\x0A\x06\x67\x76\xD3\x2C\x74\x94\x12\x02\xF9\xF4\xAA\x43\xD1\x2C\x62\x64\xAF\xA5\x96\x39\xC4\x4E\x11\xF5\xE1\x4F\x1E\x56";
+        let expected_output_sha3_256 = b"\x55\xBD\x92\x24\xAF\x4E\xED\x0D\x12\x11\x49\xE3\x7F\xF4\xD7\xDD\x5B\xE2\x4B\xD9\xFB\xE5\x6E\x01\x71\xE8\x7D\xB7\xA6\xF4\xE0\x6D";
+
+        assert_eq!(*expected_output_shake256, shake256(input));
+
+        let sha3_out = Sha3_256::digest(input).to_vec();
+        assert_eq!(expected_output_sha3_256, &*sha3_out);
+    }
 
     #[test]
     fn test_fast_mul() {
