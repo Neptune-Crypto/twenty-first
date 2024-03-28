@@ -27,8 +27,6 @@ use crate::math::traits::FiniteField;
 use crate::math::traits::ModPowU32;
 
 use super::b_field_element::BFieldElement;
-use super::b_field_element::BFIELD_ONE;
-use super::traits::Inverse;
 use super::traits::PrimitiveRootOfUnity;
 
 impl<FF: FiniteField> Zero for Polynomial<FF> {
@@ -128,19 +126,23 @@ where
     /// todo: Benchmark and find the optimal value.
     const FAST_DIVIDE_CUTOFF_THRESHOLD: isize = 8;
 
-    /// Return the polynomial which corresponds to the transformation `x -> alpha * x`
-    /// Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x) then corresponds to
-    /// evaluating P(alpha * x).
+    /// Return the polynomial which corresponds to the transformation `x → α·x`.
+    ///
+    /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then corresponds to
+    /// evaluating P(α·x).
     #[must_use]
-    pub fn scale(&self, alpha: BFieldElement) -> Self {
-        let mut acc = FF::one();
-        let mut return_coefficients = self.coefficients.clone();
-        for elem in return_coefficients.iter_mut() {
-            *elem *= acc;
-            acc *= alpha;
+    pub fn scale<XF>(&self, alpha: XF) -> Polynomial<XF>
+    where
+        FF: Mul<XF, Output = XF>,
+        XF: FiniteField,
+    {
+        let mut power_of_alpha = XF::one();
+        let mut return_coefficients = Vec::with_capacity(self.coefficients.len());
+        for &coefficient in &self.coefficients {
+            return_coefficients.push(coefficient * power_of_alpha);
+            power_of_alpha *= alpha;
         }
-
-        Self::new(return_coefficients)
+        Polynomial::new(return_coefficients)
     }
 
     /// It is the caller's responsibility that this function is called with sufficiently large input
@@ -663,7 +665,7 @@ where
     /// - The order of the domain must be greater than the degree of `self`.
     pub fn fast_coset_evaluate(
         &self,
-        offset: BFieldElement,
+        offset: FF,
         generator: BFieldElement,
         order: usize,
     ) -> Vec<FF> {
@@ -689,11 +691,7 @@ where
 
     /// The inverse of `fast_coset_evaluate`. The number of provided values must equal the order
     /// of the generator, _i.e._, the size of the domain.
-    pub fn fast_coset_interpolate(
-        offset: BFieldElement,
-        generator: BFieldElement,
-        values: &[FF],
-    ) -> Self {
+    pub fn fast_coset_interpolate(offset: FF, generator: BFieldElement, values: &[FF]) -> Self {
         let length = values.len();
         let mut mut_values = values.to_vec();
 
@@ -773,7 +771,7 @@ where
     ///
     /// [root_unit]: BFieldElement::primitive_root_of_unity
     pub fn fast_divide(&self, divisor: &Self) -> Self {
-        self.fast_coset_divide(divisor, BFIELD_ONE)
+        self.fast_coset_divide(divisor, FF::one())
     }
 
     /// Divide `self` by some `divisor`.
@@ -792,7 +790,7 @@ where
     /// - if the offset `divisor` has a [root of unity][root_unit] as a root
     ///
     /// [root_unit]: BFieldElement::primitive_root_of_unity
-    pub fn fast_coset_divide(&self, divisor: &Self, offset: BFieldElement) -> Self {
+    pub fn fast_coset_divide(&self, divisor: &Self, offset: FF) -> Self {
         // Uses the homomorphism of evaluation, i.e., NTT + batch inversion + iNTT.
 
         assert!(!divisor.is_zero(), "divisor must be non-zero");
@@ -1398,8 +1396,7 @@ mod test_polynomials {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::bfe_vec;
-    use crate::math::x_field_element::XFieldElement;
+    use crate::prelude::*;
 
     use super::*;
 
@@ -1505,6 +1502,16 @@ mod test_polynomials {
         let num_coefficients = polynomial_with_leading_zeros.coefficients.len();
 
         prop_assert_eq!(expected_num_coefficients, num_coefficients);
+    }
+
+    #[test]
+    fn scaling_a_polynomial_works_with_different_fields_as_the_offset() {
+        let bfe_poly = Polynomial::new(bfe_vec![0, 1, 2]);
+        let _ = bfe_poly.scale(bfe!(42));
+        let _ = bfe_poly.scale(xfe!(42));
+
+        let xfe_poly = Polynomial::new(xfe_vec![0, 1, 2]);
+        let _ = xfe_poly.scale(xfe!(42));
     }
 
     #[proptest]
