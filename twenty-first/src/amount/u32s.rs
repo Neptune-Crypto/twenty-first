@@ -20,9 +20,9 @@ use serde_derive::Deserialize;
 use serde_derive::Serialize;
 
 use crate::error::TryFromU32sError;
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::bfield_codec::BFieldCodec;
-use crate::shared_math::bfield_codec::BFieldCodecError;
+use crate::math::b_field_element::BFieldElement;
+use crate::math::bfield_codec::BFieldCodec;
+use crate::math::bfield_codec::BFieldCodecError;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, GetSize)]
 pub struct U32s<const N: usize> {
@@ -389,7 +389,7 @@ mod u32s_tests {
     use rand::Rng;
     use rand::RngCore;
 
-    use crate::shared_math::other::random_elements;
+    use crate::math::other::random_elements;
 
     use super::*;
 

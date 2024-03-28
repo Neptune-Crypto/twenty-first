@@ -1,4 +1,4 @@
-use twenty_first::shared_math::bfield_codec::BFieldCodec;
+use twenty_first::math::bfield_codec::BFieldCodec;
 
 #[derive(BFieldCodec)]
 struct MyStruct {

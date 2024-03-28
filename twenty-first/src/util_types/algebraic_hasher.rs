@@ -3,16 +3,14 @@ use std::iter;
 
 use itertools::Itertools;
 
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::b_field_element::BFIELD_ONE;
-use crate::shared_math::b_field_element::BFIELD_ZERO;
-use crate::shared_math::bfield_codec::BFieldCodec;
-use crate::shared_math::digest::Digest;
-use crate::shared_math::digest::DIGEST_LENGTH;
-use crate::shared_math::other::is_power_of_two;
-use crate::shared_math::other::roundup_nearest_multiple;
-use crate::shared_math::x_field_element::XFieldElement;
-use crate::shared_math::x_field_element::EXTENSION_DEGREE;
+use crate::math::b_field_element::BFieldElement;
+use crate::math::b_field_element::BFIELD_ONE;
+use crate::math::b_field_element::BFIELD_ZERO;
+use crate::math::bfield_codec::BFieldCodec;
+use crate::math::digest::Digest;
+use crate::math::digest::DIGEST_LENGTH;
+use crate::math::x_field_element::XFieldElement;
+use crate::math::x_field_element::EXTENSION_DEGREE;
 
 pub const RATE: usize = 10;
 
@@ -48,7 +46,7 @@ pub trait Sponge: Clone + Debug + Default + Send + Sync {
 
     fn pad_and_absorb_all(&mut self, input: &[BFieldElement]) {
         // pad input with [1, 0, 0, …] – padding is at least one element
-        let padded_length = roundup_nearest_multiple(input.len() + 1, RATE);
+        let padded_length = (input.len() + 1).next_multiple_of(RATE);
         let padding_iter = [BFIELD_ONE].iter().chain(iter::repeat(&BFIELD_ZERO));
         let padded_input = input.iter().chain(padding_iter).take(padded_length);
 
@@ -90,7 +88,7 @@ pub trait AlgebraicHasher: Sponge {
     /// are not uniformly distributed, and so they are dropped. This method invokes squeeze until
     /// enough uniform u32s have been sampled.
     fn sample_indices(&mut self, upper_bound: u32, num_indices: usize) -> Vec<u32> {
-        debug_assert!(is_power_of_two(upper_bound));
+        debug_assert!(upper_bound.is_power_of_two());
         let mut indices = vec![];
         let mut squeezed_elements = vec![];
         while indices.len() != num_indices {
@@ -139,9 +137,9 @@ mod algebraic_hasher_tests {
     use rand_distr::Distribution;
     use rand_distr::Standard;
 
-    use crate::shared_math::digest::DIGEST_LENGTH;
-    use crate::shared_math::tip5::Tip5;
-    use crate::shared_math::x_field_element::EXTENSION_DEGREE;
+    use crate::math::digest::DIGEST_LENGTH;
+    use crate::math::tip5::Tip5;
+    use crate::math::x_field_element::EXTENSION_DEGREE;
 
     use super::*;
 

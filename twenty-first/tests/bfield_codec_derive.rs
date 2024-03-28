@@ -6,10 +6,10 @@ use test_strategy::proptest;
 // Required by the `BFieldCodec` derive macro. This is generally only needed once per crate, at the top-level `lib.rs`.
 #[allow(clippy::single_component_path_imports)]
 use twenty_first;
-use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::bfield_codec::BFieldCodec;
-use twenty_first::shared_math::digest::Digest;
-use twenty_first::shared_math::x_field_element::XFieldElement;
+use twenty_first::math::b_field_element::BFieldElement;
+use twenty_first::math::bfield_codec::BFieldCodec;
+use twenty_first::math::digest::Digest;
+use twenty_first::math::x_field_element::XFieldElement;
 
 #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
 struct BFieldCodecTestStructA {

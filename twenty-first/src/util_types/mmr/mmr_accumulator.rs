@@ -1,18 +1,22 @@
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::marker::PhantomData;
+
 use arbitrary::Arbitrary;
 use get_size::GetSize;
-use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
-use std::{collections::HashMap, fmt::Debug};
+use itertools::Itertools;
+use serde::Deserialize;
+use serde::Serialize;
+
+use crate::math::bfield_codec::BFieldCodec;
+use crate::math::digest::Digest;
+use crate::util_types::algebraic_hasher::AlgebraicHasher;
+use crate::util_types::mmr::shared_advanced;
+use crate::util_types::shared::bag_peaks;
 
 use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::Mmr;
 use super::shared_basic;
-use crate::shared_math::bfield_codec::BFieldCodec;
-use crate::shared_math::digest::Digest;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::mmr::shared_advanced;
-use crate::util_types::shared::bag_peaks;
-use crate::utils::has_unique_elements;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary)]
 pub struct MmrAccumulator<H>
@@ -101,7 +105,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         // not exceed the total leaf count
         let manipulated_leaf_indices: Vec<u64> =
             leaf_mutations.iter().map(|x| x.1.leaf_index).collect();
-        if !has_unique_elements(manipulated_leaf_indices.clone()) {
+        if !manipulated_leaf_indices.iter().all_unique() {
             return false;
         }
 
@@ -276,13 +280,14 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
 }
 
 pub mod util {
+    use itertools::Itertools;
 
-    use super::*;
-    use crate::shared_math::other::log_2_ceil;
-    use crate::shared_math::other::random_elements;
+    use crate::math::other::log_2_ceil;
+    use crate::math::other::random_elements;
     use crate::util_types::mmr::shared_advanced::right_lineage_length_from_node_index;
     use crate::util_types::mmr::shared_basic::leaf_index_to_mt_index_and_peak_index;
-    use itertools::Itertools;
+
+    use super::*;
 
     /// Get an MMR accumulator with a requested number of leafs, and requested leaf digests at specified indices
     /// Also returns the MMR membership proofs for the specified leafs.
@@ -291,7 +296,7 @@ pub mod util {
         specified_leafs: Vec<(u64, Digest)>,
     ) -> (MmrAccumulator<H>, Vec<MmrMembershipProof<H>>) {
         assert!(
-            has_unique_elements(specified_leafs.iter().map(|x| x.0)),
+            specified_leafs.iter().map(|&(idx, _)| idx).all_unique(),
             "Specified leaf indices must be unique"
         );
 
@@ -421,14 +426,18 @@ pub mod util {
 mod accumulator_mmr_tests {
     use std::cmp;
 
-    use itertools::{izip, Itertools};
+    use itertools::izip;
+    use itertools::Itertools;
     use num_traits::Zero;
-    use rand::{random, thread_rng, Rng, RngCore};
+    use rand::distributions::Uniform;
+    use rand::random;
+    use rand::thread_rng;
+    use rand::Rng;
+    use rand::RngCore;
 
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::other::{random_elements, random_elements_range};
-    use crate::shared_math::tip5::Tip5;
-
+    use crate::math::b_field_element::BFieldElement;
+    use crate::math::other::random_elements;
+    use crate::math::tip5::Tip5;
     use crate::mock::mmr::get_mock_ammr_from_digests;
     use crate::mock::mmr::MockMmr;
 
@@ -456,7 +465,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn conversion_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf_hashes: Vec<Digest> = random_elements(3);
         let mock_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes);
@@ -472,7 +481,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_single_append_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf_hashes_start: Vec<Digest> = random_elements(3);
         let appended_leaf: Digest = random();
@@ -493,7 +502,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_single_mutate_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf0: Digest = random();
         let leaf1: Digest = random();
@@ -532,7 +541,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_two_append_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf_hashes_start: Vec<Digest> = random_elements(3);
         let appended_leafs: Vec<Digest> = random_elements(2);
@@ -551,7 +560,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_two_mutate_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf14: Digest = random();
         let leaf15: Digest = random();
@@ -582,7 +591,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn batch_mutate_leaf_and_update_mps_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let mut rng = rand::thread_rng();
         for mmr_leaf_count in 1..100 {
@@ -685,7 +694,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_pbt() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         for start_size in 1..35 {
             let leaf_hashes_start: Vec<Digest> = random_elements(start_size);
@@ -713,12 +722,12 @@ mod accumulator_mmr_tests {
 
                     // Ensure that indices are unique since batch updating cannot update
                     // the same leaf twice in one go
-                    let mutated_indices: Vec<u64> =
-                        random_elements_range(mutate_size, 0..start_size as u64)
-                            .into_iter()
-                            .sorted()
-                            .unique()
-                            .collect();
+                    let mutated_indices: Vec<u64> = thread_rng()
+                        .sample_iter(Uniform::new(0, start_size as u64))
+                        .take(mutate_size)
+                        .sorted()
+                        .unique()
+                        .collect();
 
                     // Create the expected MMRs
                     let mut leaf_hashes_mutated = leaf_hashes_start.clone();
@@ -806,7 +815,7 @@ mod accumulator_mmr_tests {
 
         let json = serde_json::to_string(&mmra).unwrap();
         let s_back = serde_json::from_str::<Mmr>(&json).unwrap();
-        assert!(mmra.bag_peaks() == s_back.bag_peaks());
+        assert_eq!(mmra.bag_peaks(), s_back.bag_peaks());
         assert_eq!(1, mmra.count_leaves());
     }
 

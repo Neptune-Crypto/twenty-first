@@ -1,5 +1,4 @@
 use std::convert::TryFrom;
-use std::convert::TryInto;
 use std::fmt;
 use std::hash::Hash;
 use std::iter::Sum;
@@ -29,15 +28,11 @@ use serde::Serialize;
 use serde::Serializer;
 
 use crate::error::ParseBFieldElementError;
-use crate::shared_math::traits::CyclicGroupGenerator;
-use crate::shared_math::traits::FiniteField;
-use crate::shared_math::traits::ModPowU32;
-use crate::shared_math::traits::ModPowU64;
-use crate::shared_math::traits::New;
-use crate::util_types::emojihash_trait::Emojihash;
-use crate::util_types::emojihash_trait::EMOJI_PER_ELEMENT;
+use crate::math::traits::CyclicGroupGenerator;
+use crate::math::traits::FiniteField;
+use crate::math::traits::ModPowU32;
+use crate::math::traits::ModPowU64;
 
-use super::traits::FromVecu8;
 use super::traits::Inverse;
 use super::traits::PrimitiveRootOfUnity;
 use super::x_field_element::XFieldElement;
@@ -352,15 +347,6 @@ impl BFieldElement {
     }
 }
 
-impl Emojihash for BFieldElement {
-    fn emojihash(&self) -> String {
-        emojihash::hash(&self.canonical_representation().to_be_bytes())
-            .chars()
-            .take(EMOJI_PER_ELEMENT)
-            .collect::<String>()
-    }
-}
-
 impl fmt::Display for BFieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let canonical_value = Self::canonical_representation(self);
@@ -439,17 +425,17 @@ impl TryFrom<BFieldElement> for u32 {
 
 /// Convert a B-field element to a byte array.
 /// The client uses this for its database.
-impl From<BFieldElement> for [u8; 8] {
+impl From<BFieldElement> for [u8; BFieldElement::BYTES] {
     fn from(bfe: BFieldElement) -> Self {
-        // It's crucial to map this to the canonical representation
-        // before converting. Otherwise the representation is degenerate.
+        // It's crucial to map this to the canonical representation before converting.
+        // Otherwise, the representation is degenerate.
         bfe.canonical_representation().to_le_bytes()
     }
 }
 
-impl From<[u8; 8]> for BFieldElement {
-    fn from(array: [u8; 8]) -> Self {
-        let n: u64 = u64::from_le_bytes(array);
+impl From<[u8; BFieldElement::BYTES]> for BFieldElement {
+    fn from(array: [u8; BFieldElement::BYTES]) -> Self {
+        let n = u64::from_le_bytes(array);
         BFieldElement::new(n)
     }
 }
@@ -516,21 +502,6 @@ impl CyclicGroupGenerator for BFieldElement {
 impl Distribution<BFieldElement> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BFieldElement {
         BFieldElement::new(rng.gen_range(0..=BFieldElement::MAX))
-    }
-}
-
-impl New for BFieldElement {
-    fn new_from_usize(&self, value: usize) -> Self {
-        Self::new(value as u64)
-    }
-}
-
-// This is used for: Convert a hash value to a BFieldElement. Consider making From<Blake3Hash> trait
-impl FromVecu8 for BFieldElement {
-    fn from_vecu8(bytes: Vec<u8>) -> Self {
-        let (eight_bytes, _rest) = bytes.as_slice().split_at(std::mem::size_of::<u64>());
-        let coerced: [u8; 8] = eight_bytes.try_into().unwrap();
-        coerced.into()
     }
 }
 
@@ -678,14 +649,13 @@ mod b_prime_field_element_test {
     use itertools::izip;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
+    use rand::random;
     use rand::thread_rng;
     use test_strategy::proptest;
 
-    use crate::shared_math::b_field_element::*;
-    use crate::shared_math::other::random_elements;
-    use crate::shared_math::other::random_elements_array;
-    use crate::shared_math::other::xgcd;
-    use crate::shared_math::polynomial::Polynomial;
+    use crate::math::b_field_element::*;
+    use crate::math::other::random_elements;
+    use crate::math::polynomial::Polynomial;
 
     impl proptest::arbitrary::Arbitrary for BFieldElement {
         type Parameters = ();
@@ -960,7 +930,7 @@ mod b_prime_field_element_test {
     #[test]
     fn mul_div_plus_minus_neg_property_based_test() {
         let elements: Vec<BFieldElement> = random_elements(300);
-        let power_input_b: [BFieldElement; 6] = random_elements_array();
+        let power_input_b: [BFieldElement; 6] = random();
         for i in 1..elements.len() {
             let a = elements[i - 1];
             let b = elements[i];
@@ -1105,19 +1075,6 @@ mod b_prime_field_element_test {
     }
 
     #[test]
-    fn b_field_xgcd_test() {
-        let a = 15;
-        let b = 25;
-        let expected_gcd_ab = 5;
-        let (actual_gcd_ab, a_factor, b_factor) = xgcd(a, b);
-
-        assert_eq!(expected_gcd_ab, actual_gcd_ab);
-        assert_eq!(2, a_factor);
-        assert_eq!(-1, b_factor);
-        assert_eq!(expected_gcd_ab, a_factor * a + b_factor * b);
-    }
-
-    #[test]
     fn mod_pow_test_powers_of_two() {
         let two = BFieldElement::new(2);
         // 2^63 < 2^64, so no wrap-around of B-field element
@@ -1184,23 +1141,6 @@ mod b_prime_field_element_test {
             let converted_0 = TryInto::<u32>::try_into(invalid_val_0);
             assert!(converted_0.is_err());
         }
-    }
-
-    #[test]
-    fn uniqueness_of_consecutive_emojis_bfe() {
-        let mut prev = BFieldElement::zero().emojihash();
-        for n in 1..256 {
-            let curr = BFieldElement::new(n).emojihash();
-            println!("{curr}, n: {n}");
-            assert_ne!(curr, prev);
-            prev = curr
-        }
-
-        // Verify that emojihash is independent of representation
-        let val = BFieldElement::new(6672);
-        let same_val = BFieldElement::new(6672 + BFieldElement::P);
-        assert_eq!(val, same_val);
-        assert_eq!(val.emojihash(), same_val.emojihash());
     }
 
     #[test]

@@ -4,8 +4,8 @@ use criterion::BatchSize;
 use criterion::Criterion;
 use rand::thread_rng;
 use rand::Rng;
-use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::polynomial::Polynomial;
+use twenty_first::math::b_field_element::BFieldElement;
+use twenty_first::math::polynomial::Polynomial;
 
 criterion_main!(benches);
 criterion_group!(

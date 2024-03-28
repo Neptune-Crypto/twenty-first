@@ -21,14 +21,13 @@ use rayon::prelude::IndexedParallelIterator;
 use rayon::prelude::IntoParallelRefIterator;
 use rayon::prelude::ParallelIterator;
 
-use crate::shared_math::ntt::intt;
-use crate::shared_math::ntt::ntt;
-use crate::shared_math::traits::FiniteField;
-use crate::shared_math::traits::ModPowU32;
+use crate::math::ntt::intt;
+use crate::math::ntt::ntt;
+use crate::math::traits::FiniteField;
+use crate::math::traits::ModPowU32;
 
 use super::b_field_element::BFieldElement;
 use super::b_field_element::BFIELD_ONE;
-use super::other;
 use super::traits::Inverse;
 use super::traits::PrimitiveRootOfUnity;
 
@@ -1334,14 +1333,29 @@ impl<FF: FiniteField> Polynomial<FF> {
     /// let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
     /// assert_eq!(gcd, a * x + b * y);
     /// ```
-    pub fn xgcd(x: Self, y: Self) -> (Self, Self, Self) {
-        let (x, a, b) = other::xgcd(x, y);
+    pub fn xgcd(mut x: Self, mut y: Self) -> (Self, Self, Self) {
+        let (mut a_factor, mut a1) = (Self::one(), Self::zero());
+        let (mut b_factor, mut b1) = (Self::zero(), Self::one());
 
-        // normalize result to ensure `x` has leading coefficient 1
+        while !y.is_zero() {
+            let quotient = x.clone() / y.clone();
+            let remainder = x % y.clone();
+            let c = a_factor - quotient.clone() * a1.clone();
+            let d = b_factor - quotient * b1.clone();
+
+            x = y;
+            y = remainder;
+            a_factor = a1;
+            a1 = c;
+            b_factor = b1;
+            b1 = d;
+        }
+
+        // normalize result to ensure the gcd, _i.e._, `x` has leading coefficient 1
         let lc = x.leading_coefficient().unwrap_or_else(FF::one);
         let normalize = |poly: Self| poly.scalar_mul(lc.inverse());
 
-        let [x, a, b] = [x, a, b].map(normalize);
+        let [x, a, b] = [x, a_factor, b_factor].map(normalize);
         (x, a, b)
     }
 }
@@ -1357,14 +1371,12 @@ impl<FF: FiniteField> Polynomial<FF> {
     }
 
     pub fn formal_derivative(&self) -> Self {
-        let coefficients = self
-            .clone()
-            .coefficients
-            .iter()
-            .enumerate()
-            .map(|(i, &coefficient)| FF::new_from_usize(&coefficient, i) * coefficient)
+        // not `enumerate()`ing: `FiniteField` is trait-bound to `From<u64>` but not `From<usize>`
+        let coefficients = (0..)
+            .zip(&self.coefficients)
+            .map(|(i, &coefficient)| FF::from(i) * coefficient)
             .skip(1)
-            .collect_vec();
+            .collect();
 
         Self { coefficients }
     }
@@ -1387,7 +1399,7 @@ mod test_polynomials {
     use test_strategy::proptest;
 
     use crate::bfe_vec;
-    use crate::shared_math::x_field_element::XFieldElement;
+    use crate::math::x_field_element::XFieldElement;
 
     use super::*;
 

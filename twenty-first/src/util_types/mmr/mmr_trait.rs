@@ -1,4 +1,4 @@
-use crate::shared_math::digest::Digest;
+use crate::math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 use super::{mmr_accumulator::MmrAccumulator, mmr_membership_proof::MmrMembershipProof};

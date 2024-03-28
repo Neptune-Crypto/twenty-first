@@ -1,9 +1,9 @@
 use std::str::FromStr;
 use thiserror::Error;
 
+pub use crate::math::bfield_codec::BFieldCodecError;
 use crate::prelude::tip5::DIGEST_LENGTH;
 use crate::prelude::x_field_element::EXTENSION_DEGREE;
-pub use crate::shared_math::bfield_codec::BFieldCodecError;
 pub use crate::util_types::merkle_tree::MerkleTreeError;
 
 #[derive(Debug, Clone, Eq, PartialEq, Error)]

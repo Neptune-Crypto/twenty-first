@@ -20,18 +20,15 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::error::TryFromXFieldElementError;
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::b_field_element::BFIELD_ZERO;
-use crate::shared_math::polynomial::Polynomial;
-use crate::shared_math::traits::CyclicGroupGenerator;
-use crate::shared_math::traits::FiniteField;
-use crate::shared_math::traits::FromVecu8;
-use crate::shared_math::traits::Inverse;
-use crate::shared_math::traits::ModPowU32;
-use crate::shared_math::traits::ModPowU64;
-use crate::shared_math::traits::New;
-use crate::shared_math::traits::PrimitiveRootOfUnity;
-use crate::util_types::emojihash_trait::Emojihash;
+use crate::math::b_field_element::BFieldElement;
+use crate::math::b_field_element::BFIELD_ZERO;
+use crate::math::polynomial::Polynomial;
+use crate::math::traits::CyclicGroupGenerator;
+use crate::math::traits::FiniteField;
+use crate::math::traits::Inverse;
+use crate::math::traits::ModPowU32;
+use crate::math::traits::ModPowU64;
+use crate::math::traits::PrimitiveRootOfUnity;
 
 use super::digest::Digest;
 
@@ -293,12 +290,6 @@ impl XFieldElement {
     }
 }
 
-impl Emojihash for XFieldElement {
-    fn emojihash(&self) -> String {
-        self.coefficients.emojihash()
-    }
-}
-
 impl Inverse for XFieldElement {
     #[must_use]
     fn inverse(&self) -> Self {
@@ -357,21 +348,6 @@ impl Display for XFieldElement {
     }
 }
 
-impl FromVecu8 for XFieldElement {
-    fn from_vecu8(bytes: Vec<u8>) -> Self {
-        // TODO: See note in BFieldElement's From<Vec<u8>>.
-        let bytesize = std::mem::size_of::<u64>();
-        let (first_eight_bytes, rest) = bytes.as_slice().split_at(bytesize);
-        let (second_eight_bytes, rest2) = rest.split_at(bytesize);
-        let (third_eight_bytes, _rest3) = rest2.split_at(bytesize);
-
-        let coefficient0 = BFieldElement::from_vecu8(first_eight_bytes.to_vec());
-        let coefficient1 = BFieldElement::from_vecu8(second_eight_bytes.to_vec());
-        let coefficient2 = BFieldElement::from_vecu8(third_eight_bytes.to_vec());
-        XFieldElement::new([coefficient0, coefficient1, coefficient2])
-    }
-}
-
 impl Zero for XFieldElement {
     fn zero() -> Self {
         let coefficients = [BFieldElement::zero(); EXTENSION_DEGREE];
@@ -397,14 +373,6 @@ impl One for XFieldElement {
 }
 
 impl FiniteField for XFieldElement {}
-
-// TODO: Replace this with a From<usize> trait
-// This trait is used by INTT
-impl New for XFieldElement {
-    fn new_from_usize(&self, value: usize) -> Self {
-        Self::new_const(BFieldElement::new(value as u64))
-    }
-}
 
 impl Add<XFieldElement> for XFieldElement {
     type Output = Self;
@@ -617,12 +585,11 @@ mod x_field_element_test {
     use test_strategy::proptest;
 
     use crate::bfe;
-    use crate::shared_math::b_field_element::*;
-    use crate::shared_math::ntt::intt;
-    use crate::shared_math::ntt::ntt;
-    use crate::shared_math::other::log_2_floor;
-    use crate::shared_math::other::random_elements;
-    use crate::shared_math::x_field_element::*;
+    use crate::math::b_field_element::*;
+    use crate::math::ntt::intt;
+    use crate::math::ntt::ntt;
+    use crate::math::other::random_elements;
+    use crate::math::x_field_element::*;
 
     impl proptest::arbitrary::Arbitrary for XFieldElement {
         type Parameters = ();
@@ -1208,7 +1175,7 @@ mod x_field_element_test {
                 .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
                 .collect();
             let root = XFieldElement::primitive_root_of_unity(root_order).unwrap();
-            let log_2_of_n = log_2_floor(inputs.len() as u128) as u32;
+            let log_2_of_n = inputs.len().ilog2();
             let mut rv = inputs.clone();
             ntt::<XFieldElement>(&mut rv, root.unlift().unwrap(), log_2_of_n);
 
@@ -1232,18 +1199,6 @@ mod x_field_element_test {
     }
 
     #[test]
-    fn uniqueness_of_consecutive_emojis_xfe() {
-        let rand_xs: Vec<XFieldElement> = random_elements(14);
-        let mut prev = XFieldElement::zero().emojihash();
-        for xfe in rand_xs {
-            let curr = xfe.emojihash();
-            println!("{curr}");
-            assert_ne!(curr, prev);
-            prev = curr
-        }
-    }
-
-    #[test]
     fn inverse_or_zero_xfe() {
         let zero = XFieldElement::zero();
         assert_eq!(zero, zero.inverse_or_zero());
@@ -1258,50 +1213,11 @@ mod x_field_element_test {
         }
     }
 
-    fn emojihash_equivalence_prop(elem: XFieldElement) {
-        let expected = elem.emojihash();
-
-        let array: [BFieldElement; EXTENSION_DEGREE] = elem.coefficients;
-        assert_eq!(expected, array.emojihash());
-
-        let array_slice: &[BFieldElement] = array.as_ref();
-        assert_eq!(expected, array_slice.emojihash());
-
-        let vector: Vec<BFieldElement> = elem.coefficients.to_vec();
-        assert_eq!(expected, vector.emojihash());
-
-        let vector_slice: &[BFieldElement] = vector.as_ref();
-        assert_eq!(expected, vector_slice.emojihash());
-
-        let vector_ref: &Vec<BFieldElement> = vector.as_ref();
-        assert_eq!(expected, vector_ref.emojihash());
-    }
-
-    #[test]
-    fn emojihash_test() {
-        emojihash_equivalence_prop(XFieldElement::zero());
-
-        let mut rng = rand::thread_rng();
-        emojihash_equivalence_prop(rng.gen());
-
-        let bfes: Vec<BFieldElement> = random_elements(9);
-        let xfes: Vec<XFieldElement> = vec![
-            XFieldElement::new([bfes[0], bfes[1], bfes[2]]),
-            XFieldElement::new([bfes[3], bfes[4], bfes[5]]),
-            XFieldElement::new([bfes[6], bfes[7], bfes[8]]),
-        ];
-
-        assert_eq!(
-            bfes.emojihash().replace(['[', ']', '|'], ""),
-            xfes.emojihash().replace(['[', ']', '|'], ""),
-        );
-    }
-
     #[test]
     #[should_panic(expected = "Cannot invert the zero element in the extension field.")]
     fn multiplicative_inverse_of_zero() {
         let zero = XFieldElement::zero();
-        zero.inverse();
+        let _ = zero.inverse();
     }
 
     #[test]

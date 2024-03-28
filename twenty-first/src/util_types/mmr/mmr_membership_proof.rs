@@ -8,9 +8,8 @@ use std::marker::PhantomData;
 use std::{fmt::Debug, iter::FromIterator};
 
 use super::{shared_advanced, shared_basic};
-use crate::shared_math::bfield_codec::BFieldCodec;
-use crate::shared_math::digest::Digest;
-use crate::shared_math::other::log_2_floor;
+use crate::math::bfield_codec::BFieldCodec;
+use crate::math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[derive(Debug, Clone, Serialize, Deserialize, GetSize, BFieldCodec, Arbitrary)]
@@ -55,7 +54,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
         // Verify that authentication path has correct length to fail gracefully when fed
         // a too short authentication path.
-        if log_2_floor(mt_index as u128) != self.authentication_path.len() as u64 {
+        if mt_index.ilog2() as u64 != self.authentication_path.len() as u64 {
             return (false, None);
         }
 
@@ -580,11 +579,11 @@ mod mmr_membership_proof_test {
     use itertools::Itertools;
     use rand::{random, thread_rng, Rng, RngCore};
 
+    use crate::math::b_field_element::BFieldElement;
+    use crate::math::digest::Digest;
+    use crate::math::other::random_elements;
+    use crate::math::tip5::Tip5;
     use crate::mock::mmr::{get_mock_ammr_from_digests, MockMmr};
-    use crate::shared_math::b_field_element::BFieldElement;
-    use crate::shared_math::digest::Digest;
-    use crate::shared_math::other::random_elements;
-    use crate::shared_math::tip5::Tip5;
     use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
     use crate::util_types::mmr::mmr_trait::Mmr;
@@ -593,7 +592,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn equality_and_hash_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
         let mut rng = rand::thread_rng();
         let some_digest: Digest = rng.gen();
         let other_digest: Digest = rng.gen();
@@ -635,7 +634,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn get_node_indices_simple_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf_hashes: Vec<Digest> = random_elements(8);
         let archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes);
@@ -650,7 +649,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn get_peak_index_simple_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let mut mmr_size = 7;
         let leaf_digests: Vec<Digest> = random_elements(mmr_size);
@@ -713,7 +712,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_batch_membership_proofs_from_leaf_mutations_new_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let total_leaf_count = 8;
         let leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
@@ -751,7 +750,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn batch_update_from_batch_leaf_mutation_total_replacement_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let total_leaf_count = 268;
         let leaf_hashes_init: Vec<Digest> = random_elements(total_leaf_count);
@@ -795,7 +794,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn batch_update_from_batch_leaf_mutation_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let total_leaf_count = 34;
         let mut leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
@@ -874,7 +873,7 @@ mod mmr_membership_proof_test {
         // even though the mutations affect the membership proofs. The reason it is empty is that
         // the resulting membership proof digests are unchanged, since the leaf hashes mutations
         // are the identity operators. In other words: the leafs don't change.
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let total_leaf_count = 8;
         let (leaf_hashes, mut membership_proofs) =
@@ -931,7 +930,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_batch_membership_proofs_from_batch_leaf_mutations_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let total_leaf_count = 8;
         let leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
@@ -973,7 +972,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_membership_proof_from_leaf_mutation_test() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf_hashes: Vec<Digest> = random_elements(8);
         let new_leaf: Digest = H::hash(&133337u64);
@@ -1087,8 +1086,8 @@ mod mmr_membership_proof_test {
     }
 
     #[test]
-    fn update_membership_proof_from_leaf_mutation_blake3_big_test() {
-        type H = blake3::Hasher;
+    fn update_membership_proof_from_leaf_mutation_big_test() {
+        type H = Tip5;
 
         // Build MMR from leaf count 0 to 22, and loop through *each*
         // leaf index for MMR, modifying its membership proof with a
@@ -1151,7 +1150,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_membership_proof_from_append_simple_with_bit_mmra() {
-        type H = blake3::Hasher;
+        type H = Tip5;
         let original_leaf_count = (1 << 35) + (1 << 7) - 1;
 
         let specified_count = 40;
@@ -1193,7 +1192,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_membership_proof_from_append_simple() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         let leaf_count = 7;
         let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
@@ -1245,7 +1244,7 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn update_membership_proof_from_append_big_tests() {
-        type H = blake3::Hasher;
+        type H = Tip5;
 
         for leaf_count in 0..68u64 {
             // 1. Build a MockMmr with a variable amount of leaves

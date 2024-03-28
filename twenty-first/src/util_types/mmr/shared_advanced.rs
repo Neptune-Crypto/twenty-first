@@ -1,5 +1,4 @@
 use super::shared_basic::*;
-use crate::shared_math::other::{indices_of_set_bits, log_2_floor};
 
 /// Get (index, height) of leftmost ancestor
 /// This ancestor does *not* have to be in the MMR
@@ -82,8 +81,7 @@ pub fn right_sibling(node_index: u64, height: u32) -> u64 {
 }
 
 pub fn get_height_from_leaf_index(leaf_index: u64) -> u32 {
-    // This should be a safe cast as 2^(u32::MAX) is a *very* big number
-    log_2_floor(leaf_index as u128 + 1) as u32
+    (leaf_index + 1).ilog2()
 }
 
 /// The number of nodes in an MMR with `leaf_count` leaves.
@@ -144,11 +142,35 @@ pub fn get_authentication_path_node_indices(
     }
 }
 
-/// Return a list of the peak heights for a given leaf count
+/// Return a list of the peak heights for a given leaf count.
+///
+/// # Examples
+///
+/// ```
+/// # use twenty_first::util_types::mmr::shared_advanced::get_peak_heights;
+/// assert_eq!(get_peak_heights(0b1010), vec![3, 1]);
+/// assert_eq!(get_peak_heights(0b1011), vec![3, 1, 0]);
+/// ```
 pub fn get_peak_heights(leaf_count: u64) -> Vec<u8> {
-    // The peak heights in an MMR can be read directly from the bit-decomposition
-    // of the leaf count.
-    indices_of_set_bits(leaf_count)
+    // In an MMR, the peak heights directly correspond the leaf count's bit decomposition. That is,
+    // the indices of the bits that are set in the binary representation of the leaf count are the
+    // peaks' heights.
+    let Some(num_bits_in_leaf_count) = leaf_count.checked_ilog2() else {
+        return vec![];
+    };
+
+    let mut indices_of_set_bits = vec![];
+    for bit_index in 0..=num_bits_in_leaf_count {
+        let bit_mask = 1 << bit_index;
+        let is_set_bit_in_leaf_count = bit_mask & leaf_count != 0;
+        if is_set_bit_in_leaf_count {
+            indices_of_set_bits.push(bit_index as u8);
+        }
+    }
+
+    // put highest index first
+    indices_of_set_bits.reverse();
+    indices_of_set_bits
 }
 
 /// Given leaf count, return a vector representing the height of

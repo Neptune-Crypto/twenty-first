@@ -2,11 +2,11 @@ use criterion::measurement::WallTime;
 use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
 };
-use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::ntt::ntt;
-use twenty_first::shared_math::other::random_elements;
-use twenty_first::shared_math::traits::PrimitiveRootOfUnity;
-use twenty_first::shared_math::x_field_element::XFieldElement;
+use twenty_first::math::b_field_element::BFieldElement;
+use twenty_first::math::ntt::ntt;
+use twenty_first::math::other::random_elements;
+use twenty_first::math::traits::PrimitiveRootOfUnity;
+use twenty_first::math::x_field_element::XFieldElement;
 
 fn chu_ntt_forward(c: &mut Criterion) {
     let mut group = c.benchmark_group("chu_ntt_forward");

@@ -14,11 +14,9 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::error::TryFromDigestError;
-use crate::shared_math::b_field_element::BFieldElement;
-use crate::shared_math::b_field_element::BFIELD_ZERO;
-use crate::shared_math::traits::FromVecu8;
+use crate::math::b_field_element::BFieldElement;
+use crate::math::b_field_element::BFIELD_ZERO;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::emojihash_trait::Emojihash;
 
 pub const DIGEST_LENGTH: usize = 5;
 
@@ -68,12 +66,6 @@ impl Digest {
     /// This function is an involutive endomorphism.
     pub const fn reversed(self) -> Digest {
         Digest([self.0[4], self.0[3], self.0[2], self.0[1], self.0[0]])
-    }
-}
-
-impl Emojihash for Digest {
-    fn emojihash(&self) -> String {
-        self.0.emojihash()
     }
 }
 
@@ -153,14 +145,20 @@ impl From<Digest> for [u8; Digest::BYTES] {
 
 impl From<[u8; Digest::BYTES]> for Digest {
     fn from(item: [u8; Digest::BYTES]) -> Self {
-        let mut bfes: [BFieldElement; DIGEST_LENGTH] = [BFieldElement::zero(); DIGEST_LENGTH];
-        for (i, bfe) in bfes.iter_mut().enumerate() {
-            let start_index = i * BFieldElement::BYTES;
-            let end_index = (i + 1) * BFieldElement::BYTES;
-            *bfe = BFieldElement::from_vecu8(item[start_index..end_index].to_vec())
-        }
+        let chunk_into_bfe = |chunk: &[u8]| {
+            let mut arr = [0u8; BFieldElement::BYTES];
+            arr.copy_from_slice(chunk);
+            BFieldElement::from(arr)
+        };
 
-        Self(bfes)
+        let digest_innards = item
+            .chunks_exact(BFieldElement::BYTES)
+            .map(chunk_into_bfe)
+            .collect_vec()
+            .try_into()
+            .unwrap();
+
+        Self(digest_innards)
     }
 }
 
@@ -410,5 +408,12 @@ pub(crate) mod digest_tests {
         let err = Digest::try_from(two_pow_384).unwrap_err();
 
         assert_eq!(TryFromDigestError::Overflow, err);
+    }
+
+    #[proptest]
+    fn forty_bytes_can_be_converted_to_digest(bytes: [u8; Digest::BYTES]) {
+        let digest = Digest::from(bytes);
+        let bytes_again: [u8; Digest::BYTES] = digest.into();
+        prop_assert_eq!(bytes, bytes_again);
     }
 }

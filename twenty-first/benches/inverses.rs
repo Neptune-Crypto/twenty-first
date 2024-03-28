@@ -1,8 +1,8 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use itertools::Itertools;
-use twenty_first::shared_math::b_field_element::BFieldElement;
-use twenty_first::shared_math::other::random_elements;
-use twenty_first::shared_math::traits::Inverse;
+use twenty_first::math::b_field_element::BFieldElement;
+use twenty_first::math::other::random_elements;
+use twenty_first::math::traits::Inverse;
 
 /// Run with `cargo criterion --bench inverse`
 fn inverse(c: &mut Criterion) {
