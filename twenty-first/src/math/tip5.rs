@@ -1031,4 +1031,15 @@ pub(crate) mod tip5_tests {
             sponge_generated.state.into_iter().join(",")
         );
     }
+
+    #[proptest]
+    fn tip5_trace_starts_with_initial_state_and_is_equivalent_to_permutation(
+        #[strategy(arb())] mut tip5: Tip5,
+    ) {
+        let [first, .., last] = tip5.clone().trace();
+        prop_assert_eq!(first, tip5.state);
+
+        tip5.permutation();
+        prop_assert_eq!(last, tip5.state);
+    }
 }
