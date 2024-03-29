@@ -62,7 +62,7 @@ name = "ntt_forward"
 harness = false
 
 [[bench]]
-name = "lagrange_interpolation"
+name = "interpolation"
 harness = false
 
 [[bench]]
