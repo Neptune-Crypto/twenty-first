@@ -62,6 +62,10 @@ name = "ntt_forward"
 harness = false
 
 [[bench]]
+name = "evaluation"
+harness = false
+
+[[bench]]
 name = "interpolation"
 harness = false
 
