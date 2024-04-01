@@ -356,8 +356,15 @@ where
         }
 
         let mid_point = domain.len() / 2;
-        let left = Self::fast_zerofier_inner(&domain[..mid_point], primitive_root, root_order);
-        let right = Self::fast_zerofier_inner(&domain[mid_point..], primitive_root, root_order);
+        let left_half = &domain[..mid_point];
+        let right_half = &domain[mid_point..];
+        let mut zerofier_halves = [left_half, right_half]
+            .into_par_iter()
+            .map(|half_domain| Self::fast_zerofier_inner(half_domain, primitive_root, root_order))
+            .collect::<Vec<_>>();
+        let right = zerofier_halves.pop().unwrap();
+        let left = zerofier_halves.pop().unwrap();
+
         Self::fast_multiply_inner(&left, &right, primitive_root, root_order)
     }
 
