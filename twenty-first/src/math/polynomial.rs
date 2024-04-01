@@ -17,9 +17,7 @@ use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::One;
 use num_traits::Zero;
-use rayon::prelude::IndexedParallelIterator;
-use rayon::prelude::IntoParallelRefIterator;
-use rayon::prelude::ParallelIterator;
+use rayon::prelude::*;
 
 use crate::math::ntt::intt;
 use crate::math::ntt::ntt;
@@ -349,11 +347,12 @@ where
         primitive_root: BFieldElement,
         root_order: usize,
     ) -> Self {
-        if domain.is_empty() {
-            return Self::one();
-        }
-        if domain.len() == 1 {
-            return Self::new(vec![-domain[0], FF::one()]);
+        if domain.len() <= 1 {
+            return match domain.len() {
+                0 => Self::one(),
+                1 => Self::new(vec![-domain[0], FF::one()]),
+                _ => unreachable!(),
+            };
         }
 
         let mid_point = domain.len() / 2;
@@ -372,35 +371,30 @@ where
     fn fast_evaluate_inner(
         &self,
         domain: &[FF],
-        primitive_root: BFieldElement,
+        root: BFieldElement,
         root_order: usize,
     ) -> Vec<FF> {
-        if domain.is_empty() {
-            return vec![];
+        if domain.len() <= 1 {
+            // More (i.e., somewhat redundant) checks here, fewer on the performance-critical path.
+            return match domain.len() {
+                0 => vec![],
+                1 => vec![self.evaluate(&domain[0])],
+                _ => unreachable!(),
+            };
         }
 
-        if domain.len() == 1 {
-            return vec![self.evaluate(&domain[0])];
-        }
+        let mid_point = domain.len() / 2;
+        let left_half = &domain[..mid_point];
+        let right_half = &domain[mid_point..];
 
-        let half = domain.len() / 2;
-
-        let left_zerofier = Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
-        let right_zerofier = Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
-
-        let mut left = (self.clone() % left_zerofier).fast_evaluate_inner(
-            &domain[..half],
-            primitive_root,
-            root_order,
-        );
-        let mut right = (self.clone() % right_zerofier).fast_evaluate_inner(
-            &domain[half..],
-            primitive_root,
-            root_order,
-        );
-
-        left.append(&mut right);
-        left
+        [left_half, right_half]
+            .into_par_iter()
+            .map(|half_domain| {
+                let zerofier = Self::fast_zerofier_inner(half_domain, root, root_order);
+                (self.clone() % zerofier).fast_evaluate_inner(half_domain, root, root_order)
+            })
+            .flatten()
+            .collect()
     }
 
     /// # Panics
