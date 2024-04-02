@@ -254,55 +254,24 @@ where
     /// O(n^2).
     #[must_use]
     pub fn fast_multiply(&self, other: &Self) -> Self {
-        if self.is_zero() || other.is_zero() {
-            return Self::zero();
+        if self.degree() + other.degree() < 8 {
+            return self.to_owned() * other.to_owned();
         }
+        self.fast_multiply_inner(other)
+    }
 
-        let degree = (self.degree() + other.degree()) as usize;
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn fast_multiply_inner(&self, other: &Self) -> Self {
+        let Ok(degree) = usize::try_from(self.degree() + other.degree()) else {
+            return Self::zero();
+        };
         let order = (degree + 1).next_power_of_two();
         let order_u64 = u64::try_from(order).unwrap();
         let root = BFieldElement::primitive_root_of_unity(order_u64).unwrap();
 
-        Self::fast_multiply_inner(self, other, root, order)
-    }
-
-    // FIXME: lhs -> &self. FIXME: Change root_order: usize into : u32.
-    fn fast_multiply_inner(
-        lhs: &Self,
-        rhs: &Self,
-        primitive_root: BFieldElement,
-        root_order: usize,
-    ) -> Self {
-        debug_assert!(
-            primitive_root.mod_pow_u32(root_order as u32).is_one(),
-            "provided primitive root must have the provided power."
-        );
-        debug_assert!(
-            !primitive_root.mod_pow_u32(root_order as u32 / 2).is_one() || root_order <= 1,
-            "provided primitive root must be primitive in the right power."
-        );
-
-        if lhs.is_zero() || rhs.is_zero() {
-            return Self::zero();
-        }
-
-        let mut root: BFieldElement = primitive_root.to_owned();
-        let mut order = root_order;
-        let lhs_degree = lhs.degree() as usize;
-        let rhs_degree = rhs.degree() as usize;
-        let degree = lhs_degree + rhs_degree;
-
-        if degree < 8 {
-            return lhs.to_owned() * rhs.to_owned();
-        }
-
-        while degree < order / 2 {
-            root *= root;
-            order /= 2;
-        }
-
-        let mut lhs_coefficients = lhs.coefficients.to_vec();
-        let mut rhs_coefficients = rhs.coefficients.to_vec();
+        let mut lhs_coefficients = self.coefficients.to_vec();
+        let mut rhs_coefficients = other.coefficients.to_vec();
 
         lhs_coefficients.resize(order, FF::zero());
         rhs_coefficients.resize(order, FF::zero());
@@ -326,36 +295,34 @@ where
 
     /// Compute the lowest degree polynomial with the provided roots.
     pub fn zerofier(roots: &[FF]) -> Self {
-        if roots.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
-            return Self::naive_zerofier(roots);
-        }
-        Self::fast_zerofier(roots)
+        let roots = roots.iter().copied().unique().collect::<Vec<_>>();
+        Self::zerofier_inner(&roots)
     }
 
+    /// Does not perform de-duplication of the passed in roots.
+    fn zerofier_inner(roots: &[FF]) -> Self {
+        if roots.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
+            Self::naive_zerofier(roots)
+        } else {
+            Self::fast_zerofier(roots)
+        }
+    }
+
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
-    pub fn fast_zerofier(domain: &[FF]) -> Self {
-        let dedup_domain = domain.iter().copied().unique().collect::<Vec<_>>();
-        let root_order = (dedup_domain.len() + 1).next_power_of_two();
-        let primitive_root = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-        Self::fast_zerofier_inner(&dedup_domain, primitive_root, root_order)
-    }
-
-    fn fast_zerofier_inner(roots: &[FF], primitive_root: BFieldElement, root_order: usize) -> Self {
-        if roots.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
-            return Self::naive_zerofier(roots);
-        }
-
+    pub fn fast_zerofier(roots: &[FF]) -> Self {
+        debug_assert!(roots.iter().all_unique());
         let mid_point = roots.len() / 2;
         let left_half = &roots[..mid_point];
         let right_half = &roots[mid_point..];
         let mut zerofier_halves = [left_half, right_half]
             .into_par_iter()
-            .map(|half_domain| Self::zerofier(half_domain))
+            .map(|half_domain| Self::zerofier_inner(half_domain))
             .collect::<Vec<_>>();
         let right = zerofier_halves.pop().unwrap();
         let left = zerofier_halves.pop().unwrap();
 
-        Self::fast_multiply_inner(&left, &right, primitive_root, root_order)
+        Self::fast_multiply(&left, &right)
     }
 
     pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
@@ -420,8 +387,8 @@ where
 
         let half = domain.len() / 2;
 
-        let left_zerofier = Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
-        let right_zerofier = Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
+        let left_zerofier = Self::zerofier(&domain[..half]);
+        let right_zerofier = Self::zerofier(&domain[half..]);
 
         let left_offset: Vec<FF> = Self::fast_evaluate(&right_zerofier, &domain[..half]);
         let right_offset: Vec<FF> = Self::fast_evaluate(&left_zerofier, &domain[half..]);
@@ -452,18 +419,8 @@ where
             root_order,
         );
 
-        let left_term = Self::fast_multiply_inner(
-            &left_interpolant,
-            &right_zerofier,
-            primitive_root,
-            root_order,
-        );
-        let right_term = Self::fast_multiply_inner(
-            &right_interpolant,
-            &left_zerofier,
-            primitive_root,
-            root_order,
-        );
+        let left_term = Self::fast_multiply(&left_interpolant, &right_zerofier);
+        let right_term = Self::fast_multiply(&right_interpolant, &left_zerofier);
         left_term + right_term
     }
 
@@ -492,8 +449,6 @@ where
         Self::batch_fast_interpolate_with_memoization(
             domain,
             values_matrix,
-            primitive_root,
-            root_order,
             &mut zerofier_dictionary,
             &mut offset_inverse_dictionary,
         )
@@ -502,8 +457,6 @@ where
     fn batch_fast_interpolate_with_memoization(
         domain: &[FF],
         values_matrix: &Vec<Vec<FF>>,
-        primitive_root: BFieldElement,
-        root_order: usize,
         zerofier_dictionary: &mut HashMap<(FF, FF), Polynomial<FF>>,
         offset_inverse_dictionary: &mut HashMap<(FF, FF), Vec<FF>>,
     ) -> Vec<Self> {
@@ -524,8 +477,7 @@ where
         let left_zerofier = match zerofier_dictionary.get(&left_key) {
             Some(z) => z.to_owned(),
             None => {
-                let left_zerofier =
-                    Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
+                let left_zerofier = Self::zerofier(&domain[..half]);
                 zerofier_dictionary.insert(left_key, left_zerofier.clone());
                 left_zerofier
             }
@@ -534,8 +486,7 @@ where
         let right_zerofier = match zerofier_dictionary.get(&right_key) {
             Some(z) => z.to_owned(),
             None => {
-                let right_zerofier =
-                    Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
+                let right_zerofier = Self::zerofier(&domain[half..]);
                 zerofier_dictionary.insert(right_key, right_zerofier.clone());
                 right_zerofier
             }
@@ -586,16 +537,12 @@ where
         let left_interpolants = Self::batch_fast_interpolate_with_memoization(
             &domain[..half],
             &all_left_targets,
-            primitive_root,
-            root_order,
             zerofier_dictionary,
             offset_inverse_dictionary,
         );
         let right_interpolants = Self::batch_fast_interpolate_with_memoization(
             &domain[half..],
             &all_right_targets,
-            primitive_root,
-            root_order,
             zerofier_dictionary,
             offset_inverse_dictionary,
         );
@@ -605,18 +552,8 @@ where
             .par_iter()
             .zip(right_interpolants.par_iter())
             .map(|(left_interpolant, right_interpolant)| {
-                let left_term = Self::fast_multiply_inner(
-                    left_interpolant,
-                    &right_zerofier,
-                    primitive_root,
-                    root_order,
-                );
-                let right_term = Self::fast_multiply_inner(
-                    right_interpolant,
-                    &left_zerofier,
-                    primitive_root,
-                    root_order,
-                );
+                let left_term = Self::fast_multiply(left_interpolant, &right_zerofier);
+                let right_term = Self::fast_multiply(right_interpolant, &left_zerofier);
 
                 left_term + right_term
             })
@@ -962,11 +899,12 @@ impl<FF: FiniteField> Polynomial<FF> {
         p2_y_times_dx / dx
     }
 
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
     pub fn naive_zerofier(domain: &[FF]) -> Self {
+        debug_assert!(domain.iter().all_unique());
         domain
             .iter()
-            .unique()
             .map(|&r| Self::new(vec![-r, FF::one()]))
             .reduce(|accumulator, linear_poly| accumulator * linear_poly)
             .unwrap_or_else(Self::one)
@@ -1842,19 +1780,23 @@ mod test_polynomials {
 
     #[proptest(cases = 50)]
     fn naive_zerofier_and_fast_zerofier_are_identical(
-        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
+        #[any(size_range(..Polynomial::<BFieldElement>::CUTOFF_POINT_FOR_FAST_ZEROFIER * 2).lift())]
+        #[filter(#roots.iter().all_unique())]
+        roots: Vec<BFieldElement>,
     ) {
-        let zerofier = Polynomial::naive_zerofier(&domain);
-        let fast_zerofier = Polynomial::fast_zerofier(&domain);
-        prop_assert_eq!(zerofier, fast_zerofier);
+        let naive_zerofier = Polynomial::naive_zerofier(&roots);
+        let fast_zerofier = Polynomial::fast_zerofier(&roots);
+        prop_assert_eq!(naive_zerofier, fast_zerofier);
     }
 
     #[proptest(cases = 50)]
     fn zerofier_and_naive_zerofier_are_identical(
-        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
+        #[any(size_range(..Polynomial::<BFieldElement>::CUTOFF_POINT_FOR_FAST_ZEROFIER * 2).lift())]
+        #[filter(#roots.iter().all_unique())]
+        roots: Vec<BFieldElement>,
     ) {
-        let zerofier = Polynomial::zerofier(&domain);
-        let naive_zerofier = Polynomial::naive_zerofier(&domain);
+        let zerofier = Polynomial::zerofier(&roots);
+        let naive_zerofier = Polynomial::naive_zerofier(&roots);
         prop_assert_eq!(zerofier, naive_zerofier);
     }
 
