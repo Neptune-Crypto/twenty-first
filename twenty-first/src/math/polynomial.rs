@@ -119,6 +119,12 @@ impl<FF> Polynomial<FF>
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
+    /// [Fast multiplication](Self::fast_multiply) is slower than [naïve multiplication](Self::mul)
+    /// for polynomials of degree less than this threshold.
+    ///
+    /// Extracted from `cargo bench --bench poly_mul` on mjolnir.
+    const FAST_MULTIPLY_CUTOFF_THRESHOLD: isize = 1 << 8;
+
     /// Fast division ([`Self::fast_divide`] and [`Self::fast_coset_divide`]) is slower for
     /// polynomials of degree less than this threshold.
     /// todo: Benchmark and find the optimal value.
@@ -254,7 +260,7 @@ where
     /// O(n^2).
     #[must_use]
     pub fn fast_multiply(&self, other: &Self) -> Self {
-        if self.degree() + other.degree() < 8 {
+        if self.degree() + other.degree() < Self::FAST_MULTIPLY_CUTOFF_THRESHOLD {
             return self.to_owned() * other.to_owned();
         }
         self.fast_multiply_inner(other)

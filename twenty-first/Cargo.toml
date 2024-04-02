@@ -70,6 +70,10 @@ name = "interpolation"
 harness = false
 
 [[bench]]
+name = "poly_mul"
+harness = false
+
+[[bench]]
 name = "inverses"
 harness = false
 
