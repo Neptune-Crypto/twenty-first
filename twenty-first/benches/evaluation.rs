@@ -32,5 +32,8 @@ fn evaluation<const SIZE: usize>(c: &mut Criterion) {
     let id = BenchmarkId::new("Fast", log2_of_size);
     group.bench_function(id, |b| b.iter(|| poly.fast_evaluate(&eval_points)));
 
+    let id = BenchmarkId::new("Faster of the two", log2_of_size);
+    group.bench_function(id, |b| b.iter(|| poly.batch_evaluate(&eval_points)));
+
     group.finish();
 }

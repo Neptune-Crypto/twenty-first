@@ -148,6 +148,12 @@ where
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
     const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 9;
 
+    /// [Fast evaluation](Self::fast_evaluate) is slower than evaluating every point in parallel
+    /// below this threshold.
+    ///
+    /// Extracted from `cargo bench --bench evaluation` on mjolnir.
+    const FAST_EVALUATE_CUTOFF_THRESHOLD: usize = 1 << 14;
+
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
     /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then corresponds to
@@ -626,16 +632,17 @@ where
         interpolants
     }
 
-    pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        if domain.len() <= 1 {
-            // More (i.e., somewhat redundant) checks here, fewer on the performance-critical path.
-            return match domain.len() {
-                0 => vec![],
-                1 => vec![self.evaluate(&domain[0])],
-                _ => unreachable!(),
-            };
+    pub fn batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        if domain.len() <= Self::FAST_EVALUATE_CUTOFF_THRESHOLD {
+            domain.par_iter().map(|p| self.evaluate(p)).collect()
+        } else {
+            self.fast_evaluate(domain)
         }
+    }
 
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         let mid_point = domain.len() / 2;
         let left_half = &domain[..mid_point];
         let right_half = &domain[mid_point..];
@@ -644,7 +651,7 @@ where
             .into_par_iter()
             .map(|half_domain| {
                 let zerofier = Self::zerofier(half_domain);
-                (self.clone() % zerofier).fast_evaluate(half_domain)
+                (self.clone() % zerofier).batch_evaluate(half_domain)
             })
             .flatten()
             .collect()
