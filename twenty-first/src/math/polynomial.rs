@@ -127,8 +127,15 @@ where
 
     /// Fast division ([`Self::fast_divide`] and [`Self::fast_coset_divide`]) is slower for
     /// polynomials of degree less than this threshold.
+    ///
     /// todo: Benchmark and find the optimal value.
     const FAST_DIVIDE_CUTOFF_THRESHOLD: isize = 8;
+
+    /// Computing the [fast zerofier](Self::fast_zerofier) is slower than computing the
+    /// [naïve zerofier](Self::naive_zerofier) for domain sizes smaller than this threshold.
+    ///
+    /// Extracted from `cargo bench --bench zerofier` on mjolnir.
+    const FAST_ZEROFIER_CUTOFF_THRESHOLD: usize = 200;
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
@@ -296,9 +303,6 @@ where
         Self::new(hadamard_product)
     }
 
-    /// Extracted from `cargo bench --bench zerofier` on mjolnir.
-    const CUTOFF_POINT_FOR_FAST_ZEROFIER: usize = 200;
-
     /// Compute the lowest degree polynomial with the provided roots.
     pub fn zerofier(roots: &[FF]) -> Self {
         let roots = roots.iter().copied().unique().collect::<Vec<_>>();
@@ -307,7 +311,7 @@ where
 
     /// Does not perform de-duplication of the passed in roots.
     fn zerofier_inner(roots: &[FF]) -> Self {
-        if roots.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
+        if roots.len() < Self::FAST_ZEROFIER_CUTOFF_THRESHOLD {
             Self::naive_zerofier(roots)
         } else {
             Self::fast_zerofier(roots)
@@ -1786,7 +1790,7 @@ mod test_polynomials {
 
     #[proptest(cases = 50)]
     fn naive_zerofier_and_fast_zerofier_are_identical(
-        #[any(size_range(..Polynomial::<BFieldElement>::CUTOFF_POINT_FOR_FAST_ZEROFIER * 2).lift())]
+        #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
         #[filter(#roots.iter().all_unique())]
         roots: Vec<BFieldElement>,
     ) {
@@ -1797,7 +1801,7 @@ mod test_polynomials {
 
     #[proptest(cases = 50)]
     fn zerofier_and_naive_zerofier_are_identical(
-        #[any(size_range(..Polynomial::<BFieldElement>::CUTOFF_POINT_FOR_FAST_ZEROFIER * 2).lift())]
+        #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
         #[filter(#roots.iter().all_unique())]
         roots: Vec<BFieldElement>,
     ) {

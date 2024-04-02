@@ -1,53 +1,43 @@
 use criterion::criterion_group;
 use criterion::criterion_main;
-use criterion::BatchSize;
+use criterion::BenchmarkId;
 use criterion::Criterion;
-use rand::thread_rng;
-use rand::Rng;
+use itertools::Itertools;
+
 use twenty_first::math::b_field_element::BFieldElement;
+use twenty_first::math::other::random_elements;
 use twenty_first::math::polynomial::Polynomial;
 
 criterion_main!(benches);
 criterion_group!(
-    benches,
-    naive_zerofier<0>,
-    naive_zerofier<10>,
-    naive_zerofier<100>,
-    naive_zerofier<200>,
-    naive_zerofier<500>,
-    naive_zerofier<700>,
-    naive_zerofier<1_000>,
-    naive_zerofier<10_000>,
-    fast_zerofier<0>,
-    fast_zerofier<10>,
-    fast_zerofier<100>,
-    fast_zerofier<200>,
-    fast_zerofier<500>,
-    fast_zerofier<700>,
-    fast_zerofier<1_000>,
-    fast_zerofier<10_000>,
+    name = benches;
+    config = Criterion::default();
+    targets = zerofier<0>,
+              zerofier<10>,
+              zerofier<100>,
+              zerofier<200>,
+              zerofier<500>,
+              zerofier<700>,
+              zerofier<1_000>,
+              zerofier<10_000>,
 );
 
-fn naive_zerofier<const N: usize>(c: &mut Criterion) {
-    let mut rng = thread_rng();
-    let id = format!("zerofier {N}");
-    c.bench_function(&id, |b| {
-        b.iter_batched(
-            || rng.gen(),
-            |v: [BFieldElement; N]| Polynomial::naive_zerofier(&v),
-            BatchSize::SmallInput,
-        )
-    });
-}
+fn zerofier<const SIZE: usize>(c: &mut Criterion) {
+    let group_name = format!("Various Zerofiers with {SIZE} Roots");
+    let mut group = c.benchmark_group(group_name);
 
-fn fast_zerofier<const N: usize>(c: &mut Criterion) {
-    let mut rng = thread_rng();
-    let id = format!("fast_zerofier {N}");
-    c.bench_function(&id, |b| {
-        b.iter_batched(
-            || rng.gen(),
-            |v: [BFieldElement; N]| Polynomial::fast_zerofier(&v),
-            BatchSize::SmallInput,
-        )
-    });
+    let roots = random_elements::<BFieldElement>(SIZE * 2);
+    let roots = roots.into_iter().unique().take(SIZE).collect_vec();
+    assert_eq!(SIZE, roots.len());
+
+    let id = BenchmarkId::new("Naïve", SIZE);
+    group.bench_function(id, |b| b.iter(|| Polynomial::naive_zerofier(&roots)));
+
+    let id = BenchmarkId::new("Fast", SIZE);
+    group.bench_function(id, |b| b.iter(|| Polynomial::fast_zerofier(&roots)));
+
+    let id = BenchmarkId::new("Faster of the two", SIZE);
+    group.bench_function(id, |b| b.iter(|| Polynomial::zerofier(&roots)));
+
+    group.finish();
 }
