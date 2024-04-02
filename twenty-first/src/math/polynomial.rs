@@ -131,10 +131,15 @@ where
     /// todo: Benchmark and find the optimal value.
     const FAST_DIVIDE_CUTOFF_THRESHOLD: isize = 8;
 
-    /// Computing the [fast zerofier](Self::fast_zerofier) is slower than computing the
-    /// [naïve zerofier](Self::naive_zerofier) for domain sizes smaller than this threshold.
+    /// Computing the [fast zerofier][fast] is slower than computing the [smart zerofier][smart] for
+    /// domain sizes smaller than this threshold. The [naïve zerofier][naive] is always slower to
+    /// compute than the [smart zerofier][smart] for domain sizes smaller than the threshold.
     ///
     /// Extracted from `cargo bench --bench zerofier` on mjolnir.
+    ///
+    /// [naive]: Self::naive_zerofier
+    /// [smart]: Self::smart_zerofier
+    /// [fast]: Self::fast_zerofier
     const FAST_ZEROFIER_CUTOFF_THRESHOLD: usize = 200;
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
@@ -305,14 +310,8 @@ where
 
     /// Compute the lowest degree polynomial with the provided roots.
     pub fn zerofier(roots: &[FF]) -> Self {
-        let roots = roots.iter().copied().unique().collect::<Vec<_>>();
-        Self::zerofier_inner(&roots)
-    }
-
-    /// Does not perform de-duplication of the passed in roots.
-    fn zerofier_inner(roots: &[FF]) -> Self {
         if roots.len() < Self::FAST_ZEROFIER_CUTOFF_THRESHOLD {
-            Self::naive_zerofier(roots)
+            Self::smart_zerofier(roots)
         } else {
             Self::fast_zerofier(roots)
         }
@@ -320,14 +319,29 @@ where
 
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
+    pub fn smart_zerofier(roots: &[FF]) -> Self {
+        let mut zerofier = vec![FF::zero(); roots.len() + 1];
+        zerofier[0] = FF::one();
+        let mut num_coeffs = 1;
+        for &root in roots {
+            for k in (1..=num_coeffs).rev() {
+                zerofier[k] = zerofier[k - 1] - root * zerofier[k];
+            }
+            zerofier[0] = -root * zerofier[0];
+            num_coeffs += 1;
+        }
+        Self::new(zerofier)
+    }
+
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
     pub fn fast_zerofier(roots: &[FF]) -> Self {
-        debug_assert!(roots.iter().all_unique());
         let mid_point = roots.len() / 2;
         let left_half = &roots[..mid_point];
         let right_half = &roots[mid_point..];
         let mut zerofier_halves = [left_half, right_half]
             .into_par_iter()
-            .map(|half_domain| Self::zerofier_inner(half_domain))
+            .map(|half_domain| Self::zerofier(half_domain))
             .collect::<Vec<_>>();
         let right = zerofier_halves.pop().unwrap();
         let left = zerofier_halves.pop().unwrap();
@@ -335,28 +349,71 @@ where
         Self::fast_multiply(&left, &right)
     }
 
-    pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        if domain.len() <= 1 {
-            // More (i.e., somewhat redundant) checks here, fewer on the performance-critical path.
-            return match domain.len() {
-                0 => vec![],
-                1 => vec![self.evaluate(&domain[0])],
-                _ => unreachable!(),
-            };
+    /// Any fast interpolation will use NTT, so this is mainly used for testing/integrity
+    /// purposes. This also means that it is not pivotal that this function has an optimal
+    /// runtime.
+    #[doc(hidden)]
+    pub fn lagrange_interpolate_zipped(points: &[(FF, FF)]) -> Self {
+        if points.is_empty() {
+            panic!("Cannot interpolate through zero points.");
+        }
+        if !points.iter().map(|x| x.0).all_unique() {
+            panic!("Repeated x values received. Got: {points:?}");
         }
 
-        let mid_point = domain.len() / 2;
-        let left_half = &domain[..mid_point];
-        let right_half = &domain[mid_point..];
+        let xs: Vec<FF> = points.iter().map(|x| x.0.to_owned()).collect();
+        let ys: Vec<FF> = points.iter().map(|x| x.1.to_owned()).collect();
+        Self::lagrange_interpolate(&xs, &ys)
+    }
 
-        [left_half, right_half]
-            .into_par_iter()
-            .map(|half_domain| {
-                let zerofier = Self::zerofier(half_domain);
-                (self.clone() % zerofier).fast_evaluate(half_domain)
-            })
-            .flatten()
-            .collect()
+    pub fn lagrange_interpolate(domain: &[FF], values: &[FF]) -> Self {
+        assert_eq!(
+            domain.len(),
+            values.len(),
+            "The domain and values lists have to be of equal length."
+        );
+        assert!(
+            !domain.is_empty(),
+            "Trying to interpolate through 0 points."
+        );
+
+        let zero = FF::zero();
+        let zerofier = Self::zerofier(domain).coefficients;
+
+        // in each iteration of this loop, we accumulate into the sum
+        // one polynomial that evaluates to some abscis (y-value) in
+        // the given ordinate (domain point), and to zero in all other
+        // ordinates.
+        let mut lagrange_sum_array = vec![zero; domain.len()];
+        let mut summand_array = vec![zero; domain.len()];
+        for (i, &abscis) in values.iter().enumerate() {
+            // divide (X - domain[i]) out of zerofier to get unweighted summand
+            let mut leading_coefficient = zerofier[domain.len()];
+            let mut supporting_coefficient = zerofier[domain.len() - 1];
+            for k in (0..domain.len()).rev() {
+                summand_array[k] = leading_coefficient;
+                leading_coefficient = supporting_coefficient + leading_coefficient * domain[i];
+                if k != 0 {
+                    supporting_coefficient = zerofier[k - 1];
+                }
+            }
+
+            // summand does not necessarily evaluate to 1 in domain[i],
+            // so we need to correct for this value
+            let mut summand_eval = zero;
+            for s in summand_array.iter().rev() {
+                summand_eval = summand_eval * domain[i] + *s;
+            }
+            let corrected_abscis = abscis / summand_eval;
+
+            // accumulate term
+            for j in 0..domain.len() {
+                lagrange_sum_array[j] += corrected_abscis * summand_array[j];
+            }
+        }
+        Polynomial {
+            coefficients: lagrange_sum_array,
+        }
     }
 
     /// # Panics
@@ -570,6 +627,30 @@ where
             .collect();
 
         interpolants
+    }
+
+    pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        if domain.len() <= 1 {
+            // More (i.e., somewhat redundant) checks here, fewer on the performance-critical path.
+            return match domain.len() {
+                0 => vec![],
+                1 => vec![self.evaluate(&domain[0])],
+                _ => unreachable!(),
+            };
+        }
+
+        let mid_point = domain.len() / 2;
+        let left_half = &domain[..mid_point];
+        let right_half = &domain[mid_point..];
+
+        [left_half, right_half]
+            .into_par_iter()
+            .map(|half_domain| {
+                let zerofier = Self::zerofier(half_domain);
+                (self.clone() % zerofier).fast_evaluate(half_domain)
+            })
+            .flatten()
+            .collect()
     }
 
     /// Fast evaluate on a coset domain, which is the group generated by `generator^i * offset`.
@@ -824,70 +905,6 @@ impl<FF: FiniteField> Polynomial<FF> {
         }
     }
 
-    pub fn lagrange_interpolate(domain: &[FF], values: &[FF]) -> Self {
-        assert_eq!(
-            domain.len(),
-            values.len(),
-            "The domain and values lists have to be of equal length."
-        );
-        assert!(
-            !domain.is_empty(),
-            "Trying to interpolate through 0 points."
-        );
-
-        let zero = FF::zero();
-        let one = FF::one();
-
-        // precompute the coefficient vector of the zerofier,
-        // which is the monic lowest-degree polynomial that evaluates
-        // to zero in all domain points, also prod_i (X - d_i).
-        let mut zerofier_array = vec![zero; domain.len() + 1];
-        zerofier_array[0] = one;
-        let mut num_coeffs = 1;
-        for &d in domain.iter() {
-            for k in (1..num_coeffs + 1).rev() {
-                zerofier_array[k] = zerofier_array[k - 1] - d * zerofier_array[k];
-            }
-            zerofier_array[0] = -d * zerofier_array[0];
-            num_coeffs += 1;
-        }
-
-        // in each iteration of this loop, we accumulate into the sum
-        // one polynomial that evaluates to some abscis (y-value) in
-        // the given ordinate (domain point), and to zero in all other
-        // ordinates.
-        let mut lagrange_sum_array = vec![zero; domain.len()];
-        let mut summand_array = vec![zero; domain.len()];
-        for (i, &abscis) in values.iter().enumerate() {
-            // divide (X - domain[i]) out of zerofier to get unweighted summand
-            let mut leading_coefficient = zerofier_array[domain.len()];
-            let mut supporting_coefficient = zerofier_array[domain.len() - 1];
-            for k in (0..domain.len()).rev() {
-                summand_array[k] = leading_coefficient;
-                leading_coefficient = supporting_coefficient + leading_coefficient * domain[i];
-                if k != 0 {
-                    supporting_coefficient = zerofier_array[k - 1];
-                }
-            }
-
-            // summand does not necessarily evaluate to 1 in domain[i],
-            // so we need to correct for this value
-            let mut summand_eval = zero;
-            for s in summand_array.iter().rev() {
-                summand_eval = summand_eval * domain[i] + *s;
-            }
-            let corrected_abscis = abscis / summand_eval;
-
-            // accumulate term
-            for j in 0..domain.len() {
-                lagrange_sum_array[j] += corrected_abscis * summand_array[j];
-            }
-        }
-        Polynomial {
-            coefficients: lagrange_sum_array,
-        }
-    }
-
     pub fn are_colinear_3(p0: (FF, FF), p1: (FF, FF), p2: (FF, FF)) -> bool {
         if p0.0 == p1.0 || p1.0 == p2.0 || p2.0 == p0.0 {
             return false;
@@ -912,7 +929,6 @@ impl<FF: FiniteField> Polynomial<FF> {
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
     pub fn naive_zerofier(domain: &[FF]) -> Self {
-        debug_assert!(domain.iter().all_unique());
         domain
             .iter()
             .map(|&r| Self::new(vec![-r, FF::one()]))
@@ -990,22 +1006,6 @@ impl<FF: FiniteField> Polynomial<FF> {
         }
 
         true
-    }
-
-    /// Any fast interpolation will use NTT, so this is mainly used for testing/integrity
-    /// purposes. This also means that it is not pivotal that this function has an optimal
-    /// runtime.
-    pub fn lagrange_interpolate_zipped(points: &[(FF, FF)]) -> Self {
-        if points.is_empty() {
-            panic!("Cannot interpolate through zero points.");
-        }
-        if !points.iter().map(|x| x.0).all_unique() {
-            panic!("Repeated x values received. Got: {points:?}");
-        }
-
-        let xs: Vec<FF> = points.iter().map(|x| x.0.to_owned()).collect();
-        let ys: Vec<FF> = points.iter().map(|x| x.1.to_owned()).collect();
-        Self::lagrange_interpolate(&xs, &ys)
     }
 }
 
@@ -1791,7 +1791,6 @@ mod test_polynomials {
     #[proptest(cases = 50)]
     fn naive_zerofier_and_fast_zerofier_are_identical(
         #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
-        #[filter(#roots.iter().all_unique())]
         roots: Vec<BFieldElement>,
     ) {
         let naive_zerofier = Polynomial::naive_zerofier(&roots);
@@ -1800,9 +1799,18 @@ mod test_polynomials {
     }
 
     #[proptest(cases = 50)]
+    fn smart_zerofier_and_fast_zerofier_are_identical(
+        #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
+        roots: Vec<BFieldElement>,
+    ) {
+        let smart_zerofier = Polynomial::smart_zerofier(&roots);
+        let fast_zerofier = Polynomial::fast_zerofier(&roots);
+        prop_assert_eq!(smart_zerofier, fast_zerofier);
+    }
+
+    #[proptest(cases = 50)]
     fn zerofier_and_naive_zerofier_are_identical(
         #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
-        #[filter(#roots.iter().all_unique())]
         roots: Vec<BFieldElement>,
     ) {
         let zerofier = Polynomial::zerofier(&roots);

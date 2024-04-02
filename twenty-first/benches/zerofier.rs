@@ -2,7 +2,6 @@ use criterion::criterion_group;
 use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
-use itertools::Itertools;
 
 use twenty_first::math::b_field_element::BFieldElement;
 use twenty_first::math::other::random_elements;
@@ -23,20 +22,20 @@ criterion_group!(
 );
 
 fn zerofier<const SIZE: usize>(c: &mut Criterion) {
+    let roots = random_elements::<BFieldElement>(SIZE);
     let group_name = format!("Various Zerofiers with {SIZE} Roots");
     let mut group = c.benchmark_group(group_name);
-
-    let roots = random_elements::<BFieldElement>(SIZE * 2);
-    let roots = roots.into_iter().unique().take(SIZE).collect_vec();
-    assert_eq!(SIZE, roots.len());
 
     let id = BenchmarkId::new("Naïve", SIZE);
     group.bench_function(id, |b| b.iter(|| Polynomial::naive_zerofier(&roots)));
 
+    let id = BenchmarkId::new("Smart", SIZE);
+    group.bench_function(id, |b| b.iter(|| Polynomial::smart_zerofier(&roots)));
+
     let id = BenchmarkId::new("Fast", SIZE);
     group.bench_function(id, |b| b.iter(|| Polynomial::fast_zerofier(&roots)));
 
-    let id = BenchmarkId::new("Faster of the two", SIZE);
+    let id = BenchmarkId::new("Fastest of the three", SIZE);
     group.bench_function(id, |b| b.iter(|| Polynomial::zerofier(&roots)));
 
     group.finish();
