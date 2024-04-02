@@ -325,9 +325,6 @@ where
     const CUTOFF_POINT_FOR_FAST_ZEROFIER: usize = 200;
 
     /// Compute the lowest degree polynomial with the provided roots.
-    ///
-    /// Uses the fastest version of zerofier available, depending on the size of the domain.
-    /// Should be preferred over [`Self::fast_zerofier`] and [`Self::naive_zerofier`].
     pub fn zerofier(roots: &[FF]) -> Self {
         if roots.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
             return Self::naive_zerofier(roots);
@@ -335,6 +332,7 @@ where
         Self::fast_zerofier(roots)
     }
 
+    #[doc(hidden)]
     pub fn fast_zerofier(domain: &[FF]) -> Self {
         let dedup_domain = domain.iter().copied().unique().collect::<Vec<_>>();
         let root_order = (dedup_domain.len() + 1).next_power_of_two();
@@ -342,25 +340,17 @@ where
         Self::fast_zerofier_inner(&dedup_domain, primitive_root, root_order)
     }
 
-    fn fast_zerofier_inner(
-        domain: &[FF],
-        primitive_root: BFieldElement,
-        root_order: usize,
-    ) -> Self {
-        if domain.len() <= 1 {
-            return match domain.len() {
-                0 => Self::one(),
-                1 => Self::new(vec![-domain[0], FF::one()]),
-                _ => unreachable!(),
-            };
+    fn fast_zerofier_inner(roots: &[FF], primitive_root: BFieldElement, root_order: usize) -> Self {
+        if roots.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
+            return Self::naive_zerofier(roots);
         }
 
-        let mid_point = domain.len() / 2;
-        let left_half = &domain[..mid_point];
-        let right_half = &domain[mid_point..];
+        let mid_point = roots.len() / 2;
+        let left_half = &roots[..mid_point];
+        let right_half = &roots[mid_point..];
         let mut zerofier_halves = [left_half, right_half]
             .into_par_iter()
-            .map(|half_domain| Self::fast_zerofier_inner(half_domain, primitive_root, root_order))
+            .map(|half_domain| Self::zerofier(half_domain))
             .collect::<Vec<_>>();
         let right = zerofier_halves.pop().unwrap();
         let left = zerofier_halves.pop().unwrap();
@@ -369,18 +359,6 @@ where
     }
 
     pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        let root_order = (domain.len() + 1).next_power_of_two();
-        let root_order_u64 = u64::try_from(root_order).unwrap();
-        let primitive_root = BFieldElement::primitive_root_of_unity(root_order_u64).unwrap();
-        self.fast_evaluate_inner(domain, primitive_root, root_order)
-    }
-
-    fn fast_evaluate_inner(
-        &self,
-        domain: &[FF],
-        root: BFieldElement,
-        root_order: usize,
-    ) -> Vec<FF> {
         if domain.len() <= 1 {
             // More (i.e., somewhat redundant) checks here, fewer on the performance-critical path.
             return match domain.len() {
@@ -397,8 +375,8 @@ where
         [left_half, right_half]
             .into_par_iter()
             .map(|half_domain| {
-                let zerofier = Self::fast_zerofier_inner(half_domain, root, root_order);
-                (self.clone() % zerofier).fast_evaluate_inner(half_domain, root, root_order)
+                let zerofier = Self::zerofier(half_domain);
+                (self.clone() % zerofier).fast_evaluate(half_domain)
             })
             .flatten()
             .collect()
@@ -445,10 +423,8 @@ where
         let left_zerofier = Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
         let right_zerofier = Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
 
-        let left_offset: Vec<FF> =
-            Self::fast_evaluate_inner(&right_zerofier, &domain[..half], primitive_root, root_order);
-        let right_offset: Vec<FF> =
-            Self::fast_evaluate_inner(&left_zerofier, &domain[half..], primitive_root, root_order);
+        let left_offset: Vec<FF> = Self::fast_evaluate(&right_zerofier, &domain[..half]);
+        let right_offset: Vec<FF> = Self::fast_evaluate(&left_zerofier, &domain[half..]);
 
         let left_offset_inverse = FF::batch_inversion(left_offset);
         let right_offset_inverse = FF::batch_inversion(right_offset);
@@ -568,12 +544,7 @@ where
         let left_offset_inverse = match offset_inverse_dictionary.get(&left_key) {
             Some(vector) => vector.to_owned(),
             None => {
-                let left_offset: Vec<FF> = Self::fast_evaluate_inner(
-                    &right_zerofier,
-                    &domain[..half],
-                    primitive_root,
-                    root_order,
-                );
+                let left_offset: Vec<FF> = Self::fast_evaluate(&right_zerofier, &domain[..half]);
                 let left_offset_inverse = FF::batch_inversion(left_offset);
                 offset_inverse_dictionary.insert(left_key, left_offset_inverse.clone());
                 left_offset_inverse
@@ -582,12 +553,7 @@ where
         let right_offset_inverse = match offset_inverse_dictionary.get(&right_key) {
             Some(vector) => vector.to_owned(),
             None => {
-                let right_offset: Vec<FF> = Self::fast_evaluate_inner(
-                    &left_zerofier,
-                    &domain[half..],
-                    primitive_root,
-                    root_order,
-                );
+                let right_offset: Vec<FF> = Self::fast_evaluate(&left_zerofier, &domain[half..]);
                 let right_offset_inverse = FF::batch_inversion(right_offset);
                 offset_inverse_dictionary.insert(right_key, right_offset_inverse.clone());
                 right_offset_inverse
@@ -996,6 +962,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         p2_y_times_dx / dx
     }
 
+    #[doc(hidden)]
     pub fn naive_zerofier(domain: &[FF]) -> Self {
         domain
             .iter()
