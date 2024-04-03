@@ -238,7 +238,7 @@ impl From<XFieldElement> for Polynomial<BFieldElement> {
 
 impl From<Polynomial<BFieldElement>> for XFieldElement {
     fn from(poly: Polynomial<BFieldElement>) -> Self {
-        let (_, rem) = poly.divide(Self::shah_polynomial());
+        let (_, rem) = poly.naive_divide(&Self::shah_polynomial());
         let zero = BFieldElement::zero();
         let mut rem_arr: [BFieldElement; EXTENSION_DEGREE] = [zero; EXTENSION_DEGREE];
 

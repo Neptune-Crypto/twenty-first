@@ -8,6 +8,7 @@ use std::ops::AddAssign;
 use std::ops::Div;
 use std::ops::Mul;
 use std::ops::MulAssign;
+use std::ops::Neg;
 use std::ops::Rem;
 use std::ops::Sub;
 
@@ -125,11 +126,11 @@ where
     /// Extracted from `cargo bench --bench poly_mul` on mjolnir.
     const FAST_MULTIPLY_CUTOFF_THRESHOLD: isize = 1 << 8;
 
-    /// Fast division ([`Self::fast_divide`] and [`Self::fast_coset_divide`]) is slower for
+    /// [Fast division](Self::fast_divide) is slower than [naïve divison](Self::naive_divide) for
     /// polynomials of degree less than this threshold.
     ///
-    /// todo: Benchmark and find the optimal value.
-    const FAST_DIVIDE_CUTOFF_THRESHOLD: isize = 8;
+    /// Extracted from `cargo bench --bench poly_div` on mjolnir.
+    const FAST_DIVIDE_CUTOFF_THRESHOLD: isize = isize::MAX - 1;
 
     /// Computing the [fast zerofier][fast] is slower than computing the [smart zerofier][smart] for
     /// domain sizes smaller than this threshold. The [naïve zerofier][naive] is always slower to
@@ -723,133 +724,76 @@ where
 
     /// Divide `self` by some `divisor`.
     ///
-    /// As the name implies, the advantage of this method over [`divide`](Self::divide) is runtime
-    /// complexity. Concretely, this method has time complexity in O(n·log(n)), whereas
-    /// [`divide`](Self::divide) has time complexity in O(n^2).
+    /// # Panics
     ///
-    /// The disadvantage of this method is its incompleteness. In some very specific cases, the
-    /// division cannot be performed and `panic!`s. More concretely:
-    /// Let `r` be the [root of unity][root_unit] of order `n`, where `n` is the next power of two
-    /// of ([`self.degree()`](Self::degree) `+ 1`).
-    /// If the `divisor` has any root equal to any power of `r`, this method will panic.
+    /// Panics if the `divisor` is zero.
+    pub fn divide(&self, divisor: &Self) -> Self {
+        if self.degree() < Self::FAST_DIVIDE_CUTOFF_THRESHOLD {
+            let (quotient, _) = self.naive_divide(divisor);
+            quotient
+        } else {
+            self.fast_divide(divisor)
+        }
+    }
+
+    /// Polynomial long division with `self` as the dividend, divided by some `divisor`.
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    ///
+    /// As the name implies, the advantage of this method over [`divide`](Self::naive_divide) is
+    /// runtime complexity. Concretely, this method has time complexity in O(n·log(n)), whereas
+    /// [`divide`](Self::naive_divide) has time complexity in O(n^2).
+    #[doc(hidden)]
+    pub fn fast_divide(&self, divisor: &Self) -> Self {
+        // The math for this function: [0]. There are very slight deviations, for example around the
+        // requirement that the divisor is monic.
+        //
+        // [0] https://cs.uwaterloo.ca/~r5olivei/courses/2021-winter-cs487/lecture5-post.pdf
+
+        let Ok(quotient_degree) = usize::try_from(self.degree() - divisor.degree()) else {
+            return Self::zero();
+        };
+
+        let divisor_lc = divisor.leading_coefficient();
+        let divisor_lc_inv = divisor_lc.expect("divisor should be non-zero").inverse();
+
+        // Reverse coefficient vectors to move into formal power series ring over FF, i.e., FF[[x]].
+        // Re-interpret as a polynomial to benefit from the already-implemented multiplication
+        // method, which mechanically work the same in FF[X] and FF[[x]].
+        let reverse = |poly: &Self| Self::new(poly.coefficients.iter().copied().rev().collect());
+        let rev_divisor = reverse(divisor);
+
+        // Newton iteration to invert divisor up to required precision. Why is this the required
+        // precision? Good question.
+        // The initialization of `f` makes up for the divisor not necessarily being monic.
+        let precision = (quotient_degree + 1).next_power_of_two();
+        let num_rounds = precision.ilog2();
+        let mut f = Self::from_constant(divisor_lc_inv);
+        for _ in 0..num_rounds {
+            f = f.scalar_mul(FF::from(2)) - rev_divisor.multiply(&f).multiply(&f);
+        }
+        let rev_divisor_inverse = f;
+
+        let rev_quotient = reverse(self).multiply(&rev_divisor_inverse);
+        reverse(&rev_quotient).truncate(quotient_degree)
+    }
+
+    /// The degree-`k` polynomial with the same `k + 1` leading coefficients as `self`. To be more
+    /// precise: The degree of the result will be the minimum of `k` and [`Self::degree()`]. This
+    /// implies, among other things, that if `self` [is zero](Self::is_zero()), the result will also
+    /// be zero, independent of `k`.
     ///
     /// # Examples
     ///
     /// ```
     /// # use twenty_first::prelude::*;
-    /// let a = Polynomial::<BFieldElement>::from([1, 2, 3]);
-    /// let b = Polynomial::from([42, 53]);
-    /// let c = a.fast_divide(&b);
+    /// let f = Polynomial::new(bfe_vec![0, 1, 2, 3, 4, 5]); // 5x⁵ + 4x⁴ + 3x³ + 2x² + 1x¹ + 0
+    /// let g = f.truncate(3);                               // 5x³ + 4x² + 3x¹ + 2
+    /// assert_eq!(Polynomial::new(bfe_vec![2, 3, 4, 5]), g);
     /// ```
-    ///
-    /// ## Incompleteness
-    ///
-    /// The divisor `(x - 1)` has [root of unity][root_unit] `1` as its root, triggering a panic.
-    ///
-    /// ```should_panic
-    /// # use twenty_first::prelude::*;
-    /// # // surpass `Polynomial::FAST_DIVIDE_CUTOFF_THRESHOLD`
-    /// # const DEGREE: u64 = 8;
-    /// # let roots = (0..DEGREE).map(BFieldElement::new).collect::<Vec<_>>();
-    /// # let dividend = Polynomial::zerofier(&roots);
-    /// let divisor = Polynomial::zerofier(&[bfe!(1)]);
-    /// let quotient = dividend.fast_divide(&divisor); // panic!
-    /// ```
-    ///
-    /// Should speed be of no concern, for example because the degrees of the polynomials involved
-    /// are known to be small, use [`divide`](Self::divide) instead.
-    ///
-    /// ```
-    /// # use twenty_first::prelude::*;
-    /// # // surpass `Polynomial::FAST_DIVIDE_CUTOFF_THRESHOLD`
-    /// # const DEGREE: u64 = 8;
-    /// # let roots = (0..DEGREE).map(BFieldElement::new).collect::<Vec<_>>();
-    /// # let dividend = Polynomial::zerofier(&roots);
-    /// # let divisor = Polynomial::zerofier(&[bfe!(1)]);
-    /// let quotient = dividend / divisor;
-    /// ```
-    ///
-    /// Alternatively, if the roots of the divisor are known or can be anticipated, _and_ are known
-    /// to be problematic, use [`fast_coset_divide`](Self::fast_coset_divide) to perform division in
-    /// a coset.
-    ///
-    /// ```
-    /// # use twenty_first::prelude::*;
-    /// # // surpass `Polynomial::FAST_DIVIDE_CUTOFF_THRESHOLD`
-    /// # const DEGREE: u64 = 8;
-    /// # let roots = (0..DEGREE).map(BFieldElement::new).collect::<Vec<_>>();
-    /// # let dividend = Polynomial::zerofier(&roots);
-    /// # let divisor = Polynomial::zerofier(&[bfe!(1)]);
-    /// let quotient = dividend.fast_coset_divide(&divisor, bfe!(7));
-    /// ```
-    ///
-    /// # Panics
-    ///
-    /// - if the `divisor` is zero
-    /// - if the degree of the `divisor` is greater than the degree of `self`
-    /// - if the `divisor` has a [root of unity][root_unit] as a root, as discussed above
-    ///
-    /// [root_unit]: BFieldElement::primitive_root_of_unity
-    pub fn fast_divide(&self, divisor: &Self) -> Self {
-        self.fast_coset_divide(divisor, FF::one())
-    }
-
-    /// Divide `self` by some `divisor`.
-    /// Generally like [`fast_divide`](Self::fast_divide).
-    ///
-    /// The additional `offset` grants finer control over the coset domain used internally to
-    /// perform the divison. Intimate understanding of [roots of unity][root_unit], cosets, and the
-    /// `divisor`'s shape are required to select an appropriate `offset`. For a discussion, see
-    /// [`fast_divide`](Self::fast_divide).
-    ///
-    /// # Panics
-    ///
-    /// - if the `divisor` is zero
-    /// - if the `offset` is zero
-    /// - if the degree of the `divisor` is greater than the degree of `self`
-    /// - if the offset `divisor` has a [root of unity][root_unit] as a root
-    ///
-    /// [root_unit]: BFieldElement::primitive_root_of_unity
-    pub fn fast_coset_divide(&self, divisor: &Self, offset: FF) -> Self {
-        // Uses the homomorphism of evaluation, i.e., NTT + batch inversion + iNTT.
-
-        assert!(!divisor.is_zero(), "divisor must be non-zero");
-        if self.is_zero() {
-            return Self::zero();
-        }
-
-        assert!(
-            divisor.degree() <= self.degree(),
-            "divisor degree must be at most that of dividend"
-        );
-
-        // See the comment in `fast_coset_evaluate` why this bound is necessary.
-        let order = (self.degree() as usize + 1).next_power_of_two();
-        let order_u64 = u64::try_from(order).unwrap();
-        let root = BFieldElement::primitive_root_of_unity(order_u64).unwrap();
-
-        if self.degree() < Self::FAST_DIVIDE_CUTOFF_THRESHOLD {
-            return self.to_owned() / divisor.to_owned();
-        }
-
-        let mut dividend_coefficients = self.scale(offset).coefficients;
-        let mut divisor_coefficients = divisor.scale(offset).coefficients;
-
-        dividend_coefficients.resize(order, FF::zero());
-        divisor_coefficients.resize(order, FF::zero());
-
-        ntt(&mut dividend_coefficients, root, order.ilog2());
-        ntt(&mut divisor_coefficients, root, order.ilog2());
-
-        let divisor_inverses = FF::batch_inversion(divisor_coefficients);
-        let mut quotient_codeword = dividend_coefficients
-            .into_iter()
-            .zip(divisor_inverses)
-            .map(|(l, r)| l * r)
-            .collect_vec();
-
-        intt(&mut quotient_codeword, root, order.ilog2());
-        Self::new(quotient_codeword).scale(offset.inverse())
+    pub fn truncate(&self, k: usize) -> Self {
+        let coefficients = self.coefficients.iter().copied();
+        let coefficients = coefficients.rev().take(k + 1).rev().collect();
+        Self::new(coefficients)
     }
 }
 
@@ -1065,35 +1009,34 @@ impl<FF: FiniteField> Polynomial<FF> {
         self.coefficients.splice(0..0, vec![zero; power]);
     }
 
-    // Multiply a polynomial with x^power
+    /// Multiply a polynomial with x^power
     #[must_use]
     pub fn shift_coefficients(&self, power: usize) -> Self {
         let zero = FF::zero();
 
         let mut coefficients: Vec<FF> = self.coefficients.clone();
         coefficients.splice(0..0, vec![zero; power]);
-        Polynomial { coefficients }
+        Self { coefficients }
     }
 
     // TODO: Review
+    #[deprecated(since = "0.39.0", note = "use `.scalar_mul()` instead")]
     pub fn scalar_mul_mut(&mut self, scalar: FF) {
-        for coefficient in self.coefficients.iter_mut() {
+        for coefficient in &mut self.coefficients {
             *coefficient *= scalar;
         }
     }
 
     #[must_use]
     pub fn scalar_mul(&self, scalar: FF) -> Self {
-        let mut coefficients: Vec<FF> = vec![];
-        for i in 0..self.coefficients.len() {
-            coefficients.push(self.coefficients[i] * scalar);
-        }
-
-        Self { coefficients }
+        Self::new(self.coefficients.iter().map(|&c| c * scalar).collect())
     }
 
-    /// Return (quotient, remainder)
-    pub fn divide(&self, divisor: Self) -> (Self, Self) {
+    /// Return (quotient, remainder). Prefer [`Self::divide()`].
+    ///
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn naive_divide(&self, divisor: &Self) -> (Self, Self) {
         let degree_lhs = self.degree();
         let degree_rhs = divisor.degree();
         // cannot divide by zero
@@ -1145,11 +1088,9 @@ impl<FF: FiniteField> Polynomial<FF> {
         }
 
         quotient.reverse();
-        let quotient_pol = Self {
-            coefficients: quotient,
-        };
+        let quotient = Self::new(quotient);
 
-        (quotient_pol, remainder)
+        (quotient, remainder)
     }
 }
 
@@ -1157,7 +1098,7 @@ impl<FF: FiniteField> Div for Polynomial<FF> {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
-        let (quotient, _): (Self, Self) = self.divide(other);
+        let (quotient, _): (Self, Self) = self.naive_divide(&other);
         quotient
     }
 }
@@ -1166,7 +1107,7 @@ impl<FF: FiniteField> Rem for Polynomial<FF> {
     type Output = Self;
 
     fn rem(self, other: Self) -> Self {
-        let (_, remainder): (Self, Self) = self.divide(other);
+        let (_, remainder): (Self, Self) = self.naive_divide(&other);
         remainder
     }
 }
@@ -1295,6 +1236,14 @@ impl<FF: FiniteField> Mul for Polynomial<FF> {
 
     fn mul(self, other: Self) -> Self {
         self.naive_multiply(&other)
+    }
+}
+
+impl<FF: FiniteField> Neg for Polynomial<FF> {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        self.scalar_mul(-FF::one())
     }
 }
 
@@ -1754,6 +1703,52 @@ mod test_polynomials {
     }
 
     #[proptest]
+    fn leading_coefficient_of_truncated_polynomial_is_same_as_original_leading_coefficient(
+        poly: Polynomial<BFieldElement>,
+        #[strategy(..50_usize)] truncation_point: usize,
+    ) {
+        let Some(lc) = poly.leading_coefficient() else {
+            let reason = "test is only sensible if polynomial has a leading coefficient";
+            return Err(TestCaseError::Reject(reason.into()));
+        };
+        let truncated_poly = poly.truncate(truncation_point);
+        let Some(trunc_lc) = truncated_poly.leading_coefficient() else {
+            let reason = "test is only sensible if truncated polynomial has a leading coefficient";
+            return Err(TestCaseError::Reject(reason.into()));
+        };
+        prop_assert_eq!(lc, trunc_lc);
+    }
+
+    #[proptest]
+    fn truncated_polynomial_is_of_degree_min_of_truncation_point_and_poly_degree(
+        poly: Polynomial<BFieldElement>,
+        #[strategy(..50_usize)] truncation_point: usize,
+    ) {
+        let expected_degree = poly.degree().min(truncation_point.try_into().unwrap());
+        prop_assert_eq!(expected_degree, poly.truncate(truncation_point).degree());
+    }
+
+    #[proptest]
+    fn truncating_zero_polynomial_gives_zero_polynomial(
+        #[strategy(..50_usize)] truncation_point: usize,
+    ) {
+        let poly = Polynomial::<BFieldElement>::zero().truncate(truncation_point);
+        prop_assert!(poly.is_zero());
+    }
+
+    #[proptest]
+    fn truncation_negates_degree_shifting(
+        #[strategy(0_usize..30)] shift: usize,
+        #[strategy(..50_usize)] truncation_point: usize,
+        #[filter(#poly.degree() >= #truncation_point as isize)] poly: Polynomial<BFieldElement>,
+    ) {
+        prop_assert_eq!(
+            poly.truncate(truncation_point),
+            poly.shift_coefficients(shift).truncate(truncation_point)
+        );
+    }
+
+    #[proptest]
     fn fast_multiplication_by_zero_gives_zero(poly: Polynomial<BFieldElement>) {
         let product = poly.fast_multiply(&Polynomial::zero());
         prop_assert_eq!(Polynomial::zero(), product);
@@ -1976,26 +1971,12 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn fast_coset_division_and_division_are_equivalent(
+    fn naive_division_and_fast_division_are_equivalent(
         a: Polynomial<BFieldElement>,
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
-        #[filter(!#offset.is_zero())] offset: BFieldElement,
     ) {
-        let product = a.clone() * b.clone();
-        let quotient = product.fast_coset_divide(&b, offset);
-        prop_assert_eq!(product / b, quotient);
-    }
-
-    #[proptest]
-    fn fast_coset_division_and_fast_division_are_equivalent(
-        a: Polynomial<BFieldElement>,
-        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
-        #[filter(!#offset.is_zero())] offset: BFieldElement,
-    ) {
-        let product = a.clone() * b.clone();
-        let quotient_0 = product.fast_divide(&b);
-        let quotient_1 = product.fast_coset_divide(&b, offset);
-        prop_assert_eq!(quotient_0, quotient_1);
+        let quotient = a.fast_divide(&b);
+        prop_assert_eq!(a / b, quotient);
     }
 
     #[proptest]
@@ -2015,7 +1996,7 @@ mod test_polynomials {
         #[filter(!#b.is_zero())] b: BFieldElement,
     ) {
         let b_poly = Polynomial::from_constant(b);
-        let (_, remainder) = a.divide(b_poly);
+        let (_, remainder) = a.naive_divide(&b_poly);
         prop_assert_eq!(Polynomial::zero(), remainder);
     }
 
@@ -2025,12 +2006,12 @@ mod test_polynomials {
 
         let shah = XFieldElement::shah_polynomial();
         let x_to_the_3 = polynomial(&[1]).shift_coefficients(3);
-        let (shah_div_x_to_the_3, shah_mod_x_to_the_3) = shah.divide(x_to_the_3);
+        let (shah_div_x_to_the_3, shah_mod_x_to_the_3) = shah.naive_divide(&x_to_the_3);
         assert_eq!(polynomial(&[1]), shah_div_x_to_the_3);
         assert_eq!(polynomial(&[1, BFieldElement::P - 1]), shah_mod_x_to_the_3);
 
         let x_to_the_6 = polynomial(&[1]).shift_coefficients(6);
-        let (x_to_the_6_div_shah, x_to_the_6_mod_shah) = x_to_the_6.divide(shah);
+        let (x_to_the_6_div_shah, x_to_the_6_mod_shah) = x_to_the_6.naive_divide(&shah);
 
         // x^3 + x - 1
         let expected_quot = polynomial(&[BFieldElement::P - 1, 1, 0, 1]);
