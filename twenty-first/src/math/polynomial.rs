@@ -152,7 +152,7 @@ where
     /// below this threshold.
     ///
     /// Extracted from `cargo bench --bench evaluation` on mjolnir.
-    const FAST_EVALUATE_CUTOFF_THRESHOLD: usize = 1 << 14;
+    const FAST_EVALUATE_CUTOFF_THRESHOLD: usize = usize::MAX - 42;
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
@@ -638,6 +638,20 @@ where
         } else {
             self.fast_evaluate(domain)
         }
+    }
+
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn vector_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        let mut accumulators = vec![FF::zero(); domain.len()];
+        for &c in self.coefficients.iter().rev() {
+            accumulators
+                .par_iter_mut()
+                .zip(domain)
+                .for_each(|(acc, &x)| *acc = *acc * x + c);
+        }
+
+        accumulators
     }
 
     /// Only `pub` to allow benchmarking; not considered part of the public API.
