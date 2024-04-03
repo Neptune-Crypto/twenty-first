@@ -988,42 +988,20 @@ impl<FF: FiniteField> Polynomial<FF> {
 impl<FF: FiniteField> Polynomial<FF> {
     pub fn are_colinear(points: &[(FF, FF)]) -> bool {
         if points.len() < 3 {
-            println!("Too few points received. Got: {} points", points.len());
             return false;
         }
 
-        if !points.iter().map(|p| p.0).all_unique() {
-            println!("Non-unique element spotted Got: {points:?}");
+        if !points.iter().map(|(x, _)| x).all_unique() {
             return false;
         }
 
-        // Find 1st degree polynomial from first two points
-        let one: FF = FF::one();
-        let x_diff: FF = points[0].0 - points[1].0;
-        let x_diff_inv = one / x_diff;
-        let a = (points[0].1 - points[1].1) * x_diff_inv;
-        let b = points[0].1 - a * points[0].0;
-        for point in points.iter().skip(2) {
-            let expected = a * point.0 + b;
-            if point.1 != expected {
-                println!(
-                    "L({}) = {}, expected L({}) = {}, Found: L(x) = {}x + {} from {{({},{}),({},{})}}",
-                    point.0,
-                    point.1,
-                    point.0,
-                    expected,
-                    a,
-                    b,
-                    points[0].0,
-                    points[0].1,
-                    points[1].0,
-                    points[1].1
-                );
-                return false;
-            }
-        }
+        // Find 1st degree polynomial through first two points
+        let (p0_x, p0_y) = points[0];
+        let (p1_x, p1_y) = points[1];
+        let a = (p0_y - p1_y) / (p0_x - p1_x);
+        let b = p0_y - a * p0_x;
 
-        true
+        points.iter().skip(2).all(|&(x, y)| a * x + b == y)
     }
 }
 
