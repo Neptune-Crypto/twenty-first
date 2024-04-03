@@ -115,8 +115,18 @@ macro_rules! bfe {
 /// assert_eq!(a, b);
 /// ```
 ///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = bfe_vec![42; 15];
+/// let b = vec![bfe!(42); 15];
+/// assert_eq!(a, b);
+/// ```
+///
 #[macro_export]
 macro_rules! bfe_vec {
+    ($b:expr; $n:expr) => {
+        vec![BFieldElement::from($b); $n]
+    };
     ($($b:expr),* $(,)?) => {
         vec![$(BFieldElement::from($b)),*]
     };
@@ -133,8 +143,19 @@ macro_rules! bfe_vec {
 /// let a = bfe_array![1, 2, 3];
 /// let b = [bfe!(1), bfe!(2), bfe!(3)];
 /// assert_eq!(a, b);
+/// ```
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = bfe_array![42; 15];
+/// let b = [bfe!(42); 15];
+/// assert_eq!(a, b);
+/// ```
 #[macro_export]
 macro_rules! bfe_array {
+    ($b:expr; $n:expr) => {
+        [BFieldElement::from($b); $n]
+    };
     ($($b:expr),* $(,)?) => {
         [$(BFieldElement::from($b)),*]
     };

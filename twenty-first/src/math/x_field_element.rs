@@ -85,8 +85,32 @@ macro_rules! xfe {
 /// let b = vec![xfe!([1, 0, 0]), xfe!([0, 2, 0]), xfe!([0, 0, 3])];
 /// assert_eq!(a, b);
 /// ```
+///
+/// Vector with the same [constant](XFieldElement::new_const) for every entry.
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = xfe_vec![42; 15];
+/// let b = vec![xfe!(42); 15];
+/// assert_eq!(a, b);
+/// ```
+///
+/// Vector with the same general [extension field element](XFieldElement) for every entry.
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = xfe_vec![[42, 43, 44]; 15];
+/// let b = vec![xfe!([42, 43, 44]); 15];
+/// assert_eq!(a, b);
+/// ```
 #[macro_export]
 macro_rules! xfe_vec {
+    ($x:expr; $n:expr) => {
+        vec![XFieldElement::from($x); $n]
+    };
+    ([$c0:expr, $c1:expr, $c2:expr]; $n:expr) => {
+        vec![XFieldElement::from([$c0, $c1, $c2]); $n]
+    };
     ($($x:expr),* $(,)?) => {
         vec![$(XFieldElement::from($x)),*]
     };
@@ -118,8 +142,32 @@ macro_rules! xfe_vec {
 /// let b = [xfe!([1, 0, 0]), xfe!([0, 2, 0]), xfe!([0, 0, 3])];
 /// assert_eq!(a, b);
 /// ```
+///
+/// Array with the same [constant](XFieldElement::new_const) for every entry.
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = xfe_array![42; 15];
+/// let b = [xfe!(42); 15];
+/// assert_eq!(a, b);
+/// ```
+///
+/// Array with the same general [extension field element](XFieldElement) for every entry.
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// let a = xfe_array![[42, 43, 44]; 15];
+/// let b = [xfe!([42, 43, 44]); 15];
+/// assert_eq!(a, b);
+/// ```
 #[macro_export]
 macro_rules! xfe_array {
+    ($x:expr; $n:expr) => {
+        [XFieldElement::from($x); $n]
+    };
+    ([$c0:expr, $c1:expr, $c2:expr]; $n:expr) => {
+        [XFieldElement::from([$c0, $c1, $c2]); $n]
+    };
     ($($x:expr),* $(,)?) => {
         [$(XFieldElement::from($x)),*]
     };
@@ -240,22 +288,16 @@ impl XFieldElement {
     #[inline]
     #[deprecated(since = "0.39.0", note = "use `xfe!` or `from` instead")]
     pub const fn new_u64(coeffs: [u64; EXTENSION_DEGREE]) -> Self {
-        Self {
-            coefficients: [
-                BFieldElement::new(coeffs[0]),
-                BFieldElement::new(coeffs[1]),
-                BFieldElement::new(coeffs[2]),
-            ],
-        }
+        let c0 = BFieldElement::new(coeffs[0]);
+        let c1 = BFieldElement::new(coeffs[1]);
+        let c2 = BFieldElement::new(coeffs[2]);
+        Self::new([c0, c1, c2])
     }
 
     #[inline]
     pub const fn new_const(element: BFieldElement) -> Self {
         let zero = BFieldElement::new(0);
-
-        Self {
-            coefficients: [element, zero, zero],
-        }
+        Self::new([element, zero, zero])
     }
 
     pub fn unlift(&self) -> Option<BFieldElement> {
