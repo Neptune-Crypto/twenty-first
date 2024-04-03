@@ -12,13 +12,9 @@ pub fn log_2_floor(x: u128) -> u64 {
     x.ilog2().into()
 }
 
+#[deprecated(since = "0.39.0", note = "use `.next_power_of_two().ilog2()` instead")]
 pub fn log_2_ceil(x: u128) -> u64 {
-    let log = x.ilog2().into();
-    if x.is_power_of_two() {
-        log
-    } else {
-        log + 1
-    }
+    x.next_power_of_two().ilog2().into()
 }
 
 /// Check if the number is a power of two: { 1,2,4 .. }
@@ -58,7 +54,7 @@ mod test_other {
     use super::*;
 
     #[test]
-    #[allow(deprecated)] // until removal of `log_2_floor`
+    #[allow(deprecated)] // until removal of `log_2_floor` and `log_2_ceil`
     fn log_2_ceil_test() {
         assert_eq!(4, log_2_floor(16));
         assert_eq!(1, log_2_floor(2));

@@ -282,7 +282,6 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
 pub mod util {
     use itertools::Itertools;
 
-    use crate::math::other::log_2_ceil;
     use crate::math::other::random_elements;
     use crate::util_types::mmr::shared_advanced::right_lineage_length_from_node_index;
     use crate::util_types::mmr::shared_basic::leaf_index_to_mt_index_and_peak_index;
@@ -311,7 +310,7 @@ pub mod util {
             leaf_index_to_mt_index_and_peak_index(first_leaf_index, leaf_count);
 
         // Change peaks such that the 1st specification belongs in the MMR
-        let first_mt_height = log_2_ceil(first_mt_index as u128 + 1) - 1;
+        let first_mt_height = (first_mt_index + 1).next_power_of_two().ilog2() - 1;
         let first_ap: Vec<Digest> = random_elements(first_mt_height as usize);
 
         let mut all_leaf_indices = vec![first_mt_index];
@@ -347,7 +346,7 @@ pub mod util {
         for (new_leaf_index, new_leaf) in specified_leafs.into_iter().skip(1) {
             let (new_leaf_mt_index, _new_leaf_peaks_index) =
                 leaf_index_to_mt_index_and_peak_index(new_leaf_index, leaf_count);
-            let height_of_new_mt = log_2_ceil(new_leaf_mt_index as u128 + 1) - 1;
+            let height_of_new_mt = (new_leaf_mt_index + 1).next_power_of_two().ilog2() - 1;
             let mut new_mp = MmrMembershipProof::<H>::new(
                 new_leaf_index,
                 random_elements(height_of_new_mt as usize),
