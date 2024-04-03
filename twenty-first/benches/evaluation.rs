@@ -11,8 +11,10 @@ use twenty_first::prelude::*;
 criterion_main!(benches);
 criterion_group!(
     name = benches;
-    config = Criterion::default().sample_size(10);
-    targets = evaluation<{ 1 << 14 }>,
+    config = Criterion::default();
+    targets = evaluation<{ 1 << 10 }>,
+              evaluation<{ 1 << 12 }>,
+              evaluation<{ 1 << 14 }>,
               evaluation<{ 1 << 15 }>,
               evaluation<{ 1 << 16 }>,
 );
@@ -29,13 +31,13 @@ fn evaluation<const SIZE: usize>(c: &mut Criterion) {
     let par_eval = || -> Vec<_> { eval_points.par_iter().map(|p| poly.evaluate(p)).collect() };
     group.bench_function(id, |b| b.iter(par_eval));
 
-    let id = BenchmarkId::new("Batched parallel", log2_of_size);
-    group.bench_function(id, |b| b.iter(|| poly.vector_batch_evaluate(&eval_points)));
+    // `vector_batch_evaluate` exists, but is super slow. Put it here if you plan to run benchmarks
+    // during a coffee break.
 
     let id = BenchmarkId::new("Fast", log2_of_size);
     group.bench_function(id, |b| b.iter(|| poly.fast_evaluate(&eval_points)));
 
-    let id = BenchmarkId::new("Fastest of the three", log2_of_size);
+    let id = BenchmarkId::new("Faster of the two", log2_of_size);
     group.bench_function(id, |b| b.iter(|| poly.batch_evaluate(&eval_points)));
 
     group.finish();
