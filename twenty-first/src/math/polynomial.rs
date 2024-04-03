@@ -669,7 +669,10 @@ where
             .into_par_iter()
             .map(|half_domain| {
                 let zerofier = Self::zerofier(half_domain);
-                (self.clone() % zerofier).batch_evaluate(half_domain)
+                let (_, zerofier_inverse, _) = Self::xgcd(zerofier.clone(), Self::zero());
+                let quotient = self.multiply(&zerofier_inverse);
+                let remainder = self.clone() - quotient.multiply(&zerofier);
+                remainder.batch_evaluate(half_domain)
             })
             .flatten()
             .collect()
