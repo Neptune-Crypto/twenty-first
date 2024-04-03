@@ -119,7 +119,7 @@ impl<FF> Polynomial<FF>
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    /// [Fast multiplication](Self::fast_multiply) is slower than [naïve multiplication](Self::mul)
+    /// [Fast multiplication](Self::multiply) is slower than [naïve multiplication](Self::mul)
     /// for polynomials of degree less than this threshold.
     ///
     /// Extracted from `cargo bench --bench poly_mul` on mjolnir.
@@ -276,23 +276,27 @@ where
 
     /// Multiply `self` by `other`.
     ///
-    /// This method is asymptotically faster than the naive multiplication method. For small
-    /// instances, _i.e._, polynomials of low degree, it might be slower.
-    ///
-    /// The time complexity of this method is in O(n·log(n)), where `n` is the sum of the degrees
-    /// of the operands. The time complexity of [the naive multiplication](Self::multiply) is in
-    /// O(n^2).
+    /// Prefer this over [`self * other`](Self::mul) since it chooses the fastest multiplication
+    /// strategy.
     #[must_use]
-    pub fn fast_multiply(&self, other: &Self) -> Self {
+    pub fn multiply(&self, other: &Self) -> Self {
         if self.degree() + other.degree() < Self::FAST_MULTIPLY_CUTOFF_THRESHOLD {
-            return self.to_owned() * other.to_owned();
+            self.naive_multiply(other)
+        } else {
+            self.fast_multiply(other)
         }
-        self.fast_multiply_inner(other)
     }
 
-    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    /// Use [Self::multiply] instead. Only `pub` to allow benchmarking; not considered part of the
+    /// public API.
+    ///
+    /// This method is asymptotically faster than [naive multiplication](Self::naive_multiply). For
+    /// small instances, _i.e._, polynomials of low degree, it is slower.
+    ///
+    /// The time complexity of this method is in O(n·log(n)), where `n` is the sum of the degrees
+    /// of the operands. The time complexity of the naive multiplication is in O(n^2).
     #[doc(hidden)]
-    pub fn fast_multiply_inner(&self, other: &Self) -> Self {
+    pub fn fast_multiply(&self, other: &Self) -> Self {
         let Ok(degree) = usize::try_from(self.degree() + other.degree()) else {
             return Self::zero();
         };
@@ -358,7 +362,7 @@ where
         let right = zerofier_halves.pop().unwrap();
         let left = zerofier_halves.pop().unwrap();
 
-        Self::fast_multiply(&left, &right)
+        Self::multiply(&left, &right)
     }
 
     /// Construct the lowest-degree polynomial interpolating the given points.
@@ -489,8 +493,8 @@ where
         let right_targets: Vec<FF> = hadamard_mul(right_values_half, right_offset_inverse);
         let right_interpolant = Self::interpolate(right_domain_half, &right_targets);
 
-        let left_term = left_interpolant.fast_multiply(&right_zerofier);
-        let right_term = right_interpolant.fast_multiply(&left_zerofier);
+        let left_term = left_interpolant.multiply(&right_zerofier);
+        let right_term = right_interpolant.multiply(&left_zerofier);
         left_term + right_term
     }
 
@@ -622,8 +626,8 @@ where
             .par_iter()
             .zip(right_interpolants.par_iter())
             .map(|(left_interpolant, right_interpolant)| {
-                let left_term = Self::fast_multiply(left_interpolant, &right_zerofier);
-                let right_term = Self::fast_multiply(right_interpolant, &left_zerofier);
+                let left_term = left_interpolant.multiply(&right_zerofier);
+                let right_term = right_interpolant.multiply(&left_zerofier);
 
                 left_term + right_term
             })
@@ -1006,36 +1010,27 @@ impl<FF: FiniteField> Polynomial<FF> {
 }
 
 impl<FF: FiniteField> Polynomial<FF> {
-    pub fn multiply(self, other: Self) -> Self {
-        let degree_lhs = self.degree();
-        let degree_rhs = other.degree();
-
-        if degree_lhs < 0 || degree_rhs < 0 {
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn naive_multiply(&self, other: &Self) -> Self {
+        let Ok(degree_lhs) = usize::try_from(self.degree()) else {
             return Self::zero();
-            // return self.zero();
-        }
+        };
+        let Ok(degree_rhs) = usize::try_from(other.degree()) else {
+            return Self::zero();
+        };
 
-        // allocate right number of coefficients, initialized to zero
-        let mut result_coeff: Vec<FF> =
-            //vec![U::zero_from_field(field: U); degree_lhs as usize + degree_rhs as usize + 1];
-            vec![FF::zero(); degree_lhs as usize + degree_rhs as usize + 1];
-
-        // TODO: Review this.
-        // for all pairs of coefficients, add product to result vector in appropriate coordinate
-        for i in 0..=degree_lhs as usize {
-            for j in 0..=degree_rhs as usize {
-                let mul: FF = self.coefficients[i] * other.coefficients[j];
-                result_coeff[i + j] += mul;
+        let mut product = vec![FF::zero(); degree_lhs + degree_rhs + 1];
+        for i in 0..=degree_lhs {
+            for j in 0..=degree_rhs {
+                product[i + j] += self.coefficients[i] * other.coefficients[j];
             }
         }
 
-        // build and return Polynomial object
-        Self {
-            coefficients: result_coeff,
-        }
+        Self::new(product)
     }
 
-    // Multiply a polynomial with itself `pow` times
+    /// Multiply a polynomial with itself `pow` times
     #[must_use]
     pub fn mod_pow(&self, pow: BigInt) -> Self {
         let one = FF::one();
@@ -1296,7 +1291,7 @@ impl<FF: FiniteField> Mul for Polynomial<FF> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        Self::multiply(self, other)
+        self.naive_multiply(&other)
     }
 }
 

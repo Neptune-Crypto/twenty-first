@@ -31,13 +31,13 @@ fn poly_mul<const LOG2_SIZE: usize>(c: &mut Criterion) {
     let poly_1 = new_poly();
 
     let id = BenchmarkId::new("Naïve", product_degree);
-    group.bench_function(id, |b| b.iter(|| poly_0.clone() * poly_1.clone()));
+    group.bench_function(id, |b| b.iter(|| poly_0.naive_multiply(&poly_1)));
 
     let id = BenchmarkId::new("Fast", product_degree);
-    group.bench_function(id, |b| b.iter(|| poly_0.fast_multiply_inner(&poly_1)));
+    group.bench_function(id, |b| b.iter(|| poly_0.fast_multiply(&poly_1)));
 
     let id = BenchmarkId::new("Faster of the two", product_degree);
-    group.bench_function(id, |b| b.iter(|| poly_0.fast_multiply(&poly_1)));
+    group.bench_function(id, |b| b.iter(|| poly_0.multiply(&poly_1)));
 
     group.finish();
 }
