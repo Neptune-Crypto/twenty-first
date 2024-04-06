@@ -2030,6 +2030,16 @@ mod test_polynomials {
     }
 
     #[proptest]
+    fn naive_division_gives_quotient_and_remainder_with_expected_properties(
+        a: Polynomial<BFieldElement>,
+        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
+    ) {
+        let (quot, rem) = a.naive_divide(&b);
+        prop_assert!(rem.degree() < b.degree());
+        prop_assert_eq!(a, quot * b + rem);
+    }
+
+    #[proptest]
     fn naive_division_and_fast_division_are_equivalent(
         a: Polynomial<BFieldElement>,
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
