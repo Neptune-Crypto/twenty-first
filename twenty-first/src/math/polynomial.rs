@@ -884,6 +884,20 @@ impl<FF: FiniteField> Polynomial<FF> {
         acc
     }
 
+    /// The coefficient of the polynomial's term of highest power. `None` if (and only if) `self`
+    /// [is zero](Self::is_zero).
+    ///
+    /// Furthermore, is never `Some(FF::zero())`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// # use num_traits::Zero;
+    /// let f = Polynomial::new(bfe_vec![1, 2, 3]);
+    /// assert_eq!(Some(bfe!(3)), f.leading_coefficient());
+    /// assert_eq!(None, Polynomial::<XFieldElement>::zero().leading_coefficient());
+    /// ```
     pub fn leading_coefficient(&self) -> Option<FF> {
         match self.degree() {
             -1 => None,
