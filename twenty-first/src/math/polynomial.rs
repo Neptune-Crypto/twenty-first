@@ -728,7 +728,8 @@ where
     ///
     /// Panics if the `divisor` is zero.
     pub fn divide(&self, divisor: &Self) -> Self {
-        if self.degree() < Self::FAST_DIVIDE_CUTOFF_THRESHOLD {
+        let quotient_degree = self.degree() - divisor.degree();
+        if quotient_degree < Self::FAST_DIVIDE_CUTOFF_THRESHOLD {
             let (quotient, _) = self.naive_divide(divisor);
             quotient
         } else {
