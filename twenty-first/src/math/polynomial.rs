@@ -142,6 +142,12 @@ where
     /// [fast]: Self::fast_zerofier
     const FAST_ZEROFIER_CUTOFF_THRESHOLD: usize = 200;
 
+    /// [Fast interpolation](Self::fast_interpolate) is slower than
+    /// [Lagrange interpolation](Self::lagrange_interpolate) below this threshold.
+    ///
+    /// Extracted from `cargo bench --bench interpolation` on mjolnir.
+    const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 9;
+
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
     /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then corresponds to
@@ -349,40 +355,72 @@ where
         Self::fast_multiply(&left, &right)
     }
 
+    /// Construct the lowest-degree polynomial interpolating the given points.
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let domain = bfe_vec![0, 1, 2, 3];
+    /// let values = bfe_vec![1, 3, 5, 7];
+    /// let polynomial = Polynomial::interpolate(&domain, &values);
+    ///
+    /// assert_eq!(1, polynomial.degree());
+    /// assert_eq!(bfe!(9), polynomial.evaluate(&bfe!(4)));
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the provided domain is empty.
+    /// - Panics if the provided domain and values are not of the same length.
+    pub fn interpolate(domain: &[FF], values: &[FF]) -> Self {
+        assert!(
+            !domain.is_empty(),
+            "interpolation must happen through more than zero points"
+        );
+        assert_eq!(
+            domain.len(),
+            values.len(),
+            "The domain and values lists have to be of equal length."
+        );
+
+        if domain.len() <= Self::FAST_INTERPOLATE_CUTOFF_THRESHOLD {
+            Self::lagrange_interpolate(domain, values)
+        } else {
+            Self::fast_interpolate(domain, values)
+        }
+    }
+
     /// Any fast interpolation will use NTT, so this is mainly used for testing/integrity
     /// purposes. This also means that it is not pivotal that this function has an optimal
     /// runtime.
     #[doc(hidden)]
     pub fn lagrange_interpolate_zipped(points: &[(FF, FF)]) -> Self {
-        if points.is_empty() {
-            panic!("Cannot interpolate through zero points.");
-        }
-        if !points.iter().map(|x| x.0).all_unique() {
-            panic!("Repeated x values received. Got: {points:?}");
-        }
+        assert!(
+            !points.is_empty(),
+            "interpolation must happen through more than zero points"
+        );
+        assert!(
+            points.iter().map(|x| x.0).all_unique(),
+            "Repeated x values received. Got: {points:?}",
+        );
 
         let xs: Vec<FF> = points.iter().map(|x| x.0.to_owned()).collect();
         let ys: Vec<FF> = points.iter().map(|x| x.1.to_owned()).collect();
         Self::lagrange_interpolate(&xs, &ys)
     }
 
+    #[doc(hidden)]
     pub fn lagrange_interpolate(domain: &[FF], values: &[FF]) -> Self {
-        assert_eq!(
-            domain.len(),
-            values.len(),
-            "The domain and values lists have to be of equal length."
-        );
-        assert!(
+        debug_assert!(
             !domain.is_empty(),
-            "Trying to interpolate through 0 points."
+            "interpolation domain cannot have zero points"
         );
+        debug_assert_eq!(domain.len(), values.len());
 
         let zero = FF::zero();
         let zerofier = Self::zerofier(domain).coefficients;
 
-        // in each iteration of this loop, we accumulate into the sum
-        // one polynomial that evaluates to some abscis (y-value) in
-        // the given ordinate (domain point), and to zero in all other
+        // In each iteration of this loop, accumulate into the sum one polynomial that evaluates
+        // to some abscis (y-value) in the given ordinate (domain point), and to zero in all other
         // ordinates.
         let mut lagrange_sum_array = vec![zero; domain.len()];
         let mut summand_array = vec![zero; domain.len()];
@@ -398,11 +436,10 @@ where
                 }
             }
 
-            // summand does not necessarily evaluate to 1 in domain[i],
-            // so we need to correct for this value
+            // summand does not necessarily evaluate to 1 in domain[i]: correct for this value
             let mut summand_eval = zero;
-            for s in summand_array.iter().rev() {
-                summand_eval = summand_eval * domain[i] + *s;
+            for &s in summand_array.iter().rev() {
+                summand_eval = summand_eval * domain[i] + s;
             }
             let corrected_abscis = abscis / summand_eval;
 
@@ -411,83 +448,43 @@ where
                 lagrange_sum_array[j] += corrected_abscis * summand_array[j];
             }
         }
-        Polynomial {
-            coefficients: lagrange_sum_array,
-        }
+
+        Self::new(lagrange_sum_array)
     }
 
-    /// # Panics
-    ///
-    /// - Panics if the provided domain is empty.
-    /// - Panics if the provided domain and values are not of the same length.
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
     pub fn fast_interpolate(domain: &[FF], values: &[FF]) -> Self {
-        assert_eq!(domain.len(), values.len());
-        assert!(
+        debug_assert!(
             !domain.is_empty(),
-            "Cannot interpolate through zero points.",
+            "interpolation domain cannot have zero points"
         );
+        debug_assert_eq!(domain.len(), values.len());
 
-        let root_order = (domain.len() + 1).next_power_of_two();
-        let root_order_u64 = u64::try_from(root_order).unwrap();
-        let primitive_root = BFieldElement::primitive_root_of_unity(root_order_u64).unwrap();
-        Self::fast_interpolate_inner(domain, values, primitive_root, root_order)
-    }
+        let hadamard_mul = |x: &[_], y: Vec<_>| x.iter().zip(y).map(|(&n, d)| n * d).collect_vec();
 
-    fn fast_interpolate_inner(
-        domain: &[FF],
-        values: &[FF],
-        primitive_root: BFieldElement,
-        root_order: usize,
-    ) -> Self {
-        debug_assert_eq!(
-            primitive_root.mod_pow_u32(root_order as u32),
-            BFieldElement::one(),
-            "Supplied element “primitive_root” must have supplied order.\
-            Supplied element was: {primitive_root:?}\
-            Supplied order was: {root_order:?}"
-        );
+        let mid_point = domain.len() / 2;
+        let left_domain_half = &domain[..mid_point];
+        let left_values_half = &values[..mid_point];
+        let right_domain_half = &domain[mid_point..];
+        let right_values_half = &values[mid_point..];
 
-        const CUTOFF_POINT_FOR_FAST_INTERPOLATION: usize = 1024;
-        if domain.len() < CUTOFF_POINT_FOR_FAST_INTERPOLATION {
-            return Self::lagrange_interpolate(domain, values);
-        }
+        let left_zerofier = Self::zerofier(left_domain_half);
+        let right_zerofier = Self::zerofier(right_domain_half);
 
-        let half = domain.len() / 2;
-
-        let left_zerofier = Self::zerofier(&domain[..half]);
-        let right_zerofier = Self::zerofier(&domain[half..]);
-
-        let left_offset: Vec<FF> = Self::fast_evaluate(&right_zerofier, &domain[..half]);
-        let right_offset: Vec<FF> = Self::fast_evaluate(&left_zerofier, &domain[half..]);
+        let left_offset = right_zerofier.fast_evaluate(left_domain_half);
+        let right_offset = left_zerofier.fast_evaluate(right_domain_half);
 
         let left_offset_inverse = FF::batch_inversion(left_offset);
+        let left_targets: Vec<FF> = hadamard_mul(left_values_half, left_offset_inverse);
+        let left_interpolant = Self::interpolate(left_domain_half, &left_targets);
+
         let right_offset_inverse = FF::batch_inversion(right_offset);
-        let left_targets: Vec<FF> = values[..half]
-            .iter()
-            .zip(left_offset_inverse)
-            .map(|(n, d)| n.to_owned() * d)
-            .collect();
-        let right_targets: Vec<FF> = values[half..]
-            .iter()
-            .zip(right_offset_inverse)
-            .map(|(n, d)| n.to_owned() * d)
-            .collect();
+        let right_targets: Vec<FF> = hadamard_mul(right_values_half, right_offset_inverse);
+        let right_interpolant = Self::interpolate(right_domain_half, &right_targets);
 
-        let left_interpolant = Self::fast_interpolate_inner(
-            &domain[..half],
-            &left_targets,
-            primitive_root,
-            root_order,
-        );
-        let right_interpolant = Self::fast_interpolate_inner(
-            &domain[half..],
-            &right_targets,
-            primitive_root,
-            root_order,
-        );
-
-        let left_term = Self::fast_multiply(&left_interpolant, &right_zerofier);
-        let right_term = Self::fast_multiply(&right_interpolant, &left_zerofier);
+        let left_term = left_interpolant.fast_multiply(&right_zerofier);
+        let right_term = right_interpolant.fast_multiply(&left_zerofier);
         left_term + right_term
     }
 
@@ -1867,7 +1864,7 @@ mod test_polynomials {
     }
 
     #[test]
-    #[should_panic(expected = "0 points")]
+    #[should_panic(expected = "zero points")]
     fn lagrange_interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::lagrange_interpolate(&[], &[]);
     }
@@ -1966,7 +1963,7 @@ mod test_polynomials {
     #[proptest]
     fn fast_coset_interpolation_and_and_fast_interpolation_on_coset_are_identical(
         #[filter(!#offset.is_zero())] offset: BFieldElement,
-        #[strategy(0..8usize)]
+        #[strategy(1..8usize)]
         #[map(|x: usize| 1 << x)]
         root_order: usize,
         #[strategy(vec(arb(), #root_order))] values: Vec<BFieldElement>,

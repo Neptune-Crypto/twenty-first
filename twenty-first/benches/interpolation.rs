@@ -14,7 +14,8 @@ criterion_main!(benches);
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = interpolation<{ 1 << 10 }>,
+    targets = interpolation<{ 1 << 9 }>,
+              interpolation<{ 1 << 10 }>,
               interpolation<{ 1 << 11 }>,
               interpolation<{ 1 << 12 }>,
               interpolation<{ 1 << 13 }>,
