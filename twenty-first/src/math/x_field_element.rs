@@ -286,15 +286,6 @@ impl XFieldElement {
     }
 
     #[inline]
-    #[deprecated(since = "0.39.0", note = "use `xfe!` or `from` instead")]
-    pub const fn new_u64(coeffs: [u64; EXTENSION_DEGREE]) -> Self {
-        let c0 = BFieldElement::new(coeffs[0]);
-        let c1 = BFieldElement::new(coeffs[1]);
-        let c2 = BFieldElement::new(coeffs[2]);
-        Self::new([c0, c1, c2])
-    }
-
-    #[inline]
     pub const fn new_const(element: BFieldElement) -> Self {
         let zero = BFieldElement::new(0);
         Self::new([element, zero, zero])
@@ -306,20 +297,6 @@ impl XFieldElement {
         } else {
             None
         }
-    }
-
-    /// Derive a sample `XFieldElement` from a random `Digest`.
-    ///
-    /// The specific elements of the digest (element 2, 3 and 4)
-    /// were chosen because the tasm equivalent of this function
-    /// can more efficiently pop elements 0 and 1, leading to a
-    /// more efficient `sample_weights()` implementation:
-    ///
-    /// <https://github.com/Neptune-Crypto/twenty-first/pull/66#discussion_r1049771105>
-    #[deprecated(since = "0.39.0", note = "unused and obscure")]
-    pub fn sample(digest: Digest) -> Self {
-        let elements = digest.values();
-        XFieldElement::new([elements[2], elements[3], elements[4]])
     }
 
     // `increment` and `decrement` are mainly used for testing purposes
@@ -1298,13 +1275,6 @@ mod x_field_element_test {
     #[proptest]
     fn xfe_macro_produces_same_result_as_calling_new(coeffs: [BFieldElement; EXTENSION_DEGREE]) {
         let xfe = XFieldElement::new(coeffs);
-        prop_assert_eq!(xfe, xfe!(coeffs));
-    }
-
-    #[proptest]
-    fn xfe_macro_produces_same_result_as_calling_new_u64(coeffs: [u64; EXTENSION_DEGREE]) {
-        #[allow(deprecated)] // temporary, until the deprecated function is removed
-        let xfe = XFieldElement::new_u64(coeffs);
         prop_assert_eq!(xfe, xfe!(coeffs));
     }
 
