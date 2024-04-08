@@ -3,6 +3,76 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.39.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.38.0..v0.39.0) – 2024-04-08
+
+### ✨ Features
+
+- Add method `new` for `MerkleTree` ([50c634ef](https://github.com/Neptune-Crypto/twenty-first/commit/50c634ef))
+- Make get_direct_path_indices() pub ([4f5f46b3](https://github.com/Neptune-Crypto/twenty-first/commit/4f5f46b3))
+- Simplify construction of polynomials ([065dd753](https://github.com/Neptune-Crypto/twenty-first/commit/065dd753))
+- Add `bfe_vec!` and `bfe_array!` macros ([d6bb353d](https://github.com/Neptune-Crypto/twenty-first/commit/d6bb353d))
+- Add `xfe_vec!` and `xfe_array!` macros ([578b6472](https://github.com/Neptune-Crypto/twenty-first/commit/578b6472))
+- Generalize `Polynomial::scale`'s offset ([ce4047b8](https://github.com/Neptune-Crypto/twenty-first/commit/ce4047b8))
+- Make `{bfe, xfe}_{vec, array}` more powerful ([33a2003c](https://github.com/Neptune-Crypto/twenty-first/commit/33a2003c))
+
+### ⚡️ Performance
+
+- Remove `.clone()` in extended gcd ([b9a9e4af](https://github.com/Neptune-Crypto/twenty-first/commit/b9a9e4af))
+
+### 📚 Documentation
+
+- Add example to extended Euclidean algorithm ([5936c57b](https://github.com/Neptune-Crypto/twenty-first/commit/5936c57b))
+
+### ⚙️ Miscellaneous
+
+- Remove unused rusty_leveldb_vec* files ([890c451e](https://github.com/Neptune-Crypto/twenty-first/commit/890c451e))
+- Remove `storage` and `sync` modules ([3775c51b](https://github.com/Neptune-Crypto/twenty-first/commit/3775c51b))
+- Removed benches and unused dependencies ([57ce4535](https://github.com/Neptune-Crypto/twenty-first/commit/57ce4535))
+- Clean up `polynomial.rs` ([8ca79022](https://github.com/Neptune-Crypto/twenty-first/commit/8ca79022))
+- Simplify case handling for root of unity ([cca92f74](https://github.com/Neptune-Crypto/twenty-first/commit/cca92f74))
+- Collect code coverage ([e0f32e0e](https://github.com/Neptune-Crypto/twenty-first/commit/e0f32e0e))
+- Use `nextest` to test more things ([62088fda](https://github.com/Neptune-Crypto/twenty-first/commit/62088fda))
+- Add code coverage badge ([6b33124e](https://github.com/Neptune-Crypto/twenty-first/commit/6b33124e))
+- Clean up `XFieldElement` ([84a4176f](https://github.com/Neptune-Crypto/twenty-first/commit/84a4176f))
+- (!) Remove constraint circuits ([0c757258](https://github.com/Neptune-Crypto/twenty-first/commit/0c757258))
+- Remove unused dependencies ([0e3b8c98](https://github.com/Neptune-Crypto/twenty-first/commit/0e3b8c98))
+
+### ♻️ Refactor
+
+- Mmr tests no longer depend on storage layer ([#189](https://github.com/Neptune-Crypto/twenty-first/issues/189)) ([c4c0502f](https://github.com/Neptune-Crypto/twenty-first/commit/c4c0502f))
+- Move mmra_with_mps into mmr_accumulator::util ([81573735](https://github.com/Neptune-Crypto/twenty-first/commit/81573735))
+- (!) Simplify interface for evaluation ([a4641d35](https://github.com/Neptune-Crypto/twenty-first/commit/a4641d35))
+- (!) Simplify interface for interpolation ([a321587e](https://github.com/Neptune-Crypto/twenty-first/commit/a321587e))
+- (!) Simplify interface of fast division ([6113875a](https://github.com/Neptune-Crypto/twenty-first/commit/6113875a))
+- (!) Simplify interface for fast poly mul ([5fde6ccd](https://github.com/Neptune-Crypto/twenty-first/commit/5fde6ccd))
+- (!) Use `prelude` in `BFieldCodec` derive ([a3109fda](https://github.com/Neptune-Crypto/twenty-first/commit/a3109fda))
+- (!) Remove multivariate polynomial support ([89c7cf54](https://github.com/Neptune-Crypto/twenty-first/commit/89c7cf54))
+- (!) Remove timing reporter ([84b6e29c](https://github.com/Neptune-Crypto/twenty-first/commit/84b6e29c))
+- Remove `utils` module ([e701395e](https://github.com/Neptune-Crypto/twenty-first/commit/e701395e))
+- (!) Remove Blake3 ([e51c4afd](https://github.com/Neptune-Crypto/twenty-first/commit/e51c4afd))
+- (!) Remove emojihash implementations ([94162f5f](https://github.com/Neptune-Crypto/twenty-first/commit/94162f5f))
+- (!) Move de-facto MMR functionality there ([46531c4a](https://github.com/Neptune-Crypto/twenty-first/commit/46531c4a))
+- (!) Remove unused helper methods ([4c22abee](https://github.com/Neptune-Crypto/twenty-first/commit/4c22abee))
+- Deprecated methods mimicking built-ins ([e8c5b528](https://github.com/Neptune-Crypto/twenty-first/commit/e8c5b528))
+- (!) Remove unused or shallow rng-methods ([547b7e51](https://github.com/Neptune-Crypto/twenty-first/commit/547b7e51))
+- (!) Remove dyadic rationals ([c3584153](https://github.com/Neptune-Crypto/twenty-first/commit/c3584153))
+- (!) Remove trait `FromVecu8` ([d041424f](https://github.com/Neptune-Crypto/twenty-first/commit/d041424f))
+- (!) Rename `shared_math` into `math` ([ec87ee5e](https://github.com/Neptune-Crypto/twenty-first/commit/ec87ee5e))
+- (!) Remove trait `New` ([e8d0c7e4](https://github.com/Neptune-Crypto/twenty-first/commit/e8d0c7e4))
+- (!) Remove Sha3 implementation ([7175f7dd](https://github.com/Neptune-Crypto/twenty-first/commit/7175f7dd))
+- Deprecate `log_2_ceil` ([42b2ca10](https://github.com/Neptune-Crypto/twenty-first/commit/42b2ca10))
+- De-duplicate `BFieldCodec` test setup ([0dba559e](https://github.com/Neptune-Crypto/twenty-first/commit/0dba559e))
+
+### ✅ Testing
+
+- Add tests for `BFieldCodec` derive macro ([56cc6ce3](https://github.com/Neptune-Crypto/twenty-first/commit/56cc6ce3))
+- Corrupting digest always corrupts digest ([db86606f](https://github.com/Neptune-Crypto/twenty-first/commit/db86606f))
+- Tip5's trace is equivalent to permutation ([b548159d](https://github.com/Neptune-Crypto/twenty-first/commit/b548159d))
+
+### 🎨 Styling
+
+- Remove superfluous parentheses ([13feb388](https://github.com/Neptune-Crypto/twenty-first/commit/13feb388))
+
 ## [0.38.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.37.0..v0.38.0) – 2024-02-28
 
 ### ✨ Features
