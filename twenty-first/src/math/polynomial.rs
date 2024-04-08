@@ -786,14 +786,31 @@ where
     ///
     /// ```
     /// # use twenty_first::prelude::*;
-    /// let f = Polynomial::new(bfe_vec![0, 1, 2, 3, 4, 5]); // 5x⁵ + 4x⁴ + 3x³ + 2x² + 1x¹ + 0
-    /// let g = f.truncate(3);                               // 5x³ + 4x² + 3x¹ + 2
-    /// assert_eq!(Polynomial::new(bfe_vec![2, 3, 4, 5]), g);
+    /// let f = Polynomial::new(bfe_vec![0, 1, 2, 3, 4]); // 4x⁴ + 3x³ + 2x² + 1x¹ + 0
+    /// let g = f.truncate(2);                            // 4x² + 3x¹ + 2
+    /// assert_eq!(Polynomial::new(bfe_vec![2, 3, 4]), g);
     /// ```
     pub fn truncate(&self, k: usize) -> Self {
         let coefficients = self.coefficients.iter().copied();
         let coefficients = coefficients.rev().take(k + 1).rev().collect();
         Self::new(coefficients)
+    }
+
+    /// `self % x^n`
+    ///
+    /// A special case of [Self::rem], and faster.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let f = Polynomial::new(bfe_vec![0, 1, 2, 3, 4]); // 4x⁴ + 3x³ + 2x² + 1x¹ + 0
+    /// let g = f.mod_x_to_the_n(2);                      // 1x¹ + 0
+    /// assert_eq!(Polynomial::new(bfe_vec![0, 1]), g);
+    /// ```
+    pub fn mod_x_to_the_n(&self, n: usize) -> Self {
+        let num_coefficients_to_retain = n.min(self.coefficients.len());
+        Self::new(self.coefficients[..num_coefficients_to_retain].into())
     }
 }
 
@@ -1745,6 +1762,34 @@ mod test_polynomials {
         prop_assert_eq!(
             poly.truncate(truncation_point),
             poly.shift_coefficients(shift).truncate(truncation_point)
+        );
+    }
+
+    #[proptest]
+    fn zero_polynomial_mod_any_power_of_x_is_zero_polynomial(power: usize) {
+        let must_be_zero = Polynomial::<BFieldElement>::zero().mod_x_to_the_n(power);
+        prop_assert!(must_be_zero.is_zero());
+    }
+
+    #[proptest]
+    fn polynomial_mod_some_power_of_x_results_in_polynomial_of_degree_one_less_than_power(
+        #[filter(!#poly.is_zero())] poly: Polynomial<BFieldElement>,
+        #[strategy(..=usize::try_from(#poly.degree()).unwrap())] power: usize,
+    ) {
+        let remainder = poly.mod_x_to_the_n(power);
+        prop_assert_eq!(isize::try_from(power).unwrap() - 1, remainder.degree());
+    }
+
+    #[proptest]
+    fn polynomial_mod_some_power_of_x_shares_low_degree_terms_coefficients_with_original_polynomial(
+        #[filter(!#poly.is_zero())] poly: Polynomial<BFieldElement>,
+        power: usize,
+    ) {
+        let remainder = poly.mod_x_to_the_n(power);
+        let min_num_coefficients = poly.coefficients.len().min(remainder.coefficients.len());
+        prop_assert_eq!(
+            &poly.coefficients[..min_num_coefficients],
+            &remainder.coefficients[..min_num_coefficients]
         );
     }
 
