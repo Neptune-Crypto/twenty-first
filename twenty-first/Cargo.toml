@@ -74,6 +74,10 @@ name = "poly_div"
 harness = false
 
 [[bench]]
+name = "poly_clean_div"
+harness = false
+
+[[bench]]
 name = "poly_mul"
 harness = false
 

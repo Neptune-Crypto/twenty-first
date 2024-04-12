@@ -24,8 +24,10 @@ use crate::math::ntt::intt;
 use crate::math::ntt::ntt;
 use crate::math::traits::FiniteField;
 use crate::math::traits::ModPowU32;
+use crate::prelude::BFieldElement;
+use crate::prelude::Inverse;
+use crate::prelude::XFieldElement;
 
-use super::b_field_element::BFieldElement;
 use super::traits::PrimitiveRootOfUnity;
 
 impl<FF: FiniteField> Zero for Polynomial<FF> {
@@ -813,6 +815,80 @@ where
     pub fn mod_x_to_the_n(&self, n: usize) -> Self {
         let num_coefficients_to_retain = n.min(self.coefficients.len());
         Self::new(self.coefficients[..num_coefficients_to_retain].into())
+    }
+}
+
+impl Polynomial<BFieldElement> {
+    /// [Clean division](Self::clean_divide) is slower than [naïve divison](Self::naive_divide) for
+    /// polynomials of degree less than this threshold.
+    ///
+    /// Extracted from `cargo bench --bench poly_clean_div` on mjolnir.
+    const CLEAN_DIVIDE_CUTOFF_THRESHOLD: isize = {
+        if cfg!(test) {
+            0
+        } else {
+            1 << 9
+        }
+    };
+
+    /// A fast way of dividing two polynomials. Only works if division is clean, _i.e._, if the
+    /// remainder of polynomial long division is [zero]. This **must** be known ahead of time. If
+    /// division is unclean, this method might panic or produce a wrong result.
+    /// Use [`Polynomial::divide`] for more generality.
+    ///
+    /// # Panics
+    ///
+    /// Panics if
+    /// - the divisor is [zero], or
+    /// - division is not clean, _i.e._, if polynomial long division leaves some non-zero remainder.
+    ///
+    /// [zero]: Polynomial::is_zero
+    #[must_use]
+    pub fn clean_divide(mut self, mut divisor: Self) -> Self {
+        if divisor.degree() < Self::CLEAN_DIVIDE_CUTOFF_THRESHOLD {
+            return self.divide(&divisor);
+        }
+
+        // Incompleteness workaround: Manually check whether 0 is a root of the divisor.
+        // f(0) == 0 <=> f's constant term is 0
+        if divisor.coefficients.first().is_some_and(Zero::is_zero) {
+            // Clean division implies the dividend also has 0 as a root.
+            assert!(self.coefficients[0].is_zero());
+            self.coefficients.remove(0);
+            divisor.coefficients.remove(0);
+        }
+
+        // Incompleteness workaround: Move both dividend and divisor to an extension field.
+        let offset = XFieldElement::from([0, 1, 0]);
+        let mut dividend_coefficients = self.scale(offset).coefficients;
+        let mut divisor_coefficients = divisor.scale(offset).coefficients;
+
+        // See the comment in `fast_coset_evaluate` why this bound is necessary.
+        let dividend_deg_plus_1 = usize::try_from(self.degree() + 1).unwrap();
+        let order = dividend_deg_plus_1.next_power_of_two();
+        let order_u64 = u64::try_from(order).unwrap();
+        let root = BFieldElement::primitive_root_of_unity(order_u64).unwrap();
+
+        dividend_coefficients.resize(order, XFieldElement::zero());
+        divisor_coefficients.resize(order, XFieldElement::zero());
+
+        ntt(&mut dividend_coefficients, root, order.ilog2());
+        ntt(&mut divisor_coefficients, root, order.ilog2());
+
+        let divisor_inverses = XFieldElement::batch_inversion(divisor_coefficients);
+        let mut quotient_codeword = dividend_coefficients
+            .into_iter()
+            .zip(divisor_inverses)
+            .map(|(l, r)| l * r)
+            .collect_vec();
+
+        intt(&mut quotient_codeword, root, order.ilog2());
+        let quotient = Polynomial::new(quotient_codeword);
+
+        // If the division was clean, “unscaling” brings all coefficients back to the base field.
+        let quotient: Polynomial<XFieldElement> = quotient.scale(offset.inverse());
+        let coeffs = quotient.coefficients.into_iter();
+        coeffs.map(|c| c.unlift().unwrap()).collect_vec().into()
     }
 }
 
@@ -2054,6 +2130,102 @@ mod test_polynomials {
     ) {
         let quotient = a.fast_divide(&b);
         prop_assert_eq!(a / b, quotient);
+    }
+
+    #[proptest]
+    fn clean_division_agrees_with_divide_on_clean_division(
+        #[strategy(arb())] a: Polynomial<BFieldElement>,
+        #[strategy(arb())]
+        #[filter(!#b.is_zero())]
+        b: Polynomial<BFieldElement>,
+    ) {
+        let product = a.clone() * b.clone();
+        let (naive_quotient, remainder) = product.naive_divide(&b);
+        let clean_quotient = product.clone().clean_divide(b.clone());
+        let err = format!("{product} / {b} == {naive_quotient} != {clean_quotient}");
+        prop_assert_eq!(naive_quotient, clean_quotient, "{}", err);
+        prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
+    }
+
+    #[proptest]
+    fn clean_division_agrees_with_division_if_divisor_has_only_0_as_root(
+        #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
+    ) {
+        dividend_roots.push(bfe!(0));
+        let dividend = Polynomial::zerofier(&dividend_roots);
+        let divisor = Polynomial::zerofier(&[bfe!(0)]);
+
+        let (naive_quotient, remainder) = dividend.naive_divide(&divisor);
+        let clean_quotient = dividend.clean_divide(divisor);
+        prop_assert_eq!(naive_quotient, clean_quotient);
+        prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
+    }
+
+    #[proptest]
+    fn clean_division_agrees_with_division_if_divisor_has_only_0_as_multiple_root(
+        #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
+        #[strategy(0_usize..300)] num_roots: usize,
+    ) {
+        let multiple_roots = bfe_vec![0; num_roots];
+        let divisor = Polynomial::zerofier(&multiple_roots);
+        dividend_roots.extend(multiple_roots);
+        let dividend = Polynomial::zerofier(&dividend_roots);
+
+        let (naive_quotient, remainder) = dividend.naive_divide(&divisor);
+        let clean_quotient = dividend.clean_divide(divisor);
+        prop_assert_eq!(naive_quotient, clean_quotient);
+        prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
+    }
+
+    #[proptest]
+    fn clean_division_agrees_with_division_if_divisor_has_0_as_root(
+        #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
+        #[strategy(vec(0..#dividend_roots.len(), 0..=#dividend_roots.len()))]
+        #[filter(#divisor_root_indices.iter().all_unique())]
+        divisor_root_indices: Vec<usize>,
+    ) {
+        // ensure clean division: make divisor's roots a subset of dividend's roots
+        let mut divisor_roots = divisor_root_indices
+            .into_iter()
+            .map(|i| dividend_roots[i])
+            .collect_vec();
+
+        // ensure clean division: make 0 a root of both dividend and divisor
+        dividend_roots.push(bfe!(0));
+        divisor_roots.push(bfe!(0));
+
+        let dividend = Polynomial::zerofier(&dividend_roots);
+        let divisor = Polynomial::zerofier(&divisor_roots);
+        let quotient = dividend.clone().clean_divide(divisor.clone());
+        prop_assert_eq!(dividend / divisor, quotient);
+    }
+
+    #[proptest]
+    fn clean_division_agrees_with_division_if_divisor_has_0_through_9_as_roots(
+        #[strategy(arb())] additional_dividend_roots: Vec<BFieldElement>,
+    ) {
+        let divisor_roots = (0..10).map(BFieldElement::new).collect_vec();
+        let divisor = Polynomial::zerofier(&divisor_roots);
+        let dividend_roots = [additional_dividend_roots, divisor_roots].concat();
+        let dividend = Polynomial::zerofier(&dividend_roots);
+        dbg!(dividend.to_string());
+        dbg!(divisor.to_string());
+        let quotient = dividend.clone().clean_divide(divisor.clone());
+        prop_assert_eq!(dividend / divisor, quotient);
+    }
+
+    #[proptest]
+    fn clean_division_gives_quotient_and_remainder_with_expected_properties(
+        #[filter(!#a_roots.is_empty())] a_roots: Vec<BFieldElement>,
+        #[strategy(vec(0..#a_roots.len(), 1..=#a_roots.len()))]
+        #[filter(#b_root_indices.iter().all_unique())]
+        b_root_indices: Vec<usize>,
+    ) {
+        let b_roots = b_root_indices.into_iter().map(|i| a_roots[i]).collect_vec();
+        let a = Polynomial::zerofier(&a_roots);
+        let b = Polynomial::zerofier(&b_roots);
+        let quotient = a.clone().clean_divide(b.clone());
+        prop_assert_eq!(a, quotient * b);
     }
 
     #[proptest]
