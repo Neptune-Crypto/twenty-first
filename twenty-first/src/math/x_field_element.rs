@@ -1021,43 +1021,26 @@ mod x_field_element_test {
         }
     }
 
-    #[test]
-    fn x_field_inversion_pbt() {
-        let test_iterations = 100;
-        let rands: Vec<XFieldElement> = random_elements(test_iterations);
-        for mut rand in rands.clone() {
-            let rand_inv_original = rand.inverse();
-            assert!((rand * rand_inv_original).is_one());
-            assert!((rand_inv_original * rand).is_one());
+    #[proptest]
+    fn field_element_inversion(
+        #[filter(!#x.is_zero())] x: XFieldElement,
+        #[filter(!#disturbance.is_zero())]
+        #[filter(#x != #disturbance)]
+        disturbance: XFieldElement,
+    ) {
+        let not_x = x - disturbance;
+        prop_assert_eq!(XFieldElement::one(), x * x.inverse());
+        prop_assert_eq!(XFieldElement::one(), not_x * not_x.inverse());
+        prop_assert_ne!(XFieldElement::one(), x * not_x.inverse());
+    }
 
-            // Negative test, verify that when decrementing and incrementing
-            // by one in the different indices, we get something
-            rand.increment(0);
-            assert!((rand * rand.inverse()).is_one());
-            assert!((rand.inverse() * rand).is_one());
-            assert!(!(rand * rand_inv_original).is_one());
-            assert!(!(rand_inv_original * rand).is_one());
-            rand.decrement(0);
-
-            rand.increment(1);
-            assert!((rand * rand.inverse()).is_one());
-            assert!((rand.inverse() * rand).is_one());
-            assert!(!(rand * rand_inv_original).is_one());
-            assert!(!(rand_inv_original * rand).is_one());
-            rand.decrement(1);
-
-            rand.increment(2);
-            assert!((rand * rand.inverse()).is_one());
-            assert!((rand.inverse() * rand).is_one());
-            assert!(!(rand * rand_inv_original).is_one());
-            assert!(!(rand_inv_original * rand).is_one());
-        }
-
-        // Test batch inversion
-        let inverses = XFieldElement::batch_inversion(rands.clone());
-        for (val, inv) in izip!(rands, inverses) {
-            assert!(!val.is_one()); // Pretty small likely this could happen ^^
-            assert!((val * inv).is_one());
+    #[proptest]
+    fn field_element_batch_inversion(
+        #[filter(!#xs.iter().any(|x| x.is_zero()))] xs: Vec<XFieldElement>,
+    ) {
+        let inverses = XFieldElement::batch_inversion(xs.clone());
+        for (x, inv) in xs.into_iter().zip(inverses) {
+            prop_assert_eq!(XFieldElement::one(), x * inv);
         }
     }
 
