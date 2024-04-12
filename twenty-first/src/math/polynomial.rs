@@ -1285,8 +1285,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         let (mut b_factor, mut b1) = (Self::zero(), Self::one());
 
         while !y.is_zero() {
-            let quotient = x.clone() / y.clone();
-            let remainder = x % y.clone();
+            let (quotient, remainder) = x.naive_divide(&y);
             let c = a_factor - quotient.clone() * a1.clone();
             let d = b_factor - quotient * b1.clone();
 
