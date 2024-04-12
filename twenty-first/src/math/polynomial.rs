@@ -160,16 +160,17 @@ where
     /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then corresponds to
     /// evaluating P(α·x).
     #[must_use]
-    pub fn scale<XF>(&self, alpha: XF) -> Polynomial<XF>
+    pub fn scale<S, XF>(&self, alpha: S) -> Polynomial<XF>
     where
+        S: Clone,
         FF: Mul<XF, Output = XF>,
-        XF: FiniteField,
+        XF: FiniteField + Mul<S, Output = XF>,
     {
         let mut power_of_alpha = XF::one();
         let mut return_coefficients = Vec::with_capacity(self.coefficients.len());
         for &coefficient in &self.coefficients {
             return_coefficients.push(coefficient * power_of_alpha);
-            power_of_alpha *= alpha;
+            power_of_alpha = power_of_alpha * alpha.clone();
         }
         Polynomial::new(return_coefficients)
     }
@@ -1387,11 +1388,13 @@ mod test_polynomials {
     #[test]
     fn scaling_a_polynomial_works_with_different_fields_as_the_offset() {
         let bfe_poly = Polynomial::new(bfe_vec![0, 1, 2]);
-        let _ = bfe_poly.scale(bfe!(42));
-        let _ = bfe_poly.scale(xfe!(42));
+        let _: Polynomial<BFieldElement> = bfe_poly.scale(bfe!(42));
+        let _: Polynomial<XFieldElement> = bfe_poly.scale(bfe!(42));
+        let _: Polynomial<XFieldElement> = bfe_poly.scale(xfe!(42));
 
         let xfe_poly = Polynomial::new(xfe_vec![0, 1, 2]);
-        let _ = xfe_poly.scale(xfe!(42));
+        let _: Polynomial<XFieldElement> = xfe_poly.scale(bfe!(42));
+        let _: Polynomial<XFieldElement> = xfe_poly.scale(xfe!(42));
     }
 
     #[proptest]

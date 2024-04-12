@@ -34,7 +34,7 @@ fn poly_scale<const LOG2_SIZE: usize>(c: &mut Criterion) {
     });
 
     group.bench_function(BenchmarkId::new("xfe poly, bfe scalar", LOG2_SIZE), |b| {
-        b.iter(|| -> Polynomial<XFieldElement> { xfe_poly.scale(bfe_scalar.into()) })
+        b.iter(|| -> Polynomial<XFieldElement> { xfe_poly.scale(bfe_scalar) })
     });
 
     group.bench_function(BenchmarkId::new("xfe poly, xfe scalar", LOG2_SIZE), |b| {
