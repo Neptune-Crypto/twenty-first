@@ -78,6 +78,10 @@ name = "poly_mul"
 harness = false
 
 [[bench]]
+name = "poly_scale"
+harness = false
+
+[[bench]]
 name = "inverses"
 harness = false
 
