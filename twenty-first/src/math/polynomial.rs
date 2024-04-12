@@ -1068,58 +1068,47 @@ impl<FF: FiniteField> Polynomial<FF> {
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
     pub fn naive_divide(&self, divisor: &Self) -> (Self, Self) {
-        let degree_lhs = self.degree();
-        let degree_rhs = divisor.degree();
-        // cannot divide by zero
-        if degree_rhs < 0 {
-            panic!("Cannot divide polynomial by zero. Got: ({self:?})/({divisor:?})");
-        }
+        let divisor_lc_inv = divisor
+            .leading_coefficient()
+            .expect("divisor should be non-zero")
+            .inverse();
 
-        // zero divided by anything gives zero. degree == -1 <=> polynomial = 0
-        if self.is_zero() {
-            return (Self::zero(), Self::zero());
-        }
-
-        // quotient is built from back to front so must be reversed
-        // Preallocate space for quotient coefficients
-        let mut quotient: Vec<FF> = if degree_lhs - degree_rhs >= 0 {
-            Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize)
-        } else {
-            vec![]
+        let Ok(quotient_degree) = usize::try_from(self.degree() - divisor.degree()) else {
+            // self.degree() < divisor.degree()
+            return (Self::zero(), self.to_owned());
         };
+        debug_assert!(!self.is_zero());
+
+        // quotient is built from back to front, must be reversed later
+        let mut rev_quotient = Vec::with_capacity(quotient_degree + 1);
         let mut remainder = self.clone();
         remainder.normalize();
 
-        // a divisor coefficient is guaranteed to exist since the divisor is non-zero
-        let dlc: FF = divisor.leading_coefficient().unwrap();
-        let inv = FF::one() / dlc;
+        // The divisor is also iterated back to front.
+        // It is normalized manually to avoid it being a `&mut` argument.
+        let rev_divisor = divisor.coefficients.iter().rev();
+        let normal_rev_divisor = rev_divisor.skip_while(|c| c.is_zero());
 
-        let mut i = 0;
-        while i + degree_rhs <= degree_lhs {
-            // calculate next quotient coefficient, and set leading coefficient
-            // of remainder is 0 by removing it
-            let rlc: FF = remainder.coefficients.last().unwrap().to_owned();
-            let q: FF = rlc * inv;
-            quotient.push(q);
-            remainder.coefficients.pop();
-            if q.is_zero() {
-                i += 1;
+        for _ in 0..=quotient_degree {
+            let remainder_lc = remainder.coefficients.pop().unwrap();
+            let quotient_coeff = remainder_lc * divisor_lc_inv;
+            rev_quotient.push(quotient_coeff);
+
+            if quotient_coeff.is_zero() {
                 continue;
             }
 
-            // TODO: Review that this loop body was correctly modified.
-            // Calculate the new remainder
-            for j in 0..degree_rhs as usize {
-                let rem_length = remainder.coefficients.len();
-                remainder.coefficients[rem_length - j - 1] -=
-                    q * divisor.coefficients[(degree_rhs + 1) as usize - j - 2];
-            }
+            // don't use `.degree()` to still count leading zeros in intermittent remainders
+            let remainder_degree = remainder.coefficients.len().saturating_sub(1);
 
-            i += 1;
+            // skip divisor's leading coefficient: it has already been dealt with
+            for (i, &divisor_coeff) in normal_rev_divisor.clone().skip(1).enumerate() {
+                remainder.coefficients[remainder_degree - i] -= quotient_coeff * divisor_coeff;
+            }
         }
 
-        quotient.reverse();
-        let quotient = Self::new(quotient);
+        rev_quotient.reverse();
+        let quotient = Self::new(rev_quotient);
 
         (quotient, remainder)
     }
@@ -2037,6 +2026,21 @@ mod test_polynomials {
         let (quot, rem) = a.naive_divide(&b);
         prop_assert!(rem.degree() < b.degree());
         prop_assert_eq!(a, quot * b + rem);
+    }
+
+    #[proptest]
+    fn clean_naive_division_gives_quotient_and_remainder_with_expected_properties(
+        #[filter(!#a_roots.is_empty())] a_roots: Vec<BFieldElement>,
+        #[strategy(vec(0..#a_roots.len(), 1..=#a_roots.len()))]
+        #[filter(#b_root_indices.iter().all_unique())]
+        b_root_indices: Vec<usize>,
+    ) {
+        let b_roots = b_root_indices.into_iter().map(|i| a_roots[i]).collect_vec();
+        let a = Polynomial::zerofier(&a_roots);
+        let b = Polynomial::zerofier(&b_roots);
+        let (quot, rem) = a.naive_divide(&b);
+        prop_assert!(rem.is_zero());
+        prop_assert_eq!(a, quot * b);
     }
 
     #[proptest]
