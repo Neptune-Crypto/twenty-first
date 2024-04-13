@@ -1367,7 +1367,7 @@ mod test_polynomials {
     #[proptest]
     fn normalizing_removes_spurious_leading_zeros(
         polynomial: Polynomial<BFieldElement>,
-        leading_coefficient: BFieldElement,
+        #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
         #[strategy(0usize..30)] num_leading_zeros: usize,
     ) {
         let mut coefficients = polynomial.coefficients.clone();
