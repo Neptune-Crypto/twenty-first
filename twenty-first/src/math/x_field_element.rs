@@ -19,6 +19,7 @@ use rand_distr::Standard;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::bfe_vec;
 use crate::error::TryFromXFieldElementError;
 use crate::math::b_field_element::BFieldElement;
 use crate::math::b_field_element::BFIELD_ZERO;
@@ -270,14 +271,11 @@ impl TryFrom<Vec<BFieldElement>> for XFieldElement {
 }
 
 impl XFieldElement {
+    /// The quotient defining the [field extension](XFieldElement) over the
+    /// [base field](BFieldElement), namely x³ - x + 1.
     #[inline]
     pub fn shah_polynomial() -> Polynomial<BFieldElement> {
-        Polynomial::new(vec![
-            BFieldElement::one(),
-            -BFieldElement::one(),
-            BFieldElement::zero(),
-            BFieldElement::one(),
-        ])
+        Polynomial::new(bfe_vec![1, -1, 0, 1])
     }
 
     #[inline]
