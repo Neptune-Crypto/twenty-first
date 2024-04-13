@@ -240,14 +240,14 @@ impl From<XFieldElement> for Polynomial<BFieldElement> {
 impl From<Polynomial<BFieldElement>> for XFieldElement {
     fn from(poly: Polynomial<BFieldElement>) -> Self {
         let (_, rem) = poly.naive_divide(&Self::shah_polynomial());
-        let zero = BFieldElement::zero();
-        let mut rem_arr: [BFieldElement; EXTENSION_DEGREE] = [zero; EXTENSION_DEGREE];
+        let mut xfe = [BFieldElement::zero(); EXTENSION_DEGREE];
 
-        for i in 0..rem.degree() + 1 {
-            rem_arr[i as usize] = rem.coefficients[i as usize];
-        }
+        let Ok(rem_degree) = usize::try_from(rem.degree()) else {
+            return Self::zero();
+        };
+        xfe[..=rem_degree].copy_from_slice(&rem.coefficients[..=rem_degree]);
 
-        XFieldElement::new(rem_arr)
+        XFieldElement::new(xfe)
     }
 }
 
