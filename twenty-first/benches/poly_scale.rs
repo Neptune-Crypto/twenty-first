@@ -26,19 +26,19 @@ fn poly_scale<const LOG2_SIZE: usize>(c: &mut Criterion) {
     let xfe_scalar: XFieldElement = random();
 
     group.bench_function(BenchmarkId::new("bfe poly, bfe scalar", LOG2_SIZE), |b| {
-        b.iter(|| -> Polynomial<BFieldElement> { bfe_poly.scale(bfe_scalar) })
+        b.iter(|| bfe_poly.scale(bfe_scalar))
     });
 
     group.bench_function(BenchmarkId::new("bfe poly, xfe scalar", LOG2_SIZE), |b| {
-        b.iter(|| -> Polynomial<XFieldElement> { bfe_poly.scale(xfe_scalar) })
+        b.iter(|| bfe_poly.scale(xfe_scalar))
     });
 
     group.bench_function(BenchmarkId::new("xfe poly, bfe scalar", LOG2_SIZE), |b| {
-        b.iter(|| -> Polynomial<XFieldElement> { xfe_poly.scale(bfe_scalar) })
+        b.iter(|| xfe_poly.scale(bfe_scalar))
     });
 
     group.bench_function(BenchmarkId::new("xfe poly, xfe scalar", LOG2_SIZE), |b| {
-        b.iter(|| -> Polynomial<XFieldElement> { xfe_poly.scale(xfe_scalar) })
+        b.iter(|| xfe_poly.scale(xfe_scalar))
     });
 
     group.finish();

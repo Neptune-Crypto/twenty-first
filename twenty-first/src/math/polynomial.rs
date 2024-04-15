@@ -152,14 +152,14 @@ where
     #[must_use]
     pub fn scale<S, XF>(&self, alpha: S) -> Polynomial<XF>
     where
-        S: Clone,
-        FF: Mul<XF, Output = XF>,
-        XF: FiniteField + Mul<S, Output = XF>,
+        S: Clone + One,
+        FF: Mul<S, Output = XF>,
+        XF: FiniteField,
     {
-        let mut power_of_alpha = XF::one();
+        let mut power_of_alpha = S::one();
         let mut return_coefficients = Vec::with_capacity(self.coefficients.len());
         for &coefficient in &self.coefficients {
-            return_coefficients.push(coefficient * power_of_alpha);
+            return_coefficients.push(coefficient * power_of_alpha.clone());
             power_of_alpha = power_of_alpha * alpha.clone();
         }
         Polynomial::new(return_coefficients)
@@ -673,12 +673,16 @@ where
     /// ### Current limitations
     ///
     /// - The order of the domain must be greater than the degree of `self`.
-    pub fn fast_coset_evaluate(
+    pub fn fast_coset_evaluate<S>(
         &self,
-        offset: FF,
+        offset: S,
         generator: BFieldElement,
         order: usize,
-    ) -> Vec<FF> {
+    ) -> Vec<FF>
+    where
+        S: Clone + One,
+        FF: Mul<S, Output = FF>,
+    {
         // NTT's input and output are of the same size. For domains of an order that is larger than
         // or equal to the number of coefficients of the polynomial, padding with leading zeros
         // (a no-op to the polynomial) achieves this requirement. However, if the order is smaller
@@ -701,7 +705,11 @@ where
 
     /// The inverse of `fast_coset_evaluate`. The number of provided values must equal the order
     /// of the generator, _i.e._, the size of the domain.
-    pub fn fast_coset_interpolate(offset: FF, generator: BFieldElement, values: &[FF]) -> Self {
+    pub fn fast_coset_interpolate<S>(offset: S, generator: BFieldElement, values: &[FF]) -> Self
+    where
+        S: Clone + One + Inverse,
+        FF: Mul<S, Output = FF>,
+    {
         let length = values.len();
         let mut mut_values = values.to_vec();
 
@@ -869,7 +877,7 @@ impl Polynomial<BFieldElement> {
         let quotient = Polynomial::new(quotient_codeword);
 
         // If the division was clean, “unscaling” brings all coefficients back to the base field.
-        let quotient: Polynomial<XFieldElement> = quotient.scale(offset.inverse());
+        let quotient = quotient.scale(offset.inverse());
         let coeffs = quotient.coefficients.into_iter();
         coeffs.map(|c| c.unlift().unwrap()).collect_vec().into()
     }
@@ -1446,13 +1454,12 @@ mod test_polynomials {
     #[test]
     fn scaling_a_polynomial_works_with_different_fields_as_the_offset() {
         let bfe_poly = Polynomial::new(bfe_vec![0, 1, 2]);
-        let _: Polynomial<BFieldElement> = bfe_poly.scale(bfe!(42));
-        let _: Polynomial<XFieldElement> = bfe_poly.scale(bfe!(42));
-        let _: Polynomial<XFieldElement> = bfe_poly.scale(xfe!(42));
+        let _ = bfe_poly.scale(bfe!(42));
+        let _ = bfe_poly.scale(xfe!(42));
 
         let xfe_poly = Polynomial::new(xfe_vec![0, 1, 2]);
-        let _: Polynomial<XFieldElement> = xfe_poly.scale(bfe!(42));
-        let _: Polynomial<XFieldElement> = xfe_poly.scale(xfe!(42));
+        let _ = xfe_poly.scale(bfe!(42));
+        let _ = xfe_poly.scale(xfe!(42));
     }
 
     #[proptest]
