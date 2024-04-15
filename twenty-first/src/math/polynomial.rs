@@ -30,6 +30,7 @@ use super::b_field_element::BFieldElement;
 use super::b_field_element::BFIELD_ONE;
 use super::traits::Inverse;
 use super::traits::PrimitiveRootOfUnity;
+use super::x_field_element::XFieldElement;
 
 impl<FF: FiniteField> Zero for Polynomial<FF> {
     fn zero() -> Self {
@@ -121,7 +122,10 @@ impl<FF: FiniteField> Eq for Polynomial<FF> {}
 
 impl<FF> Polynomial<FF>
 where
-    FF: FiniteField + MulAssign<BFieldElement>,
+    FF: FiniteField
+        + MulAssign<BFieldElement>
+        + Mul<BFieldElement, Output = FF>
+        + Mul<XFieldElement, Output = XFieldElement>,
 {
     /// Fast division ([`Self::fast_divide`] and [`Self::fast_coset_divide`]) is slower for
     /// polynomials of degree less than this threshold.
@@ -132,15 +136,29 @@ where
     /// Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x) then corresponds to
     /// evaluating P(alpha * x).
     #[must_use]
-    pub fn scale(&self, alpha: BFieldElement) -> Self {
-        let mut powers_of_alpha = BFieldElement::one();
-        let mut return_coefficients = self.coefficients.clone();
-        for elem in return_coefficients.iter_mut() {
-            *elem *= powers_of_alpha;
-            powers_of_alpha *= alpha;
+    pub fn bfe_scale(&self, alpha: BFieldElement) -> Self {
+        let mut power_of_alpha = BFieldElement::one();
+        let mut return_coefficients = Vec::with_capacity(self.coefficients.len());
+        for &coefficient in &self.coefficients {
+            return_coefficients.push(coefficient * power_of_alpha);
+            power_of_alpha *= alpha;
         }
 
-        Self::new(return_coefficients)
+        Polynomial::new(return_coefficients)
+    }
+
+    /// Return the polynomial which corresponds to the transformation `x -> alpha * x`
+    /// Given a polynomial P(x), produce P'(x) := P(alpha * x). Evaluating P'(x) then corresponds to
+    /// evaluating P(alpha * x).
+    pub fn xfe_scale(&self, alpha: XFieldElement) -> Polynomial<XFieldElement> {
+        let mut power_of_alpha = XFieldElement::one();
+        let mut return_coefficients = Vec::with_capacity(self.coefficients.len());
+        for &coefficient in &self.coefficients {
+            return_coefficients.push(coefficient * power_of_alpha);
+            power_of_alpha *= alpha;
+        }
+
+        Polynomial::new(return_coefficients)
     }
 
     /// It is the caller's responsibility that this function is called with sufficiently large input
@@ -679,7 +697,7 @@ where
             greater than the degree of the polynomial."
         );
 
-        let mut coefficients = self.scale(offset).coefficients;
+        let mut coefficients = self.bfe_scale(offset).coefficients;
         coefficients.resize(order, FF::zero());
 
         let log_2_of_n = coefficients.len().ilog2();
@@ -700,7 +718,7 @@ where
         intt(&mut mut_values, generator, length.ilog2());
         let poly = Polynomial::new(mut_values);
 
-        poly.scale(offset.inverse())
+        poly.bfe_scale(offset.inverse())
     }
 
     /// Divide `self` by some `divisor`.
@@ -814,8 +832,8 @@ where
             return self.to_owned() / divisor.to_owned();
         }
 
-        let mut dividend_coefficients = self.scale(offset).coefficients;
-        let mut divisor_coefficients = divisor.scale(offset).coefficients;
+        let mut dividend_coefficients = self.bfe_scale(offset).coefficients;
+        let mut divisor_coefficients = divisor.bfe_scale(offset).coefficients;
 
         dividend_coefficients.resize(order, FF::zero());
         divisor_coefficients.resize(order, FF::zero());
@@ -831,7 +849,7 @@ where
             .collect_vec();
 
         intt(&mut quotient_codeword, root, order.ilog2());
-        Self::new(quotient_codeword).scale(offset.inverse())
+        Self::new(quotient_codeword).bfe_scale(offset.inverse())
     }
 }
 
@@ -1505,6 +1523,20 @@ mod test_polynomials {
         let num_coefficients = polynomial_with_leading_zeros.coefficients.len();
 
         prop_assert_eq!(expected_num_coefficients, num_coefficients);
+    }
+
+    #[proptest]
+    fn bfe_scale_matches_xfe_scale(
+        polynomial: Polynomial<XFieldElement>,
+        alpha: BFieldElement,
+        x: XFieldElement,
+    ) {
+        let bfe_scaled = polynomial.bfe_scale(alpha);
+        let xfe_scaled = polynomial.xfe_scale(alpha.lift());
+
+        prop_assert_eq!(&bfe_scaled, &xfe_scaled);
+
+        prop_assert_eq!(polynomial.evaluate(&(alpha * x)), bfe_scaled.evaluate(&x));
     }
 
     #[proptest]
