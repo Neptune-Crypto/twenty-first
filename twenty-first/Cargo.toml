@@ -81,6 +81,10 @@ name = "merkle_tree_auth_structure_size"
 harness = false
 
 [[bench]]
+name = "polynomial_coset"
+harness = false
+
+[[bench]]
 name = "polynomial_scale"
 harness = false
 
