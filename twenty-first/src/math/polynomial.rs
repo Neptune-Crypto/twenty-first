@@ -128,12 +128,6 @@ where
     /// Extracted from `cargo bench --bench poly_mul` on mjolnir.
     const FAST_MULTIPLY_CUTOFF_THRESHOLD: isize = 1 << 8;
 
-    /// [Fast division](Self::fast_divide) is slower than [naïve divison](Self::naive_divide) for
-    /// polynomials of degree less than this threshold.
-    ///
-    /// Extracted from `cargo bench --bench poly_div` on mjolnir.
-    const FAST_DIVIDE_CUTOFF_THRESHOLD: isize = isize::MAX - 1;
-
     /// Computing the [fast zerofier][fast] is slower than computing the [smart zerofier][smart] for
     /// domain sizes smaller than this threshold. The [naïve zerofier][naive] is always slower to
     /// compute than the [smart zerofier][smart] for domain sizes smaller than the threshold.
@@ -150,12 +144,6 @@ where
     ///
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
     const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 9;
-
-    /// [Fast evaluation](Self::fast_evaluate) is slower than evaluating every point in parallel
-    /// below this threshold.
-    ///
-    /// Extracted from `cargo bench --bench evaluation` on mjolnir.
-    const FAST_EVALUATE_CUTOFF_THRESHOLD: usize = usize::MAX - 42;
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
@@ -641,11 +629,9 @@ where
     }
 
     pub fn batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        if domain.len() <= Self::FAST_EVALUATE_CUTOFF_THRESHOLD {
-            domain.par_iter().map(|p| self.evaluate(p)).collect()
-        } else {
-            self.fast_evaluate(domain)
-        }
+        // According to `cargo bench --bench evaluation` on mjolnir, parallel evaluation is always
+        // faster than fast evaluation.
+        domain.par_iter().map(|p| self.evaluate(p)).collect()
     }
 
     /// Only `pub` to allow benchmarking; not considered part of the public API.
@@ -731,13 +717,10 @@ where
     ///
     /// Panics if the `divisor` is zero.
     pub fn divide(&self, divisor: &Self) -> Self {
-        let quotient_degree = self.degree() - divisor.degree();
-        if quotient_degree < Self::FAST_DIVIDE_CUTOFF_THRESHOLD {
-            let (quotient, _) = self.naive_divide(divisor);
-            quotient
-        } else {
-            self.fast_divide(divisor)
-        }
+        // According to `cargo bench --bench poly_div` on mjolnir, naive division is always faster
+        // than fast division.
+        let (quotient, _) = self.naive_divide(divisor);
+        quotient
     }
 
     /// Polynomial long division with `self` as the dividend, divided by some `divisor`.
@@ -1141,7 +1124,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         Self::new(self.coefficients.iter().map(|&c| c * scalar).collect())
     }
 
-    /// Return (quotient, remainder). Prefer [`Self::divide()`].
+    /// Return (quotient, remainder).
     ///
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
