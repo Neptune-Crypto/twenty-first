@@ -81,9 +81,13 @@ name = "merkle_tree_auth_structure_size"
 harness = false
 
 [[bench]]
-name = "zerofier"
+name = "polynomial_scale"
 harness = false
 
 [[bench]]
 name = "various_muls"
+harness = false
+
+[[bench]]
+name = "zerofier"
 harness = false
