@@ -35,10 +35,13 @@ While twenty-first's version is `0.x.y`, releasing a new version:
 
 1. Is the release backwards-compatible?
    Then the new version is `0.x.y+1`. Otherwise the new version is `0.x+1.0`.
-2. Create a commit that increases `version = "0.x.y"` in twenty-first/Cargo.toml.
-   The commit message should give a one-line summary of each release change.
-3. Have a `v0.x.y` [git tag][tag] on this commit created. (`git tag v0.x.y [sha]`, `git push upstream --tags`)
-4. Have this commit `cargo publish`ed on [crates.io][crates] and in GitHub [tags][tags].
+2. Checkout the last commit on Mjolnir, and run `make bench-publish`. Save the benchmark's result
+   and verify that there is no performance degredation.
+3. Create a commit that increases `version = "0.x.y"` in twenty-first/Cargo.toml.
+   The commit message should give a one-line summary of each release change. Include the benchmark
+   result at the bottom.
+4. Have a `v0.x.y` [git tag][tag] on this commit created. (`git tag v0.x.y [sha]`, `git push upstream --tags`)
+5. Have this commit `cargo publish`ed on [crates.io][crates] and in GitHub [tags][tags].
 
 [tag]: https://git-scm.com/book/en/v2/Git-Basics-Tagging
 [tags]: https://github.com/Neptune-Crypto/twenty-first/tags
