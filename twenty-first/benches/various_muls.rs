@@ -12,7 +12,7 @@ use twenty_first::math::b_field_element::BFieldElement;
 use twenty_first::math::other::random_elements;
 use twenty_first::math::x_field_element::XFieldElement;
 
-fn unsigned_mul(c: &mut Criterion) {
+fn various_muls(c: &mut Criterion) {
     let mut group = c.benchmark_group("mul");
 
     let sizes = [10, 100, 1000, 1_000_000];
@@ -128,5 +128,5 @@ fn xfe_bfe_mul(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size
     group.sample_size(10);
 }
 
-criterion_group!(benches, unsigned_mul);
+criterion_group!(benches, various_muls);
 criterion_main!(benches);
