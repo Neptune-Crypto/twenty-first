@@ -133,11 +133,11 @@ where
     /// evaluating P(alpha * x).
     #[must_use]
     pub fn scale(&self, alpha: BFieldElement) -> Self {
-        let mut acc = FF::one();
+        let mut powers_of_alpha = BFieldElement::one();
         let mut return_coefficients = self.coefficients.clone();
         for elem in return_coefficients.iter_mut() {
-            *elem *= acc;
-            acc *= alpha;
+            *elem *= powers_of_alpha;
+            powers_of_alpha *= alpha;
         }
 
         Self::new(return_coefficients)
