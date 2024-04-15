@@ -131,9 +131,10 @@ where
     /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then corresponds to
     /// evaluating P(α·x).
     #[must_use]
-    pub fn scale<XF>(&self, alpha: XF) -> Polynomial<XF>
+    pub fn scale<XF, YF>(&self, alpha: XF) -> Polynomial<YF>
     where
-        FF: Mul<XF, Output = XF>,
+        YF: FiniteField,
+        FF: Mul<XF, Output = YF>,
         XF: FiniteField,
     {
         let mut power_of_alpha = XF::one();
