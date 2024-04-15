@@ -666,7 +666,7 @@ where
     /// - The order of the domain must be greater than the degree of `self`.
     pub fn fast_coset_evaluate(
         &self,
-        offset: FF,
+        offset: BFieldElement,
         generator: BFieldElement,
         order: usize,
     ) -> Vec<FF> {
