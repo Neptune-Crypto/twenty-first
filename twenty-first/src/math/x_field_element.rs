@@ -592,13 +592,12 @@ impl ModPowU32 for XFieldElement {
 }
 
 #[cfg(test)]
-mod x_field_element_test {
+mod tests {
     use itertools::izip;
     use itertools::Itertools;
+    use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use rand::random;
-    use rand::thread_rng;
     use test_strategy::proptest;
 
     use crate::bfe;
@@ -1108,108 +1107,71 @@ mod x_field_element_test {
     }
 
     #[test]
-    fn xfe_mod_pow_zero_test() {
-        assert!(
-            XFieldElement::zero().mod_pow_u32(0).is_one(),
-            "0^0 must be 1 for XFE"
-        );
-        assert!(
-            XFieldElement::zero().mod_pow_u64(0).is_one(),
-            "0^0 must be 1 for XFE"
-        );
-        assert!(
-            XFieldElement::one().mod_pow_u32(0).is_one(),
-            "0^0 must be 1 for XFE"
-        );
-        assert!(
-            XFieldElement::one().mod_pow_u64(0).is_one(),
-            "0^0 must be 1 for XFE"
-        );
+    fn xfe_mod_pow_zero() {
+        assert!(XFieldElement::zero().mod_pow_u32(0).is_one());
+        assert!(XFieldElement::zero().mod_pow_u64(0).is_one());
+        assert!(XFieldElement::one().mod_pow_u32(0).is_one());
+        assert!(XFieldElement::one().mod_pow_u64(0).is_one());
     }
 
-    #[test]
-    fn xfe_mod_pow_pbt() {
-        let mut rng = thread_rng();
-        for _ in 0..3 {
-            let exponent: u32 = rng.gen_range(0..200);
-            let base: XFieldElement = random();
-            let mut acc = XFieldElement::one();
-
-            for i in 0..exponent {
-                assert_eq!(acc, base.mod_pow_u32(i));
-                acc *= base;
-            }
+    #[proptest]
+    fn xfe_mod_pow(base: XFieldElement, #[strategy(0_u32..200)] exponent: u32) {
+        let mut acc = XFieldElement::one();
+        for i in 0..exponent {
+            assert_eq!(acc, base.mod_pow_u32(i));
+            acc *= base;
         }
     }
 
     #[test]
-    fn x_field_mod_pow_test() {
-        let const_poly = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
+    fn xfe_mod_pow_static() {
+        let three_to_the_n = |n| xfe!(3).mod_pow_u64(n);
+        let actual = [0, 1, 2, 3, 4, 5].map(three_to_the_n);
+        let expected = xfe_array![1, 3, 9, 27, 81, 243];
+        assert_eq!(expected, actual);
+    }
 
-        let expecteds = [1u64, 3, 9, 27, 81, 243].iter().map(|&x| {
-            XFieldElement::new([
-                BFieldElement::new(x),
-                BFieldElement::zero(),
-                BFieldElement::zero(),
-            ])
-        });
+    #[proptest(cases = 100)]
+    fn xfe_intt_is_inverse_of_xfe_ntt(
+        #[strategy(1_u32..=11)] log_2_n: u32,
+        #[strategy(Just(1 << #log_2_n))] root_order: u64,
+        #[strategy(vec(arb(), #root_order as usize))] inputs: Vec<XFieldElement>,
+    ) {
+        let root = XFieldElement::primitive_root_of_unity(root_order).unwrap();
+        let root = root.unlift().unwrap();
+        let mut rv = inputs.clone();
+        ntt::<XFieldElement>(&mut rv, root, log_2_n);
+        intt::<XFieldElement>(&mut rv, root, log_2_n);
+        prop_assert_eq!(inputs, rv);
+    }
 
-        let actuals = [0u64, 1, 2, 3, 4, 5]
-            .iter()
-            .map(|&n| const_poly.mod_pow_u64(n));
+    #[proptest(cases = 100)]
+    fn xfe_ntt_corresponds_to_polynomial_evaluation(
+        #[strategy(1_u32..=11)] log_2_n: u32,
+        #[strategy(Just(1 << #log_2_n))] root_order: u64,
+        #[strategy(vec(arb(), #root_order as usize))] inputs: Vec<XFieldElement>,
+    ) {
+        let root = XFieldElement::primitive_root_of_unity(root_order).unwrap();
+        let mut rv = inputs.clone();
+        ntt::<XFieldElement>(&mut rv, root.unlift().unwrap(), log_2_n);
 
-        for (expected, actual) in izip!(expecteds, actuals) {
-            assert_eq!(expected, actual);
-        }
+        let poly = Polynomial::new(inputs);
+        let domain = root.get_cyclic_group_elements(None);
+        let evaluations = poly.batch_evaluate(&domain);
+        prop_assert_eq!(evaluations, rv);
     }
 
     #[test]
-    fn x_field_ntt_test() {
-        for root_order in [2, 4, 8, 16, 32] {
-            // Verify that NTT and INTT are each other's inverses,
-            // and that NTT corresponds to polynomial evaluation
-            let inputs_u64: Vec<u64> = (0..root_order).collect();
-            let inputs: Vec<XFieldElement> = inputs_u64
-                .iter()
-                .map(|&x| XFieldElement::new_const(BFieldElement::new(x)))
-                .collect();
-            let root = XFieldElement::primitive_root_of_unity(root_order).unwrap();
-            let log_2_of_n = inputs.len().ilog2();
-            let mut rv = inputs.clone();
-            ntt::<XFieldElement>(&mut rv, root.unlift().unwrap(), log_2_of_n);
-
-            // The output should be equivalent to evaluating root^i, i = [0..4]
-            // over the polynomial with coefficients 1, 2, 3, 4
-            let pol_degree_i_minus_1: Polynomial<XFieldElement> = Polynomial::from(&inputs);
-            let x_domain = root.get_cyclic_group_elements(None);
-            for i in 0..inputs.len() {
-                assert_eq!(pol_degree_i_minus_1.evaluate(x_domain[i]), rv[i]);
-            }
-
-            // Verify that polynomial interpolation produces the same polynomial
-            // Slow Lagrange interpolation is very slow for big inputs. Do not increase
-            // this above 32 elements!
-            let interpolated = Polynomial::<XFieldElement>::lagrange_interpolate(&x_domain, &rv);
-            assert_eq!(pol_degree_i_minus_1, interpolated);
-
-            intt::<XFieldElement>(&mut rv, root.unlift().unwrap(), log_2_of_n);
-            assert_eq!(inputs, rv);
-        }
-    }
-
-    #[test]
-    fn inverse_or_zero_xfe() {
+    fn inverse_or_zero_of_zero_is_zero() {
         let zero = XFieldElement::zero();
         assert_eq!(zero, zero.inverse_or_zero());
+    }
 
-        let mut rng = rand::thread_rng();
-        let elem: XFieldElement = rng.gen();
-        if elem.is_zero() {
-            assert_eq!(zero, elem.inverse_or_zero())
-        } else {
-            let one = XFieldElement::one();
-            assert_eq!(one, elem * elem.inverse_or_zero());
-        }
+    #[proptest]
+    fn inverse_or_zero_of_non_zero_is_inverse(#[filter(!#xfe.is_zero())] xfe: XFieldElement) {
+        let inv = xfe.inverse_or_zero();
+        prop_assert_ne!(XFieldElement::zero(), inv);
+        prop_assert_eq!(XFieldElement::one(), xfe * inv);
     }
 
     #[test]
@@ -1219,17 +1181,18 @@ mod x_field_element_test {
         let _ = zero.inverse();
     }
 
-    #[test]
-    fn xfe_to_digest_to_xfe() {
-        let xfe: XFieldElement = rand::thread_rng().gen();
+    #[proptest]
+    fn xfe_to_digest_to_xfe_is_invariant(xfe: XFieldElement) {
         let digest: Digest = xfe.into();
         let xfe2: XFieldElement = digest.try_into().unwrap();
         assert_eq!(xfe, xfe2);
+    }
 
-        let digest2: Digest = rand::thread_rng().gen();
-        match XFieldElement::try_from(digest2) {
-            Ok(_) => panic!("Should not be able to convert a random digest to an XFieldElement."),
-            Err(_) => println!("Conversion of random digest to XFieldElement failed as expected."),
+    #[proptest]
+    fn converting_random_digest_to_xfield_element_fails(digest: Digest) {
+        if XFieldElement::try_from(digest).is_ok() {
+            let reason = "Should not be able to convert random `Digest` to an `XFieldElement`.";
+            return Err(TestCaseError::Fail(reason.into()));
         }
     }
 
