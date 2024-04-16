@@ -430,19 +430,19 @@ where
             // divide (X - domain[i]) out of zerofier to get unweighted summand
             let mut leading_coefficient = zerofier[domain.len()];
             let mut supporting_coefficient = zerofier[domain.len() - 1];
-            for k in (0..domain.len()).rev() {
-                summand_array[k] = leading_coefficient;
+            let mut summand_eval = zero;
+            for j in (1..domain.len()).rev() {
+                summand_array[j] = leading_coefficient;
+                summand_eval = summand_eval * domain[i] + leading_coefficient;
                 leading_coefficient = supporting_coefficient + leading_coefficient * domain[i];
-                if k != 0 {
-                    supporting_coefficient = zerofier[k - 1];
-                }
+                supporting_coefficient = zerofier[j - 1];
             }
 
+            // avoid `j - 1` for j == 0 in the loop above
+            summand_array[0] = leading_coefficient;
+            summand_eval = summand_eval * domain[i] + leading_coefficient;
+
             // summand does not necessarily evaluate to 1 in domain[i]: correct for this value
-            let mut summand_eval = zero;
-            for &s in summand_array.iter().rev() {
-                summand_eval = summand_eval * domain[i] + s;
-            }
             let corrected_abscis = abscis / summand_eval;
 
             // accumulate term
