@@ -366,9 +366,9 @@ pub mod util {
             let new_peaks = shared_basic::calculate_new_peaks_from_leaf_mutation::<H>(
                 &peaks, new_leaf, leaf_count, &new_mp,
             );
-            assert!(new_mp.verify(&new_peaks, new_leaf, leaf_count).0);
+            assert!(new_mp.verify(&new_peaks, new_leaf, leaf_count));
             for (j, mp) in all_mps.iter().enumerate() {
-                assert!(mp.verify(&peaks, all_leaves[j], leaf_count).0);
+                assert!(mp.verify(&peaks, all_leaves[j], leaf_count));
             }
             let mutated = MmrMembershipProof::batch_update_from_batch_leaf_mutation(
                 &mut all_mps.iter_mut().collect_vec(),
@@ -384,7 +384,7 @@ pub mod util {
             }
 
             for (j, mp) in all_mps.iter().enumerate() {
-                assert!(mp.verify(&new_peaks, all_leaves[j], leaf_count).0);
+                assert!(mp.verify(&new_peaks, all_leaves[j], leaf_count));
             }
 
             // Update derivable node values
@@ -677,7 +677,7 @@ mod accumulator_mmr_tests {
             assert!(mmra_mps
                 .iter()
                 .zip(terminal_leafs_for_mps.iter())
-                .all(|(mp, &leaf)| mp.verify(&mmra.get_peaks(), leaf, mmra.count_leaves()).0));
+                .all(|(mp, &leaf)| mp.verify(&mmra.get_peaks(), leaf, mmra.count_leaves())));
 
             // Manually construct an MMRA from the new data and verify that peaks and leaf count matches
             assert!(

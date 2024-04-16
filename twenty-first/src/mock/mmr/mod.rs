@@ -55,7 +55,7 @@ mod shared_tests_tests {
         for leaf_count in 1..10 {
             for index in 0..leaf_count {
                 let (mmra, mps) = mmra_with_mps::<H>(leaf_count, vec![(index, some)]);
-                assert!(mps[0].verify(&mmra.get_peaks(), some, leaf_count).0);
+                assert!(mps[0].verify(&mmra.get_peaks(), some, leaf_count));
             }
         }
 
@@ -70,8 +70,8 @@ mod shared_tests_tests {
                         leaf_count,
                         vec![(first_index, some), (second_index, other)],
                     );
-                    assert!(mps[0].verify(&mmra.get_peaks(), some, leaf_count).0);
-                    assert!(mps[1].verify(&mmra.get_peaks(), other, leaf_count).0);
+                    assert!(mps[0].verify(&mmra.get_peaks(), some, leaf_count));
+                    assert!(mps[1].verify(&mmra.get_peaks(), other, leaf_count));
                 }
             }
         }
@@ -81,7 +81,7 @@ mod shared_tests_tests {
             let specifications = (0..leaf_count).map(|i| (i, random())).collect_vec();
             let (mmra, mps) = mmra_with_mps::<H>(leaf_count, specifications.clone());
             for (mp, leaf) in mps.iter().zip(specifications.iter().map(|x| x.1)) {
-                assert!(mp.verify(&mmra.get_peaks(), leaf, leaf_count).0);
+                assert!(mp.verify(&mmra.get_peaks(), leaf, leaf_count));
             }
         }
     }
@@ -94,16 +94,8 @@ mod shared_tests_tests {
         let other_digest: Digest = rng.gen();
 
         let (mmra, mps) = mmra_with_mps::<H>(32, vec![(12, some_digest), (14, other_digest)]);
-        assert!(
-            mps[0]
-                .verify(&mmra.get_peaks(), some_digest, mmra.count_leaves())
-                .0
-        );
-        assert!(
-            mps[1]
-                .verify(&mmra.get_peaks(), other_digest, mmra.count_leaves())
-                .0
-        );
+        assert!(mps[0].verify(&mmra.get_peaks(), some_digest, mmra.count_leaves()));
+        assert!(mps[1].verify(&mmra.get_peaks(), other_digest, mmra.count_leaves()));
     }
 
     #[test]
@@ -126,7 +118,7 @@ mod shared_tests_tests {
                 let (mmra, mps) = mmra_with_mps::<H>(leaf_count, specified_leafs.clone());
 
                 for (mp, leaf) in mps.iter().zip_eq(specified_leafs.iter().map(|x| x.1)) {
-                    assert!(mp.verify(&mmra.get_peaks(), leaf, leaf_count).0);
+                    assert!(mp.verify(&mmra.get_peaks(), leaf, leaf_count));
                 }
             }
         }
@@ -151,7 +143,7 @@ mod shared_tests_tests {
         let (mmra, mps) = mmra_with_mps::<H>(leaf_count, specified_leafs.clone());
 
         for (mp, leaf) in mps.iter().zip_eq(specified_leafs.iter().map(|x| x.1)) {
-            assert!(mp.verify(&mmra.get_peaks(), leaf, leaf_count).0);
+            assert!(mp.verify(&mmra.get_peaks(), leaf, leaf_count));
         }
     }
 }

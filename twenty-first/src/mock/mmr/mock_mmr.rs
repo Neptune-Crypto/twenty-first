@@ -476,13 +476,11 @@ mod mmr_test {
             "accumulator and archival membership proofs must agree"
         );
         assert!(
-            archival_membership_proof
-                .verify(
-                    &archival_mmr.get_peaks(),
-                    new_leaf,
-                    archival_mmr.count_leaves(),
-                )
-                .0,
+            archival_membership_proof.verify(
+                &archival_mmr.get_peaks(),
+                new_leaf,
+                archival_mmr.count_leaves(),
+            ),
             "membership proof from arhival MMR must validate"
         );
     }
@@ -506,32 +504,24 @@ mod mmr_test {
 
         // Verify that the accumulated hash in the verifier is compared against the **correct** hash,
         // not just **any** hash in the peaks list.
-        assert!(membership_proof.verify(&peaks, leaf_hashes[0], 3).0);
+        assert!(membership_proof.verify(&peaks, leaf_hashes[0], 3));
         membership_proof.leaf_index = 2;
-        assert!(!membership_proof.verify(&peaks, leaf_hashes[0], 3).0);
+        assert!(!membership_proof.verify(&peaks, leaf_hashes[0], 3));
         membership_proof.leaf_index = 0;
 
         // verify the same behavior in the accumulator MMR
         let accumulator_mmr = MmrAccumulator::<H>::new(leaf_hashes.clone());
-        assert!(
-            membership_proof
-                .verify(
-                    &accumulator_mmr.get_peaks(),
-                    leaf_hashes[0],
-                    accumulator_mmr.count_leaves(),
-                )
-                .0
-        );
+        assert!(membership_proof.verify(
+            &accumulator_mmr.get_peaks(),
+            leaf_hashes[0],
+            accumulator_mmr.count_leaves(),
+        ));
         membership_proof.leaf_index = 2;
-        assert!(
-            !membership_proof
-                .verify(
-                    &accumulator_mmr.get_peaks(),
-                    leaf_hashes[0],
-                    accumulator_mmr.count_leaves(),
-                )
-                .0
-        );
+        assert!(!membership_proof.verify(
+            &accumulator_mmr.get_peaks(),
+            leaf_hashes[0],
+            accumulator_mmr.count_leaves(),
+        ));
     }
 
     #[test]
@@ -550,8 +540,7 @@ mod mmr_test {
 
         // Verify single leaf
 
-        let (mp1_verifies, _acc_hash_1) =
-            mp1.verify(&old_peaks, leaf_hashes[leaf_index], leaf_count as u64);
+        let mp1_verifies = mp1.verify(&old_peaks, leaf_hashes[leaf_index], leaf_count as u64);
         assert!(mp1_verifies);
 
         // Create copy of MockMmr, recreate membership proof
@@ -582,12 +571,11 @@ mod mmr_test {
         assert_eq!(expected_num_peaks, new_peaks_two.len());
         assert_eq!(expected_num_peaks, old_peaks.len());
 
-        let (mp2_verifies_non_mutated_leaf, _acc_hash_3) =
+        let mp2_verifies_non_mutated_leaf =
             mp2.verify(&new_peaks_two, leaf_hashes[leaf_index], leaf_count as u64);
         assert!(!mp2_verifies_non_mutated_leaf);
 
-        let (mp2_verifies_mutated_leaf, _acc_hash_4) =
-            mp2.verify(&new_peaks_two, mutated_leaf, leaf_count as u64);
+        let mp2_verifies_mutated_leaf = mp2.verify(&new_peaks_two, mutated_leaf, leaf_count as u64);
         assert!(mp2_verifies_mutated_leaf);
 
         // Create a new MockMmr with the same leaf hashes as in the
@@ -710,15 +698,11 @@ mod mmr_test {
                     accumulator_membership_proof, archival_membership_proof,
                     "membership proofs from append operation must agree"
                 );
-                assert!(
-                    archival_membership_proof
-                        .verify(
-                            &archival_iterative.get_peaks(),
-                            leaf_hash,
-                            archival_iterative.count_leaves(),
-                        )
-                        .0
-                );
+                assert!(archival_membership_proof.verify(
+                    &archival_iterative.get_peaks(),
+                    leaf_hash,
+                    archival_iterative.count_leaves(),
+                ));
 
                 // Verify that membership proofs are the same as generating them from a MockMmr
                 let archival_membership_proof_direct =
@@ -771,9 +755,7 @@ mod mmr_test {
         {
             let leaf_index = 0;
             let (membership_proof, peaks) = mmr.prove_membership(leaf_index);
-            let valid_res = membership_proof.verify(&peaks, input_hash, 1);
-            assert!(valid_res.0);
-            assert!(valid_res.1.is_some());
+            assert!(membership_proof.verify(&peaks, input_hash, 1));
         }
 
         mmr.append(new_input_hash);
@@ -835,18 +817,12 @@ mod mmr_test {
             let input_digest = input_digests[leaf_index];
             let (mut membership_proof, peaks) = mmr.prove_membership(leaf_index as u64);
 
-            let (mp_verifies_1, acc_hash_1) =
-                membership_proof.verify(&peaks, input_digest, num_leaves);
-            assert!(mp_verifies_1);
-            assert!(acc_hash_1.is_some());
+            assert!(membership_proof.verify(&peaks, input_digest, num_leaves));
 
             // Negative test for verify membership
             membership_proof.leaf_index += 1;
 
-            let (mp_verifies_2, acc_hash_2) =
-                membership_proof.verify(&peaks, input_digest, num_leaves);
-            assert!(!mp_verifies_2);
-            assert!(acc_hash_2.is_none());
+            assert!(!membership_proof.verify(&peaks, input_digest, num_leaves));
         }
 
         let new_leaf_hash: Digest = H::hash(&BFieldElement::new(201));
@@ -909,11 +885,7 @@ mod mmr_test {
             // verify that it is valid
             for index in 0..leaf_count {
                 let (membership_proof, peaks) = mmr.prove_membership(index);
-                let valid_res =
-                    membership_proof.verify(&peaks, input_hashes[index as usize], leaf_count);
-
-                assert!(valid_res.0);
-                assert!(valid_res.1.is_some());
+                assert!(membership_proof.verify(&peaks, input_hashes[index as usize], leaf_count));
             }
 
             // // Make a new MMR where we append with a value and run the verify_append
@@ -921,7 +893,7 @@ mod mmr_test {
             let orignal_peaks = mmr.get_peaks();
             let mp = mmr.append(new_leaf_hash);
             assert!(
-                mp.verify(&mmr.get_peaks(), new_leaf_hash, leaf_count + 1).0,
+                mp.verify(&mmr.get_peaks(), new_leaf_hash, leaf_count + 1),
                 "Returned membership proof from append must verify"
             );
             assert_ne!(
@@ -1027,10 +999,7 @@ mod mmr_test {
             // verify that it is valid
             for leaf_index in 0..size {
                 let (mut membership_proof, peaks) = mmr.prove_membership(leaf_index);
-                let valid_res =
-                    membership_proof.verify(&peaks, input_digests[leaf_index as usize], size);
-                assert!(valid_res.0);
-                assert!(valid_res.1.is_some());
+                assert!(membership_proof.verify(&peaks, input_digests[leaf_index as usize], size));
 
                 let new_leaf: Digest = random();
 
@@ -1040,7 +1009,7 @@ mod mmr_test {
                 membership_proof.leaf_index = wrong_leaf_index;
                 assert!(
                     wrong_leaf_index == leaf_index
-                        || !membership_proof.verify(&peaks, new_leaf, size).0
+                        || !membership_proof.verify(&peaks, new_leaf, size)
                 );
                 membership_proof.leaf_index = leaf_index;
 
@@ -1049,14 +1018,14 @@ mod mmr_test {
                 mmr.mutate_leaf_raw(leaf_index, new_leaf);
 
                 let (new_mp, new_peaks) = mmr.prove_membership(leaf_index);
-                assert!(new_mp.verify(&new_peaks, new_leaf, size).0);
-                assert!(!new_mp.verify(&new_peaks, old_leaf, size).0);
+                assert!(new_mp.verify(&new_peaks, new_leaf, size));
+                assert!(!new_mp.verify(&new_peaks, old_leaf, size));
 
                 // Return the element to its former value and run prove/verify for membership
                 mmr.mutate_leaf_raw(leaf_index, old_leaf);
                 let (old_mp, old_peaks) = mmr.prove_membership(leaf_index);
-                assert!(!old_mp.verify(&old_peaks, new_leaf, size).0);
-                assert!(old_mp.verify(&old_peaks, old_leaf, size).0);
+                assert!(!old_mp.verify(&old_peaks, new_leaf, size));
+                assert!(old_mp.verify(&old_peaks, old_leaf, size));
             }
 
             // Make a new MMR where we append with a value and run the verify_append
