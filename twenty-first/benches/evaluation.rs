@@ -11,7 +11,7 @@ use twenty_first::prelude::*;
 criterion_main!(benches);
 criterion_group!(
     name = benches;
-    config = Criterion::default();
+    config = Criterion::default().sample_size(50);
     targets = evaluation<{ 1 << 10 }>,
               evaluation<{ 1 << 14 }>,
               evaluation<{ 1 << 16 }>,
