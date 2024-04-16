@@ -345,16 +345,12 @@ where
     #[doc(hidden)]
     pub fn fast_zerofier(roots: &[FF]) -> Self {
         let mid_point = roots.len() / 2;
-        let left_half = &roots[..mid_point];
-        let right_half = &roots[mid_point..];
-        let mut zerofier_halves = [left_half, right_half]
-            .into_par_iter()
-            .map(|half_domain| Self::zerofier(half_domain))
-            .collect::<Vec<_>>();
-        let right = zerofier_halves.pop().unwrap();
-        let left = zerofier_halves.pop().unwrap();
+        let (left, right) = rayon::join(
+            || Self::zerofier(&roots[..mid_point]),
+            || Self::zerofier(&roots[mid_point..]),
+        );
 
-        Self::multiply(&left, &right)
+        left.multiply(&right)
     }
 
     /// Construct the lowest-degree polynomial interpolating the given points.
