@@ -896,9 +896,8 @@ mod x_field_element_test {
         let shah_zero: XFieldElement = XFieldElement::shah_polynomial().into();
         assert!(shah_zero.is_zero());
 
-        let neg_shah_zero: XFieldElement = XFieldElement::shah_polynomial()
-            .scalar_mul(BFieldElement::new(BFieldElement::P - 1))
-            .into();
+        let neg_shah_zero: XFieldElement =
+            XFieldElement::shah_polynomial().scalar_mul(bfe!(-1)).into();
         assert!(neg_shah_zero.is_zero());
     }
 

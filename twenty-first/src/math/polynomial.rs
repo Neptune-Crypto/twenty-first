@@ -781,7 +781,9 @@ where
         let num_rounds = precision.ilog2();
         let mut f = Self::from_constant(divisor_lc_inv);
         for _ in 0..num_rounds {
-            f = f.scalar_mul(FF::from(2)) - rev_divisor.multiply(&f).multiply(&f);
+            let subtrahend = rev_divisor.multiply(&f).multiply(&f);
+            f.scalar_mul_mut(FF::from(2));
+            f = f - subtrahend;
         }
         let rev_divisor_inverse = f;
 
@@ -1136,14 +1138,36 @@ impl<FF: FiniteField> Polynomial<FF> {
         Self { coefficients }
     }
 
-    // TODO: Review
-    #[deprecated(since = "0.39.0", note = "use `.scalar_mul()` instead")]
+    /// Multiply a polynomial with a scalar, _i.e._, compute `scalar · self(x)`.
+    ///
+    /// Slightly faster than [`Self::scalar_mul`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let mut f = Polynomial::new(bfe_vec![1, 2, 3]);
+    /// f.scalar_mul_mut(bfe!(2));
+    /// assert_eq!(Polynomial::new(bfe_vec![2, 4, 6]), f);
+    /// ```
     pub fn scalar_mul_mut(&mut self, scalar: FF) {
         for coefficient in &mut self.coefficients {
             *coefficient *= scalar;
         }
     }
 
+    /// Multiply a polynomial with a scalar, _i.e._, compute `scalar · self(x)`.
+    ///
+    /// Slightly slower than [`Self::scalar_mul_mut`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let f = Polynomial::new(bfe_vec![1, 2, 3]);
+    /// let g = f.scalar_mul(bfe!(2));
+    /// assert_eq!(Polynomial::new(bfe_vec![2, 4, 6]), g);
+    /// ```
     #[must_use]
     pub fn scalar_mul(&self, scalar: FF) -> Self {
         Self::new(self.coefficients.iter().map(|&c| c * scalar).collect())
@@ -1307,7 +1331,10 @@ impl<FF: FiniteField> Polynomial<FF> {
 
         // normalize result to ensure the gcd, _i.e._, `x` has leading coefficient 1
         let lc = x.leading_coefficient().unwrap_or_else(FF::one);
-        let normalize = |poly: Self| poly.scalar_mul(lc.inverse());
+        let normalize = |mut poly: Self| {
+            poly.scalar_mul_mut(lc.inverse());
+            poly
+        };
 
         let [x, a, b] = [x, a_factor, b_factor].map(normalize);
         (x, a, b)
@@ -1347,8 +1374,9 @@ impl<FF: FiniteField> Mul for Polynomial<FF> {
 impl<FF: FiniteField> Neg for Polynomial<FF> {
     type Output = Self;
 
-    fn neg(self) -> Self::Output {
-        self.scalar_mul(-FF::one())
+    fn neg(mut self) -> Self::Output {
+        self.scalar_mul_mut(-FF::one());
+        self
     }
 }
 
@@ -1504,6 +1532,16 @@ mod test_polynomials {
             polynomial.evaluate(alpha * x),
             scaled_polynomial.evaluate(x)
         );
+    }
+
+    #[proptest]
+    fn polynomial_multiplication_with_scalar_is_equivalent_for_the_two_methods(
+        mut polynomial: Polynomial<BFieldElement>,
+        scalar: BFieldElement,
+    ) {
+        let new_polynomial = polynomial.scalar_mul(scalar);
+        polynomial.scalar_mul_mut(scalar);
+        prop_assert_eq!(polynomial, new_polynomial);
     }
 
     #[proptest]
