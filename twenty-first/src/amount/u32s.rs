@@ -803,8 +803,8 @@ mod u32s_tests {
         assert_eq!(v_string, u32s_string)
     }
 
-    #[ignore]
     #[test]
+    #[should_panic(expected = "the len is 0 but the index is 0")]
     fn crash() {
         let _u32s = U32s::<0>::from(0u32);
     }

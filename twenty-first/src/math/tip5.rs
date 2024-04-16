@@ -703,7 +703,6 @@ pub(crate) mod tip5_tests {
     }
 
     #[test]
-    #[ignore = "used for calculating parameters"]
     fn test_fermat_cube_map_is_permutation() {
         let mut touched = [false; 256];
         for i in 0..256 {
@@ -715,7 +714,6 @@ pub(crate) mod tip5_tests {
     }
 
     #[test]
-    #[ignore = "used for calculating parameters"]
     fn calculate_differential_uniformity() {
         // cargo test calculate_differential_uniformity -- --include-ignored --nocapture
         // addition-differential
@@ -776,7 +774,6 @@ pub(crate) mod tip5_tests {
     }
 
     #[test]
-    #[ignore = "used for calculating parameters"]
     fn calculate_approximation_quality() {
         let mut fermat_cubed = [0u16; 65536];
         let mut bfield_cubed = [0u16; 65536];
