@@ -70,6 +70,12 @@ bench-no-run:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
 	cargo bench --no-run
 
+bench-publish:
+	cargo criterion --bench evaluation
+	cargo criterion --bench interpolation
+	cargo criterion --bench poly_mul
+	cargo criterion --bench polynomial_coset
+
 all: lint format build test bench-no-run
 
 help:

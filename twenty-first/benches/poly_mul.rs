@@ -10,12 +10,7 @@ criterion_main!(benches);
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = poly_mul<2>,
-              poly_mul<3>,
-              poly_mul<4>,
-              poly_mul<5>,
-              poly_mul<6>,
-              poly_mul<7>,
+    targets = poly_mul<7>,
               poly_mul<8>,
               poly_mul<9>,
 );

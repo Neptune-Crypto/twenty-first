@@ -10,34 +10,15 @@ criterion_main!(benches);
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = poly_div<12,  4>,
-              poly_div<12,  6>,
+    targets = poly_div<12,  6>,
               poly_div<12,  8>,
               poly_div<12, 12>,
-              poly_div<13,  4>,
               poly_div<13,  6>,
               poly_div<13,  8>,
               poly_div<13, 12>,
-              poly_div<14,  4>,
               poly_div<14,  6>,
               poly_div<14,  8>,
               poly_div<14, 12>,
-              poly_div<15,  4>,
-              poly_div<15,  6>,
-              poly_div<15,  8>,
-              poly_div<15, 12>,
-              poly_div<16,  4>,
-              poly_div<16,  6>,
-              poly_div<16,  8>,
-              poly_div<16, 12>,
-              poly_div<17,  4>,
-              poly_div<17,  6>,
-              poly_div<17,  8>,
-              poly_div<17, 12>,
-              poly_div<18,  4>,
-              poly_div<18,  6>,
-              poly_div<18,  8>,
-              poly_div<18, 12>,
 );
 
 fn poly_div<const LOG2_NUM_DEG: usize, const LOG2_DEN_DEG: usize>(c: &mut Criterion) {

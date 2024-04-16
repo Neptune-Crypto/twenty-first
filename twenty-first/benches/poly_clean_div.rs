@@ -28,25 +28,10 @@ criterion_group!(
               poly_clean_div<12, 11>,
               poly_clean_div<12, 12>,
 
-              poly_clean_div<13,  8>,
-              poly_clean_div<13,  9>,
-              poly_clean_div<13, 12>,
-              poly_clean_div<13, 13>,
-
               poly_clean_div<14,  8>,
               poly_clean_div<14,  9>,
               poly_clean_div<14, 13>,
               poly_clean_div<14, 14>,
-
-              poly_clean_div<15,  8>,
-              poly_clean_div<15,  9>,
-              poly_clean_div<15, 14>,
-              poly_clean_div<15, 15>,
-
-              poly_clean_div<16,  8>,
-              poly_clean_div<16,  9>,
-              poly_clean_div<16, 15>,
-              poly_clean_div<16, 16>,
 );
 
 fn poly_clean_div<const LOG2_NUM_DEG: usize, const LOG2_DEN_DEG: usize>(c: &mut Criterion) {

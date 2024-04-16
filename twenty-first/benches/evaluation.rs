@@ -13,9 +13,7 @@ criterion_group!(
     name = benches;
     config = Criterion::default();
     targets = evaluation<{ 1 << 10 }>,
-              evaluation<{ 1 << 12 }>,
               evaluation<{ 1 << 14 }>,
-              evaluation<{ 1 << 15 }>,
               evaluation<{ 1 << 16 }>,
 );
 

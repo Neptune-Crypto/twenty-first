@@ -11,12 +11,9 @@ criterion_main!(benches);
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = interpolation<{ 1 << 6 }>,
-              interpolation<{ 1 << 7 }>,
-              interpolation<{ 1 << 8 }>,
+    targets = interpolation<{ 1 << 8 }>,
               interpolation<{ 1 << 9 }>,
               interpolation<{ 1 << 10 }>,
-              interpolation<{ 1 << 11 }>,
 );
 
 fn interpolation<const SIZE: usize>(c: &mut Criterion) {
