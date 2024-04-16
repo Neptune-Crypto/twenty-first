@@ -19,6 +19,7 @@ use rand_distr::Standard;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::bfe_vec;
 use crate::error::TryFromXFieldElementError;
 use crate::math::b_field_element::BFieldElement;
 use crate::math::b_field_element::BFIELD_ZERO;
@@ -238,15 +239,15 @@ impl From<XFieldElement> for Polynomial<BFieldElement> {
 
 impl From<Polynomial<BFieldElement>> for XFieldElement {
     fn from(poly: Polynomial<BFieldElement>) -> Self {
-        let (_, rem) = poly.divide(Self::shah_polynomial());
-        let zero = BFieldElement::zero();
-        let mut rem_arr: [BFieldElement; EXTENSION_DEGREE] = [zero; EXTENSION_DEGREE];
+        let (_, rem) = poly.naive_divide(&Self::shah_polynomial());
+        let mut xfe = [BFieldElement::zero(); EXTENSION_DEGREE];
 
-        for i in 0..rem.degree() + 1 {
-            rem_arr[i as usize] = rem.coefficients[i as usize];
-        }
+        let Ok(rem_degree) = usize::try_from(rem.degree()) else {
+            return Self::zero();
+        };
+        xfe[..=rem_degree].copy_from_slice(&rem.coefficients[..=rem_degree]);
 
-        XFieldElement::new(rem_arr)
+        XFieldElement::new(xfe)
     }
 }
 
@@ -270,14 +271,11 @@ impl TryFrom<Vec<BFieldElement>> for XFieldElement {
 }
 
 impl XFieldElement {
+    /// The quotient defining the [field extension](XFieldElement) over the
+    /// [base field](BFieldElement), namely x³ - x + 1.
     #[inline]
     pub fn shah_polynomial() -> Polynomial<BFieldElement> {
-        Polynomial::new(vec![
-            BFieldElement::one(),
-            -BFieldElement::one(),
-            BFieldElement::zero(),
-            BFieldElement::one(),
-        ])
+        Polynomial::new(bfe_vec![1, -1, 0, 1])
     }
 
     #[inline]
@@ -875,9 +873,8 @@ mod x_field_element_test {
         let shah_zero: XFieldElement = XFieldElement::shah_polynomial().into();
         assert!(shah_zero.is_zero());
 
-        let neg_shah_zero: XFieldElement = XFieldElement::shah_polynomial()
-            .scalar_mul(BFieldElement::new(BFieldElement::P - 1))
-            .into();
+        let neg_shah_zero: XFieldElement =
+            XFieldElement::shah_polynomial().scalar_mul(bfe!(-1)).into();
         assert!(neg_shah_zero.is_zero());
     }
 
@@ -1000,43 +997,26 @@ mod x_field_element_test {
         }
     }
 
-    #[test]
-    fn x_field_inversion_pbt() {
-        let test_iterations = 100;
-        let rands: Vec<XFieldElement> = random_elements(test_iterations);
-        for mut rand in rands.clone() {
-            let rand_inv_original = rand.inverse();
-            assert!((rand * rand_inv_original).is_one());
-            assert!((rand_inv_original * rand).is_one());
+    #[proptest]
+    fn field_element_inversion(
+        #[filter(!#x.is_zero())] x: XFieldElement,
+        #[filter(!#disturbance.is_zero())]
+        #[filter(#x != #disturbance)]
+        disturbance: XFieldElement,
+    ) {
+        let not_x = x - disturbance;
+        prop_assert_eq!(XFieldElement::one(), x * x.inverse());
+        prop_assert_eq!(XFieldElement::one(), not_x * not_x.inverse());
+        prop_assert_ne!(XFieldElement::one(), x * not_x.inverse());
+    }
 
-            // Negative test, verify that when decrementing and incrementing
-            // by one in the different indices, we get something
-            rand.increment(0);
-            assert!((rand * rand.inverse()).is_one());
-            assert!((rand.inverse() * rand).is_one());
-            assert!(!(rand * rand_inv_original).is_one());
-            assert!(!(rand_inv_original * rand).is_one());
-            rand.decrement(0);
-
-            rand.increment(1);
-            assert!((rand * rand.inverse()).is_one());
-            assert!((rand.inverse() * rand).is_one());
-            assert!(!(rand * rand_inv_original).is_one());
-            assert!(!(rand_inv_original * rand).is_one());
-            rand.decrement(1);
-
-            rand.increment(2);
-            assert!((rand * rand.inverse()).is_one());
-            assert!((rand.inverse() * rand).is_one());
-            assert!(!(rand * rand_inv_original).is_one());
-            assert!(!(rand_inv_original * rand).is_one());
-        }
-
-        // Test batch inversion
-        let inverses = XFieldElement::batch_inversion(rands.clone());
-        for (val, inv) in izip!(rands, inverses) {
-            assert!(!val.is_one()); // Pretty small likely this could happen ^^
-            assert!((val * inv).is_one());
+    #[proptest]
+    fn field_element_batch_inversion(
+        #[filter(!#xs.iter().any(|x| x.is_zero()))] xs: Vec<XFieldElement>,
+    ) {
+        let inverses = XFieldElement::batch_inversion(xs.clone());
+        for (x, inv) in xs.into_iter().zip(inverses) {
+            prop_assert_eq!(XFieldElement::one(), x * inv);
         }
     }
 
@@ -1203,7 +1183,7 @@ mod x_field_element_test {
             let pol_degree_i_minus_1: Polynomial<XFieldElement> = Polynomial::from(&inputs);
             let x_domain = root.get_cyclic_group_elements(None);
             for i in 0..inputs.len() {
-                assert_eq!(pol_degree_i_minus_1.evaluate(&x_domain[i]), rv[i]);
+                assert_eq!(pol_degree_i_minus_1.evaluate(x_domain[i]), rv[i]);
             }
 
             // Verify that polynomial interpolation produces the same polynomial

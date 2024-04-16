@@ -61,7 +61,31 @@ name = "ntt_forward"
 harness = false
 
 [[bench]]
-name = "lagrange_interpolation"
+name = "evaluation"
+harness = false
+
+[[bench]]
+name = "interpolation"
+harness = false
+
+[[bench]]
+name = "poly_div"
+harness = false
+
+[[bench]]
+name = "poly_clean_div"
+harness = false
+
+[[bench]]
+name = "poly_mul"
+harness = false
+
+[[bench]]
+name = "poly_scalar_mul"
+harness = false
+
+[[bench]]
+name = "poly_scale"
 harness = false
 
 [[bench]]
@@ -81,9 +105,13 @@ name = "merkle_tree_auth_structure_size"
 harness = false
 
 [[bench]]
-name = "zerofier"
+name = "polynomial_coset"
 harness = false
 
 [[bench]]
 name = "various_muls"
+harness = false
+
+[[bench]]
+name = "zerofier"
 harness = false

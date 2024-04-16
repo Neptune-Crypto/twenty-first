@@ -513,7 +513,7 @@ mod fast_ntt_attempt_tests {
 
             let evals = (0..size)
                 .map(|i| omega.mod_pow(i.try_into().unwrap()))
-                .map(|p| polynomial.evaluate(&p))
+                .map(|p| polynomial.evaluate(p))
                 .collect_vec();
 
             assert_eq!(evals, array);

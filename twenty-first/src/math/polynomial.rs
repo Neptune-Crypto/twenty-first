@@ -8,6 +8,7 @@ use std::ops::AddAssign;
 use std::ops::Div;
 use std::ops::Mul;
 use std::ops::MulAssign;
+use std::ops::Neg;
 use std::ops::Rem;
 use std::ops::Sub;
 
@@ -17,16 +18,16 @@ use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::One;
 use num_traits::Zero;
-use rayon::prelude::IndexedParallelIterator;
-use rayon::prelude::IntoParallelRefIterator;
-use rayon::prelude::ParallelIterator;
+use rayon::prelude::*;
 
 use crate::math::ntt::intt;
 use crate::math::ntt::ntt;
 use crate::math::traits::FiniteField;
 use crate::math::traits::ModPowU32;
+use crate::prelude::BFieldElement;
+use crate::prelude::Inverse;
+use crate::prelude::XFieldElement;
 
-use super::b_field_element::BFieldElement;
 use super::traits::PrimitiveRootOfUnity;
 
 impl<FF: FiniteField> Zero for Polynomial<FF> {
@@ -121,26 +122,45 @@ impl<FF> Polynomial<FF>
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    /// Fast division ([`Self::fast_divide`] and [`Self::fast_coset_divide`]) is slower for
-    /// polynomials of degree less than this threshold.
-    /// todo: Benchmark and find the optimal value.
-    const FAST_DIVIDE_CUTOFF_THRESHOLD: isize = 8;
+    /// [Fast multiplication](Self::multiply) is slower than [naïve multiplication](Self::mul)
+    /// for polynomials of degree less than this threshold.
+    ///
+    /// Extracted from `cargo bench --bench poly_mul` on mjolnir.
+    const FAST_MULTIPLY_CUTOFF_THRESHOLD: isize = 1 << 8;
+
+    /// Computing the [fast zerofier][fast] is slower than computing the [smart zerofier][smart] for
+    /// domain sizes smaller than this threshold. The [naïve zerofier][naive] is always slower to
+    /// compute than the [smart zerofier][smart] for domain sizes smaller than the threshold.
+    ///
+    /// Extracted from `cargo bench --bench zerofier` on mjolnir.
+    ///
+    /// [naive]: Self::naive_zerofier
+    /// [smart]: Self::smart_zerofier
+    /// [fast]: Self::fast_zerofier
+    const FAST_ZEROFIER_CUTOFF_THRESHOLD: usize = 200;
+
+    /// [Fast interpolation](Self::fast_interpolate) is slower than
+    /// [Lagrange interpolation](Self::lagrange_interpolate) below this threshold.
+    ///
+    /// Extracted from `cargo bench --bench interpolation` on mjolnir.
+    const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
     /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then corresponds to
     /// evaluating P(α·x).
     #[must_use]
-    pub fn scale<XF>(&self, alpha: XF) -> Polynomial<XF>
+    pub fn scale<S, XF>(&self, alpha: S) -> Polynomial<XF>
     where
-        FF: Mul<XF, Output = XF>,
+        S: Clone + One,
+        FF: Mul<S, Output = XF>,
         XF: FiniteField,
     {
-        let mut power_of_alpha = XF::one();
+        let mut power_of_alpha = S::one();
         let mut return_coefficients = Vec::with_capacity(self.coefficients.len());
         for &coefficient in &self.coefficients {
-            return_coefficients.push(coefficient * power_of_alpha);
-            power_of_alpha *= alpha;
+            return_coefficients.push(coefficient * power_of_alpha.clone());
+            power_of_alpha = power_of_alpha * alpha.clone();
         }
         Polynomial::new(return_coefficients)
     }
@@ -248,63 +268,36 @@ where
 
     /// Multiply `self` by `other`.
     ///
-    /// This method is asymptotically faster than the naive multiplication method. For small
-    /// instances, _i.e._, polynomials of low degree, it might be slower.
+    /// Prefer this over [`self * other`](Self::mul) since it chooses the fastest multiplication
+    /// strategy.
+    #[must_use]
+    pub fn multiply(&self, other: &Self) -> Self {
+        if self.degree() + other.degree() < Self::FAST_MULTIPLY_CUTOFF_THRESHOLD {
+            self.naive_multiply(other)
+        } else {
+            self.fast_multiply(other)
+        }
+    }
+
+    /// Use [Self::multiply] instead. Only `pub` to allow benchmarking; not considered part of the
+    /// public API.
+    ///
+    /// This method is asymptotically faster than [naive multiplication](Self::naive_multiply). For
+    /// small instances, _i.e._, polynomials of low degree, it is slower.
     ///
     /// The time complexity of this method is in O(n·log(n)), where `n` is the sum of the degrees
-    /// of the operands. The time complexity of [the naive multiplication](Self::multiply) is in
-    /// O(n^2).
-    #[must_use]
+    /// of the operands. The time complexity of the naive multiplication is in O(n^2).
+    #[doc(hidden)]
     pub fn fast_multiply(&self, other: &Self) -> Self {
-        if self.is_zero() || other.is_zero() {
+        let Ok(degree) = usize::try_from(self.degree() + other.degree()) else {
             return Self::zero();
-        }
-
-        let degree = (self.degree() + other.degree()) as usize;
+        };
         let order = (degree + 1).next_power_of_two();
         let order_u64 = u64::try_from(order).unwrap();
         let root = BFieldElement::primitive_root_of_unity(order_u64).unwrap();
 
-        Self::fast_multiply_inner(self, other, root, order)
-    }
-
-    // FIXME: lhs -> &self. FIXME: Change root_order: usize into : u32.
-    fn fast_multiply_inner(
-        lhs: &Self,
-        rhs: &Self,
-        primitive_root: BFieldElement,
-        root_order: usize,
-    ) -> Self {
-        debug_assert!(
-            primitive_root.mod_pow_u32(root_order as u32).is_one(),
-            "provided primitive root must have the provided power."
-        );
-        debug_assert!(
-            !primitive_root.mod_pow_u32(root_order as u32 / 2).is_one() || root_order <= 1,
-            "provided primitive root must be primitive in the right power."
-        );
-
-        if lhs.is_zero() || rhs.is_zero() {
-            return Self::zero();
-        }
-
-        let mut root: BFieldElement = primitive_root.to_owned();
-        let mut order = root_order;
-        let lhs_degree = lhs.degree() as usize;
-        let rhs_degree = rhs.degree() as usize;
-        let degree = lhs_degree + rhs_degree;
-
-        if degree < 8 {
-            return lhs.to_owned() * rhs.to_owned();
-        }
-
-        while degree < order / 2 {
-            root *= root;
-            order /= 2;
-        }
-
-        let mut lhs_coefficients = lhs.coefficients.to_vec();
-        let mut rhs_coefficients = rhs.coefficients.to_vec();
+        let mut lhs_coefficients = self.coefficients.to_vec();
+        let mut rhs_coefficients = other.coefficients.to_vec();
 
         lhs_coefficients.resize(order, FF::zero());
         rhs_coefficients.resize(order, FF::zero());
@@ -323,170 +316,181 @@ where
         Self::new(hadamard_product)
     }
 
-    /// Extracted from `cargo bench --bench zerofier` on mjolnir.
-    const CUTOFF_POINT_FOR_FAST_ZEROFIER: usize = 200;
-
     /// Compute the lowest degree polynomial with the provided roots.
-    ///
-    /// Uses the fastest version of zerofier available, depending on the size of the domain.
-    /// Should be preferred over [`Self::fast_zerofier`] and [`Self::naive_zerofier`].
     pub fn zerofier(roots: &[FF]) -> Self {
-        if roots.len() < Self::CUTOFF_POINT_FOR_FAST_ZEROFIER {
-            return Self::naive_zerofier(roots);
+        if roots.len() < Self::FAST_ZEROFIER_CUTOFF_THRESHOLD {
+            Self::smart_zerofier(roots)
+        } else {
+            Self::fast_zerofier(roots)
         }
-        Self::fast_zerofier(roots)
     }
 
-    pub fn fast_zerofier(domain: &[FF]) -> Self {
-        let dedup_domain = domain.iter().copied().unique().collect::<Vec<_>>();
-        let root_order = (dedup_domain.len() + 1).next_power_of_two();
-        let primitive_root = BFieldElement::primitive_root_of_unity(root_order as u64).unwrap();
-        Self::fast_zerofier_inner(&dedup_domain, primitive_root, root_order)
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn smart_zerofier(roots: &[FF]) -> Self {
+        let mut zerofier = vec![FF::zero(); roots.len() + 1];
+        zerofier[0] = FF::one();
+        let mut num_coeffs = 1;
+        for &root in roots {
+            for k in (1..=num_coeffs).rev() {
+                zerofier[k] = zerofier[k - 1] - root * zerofier[k];
+            }
+            zerofier[0] = -root * zerofier[0];
+            num_coeffs += 1;
+        }
+        Self::new(zerofier)
     }
 
-    fn fast_zerofier_inner(
-        domain: &[FF],
-        primitive_root: BFieldElement,
-        root_order: usize,
-    ) -> Self {
-        if domain.is_empty() {
-            return Self::one();
-        }
-        if domain.len() == 1 {
-            return Self::new(vec![-domain[0], FF::one()]);
-        }
-
-        let mid_point = domain.len() / 2;
-        let left = Self::fast_zerofier_inner(&domain[..mid_point], primitive_root, root_order);
-        let right = Self::fast_zerofier_inner(&domain[mid_point..], primitive_root, root_order);
-        Self::fast_multiply_inner(&left, &right, primitive_root, root_order)
-    }
-
-    pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        let root_order = (domain.len() + 1).next_power_of_two();
-        let root_order_u64 = u64::try_from(root_order).unwrap();
-        let primitive_root = BFieldElement::primitive_root_of_unity(root_order_u64).unwrap();
-        self.fast_evaluate_inner(domain, primitive_root, root_order)
-    }
-
-    fn fast_evaluate_inner(
-        &self,
-        domain: &[FF],
-        primitive_root: BFieldElement,
-        root_order: usize,
-    ) -> Vec<FF> {
-        if domain.is_empty() {
-            return vec![];
-        }
-
-        if domain.len() == 1 {
-            return vec![self.evaluate(&domain[0])];
-        }
-
-        let half = domain.len() / 2;
-
-        let left_zerofier = Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
-        let right_zerofier = Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
-
-        let mut left = (self.clone() % left_zerofier).fast_evaluate_inner(
-            &domain[..half],
-            primitive_root,
-            root_order,
-        );
-        let mut right = (self.clone() % right_zerofier).fast_evaluate_inner(
-            &domain[half..],
-            primitive_root,
-            root_order,
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn fast_zerofier(roots: &[FF]) -> Self {
+        let mid_point = roots.len() / 2;
+        let (left, right) = rayon::join(
+            || Self::zerofier(&roots[..mid_point]),
+            || Self::zerofier(&roots[mid_point..]),
         );
 
-        left.append(&mut right);
-        left
+        left.multiply(&right)
     }
 
+    /// Construct the lowest-degree polynomial interpolating the given points.
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let domain = bfe_vec![0, 1, 2, 3];
+    /// let values = bfe_vec![1, 3, 5, 7];
+    /// let polynomial = Polynomial::interpolate(&domain, &values);
+    ///
+    /// assert_eq!(1, polynomial.degree());
+    /// assert_eq!(bfe!(9), polynomial.evaluate(bfe!(4)));
+    /// ```
+    ///
     /// # Panics
     ///
     /// - Panics if the provided domain is empty.
     /// - Panics if the provided domain and values are not of the same length.
-    pub fn fast_interpolate(domain: &[FF], values: &[FF]) -> Self {
-        assert_eq!(domain.len(), values.len());
+    pub fn interpolate(domain: &[FF], values: &[FF]) -> Self {
         assert!(
             !domain.is_empty(),
-            "Cannot interpolate through zero points.",
+            "interpolation must happen through more than zero points"
+        );
+        assert_eq!(
+            domain.len(),
+            values.len(),
+            "The domain and values lists have to be of equal length."
         );
 
-        let root_order = (domain.len() + 1).next_power_of_two();
-        let root_order_u64 = u64::try_from(root_order).unwrap();
-        let primitive_root = BFieldElement::primitive_root_of_unity(root_order_u64).unwrap();
-        Self::fast_interpolate_inner(domain, values, primitive_root, root_order)
+        if domain.len() <= Self::FAST_INTERPOLATE_CUTOFF_THRESHOLD {
+            Self::lagrange_interpolate(domain, values)
+        } else {
+            Self::fast_interpolate(domain, values)
+        }
     }
 
-    fn fast_interpolate_inner(
-        domain: &[FF],
-        values: &[FF],
-        primitive_root: BFieldElement,
-        root_order: usize,
-    ) -> Self {
-        debug_assert_eq!(
-            primitive_root.mod_pow_u32(root_order as u32),
-            BFieldElement::one(),
-            "Supplied element “primitive_root” must have supplied order.\
-            Supplied element was: {primitive_root:?}\
-            Supplied order was: {root_order:?}"
+    /// Any fast interpolation will use NTT, so this is mainly used for testing/integrity
+    /// purposes. This also means that it is not pivotal that this function has an optimal
+    /// runtime.
+    #[doc(hidden)]
+    pub fn lagrange_interpolate_zipped(points: &[(FF, FF)]) -> Self {
+        assert!(
+            !points.is_empty(),
+            "interpolation must happen through more than zero points"
+        );
+        assert!(
+            points.iter().map(|x| x.0).all_unique(),
+            "Repeated x values received. Got: {points:?}",
         );
 
-        const CUTOFF_POINT_FOR_FAST_INTERPOLATION: usize = 1024;
-        if domain.len() < CUTOFF_POINT_FOR_FAST_INTERPOLATION {
-            return Self::lagrange_interpolate(domain, values);
+        let xs: Vec<FF> = points.iter().map(|x| x.0.to_owned()).collect();
+        let ys: Vec<FF> = points.iter().map(|x| x.1.to_owned()).collect();
+        Self::lagrange_interpolate(&xs, &ys)
+    }
+
+    #[doc(hidden)]
+    pub fn lagrange_interpolate(domain: &[FF], values: &[FF]) -> Self {
+        debug_assert!(
+            !domain.is_empty(),
+            "interpolation domain cannot have zero points"
+        );
+        debug_assert_eq!(domain.len(), values.len());
+
+        let zero = FF::zero();
+        let zerofier = Self::zerofier(domain).coefficients;
+
+        // In each iteration of this loop, accumulate into the sum one polynomial that evaluates
+        // to some abscis (y-value) in the given ordinate (domain point), and to zero in all other
+        // ordinates.
+        let mut lagrange_sum_array = vec![zero; domain.len()];
+        let mut summand_array = vec![zero; domain.len()];
+        for (i, &abscis) in values.iter().enumerate() {
+            // divide (X - domain[i]) out of zerofier to get unweighted summand
+            let mut leading_coefficient = zerofier[domain.len()];
+            let mut supporting_coefficient = zerofier[domain.len() - 1];
+            let mut summand_eval = zero;
+            for j in (1..domain.len()).rev() {
+                summand_array[j] = leading_coefficient;
+                summand_eval = summand_eval * domain[i] + leading_coefficient;
+                leading_coefficient = supporting_coefficient + leading_coefficient * domain[i];
+                supporting_coefficient = zerofier[j - 1];
+            }
+
+            // avoid `j - 1` for j == 0 in the loop above
+            summand_array[0] = leading_coefficient;
+            summand_eval = summand_eval * domain[i] + leading_coefficient;
+
+            // summand does not necessarily evaluate to 1 in domain[i]: correct for this value
+            let corrected_abscis = abscis / summand_eval;
+
+            // accumulate term
+            for j in 0..domain.len() {
+                lagrange_sum_array[j] += corrected_abscis * summand_array[j];
+            }
         }
 
-        let half = domain.len() / 2;
+        Self::new(lagrange_sum_array)
+    }
 
-        let left_zerofier = Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
-        let right_zerofier = Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
-
-        let left_offset: Vec<FF> =
-            Self::fast_evaluate_inner(&right_zerofier, &domain[..half], primitive_root, root_order);
-        let right_offset: Vec<FF> =
-            Self::fast_evaluate_inner(&left_zerofier, &domain[half..], primitive_root, root_order);
-
-        let left_offset_inverse = FF::batch_inversion(left_offset);
-        let right_offset_inverse = FF::batch_inversion(right_offset);
-        let left_targets: Vec<FF> = values[..half]
-            .iter()
-            .zip(left_offset_inverse)
-            .map(|(n, d)| n.to_owned() * d)
-            .collect();
-        let right_targets: Vec<FF> = values[half..]
-            .iter()
-            .zip(right_offset_inverse)
-            .map(|(n, d)| n.to_owned() * d)
-            .collect();
-
-        let left_interpolant = Self::fast_interpolate_inner(
-            &domain[..half],
-            &left_targets,
-            primitive_root,
-            root_order,
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn fast_interpolate(domain: &[FF], values: &[FF]) -> Self {
+        debug_assert!(
+            !domain.is_empty(),
+            "interpolation domain cannot have zero points"
         );
-        let right_interpolant = Self::fast_interpolate_inner(
-            &domain[half..],
-            &right_targets,
-            primitive_root,
-            root_order,
+        debug_assert_eq!(domain.len(), values.len());
+
+        let mid_point = domain.len() / 2;
+        let left_domain_half = &domain[..mid_point];
+        let left_values_half = &values[..mid_point];
+        let right_domain_half = &domain[mid_point..];
+        let right_values_half = &values[mid_point..];
+
+        let (left_zerofier, right_zerofier) = rayon::join(
+            || Self::zerofier(left_domain_half),
+            || Self::zerofier(right_domain_half),
         );
 
-        let left_term = Self::fast_multiply_inner(
-            &left_interpolant,
-            &right_zerofier,
-            primitive_root,
-            root_order,
+        let (left_offset, right_offset) = rayon::join(
+            || right_zerofier.batch_evaluate(left_domain_half),
+            || left_zerofier.batch_evaluate(right_domain_half),
         );
-        let right_term = Self::fast_multiply_inner(
-            &right_interpolant,
-            &left_zerofier,
-            primitive_root,
-            root_order,
+
+        let hadamard_mul = |x: &[_], y: Vec<_>| x.iter().zip(y).map(|(&n, d)| n * d).collect_vec();
+        let interpolate_half = |offset, domain_half, values_half| {
+            let offset_inverse = FF::batch_inversion(offset);
+            let targets = hadamard_mul(values_half, offset_inverse);
+            Self::interpolate(domain_half, &targets)
+        };
+        let (left_interpolant, right_interpolant) = rayon::join(
+            || interpolate_half(left_offset, left_domain_half, left_values_half),
+            || interpolate_half(right_offset, right_domain_half, right_values_half),
         );
+
+        let (left_term, right_term) = rayon::join(
+            || left_interpolant.multiply(&right_zerofier),
+            || right_interpolant.multiply(&left_zerofier),
+        );
+
         left_term + right_term
     }
 
@@ -515,8 +519,6 @@ where
         Self::batch_fast_interpolate_with_memoization(
             domain,
             values_matrix,
-            primitive_root,
-            root_order,
             &mut zerofier_dictionary,
             &mut offset_inverse_dictionary,
         )
@@ -525,8 +527,6 @@ where
     fn batch_fast_interpolate_with_memoization(
         domain: &[FF],
         values_matrix: &Vec<Vec<FF>>,
-        primitive_root: BFieldElement,
-        root_order: usize,
         zerofier_dictionary: &mut HashMap<(FF, FF), Polynomial<FF>>,
         offset_inverse_dictionary: &mut HashMap<(FF, FF), Vec<FF>>,
     ) -> Vec<Self> {
@@ -547,8 +547,7 @@ where
         let left_zerofier = match zerofier_dictionary.get(&left_key) {
             Some(z) => z.to_owned(),
             None => {
-                let left_zerofier =
-                    Self::fast_zerofier_inner(&domain[..half], primitive_root, root_order);
+                let left_zerofier = Self::zerofier(&domain[..half]);
                 zerofier_dictionary.insert(left_key, left_zerofier.clone());
                 left_zerofier
             }
@@ -557,8 +556,7 @@ where
         let right_zerofier = match zerofier_dictionary.get(&right_key) {
             Some(z) => z.to_owned(),
             None => {
-                let right_zerofier =
-                    Self::fast_zerofier_inner(&domain[half..], primitive_root, root_order);
+                let right_zerofier = Self::zerofier(&domain[half..]);
                 zerofier_dictionary.insert(right_key, right_zerofier.clone());
                 right_zerofier
             }
@@ -567,12 +565,7 @@ where
         let left_offset_inverse = match offset_inverse_dictionary.get(&left_key) {
             Some(vector) => vector.to_owned(),
             None => {
-                let left_offset: Vec<FF> = Self::fast_evaluate_inner(
-                    &right_zerofier,
-                    &domain[..half],
-                    primitive_root,
-                    root_order,
-                );
+                let left_offset: Vec<FF> = Self::fast_evaluate(&right_zerofier, &domain[..half]);
                 let left_offset_inverse = FF::batch_inversion(left_offset);
                 offset_inverse_dictionary.insert(left_key, left_offset_inverse.clone());
                 left_offset_inverse
@@ -581,12 +574,7 @@ where
         let right_offset_inverse = match offset_inverse_dictionary.get(&right_key) {
             Some(vector) => vector.to_owned(),
             None => {
-                let right_offset: Vec<FF> = Self::fast_evaluate_inner(
-                    &left_zerofier,
-                    &domain[half..],
-                    primitive_root,
-                    root_order,
-                );
+                let right_offset: Vec<FF> = Self::fast_evaluate(&left_zerofier, &domain[half..]);
                 let right_offset_inverse = FF::batch_inversion(right_offset);
                 offset_inverse_dictionary.insert(right_key, right_offset_inverse.clone());
                 right_offset_inverse
@@ -619,16 +607,12 @@ where
         let left_interpolants = Self::batch_fast_interpolate_with_memoization(
             &domain[..half],
             &all_left_targets,
-            primitive_root,
-            root_order,
             zerofier_dictionary,
             offset_inverse_dictionary,
         );
         let right_interpolants = Self::batch_fast_interpolate_with_memoization(
             &domain[half..],
             &all_right_targets,
-            primitive_root,
-            root_order,
             zerofier_dictionary,
             offset_inverse_dictionary,
         );
@@ -638,18 +622,8 @@ where
             .par_iter()
             .zip(right_interpolants.par_iter())
             .map(|(left_interpolant, right_interpolant)| {
-                let left_term = Self::fast_multiply_inner(
-                    left_interpolant,
-                    &right_zerofier,
-                    primitive_root,
-                    root_order,
-                );
-                let right_term = Self::fast_multiply_inner(
-                    right_interpolant,
-                    &left_zerofier,
-                    primitive_root,
-                    root_order,
-                );
+                let left_term = left_interpolant.multiply(&right_zerofier);
+                let right_term = right_interpolant.multiply(&left_zerofier);
 
                 left_term + right_term
             })
@@ -658,17 +632,66 @@ where
         interpolants
     }
 
+    pub fn batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        // According to `cargo bench --bench evaluation` on mjolnir, parallel evaluation is always
+        // faster than fast evaluation.
+        domain.par_iter().map(|&p| self.evaluate(p)).collect()
+    }
+
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn vector_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        let mut accumulators = vec![FF::zero(); domain.len()];
+        for &c in self.coefficients.iter().rev() {
+            accumulators
+                .par_iter_mut()
+                .zip(domain)
+                .for_each(|(acc, &x)| *acc = *acc * x + c);
+        }
+
+        accumulators
+    }
+
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        let mid_point = domain.len() / 2;
+        let left_half = &domain[..mid_point];
+        let right_half = &domain[mid_point..];
+
+        [left_half, right_half]
+            .into_par_iter()
+            .map(|half_domain| {
+                let zerofier = Self::zerofier(half_domain);
+                let (_, zerofier_inverse, _) = Self::xgcd(zerofier.clone(), Self::zero());
+                let quotient = self.multiply(&zerofier_inverse);
+                let remainder = self.clone() - quotient.multiply(&zerofier);
+                remainder.batch_evaluate(half_domain)
+            })
+            .flatten()
+            .collect()
+    }
+
     /// Fast evaluate on a coset domain, which is the group generated by `generator^i * offset`.
     ///
-    /// ### Current limitations
+    /// # Performance
     ///
-    /// - The order of the domain must be greater than the degree of `self`.
-    pub fn fast_coset_evaluate(
+    /// If possible, use a [base field element](BFieldElement) as the offset.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the order of the domain generated by the `generator` is smaller than or equal to
+    /// the degree of `self`.
+    pub fn fast_coset_evaluate<S>(
         &self,
-        offset: FF,
+        offset: S,
         generator: BFieldElement,
         order: usize,
-    ) -> Vec<FF> {
+    ) -> Vec<FF>
+    where
+        S: Clone + One,
+        FF: Mul<S, Output = FF>,
+    {
         // NTT's input and output are of the same size. For domains of an order that is larger than
         // or equal to the number of coefficients of the polynomial, padding with leading zeros
         // (a no-op to the polynomial) achieves this requirement. However, if the order is smaller
@@ -689,9 +712,21 @@ where
         coefficients
     }
 
-    /// The inverse of `fast_coset_evaluate`. The number of provided values must equal the order
-    /// of the generator, _i.e._, the size of the domain.
-    pub fn fast_coset_interpolate(offset: FF, generator: BFieldElement, values: &[FF]) -> Self {
+    /// The inverse of [`Self::fast_coset_evaluate`].
+    ///
+    /// # Performance
+    ///
+    /// If possible, use a [base field element](BFieldElement) as the offset.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the length of `values` does not equal the order of the domain generated by the
+    /// `generator`.
+    pub fn fast_coset_interpolate<S>(offset: S, generator: BFieldElement, values: &[FF]) -> Self
+    where
+        S: Clone + One + Inverse,
+        FF: Mul<S, Output = FF>,
+    {
         let length = values.len();
         let mut mut_values = values.to_vec();
 
@@ -703,125 +738,154 @@ where
 
     /// Divide `self` by some `divisor`.
     ///
-    /// As the name implies, the advantage of this method over [`divide`](Self::divide) is runtime
-    /// complexity. Concretely, this method has time complexity in O(n·log(n)), whereas
-    /// [`divide`](Self::divide) has time complexity in O(n^2).
+    /// # Panics
     ///
-    /// The disadvantage of this method is its incompleteness. In some very specific cases, the
-    /// division cannot be performed and `panic!`s. More concretely:
-    /// Let `r` be the [root of unity][root_unit] of order `n`, where `n` is the next power of two
-    /// of ([`self.degree()`](Self::degree) `+ 1`).
-    /// If the `divisor` has any root equal to any power of `r`, this method will panic.
+    /// Panics if the `divisor` is zero.
+    pub fn divide(&self, divisor: &Self) -> Self {
+        // According to `cargo bench --bench poly_div` on mjolnir, naive division is always faster
+        // than fast division.
+        let (quotient, _) = self.naive_divide(divisor);
+        quotient
+    }
+
+    /// Polynomial long division with `self` as the dividend, divided by some `divisor`.
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    ///
+    /// As the name implies, the advantage of this method over [`divide`](Self::naive_divide) is
+    /// runtime complexity. Concretely, this method has time complexity in O(n·log(n)), whereas
+    /// [`divide`](Self::naive_divide) has time complexity in O(n^2).
+    #[doc(hidden)]
+    pub fn fast_divide(&self, divisor: &Self) -> Self {
+        // The math for this function: [0]. There are very slight deviations, for example around the
+        // requirement that the divisor is monic.
+        //
+        // [0] https://cs.uwaterloo.ca/~r5olivei/courses/2021-winter-cs487/lecture5-post.pdf
+
+        let Ok(quotient_degree) = usize::try_from(self.degree() - divisor.degree()) else {
+            return Self::zero();
+        };
+
+        let divisor_lc = divisor.leading_coefficient();
+        let divisor_lc_inv = divisor_lc.expect("divisor should be non-zero").inverse();
+
+        // Reverse coefficient vectors to move into formal power series ring over FF, i.e., FF[[x]].
+        // Re-interpret as a polynomial to benefit from the already-implemented multiplication
+        // method, which mechanically work the same in FF[X] and FF[[x]].
+        let reverse = |poly: &Self| Self::new(poly.coefficients.iter().copied().rev().collect());
+        let rev_divisor = reverse(divisor);
+
+        // Newton iteration to invert divisor up to required precision. Why is this the required
+        // precision? Good question.
+        // The initialization of `f` makes up for the divisor not necessarily being monic.
+        let precision = (quotient_degree + 1).next_power_of_two();
+        let num_rounds = precision.ilog2();
+        let mut f = Self::from_constant(divisor_lc_inv);
+        for _ in 0..num_rounds {
+            let subtrahend = rev_divisor.multiply(&f).multiply(&f);
+            f.scalar_mul_mut(FF::from(2));
+            f = f - subtrahend;
+        }
+        let rev_divisor_inverse = f;
+
+        let rev_quotient = reverse(self).multiply(&rev_divisor_inverse);
+        reverse(&rev_quotient).truncate(quotient_degree)
+    }
+
+    /// The degree-`k` polynomial with the same `k + 1` leading coefficients as `self`. To be more
+    /// precise: The degree of the result will be the minimum of `k` and [`Self::degree()`]. This
+    /// implies, among other things, that if `self` [is zero](Self::is_zero()), the result will also
+    /// be zero, independent of `k`.
     ///
     /// # Examples
     ///
     /// ```
     /// # use twenty_first::prelude::*;
-    /// let a = Polynomial::<BFieldElement>::from([1, 2, 3]);
-    /// let b = Polynomial::from([42, 53]);
-    /// let c = a.fast_divide(&b);
+    /// let f = Polynomial::new(bfe_vec![0, 1, 2, 3, 4]); // 4x⁴ + 3x³ + 2x² + 1x¹ + 0
+    /// let g = f.truncate(2);                            // 4x² + 3x¹ + 2
+    /// assert_eq!(Polynomial::new(bfe_vec![2, 3, 4]), g);
     /// ```
-    ///
-    /// ## Incompleteness
-    ///
-    /// The divisor `(x - 1)` has [root of unity][root_unit] `1` as its root, triggering a panic.
-    ///
-    /// ```should_panic
-    /// # use twenty_first::prelude::*;
-    /// # // surpass `Polynomial::FAST_DIVIDE_CUTOFF_THRESHOLD`
-    /// # const DEGREE: u64 = 8;
-    /// # let roots = (0..DEGREE).map(BFieldElement::new).collect::<Vec<_>>();
-    /// # let dividend = Polynomial::zerofier(&roots);
-    /// let divisor = Polynomial::zerofier(&[bfe!(1)]);
-    /// let quotient = dividend.fast_divide(&divisor); // panic!
-    /// ```
-    ///
-    /// Should speed be of no concern, for example because the degrees of the polynomials involved
-    /// are known to be small, use [`divide`](Self::divide) instead.
-    ///
-    /// ```
-    /// # use twenty_first::prelude::*;
-    /// # // surpass `Polynomial::FAST_DIVIDE_CUTOFF_THRESHOLD`
-    /// # const DEGREE: u64 = 8;
-    /// # let roots = (0..DEGREE).map(BFieldElement::new).collect::<Vec<_>>();
-    /// # let dividend = Polynomial::zerofier(&roots);
-    /// # let divisor = Polynomial::zerofier(&[bfe!(1)]);
-    /// let quotient = dividend / divisor;
-    /// ```
-    ///
-    /// Alternatively, if the roots of the divisor are known or can be anticipated, _and_ are known
-    /// to be problematic, use [`fast_coset_divide`](Self::fast_coset_divide) to perform division in
-    /// a coset.
-    ///
-    /// ```
-    /// # use twenty_first::prelude::*;
-    /// # // surpass `Polynomial::FAST_DIVIDE_CUTOFF_THRESHOLD`
-    /// # const DEGREE: u64 = 8;
-    /// # let roots = (0..DEGREE).map(BFieldElement::new).collect::<Vec<_>>();
-    /// # let dividend = Polynomial::zerofier(&roots);
-    /// # let divisor = Polynomial::zerofier(&[bfe!(1)]);
-    /// let quotient = dividend.fast_coset_divide(&divisor, bfe!(7));
-    /// ```
-    ///
-    /// # Panics
-    ///
-    /// - if the `divisor` is zero
-    /// - if the degree of the `divisor` is greater than the degree of `self`
-    /// - if the `divisor` has a [root of unity][root_unit] as a root, as discussed above
-    ///
-    /// [root_unit]: BFieldElement::primitive_root_of_unity
-    pub fn fast_divide(&self, divisor: &Self) -> Self {
-        self.fast_coset_divide(divisor, FF::one())
+    pub fn truncate(&self, k: usize) -> Self {
+        let coefficients = self.coefficients.iter().copied();
+        let coefficients = coefficients.rev().take(k + 1).rev().collect();
+        Self::new(coefficients)
     }
 
-    /// Divide `self` by some `divisor`.
-    /// Generally like [`fast_divide`](Self::fast_divide).
+    /// `self % x^n`
     ///
-    /// The additional `offset` grants finer control over the coset domain used internally to
-    /// perform the divison. Intimate understanding of [roots of unity][root_unit], cosets, and the
-    /// `divisor`'s shape are required to select an appropriate `offset`. For a discussion, see
-    /// [`fast_divide`](Self::fast_divide).
+    /// A special case of [Self::rem], and faster.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let f = Polynomial::new(bfe_vec![0, 1, 2, 3, 4]); // 4x⁴ + 3x³ + 2x² + 1x¹ + 0
+    /// let g = f.mod_x_to_the_n(2);                      // 1x¹ + 0
+    /// assert_eq!(Polynomial::new(bfe_vec![0, 1]), g);
+    /// ```
+    pub fn mod_x_to_the_n(&self, n: usize) -> Self {
+        let num_coefficients_to_retain = n.min(self.coefficients.len());
+        Self::new(self.coefficients[..num_coefficients_to_retain].into())
+    }
+}
+
+impl Polynomial<BFieldElement> {
+    /// [Clean division](Self::clean_divide) is slower than [naïve divison](Self::naive_divide) for
+    /// polynomials of degree less than this threshold.
+    ///
+    /// Extracted from `cargo bench --bench poly_clean_div` on mjolnir.
+    const CLEAN_DIVIDE_CUTOFF_THRESHOLD: isize = {
+        if cfg!(test) {
+            0
+        } else {
+            1 << 9
+        }
+    };
+
+    /// A fast way of dividing two polynomials. Only works if division is clean, _i.e._, if the
+    /// remainder of polynomial long division is [zero]. This **must** be known ahead of time. If
+    /// division is unclean, this method might panic or produce a wrong result.
+    /// Use [`Polynomial::divide`] for more generality.
     ///
     /// # Panics
     ///
-    /// - if the `divisor` is zero
-    /// - if the `offset` is zero
-    /// - if the degree of the `divisor` is greater than the degree of `self`
-    /// - if the offset `divisor` has a [root of unity][root_unit] as a root
+    /// Panics if
+    /// - the divisor is [zero], or
+    /// - division is not clean, _i.e._, if polynomial long division leaves some non-zero remainder.
     ///
-    /// [root_unit]: BFieldElement::primitive_root_of_unity
-    pub fn fast_coset_divide(&self, divisor: &Self, offset: FF) -> Self {
-        // Uses the homomorphism of evaluation, i.e., NTT + batch inversion + iNTT.
-
-        assert!(!divisor.is_zero(), "divisor must be non-zero");
-        if self.is_zero() {
-            return Self::zero();
+    /// [zero]: Polynomial::is_zero
+    #[must_use]
+    pub fn clean_divide(mut self, mut divisor: Self) -> Self {
+        if divisor.degree() < Self::CLEAN_DIVIDE_CUTOFF_THRESHOLD {
+            return self.divide(&divisor);
         }
 
-        assert!(
-            divisor.degree() <= self.degree(),
-            "divisor degree must be at most that of dividend"
-        );
-
-        // See the comment in `fast_coset_evaluate` why this bound is necessary.
-        let order = (self.degree() as usize + 1).next_power_of_two();
-        let order_u64 = u64::try_from(order).unwrap();
-        let root = BFieldElement::primitive_root_of_unity(order_u64).unwrap();
-
-        if self.degree() < Self::FAST_DIVIDE_CUTOFF_THRESHOLD {
-            return self.to_owned() / divisor.to_owned();
+        // Incompleteness workaround: Manually check whether 0 is a root of the divisor.
+        // f(0) == 0 <=> f's constant term is 0
+        if divisor.coefficients.first().is_some_and(Zero::is_zero) {
+            // Clean division implies the dividend also has 0 as a root.
+            assert!(self.coefficients[0].is_zero());
+            self.coefficients.remove(0);
+            divisor.coefficients.remove(0);
         }
 
+        // Incompleteness workaround: Move both dividend and divisor to an extension field.
+        let offset = XFieldElement::from([0, 1, 0]);
         let mut dividend_coefficients = self.scale(offset).coefficients;
         let mut divisor_coefficients = divisor.scale(offset).coefficients;
 
-        dividend_coefficients.resize(order, FF::zero());
-        divisor_coefficients.resize(order, FF::zero());
+        // See the comment in `fast_coset_evaluate` why this bound is necessary.
+        let dividend_deg_plus_1 = usize::try_from(self.degree() + 1).unwrap();
+        let order = dividend_deg_plus_1.next_power_of_two();
+        let order_u64 = u64::try_from(order).unwrap();
+        let root = BFieldElement::primitive_root_of_unity(order_u64).unwrap();
+
+        dividend_coefficients.resize(order, XFieldElement::zero());
+        divisor_coefficients.resize(order, XFieldElement::zero());
 
         ntt(&mut dividend_coefficients, root, order.ilog2());
         ntt(&mut divisor_coefficients, root, order.ilog2());
 
-        let divisor_inverses = FF::batch_inversion(divisor_coefficients);
+        let divisor_inverses = XFieldElement::batch_inversion(divisor_coefficients);
         let mut quotient_codeword = dividend_coefficients
             .into_iter()
             .zip(divisor_inverses)
@@ -829,7 +893,12 @@ where
             .collect_vec();
 
         intt(&mut quotient_codeword, root, order.ilog2());
-        Self::new(quotient_codeword).scale(offset.inverse())
+        let quotient = Polynomial::new(quotient_codeword);
+
+        // If the division was clean, “unscaling” brings all coefficients back to the base field.
+        let quotient = quotient.scale(offset.inverse());
+        let coeffs = quotient.coefficients.into_iter();
+        coeffs.map(|c| c.unlift().unwrap()).collect_vec().into()
     }
 }
 
@@ -894,7 +963,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         self.degree() == 1 && self.coefficients[0].is_zero() && self.coefficients[1].is_one()
     }
 
-    pub fn evaluate(&self, &x: &FF) -> FF {
+    pub fn evaluate(&self, x: FF) -> FF {
         let mut acc = FF::zero();
         for &c in self.coefficients.iter().rev() {
             acc = c + x * acc;
@@ -903,74 +972,24 @@ impl<FF: FiniteField> Polynomial<FF> {
         acc
     }
 
+    /// The coefficient of the polynomial's term of highest power. `None` if (and only if) `self`
+    /// [is zero](Self::is_zero).
+    ///
+    /// Furthermore, is never `Some(FF::zero())`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// # use num_traits::Zero;
+    /// let f = Polynomial::new(bfe_vec![1, 2, 3]);
+    /// assert_eq!(Some(bfe!(3)), f.leading_coefficient());
+    /// assert_eq!(None, Polynomial::<XFieldElement>::zero().leading_coefficient());
+    /// ```
     pub fn leading_coefficient(&self) -> Option<FF> {
         match self.degree() {
             -1 => None,
             n => Some(self.coefficients[n as usize]),
-        }
-    }
-
-    pub fn lagrange_interpolate(domain: &[FF], values: &[FF]) -> Self {
-        assert_eq!(
-            domain.len(),
-            values.len(),
-            "The domain and values lists have to be of equal length."
-        );
-        assert!(
-            !domain.is_empty(),
-            "Trying to interpolate through 0 points."
-        );
-
-        let zero = FF::zero();
-        let one = FF::one();
-
-        // precompute the coefficient vector of the zerofier,
-        // which is the monic lowest-degree polynomial that evaluates
-        // to zero in all domain points, also prod_i (X - d_i).
-        let mut zerofier_array = vec![zero; domain.len() + 1];
-        zerofier_array[0] = one;
-        let mut num_coeffs = 1;
-        for &d in domain.iter() {
-            for k in (1..num_coeffs + 1).rev() {
-                zerofier_array[k] = zerofier_array[k - 1] - d * zerofier_array[k];
-            }
-            zerofier_array[0] = -d * zerofier_array[0];
-            num_coeffs += 1;
-        }
-
-        // in each iteration of this loop, we accumulate into the sum
-        // one polynomial that evaluates to some abscis (y-value) in
-        // the given ordinate (domain point), and to zero in all other
-        // ordinates.
-        let mut lagrange_sum_array = vec![zero; domain.len()];
-        let mut summand_array = vec![zero; domain.len()];
-        for (i, &abscis) in values.iter().enumerate() {
-            // divide (X - domain[i]) out of zerofier to get unweighted summand
-            let mut leading_coefficient = zerofier_array[domain.len()];
-            let mut supporting_coefficient = zerofier_array[domain.len() - 1];
-            for k in (0..domain.len()).rev() {
-                summand_array[k] = leading_coefficient;
-                leading_coefficient = supporting_coefficient + leading_coefficient * domain[i];
-                if k != 0 {
-                    supporting_coefficient = zerofier_array[k - 1];
-                }
-            }
-
-            // summand does not necessarily evaluate to 1 in domain[i],
-            // so we need to correct for this value
-            let mut summand_eval = zero;
-            for s in summand_array.iter().rev() {
-                summand_eval = summand_eval * domain[i] + *s;
-            }
-            let corrected_abscis = abscis / summand_eval;
-
-            // accumulate term
-            for j in 0..domain.len() {
-                lagrange_sum_array[j] += corrected_abscis * summand_array[j];
-            }
-        }
-        Polynomial {
-            coefficients: lagrange_sum_array,
         }
     }
 
@@ -995,10 +1014,11 @@ impl<FF: FiniteField> Polynomial<FF> {
         p2_y_times_dx / dx
     }
 
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
     pub fn naive_zerofier(domain: &[FF]) -> Self {
         domain
             .iter()
-            .unique()
             .map(|&r| Self::new(vec![-r, FF::one()]))
             .reduce(|accumulator, linear_poly| accumulator * linear_poly)
             .unwrap_or_else(Self::one)
@@ -1038,92 +1058,45 @@ impl<FF: FiniteField> Polynomial<FF> {
 impl<FF: FiniteField> Polynomial<FF> {
     pub fn are_colinear(points: &[(FF, FF)]) -> bool {
         if points.len() < 3 {
-            println!("Too few points received. Got: {} points", points.len());
             return false;
         }
 
-        if !points.iter().map(|p| p.0).all_unique() {
-            println!("Non-unique element spotted Got: {points:?}");
+        if !points.iter().map(|(x, _)| x).all_unique() {
             return false;
         }
 
-        // Find 1st degree polynomial from first two points
-        let one: FF = FF::one();
-        let x_diff: FF = points[0].0 - points[1].0;
-        let x_diff_inv = one / x_diff;
-        let a = (points[0].1 - points[1].1) * x_diff_inv;
-        let b = points[0].1 - a * points[0].0;
-        for point in points.iter().skip(2) {
-            let expected = a * point.0 + b;
-            if point.1 != expected {
-                println!(
-                    "L({}) = {}, expected L({}) = {}, Found: L(x) = {}x + {} from {{({},{}),({},{})}}",
-                    point.0,
-                    point.1,
-                    point.0,
-                    expected,
-                    a,
-                    b,
-                    points[0].0,
-                    points[0].1,
-                    points[1].0,
-                    points[1].1
-                );
-                return false;
-            }
-        }
+        // Find 1st degree polynomial through first two points
+        let (p0_x, p0_y) = points[0];
+        let (p1_x, p1_y) = points[1];
+        let a = (p0_y - p1_y) / (p0_x - p1_x);
+        let b = p0_y - a * p0_x;
 
-        true
-    }
-
-    /// Any fast interpolation will use NTT, so this is mainly used for testing/integrity
-    /// purposes. This also means that it is not pivotal that this function has an optimal
-    /// runtime.
-    pub fn lagrange_interpolate_zipped(points: &[(FF, FF)]) -> Self {
-        if points.is_empty() {
-            panic!("Cannot interpolate through zero points.");
-        }
-        if !points.iter().map(|x| x.0).all_unique() {
-            panic!("Repeated x values received. Got: {points:?}");
-        }
-
-        let xs: Vec<FF> = points.iter().map(|x| x.0.to_owned()).collect();
-        let ys: Vec<FF> = points.iter().map(|x| x.1.to_owned()).collect();
-        Self::lagrange_interpolate(&xs, &ys)
+        points.iter().skip(2).all(|&(x, y)| a * x + b == y)
     }
 }
 
 impl<FF: FiniteField> Polynomial<FF> {
-    pub fn multiply(self, other: Self) -> Self {
-        let degree_lhs = self.degree();
-        let degree_rhs = other.degree();
-
-        if degree_lhs < 0 || degree_rhs < 0 {
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn naive_multiply(&self, other: &Self) -> Self {
+        let Ok(degree_lhs) = usize::try_from(self.degree()) else {
             return Self::zero();
-            // return self.zero();
-        }
+        };
+        let Ok(degree_rhs) = usize::try_from(other.degree()) else {
+            return Self::zero();
+        };
 
-        // allocate right number of coefficients, initialized to zero
-        let mut result_coeff: Vec<FF> =
-            //vec![U::zero_from_field(field: U); degree_lhs as usize + degree_rhs as usize + 1];
-            vec![FF::zero(); degree_lhs as usize + degree_rhs as usize + 1];
-
-        // TODO: Review this.
-        // for all pairs of coefficients, add product to result vector in appropriate coordinate
-        for i in 0..=degree_lhs as usize {
-            for j in 0..=degree_rhs as usize {
-                let mul: FF = self.coefficients[i] * other.coefficients[j];
-                result_coeff[i + j] += mul;
+        let mut product = vec![FF::zero(); degree_lhs + degree_rhs + 1];
+        for i in 0..=degree_lhs {
+            for j in 0..=degree_rhs {
+                product[i + j] += self.coefficients[i] * other.coefficients[j];
             }
         }
 
-        // build and return Polynomial object
-        Self {
-            coefficients: result_coeff,
-        }
+        Self::new(product)
     }
 
-    // Multiply a polynomial with itself `pow` times
+    /// Multiply a polynomial with itself `pow` times
     #[must_use]
     pub fn mod_pow(&self, pow: BigInt) -> Self {
         let one = FF::one();
@@ -1155,91 +1128,99 @@ impl<FF: FiniteField> Polynomial<FF> {
         self.coefficients.splice(0..0, vec![zero; power]);
     }
 
-    // Multiply a polynomial with x^power
+    /// Multiply a polynomial with x^power
     #[must_use]
     pub fn shift_coefficients(&self, power: usize) -> Self {
         let zero = FF::zero();
 
         let mut coefficients: Vec<FF> = self.coefficients.clone();
         coefficients.splice(0..0, vec![zero; power]);
-        Polynomial { coefficients }
+        Self { coefficients }
     }
 
-    // TODO: Review
+    /// Multiply a polynomial with a scalar, _i.e._, compute `scalar · self(x)`.
+    ///
+    /// Slightly faster than [`Self::scalar_mul`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let mut f = Polynomial::new(bfe_vec![1, 2, 3]);
+    /// f.scalar_mul_mut(bfe!(2));
+    /// assert_eq!(Polynomial::new(bfe_vec![2, 4, 6]), f);
+    /// ```
     pub fn scalar_mul_mut(&mut self, scalar: FF) {
-        for coefficient in self.coefficients.iter_mut() {
+        for coefficient in &mut self.coefficients {
             *coefficient *= scalar;
         }
     }
 
+    /// Multiply a polynomial with a scalar, _i.e._, compute `scalar · self(x)`.
+    ///
+    /// Slightly slower than [`Self::scalar_mul_mut`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let f = Polynomial::new(bfe_vec![1, 2, 3]);
+    /// let g = f.scalar_mul(bfe!(2));
+    /// assert_eq!(Polynomial::new(bfe_vec![2, 4, 6]), g);
+    /// ```
     #[must_use]
     pub fn scalar_mul(&self, scalar: FF) -> Self {
-        let mut coefficients: Vec<FF> = vec![];
-        for i in 0..self.coefficients.len() {
-            coefficients.push(self.coefficients[i] * scalar);
-        }
-
-        Self { coefficients }
+        Self::new(self.coefficients.iter().map(|&c| c * scalar).collect())
     }
 
-    /// Return (quotient, remainder)
-    pub fn divide(&self, divisor: Self) -> (Self, Self) {
-        let degree_lhs = self.degree();
-        let degree_rhs = divisor.degree();
-        // cannot divide by zero
-        if degree_rhs < 0 {
-            panic!("Cannot divide polynomial by zero. Got: ({self:?})/({divisor:?})");
-        }
+    /// Return (quotient, remainder).
+    ///
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn naive_divide(&self, divisor: &Self) -> (Self, Self) {
+        let divisor_lc_inv = divisor
+            .leading_coefficient()
+            .expect("divisor should be non-zero")
+            .inverse();
 
-        // zero divided by anything gives zero. degree == -1 <=> polynomial = 0
-        if self.is_zero() {
-            return (Self::zero(), Self::zero());
-        }
-
-        // quotient is built from back to front so must be reversed
-        // Preallocate space for quotient coefficients
-        let mut quotient: Vec<FF> = if degree_lhs - degree_rhs >= 0 {
-            Vec::with_capacity((degree_lhs - degree_rhs + 1) as usize)
-        } else {
-            vec![]
+        let Ok(quotient_degree) = usize::try_from(self.degree() - divisor.degree()) else {
+            // self.degree() < divisor.degree()
+            return (Self::zero(), self.to_owned());
         };
+        debug_assert!(!self.is_zero());
+
+        // quotient is built from back to front, must be reversed later
+        let mut rev_quotient = Vec::with_capacity(quotient_degree + 1);
         let mut remainder = self.clone();
         remainder.normalize();
 
-        // a divisor coefficient is guaranteed to exist since the divisor is non-zero
-        let dlc: FF = divisor.leading_coefficient().unwrap();
-        let inv = FF::one() / dlc;
+        // The divisor is also iterated back to front.
+        // It is normalized manually to avoid it being a `&mut` argument.
+        let rev_divisor = divisor.coefficients.iter().rev();
+        let normal_rev_divisor = rev_divisor.skip_while(|c| c.is_zero());
 
-        let mut i = 0;
-        while i + degree_rhs <= degree_lhs {
-            // calculate next quotient coefficient, and set leading coefficient
-            // of remainder is 0 by removing it
-            let rlc: FF = remainder.coefficients.last().unwrap().to_owned();
-            let q: FF = rlc * inv;
-            quotient.push(q);
-            remainder.coefficients.pop();
-            if q.is_zero() {
-                i += 1;
+        for _ in 0..=quotient_degree {
+            let remainder_lc = remainder.coefficients.pop().unwrap();
+            let quotient_coeff = remainder_lc * divisor_lc_inv;
+            rev_quotient.push(quotient_coeff);
+
+            if quotient_coeff.is_zero() {
                 continue;
             }
 
-            // TODO: Review that this loop body was correctly modified.
-            // Calculate the new remainder
-            for j in 0..degree_rhs as usize {
-                let rem_length = remainder.coefficients.len();
-                remainder.coefficients[rem_length - j - 1] -=
-                    q * divisor.coefficients[(degree_rhs + 1) as usize - j - 2];
-            }
+            // don't use `.degree()` to still count leading zeros in intermittent remainders
+            let remainder_degree = remainder.coefficients.len().saturating_sub(1);
 
-            i += 1;
+            // skip divisor's leading coefficient: it has already been dealt with
+            for (i, &divisor_coeff) in normal_rev_divisor.clone().skip(1).enumerate() {
+                remainder.coefficients[remainder_degree - i] -= quotient_coeff * divisor_coeff;
+            }
         }
 
-        quotient.reverse();
-        let quotient_pol = Self {
-            coefficients: quotient,
-        };
+        rev_quotient.reverse();
+        let quotient = Self::new(rev_quotient);
 
-        (quotient_pol, remainder)
+        (quotient, remainder)
     }
 }
 
@@ -1247,7 +1228,7 @@ impl<FF: FiniteField> Div for Polynomial<FF> {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
-        let (quotient, _): (Self, Self) = self.divide(other);
+        let (quotient, _): (Self, Self) = self.naive_divide(&other);
         quotient
     }
 }
@@ -1256,7 +1237,7 @@ impl<FF: FiniteField> Rem for Polynomial<FF> {
     type Output = Self;
 
     fn rem(self, other: Self) -> Self {
-        let (_, remainder): (Self, Self) = self.divide(other);
+        let (_, remainder): (Self, Self) = self.naive_divide(&other);
         remainder
     }
 }
@@ -1336,8 +1317,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         let (mut b_factor, mut b1) = (Self::zero(), Self::one());
 
         while !y.is_zero() {
-            let quotient = x.clone() / y.clone();
-            let remainder = x % y.clone();
+            let (quotient, remainder) = x.naive_divide(&y);
             let c = a_factor - quotient.clone() * a1.clone();
             let d = b_factor - quotient * b1.clone();
 
@@ -1351,7 +1331,10 @@ impl<FF: FiniteField> Polynomial<FF> {
 
         // normalize result to ensure the gcd, _i.e._, `x` has leading coefficient 1
         let lc = x.leading_coefficient().unwrap_or_else(FF::one);
-        let normalize = |poly: Self| poly.scalar_mul(lc.inverse());
+        let normalize = |mut poly: Self| {
+            poly.scalar_mul_mut(lc.inverse());
+            poly
+        };
 
         let [x, a, b] = [x, a_factor, b_factor].map(normalize);
         (x, a, b)
@@ -1384,7 +1367,16 @@ impl<FF: FiniteField> Mul for Polynomial<FF> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
-        Self::multiply(self, other)
+        self.naive_multiply(&other)
+    }
+}
+
+impl<FF: FiniteField> Neg for Polynomial<FF> {
+    type Output = Self;
+
+    fn neg(mut self) -> Self::Output {
+        self.scalar_mul_mut(-FF::one());
+        self
     }
 }
 
@@ -1488,7 +1480,7 @@ mod test_polynomials {
     #[proptest]
     fn normalizing_removes_spurious_leading_zeros(
         polynomial: Polynomial<BFieldElement>,
-        leading_coefficient: BFieldElement,
+        #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
         #[strategy(0usize..30)] num_leading_zeros: usize,
     ) {
         let mut coefficients = polynomial.coefficients.clone();
@@ -1511,7 +1503,45 @@ mod test_polynomials {
         let _ = bfe_poly.scale(xfe!(42));
 
         let xfe_poly = Polynomial::new(xfe_vec![0, 1, 2]);
+        let _ = xfe_poly.scale(bfe!(42));
         let _ = xfe_poly.scale(xfe!(42));
+    }
+
+    #[proptest]
+    fn polynomial_scaling_is_equivalent_in_extension_field(
+        bfe_polynomial: Polynomial<BFieldElement>,
+        alpha: BFieldElement,
+    ) {
+        let bfe_coefficients = bfe_polynomial.coefficients.iter();
+        let xfe_coefficients = bfe_coefficients.map(|bfe| bfe.lift()).collect();
+        let xfe_polynomial = Polynomial::<XFieldElement>::new(xfe_coefficients);
+
+        let xfe_poly_bfe_scalar = xfe_polynomial.scale(alpha);
+        let bfe_poly_xfe_scalar = bfe_polynomial.scale(alpha.lift());
+        prop_assert_eq!(xfe_poly_bfe_scalar, bfe_poly_xfe_scalar);
+    }
+
+    #[proptest]
+    fn evaluating_scaled_polynomial_is_equivalent_to_evaluating_original_in_offset_point(
+        polynomial: Polynomial<BFieldElement>,
+        alpha: BFieldElement,
+        x: BFieldElement,
+    ) {
+        let scaled_polynomial = polynomial.scale(alpha);
+        prop_assert_eq!(
+            polynomial.evaluate(alpha * x),
+            scaled_polynomial.evaluate(x)
+        );
+    }
+
+    #[proptest]
+    fn polynomial_multiplication_with_scalar_is_equivalent_for_the_two_methods(
+        mut polynomial: Polynomial<BFieldElement>,
+        scalar: BFieldElement,
+    ) {
+        let new_polynomial = polynomial.scalar_mul(scalar);
+        polynomial.scalar_mul_mut(scalar);
+        prop_assert_eq!(polynomial, new_polynomial);
     }
 
     #[proptest]
@@ -1522,7 +1552,7 @@ mod test_polynomials {
     ) {
         let evaluations = points
             .into_iter()
-            .map(|x| (x, polynomial.evaluate(&x)))
+            .map(|x| (x, polynomial.evaluate(x)))
             .collect_vec();
         let interpolation_polynomial = Polynomial::lagrange_interpolate_zipped(&evaluations);
         prop_assert_eq!(polynomial, interpolation_polynomial);
@@ -1535,7 +1565,7 @@ mod test_polynomials {
         #[filter(#p0.0 != #p2_x && #p1.0 != #p2_x)] p2_x: BFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let p2 = (p2_x, line.evaluate(&p2_x));
+        let p2 = (p2_x, line.evaluate(p2_x));
         prop_assert!(Polynomial::are_colinear_3(p0, p1, p2));
     }
 
@@ -1547,7 +1577,7 @@ mod test_polynomials {
         #[filter(!#disturbance.is_zero())] disturbance: BFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let p2 = (p2_x, line.evaluate(&p2_x) + disturbance);
+        let p2 = (p2_x, line.evaluate(p2_x) + disturbance);
         prop_assert!(!Polynomial::are_colinear_3(p0, p1, p2));
     }
 
@@ -1582,7 +1612,7 @@ mod test_polynomials {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
         let additional_points = additional_points_xs
             .into_iter()
-            .map(|x| (x, line.evaluate(&x)))
+            .map(|x| (x, line.evaluate(x)))
             .collect_vec();
         let all_points = [p0, p1].into_iter().chain(additional_points).collect_vec();
         prop_assert!(Polynomial::are_colinear(&all_points));
@@ -1604,7 +1634,7 @@ mod test_polynomials {
         x: BFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let y = line.evaluate(&x);
+        let y = line.evaluate(x);
         let y_from_get_point_on_line = Polynomial::get_colinear_y(p0, p1, x);
         prop_assert_eq!(y, y_from_get_point_on_line);
     }
@@ -1616,7 +1646,7 @@ mod test_polynomials {
         x: XFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let y = line.evaluate(&x);
+        let y = line.evaluate(x);
         let y_from_get_point_on_line = Polynomial::get_colinear_y(p0, p1, x);
         prop_assert_eq!(y, y_from_get_point_on_line);
     }
@@ -1844,6 +1874,80 @@ mod test_polynomials {
     }
 
     #[proptest]
+    fn leading_coefficient_of_truncated_polynomial_is_same_as_original_leading_coefficient(
+        poly: Polynomial<BFieldElement>,
+        #[strategy(..50_usize)] truncation_point: usize,
+    ) {
+        let Some(lc) = poly.leading_coefficient() else {
+            let reason = "test is only sensible if polynomial has a leading coefficient";
+            return Err(TestCaseError::Reject(reason.into()));
+        };
+        let truncated_poly = poly.truncate(truncation_point);
+        let Some(trunc_lc) = truncated_poly.leading_coefficient() else {
+            let reason = "test is only sensible if truncated polynomial has a leading coefficient";
+            return Err(TestCaseError::Reject(reason.into()));
+        };
+        prop_assert_eq!(lc, trunc_lc);
+    }
+
+    #[proptest]
+    fn truncated_polynomial_is_of_degree_min_of_truncation_point_and_poly_degree(
+        poly: Polynomial<BFieldElement>,
+        #[strategy(..50_usize)] truncation_point: usize,
+    ) {
+        let expected_degree = poly.degree().min(truncation_point.try_into().unwrap());
+        prop_assert_eq!(expected_degree, poly.truncate(truncation_point).degree());
+    }
+
+    #[proptest]
+    fn truncating_zero_polynomial_gives_zero_polynomial(
+        #[strategy(..50_usize)] truncation_point: usize,
+    ) {
+        let poly = Polynomial::<BFieldElement>::zero().truncate(truncation_point);
+        prop_assert!(poly.is_zero());
+    }
+
+    #[proptest]
+    fn truncation_negates_degree_shifting(
+        #[strategy(0_usize..30)] shift: usize,
+        #[strategy(..50_usize)] truncation_point: usize,
+        #[filter(#poly.degree() >= #truncation_point as isize)] poly: Polynomial<BFieldElement>,
+    ) {
+        prop_assert_eq!(
+            poly.truncate(truncation_point),
+            poly.shift_coefficients(shift).truncate(truncation_point)
+        );
+    }
+
+    #[proptest]
+    fn zero_polynomial_mod_any_power_of_x_is_zero_polynomial(power: usize) {
+        let must_be_zero = Polynomial::<BFieldElement>::zero().mod_x_to_the_n(power);
+        prop_assert!(must_be_zero.is_zero());
+    }
+
+    #[proptest]
+    fn polynomial_mod_some_power_of_x_results_in_polynomial_of_degree_one_less_than_power(
+        #[filter(!#poly.is_zero())] poly: Polynomial<BFieldElement>,
+        #[strategy(..=usize::try_from(#poly.degree()).unwrap())] power: usize,
+    ) {
+        let remainder = poly.mod_x_to_the_n(power);
+        prop_assert_eq!(isize::try_from(power).unwrap() - 1, remainder.degree());
+    }
+
+    #[proptest]
+    fn polynomial_mod_some_power_of_x_shares_low_degree_terms_coefficients_with_original_polynomial(
+        #[filter(!#poly.is_zero())] poly: Polynomial<BFieldElement>,
+        power: usize,
+    ) {
+        let remainder = poly.mod_x_to_the_n(power);
+        let min_num_coefficients = poly.coefficients.len().min(remainder.coefficients.len());
+        prop_assert_eq!(
+            &poly.coefficients[..min_num_coefficients],
+            &remainder.coefficients[..min_num_coefficients]
+        );
+    }
+
+    #[proptest]
     fn fast_multiplication_by_zero_gives_zero(poly: Polynomial<BFieldElement>) {
         let product = poly.fast_multiply(&Polynomial::zero());
         prop_assert_eq!(Polynomial::zero(), product);
@@ -1874,19 +1978,31 @@ mod test_polynomials {
 
     #[proptest(cases = 50)]
     fn naive_zerofier_and_fast_zerofier_are_identical(
-        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
+        #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
+        roots: Vec<BFieldElement>,
     ) {
-        let zerofier = Polynomial::naive_zerofier(&domain);
-        let fast_zerofier = Polynomial::fast_zerofier(&domain);
-        prop_assert_eq!(zerofier, fast_zerofier);
+        let naive_zerofier = Polynomial::naive_zerofier(&roots);
+        let fast_zerofier = Polynomial::fast_zerofier(&roots);
+        prop_assert_eq!(naive_zerofier, fast_zerofier);
+    }
+
+    #[proptest(cases = 50)]
+    fn smart_zerofier_and_fast_zerofier_are_identical(
+        #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
+        roots: Vec<BFieldElement>,
+    ) {
+        let smart_zerofier = Polynomial::smart_zerofier(&roots);
+        let fast_zerofier = Polynomial::fast_zerofier(&roots);
+        prop_assert_eq!(smart_zerofier, fast_zerofier);
     }
 
     #[proptest(cases = 50)]
     fn zerofier_and_naive_zerofier_are_identical(
-        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
+        #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
+        roots: Vec<BFieldElement>,
     ) {
-        let zerofier = Polynomial::zerofier(&domain);
-        let naive_zerofier = Polynomial::naive_zerofier(&domain);
+        let zerofier = Polynomial::zerofier(&roots);
+        let naive_zerofier = Polynomial::naive_zerofier(&roots);
         prop_assert_eq!(zerofier, naive_zerofier);
     }
 
@@ -1898,10 +2014,10 @@ mod test_polynomials {
     ) {
         let zerofier = Polynomial::zerofier(&domain);
         for point in domain {
-            prop_assert_eq!(BFieldElement::zero(), zerofier.evaluate(&point));
+            prop_assert_eq!(BFieldElement::zero(), zerofier.evaluate(point));
         }
         for point in out_of_domain_points {
-            prop_assert_ne!(BFieldElement::zero(), zerofier.evaluate(&point));
+            prop_assert_ne!(BFieldElement::zero(), zerofier.evaluate(point));
         }
     }
 
@@ -1933,13 +2049,13 @@ mod test_polynomials {
         poly: Polynomial<BFieldElement>,
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
     ) {
-        let evaluations = domain.iter().map(|x| poly.evaluate(x)).collect_vec();
+        let evaluations = domain.iter().map(|&x| poly.evaluate(x)).collect_vec();
         let fast_evaluations = poly.fast_evaluate(&domain);
         prop_assert_eq!(evaluations, fast_evaluations);
     }
 
     #[test]
-    #[should_panic(expected = "0 points")]
+    #[should_panic(expected = "zero points")]
     fn lagrange_interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::lagrange_interpolate(&[], &[]);
     }
@@ -2038,7 +2154,7 @@ mod test_polynomials {
     #[proptest]
     fn fast_coset_interpolation_and_and_fast_interpolation_on_coset_are_identical(
         #[filter(!#offset.is_zero())] offset: BFieldElement,
-        #[strategy(0..8usize)]
+        #[strategy(1..8usize)]
         #[map(|x: usize| 1 << x)]
         root_order: usize,
         #[strategy(vec(arb(), #root_order))] values: Vec<BFieldElement>,
@@ -2054,26 +2170,133 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn fast_coset_division_and_division_are_equivalent(
+    fn naive_division_gives_quotient_and_remainder_with_expected_properties(
         a: Polynomial<BFieldElement>,
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
-        #[filter(!#offset.is_zero())] offset: BFieldElement,
     ) {
-        let product = a.clone() * b.clone();
-        let quotient = product.fast_coset_divide(&b, offset);
-        prop_assert_eq!(product / b, quotient);
+        let (quot, rem) = a.naive_divide(&b);
+        prop_assert!(rem.degree() < b.degree());
+        prop_assert_eq!(a, quot * b + rem);
     }
 
     #[proptest]
-    fn fast_coset_division_and_fast_division_are_equivalent(
+    fn clean_naive_division_gives_quotient_and_remainder_with_expected_properties(
+        #[filter(!#a_roots.is_empty())] a_roots: Vec<BFieldElement>,
+        #[strategy(vec(0..#a_roots.len(), 1..=#a_roots.len()))]
+        #[filter(#b_root_indices.iter().all_unique())]
+        b_root_indices: Vec<usize>,
+    ) {
+        let b_roots = b_root_indices.into_iter().map(|i| a_roots[i]).collect_vec();
+        let a = Polynomial::zerofier(&a_roots);
+        let b = Polynomial::zerofier(&b_roots);
+        let (quot, rem) = a.naive_divide(&b);
+        prop_assert!(rem.is_zero());
+        prop_assert_eq!(a, quot * b);
+    }
+
+    #[proptest]
+    fn naive_division_and_fast_division_are_equivalent(
         a: Polynomial<BFieldElement>,
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
-        #[filter(!#offset.is_zero())] offset: BFieldElement,
+    ) {
+        let quotient = a.fast_divide(&b);
+        prop_assert_eq!(a / b, quotient);
+    }
+
+    #[proptest]
+    fn clean_division_agrees_with_divide_on_clean_division(
+        #[strategy(arb())] a: Polynomial<BFieldElement>,
+        #[strategy(arb())]
+        #[filter(!#b.is_zero())]
+        b: Polynomial<BFieldElement>,
     ) {
         let product = a.clone() * b.clone();
-        let quotient_0 = product.fast_divide(&b);
-        let quotient_1 = product.fast_coset_divide(&b, offset);
-        prop_assert_eq!(quotient_0, quotient_1);
+        let (naive_quotient, remainder) = product.naive_divide(&b);
+        let clean_quotient = product.clone().clean_divide(b.clone());
+        let err = format!("{product} / {b} == {naive_quotient} != {clean_quotient}");
+        prop_assert_eq!(naive_quotient, clean_quotient, "{}", err);
+        prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
+    }
+
+    #[proptest]
+    fn clean_division_agrees_with_division_if_divisor_has_only_0_as_root(
+        #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
+    ) {
+        dividend_roots.push(bfe!(0));
+        let dividend = Polynomial::zerofier(&dividend_roots);
+        let divisor = Polynomial::zerofier(&[bfe!(0)]);
+
+        let (naive_quotient, remainder) = dividend.naive_divide(&divisor);
+        let clean_quotient = dividend.clean_divide(divisor);
+        prop_assert_eq!(naive_quotient, clean_quotient);
+        prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
+    }
+
+    #[proptest]
+    fn clean_division_agrees_with_division_if_divisor_has_only_0_as_multiple_root(
+        #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
+        #[strategy(0_usize..300)] num_roots: usize,
+    ) {
+        let multiple_roots = bfe_vec![0; num_roots];
+        let divisor = Polynomial::zerofier(&multiple_roots);
+        dividend_roots.extend(multiple_roots);
+        let dividend = Polynomial::zerofier(&dividend_roots);
+
+        let (naive_quotient, remainder) = dividend.naive_divide(&divisor);
+        let clean_quotient = dividend.clean_divide(divisor);
+        prop_assert_eq!(naive_quotient, clean_quotient);
+        prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
+    }
+
+    #[proptest]
+    fn clean_division_agrees_with_division_if_divisor_has_0_as_root(
+        #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
+        #[strategy(vec(0..#dividend_roots.len(), 0..=#dividend_roots.len()))]
+        #[filter(#divisor_root_indices.iter().all_unique())]
+        divisor_root_indices: Vec<usize>,
+    ) {
+        // ensure clean division: make divisor's roots a subset of dividend's roots
+        let mut divisor_roots = divisor_root_indices
+            .into_iter()
+            .map(|i| dividend_roots[i])
+            .collect_vec();
+
+        // ensure clean division: make 0 a root of both dividend and divisor
+        dividend_roots.push(bfe!(0));
+        divisor_roots.push(bfe!(0));
+
+        let dividend = Polynomial::zerofier(&dividend_roots);
+        let divisor = Polynomial::zerofier(&divisor_roots);
+        let quotient = dividend.clone().clean_divide(divisor.clone());
+        prop_assert_eq!(dividend / divisor, quotient);
+    }
+
+    #[proptest]
+    fn clean_division_agrees_with_division_if_divisor_has_0_through_9_as_roots(
+        #[strategy(arb())] additional_dividend_roots: Vec<BFieldElement>,
+    ) {
+        let divisor_roots = (0..10).map(BFieldElement::new).collect_vec();
+        let divisor = Polynomial::zerofier(&divisor_roots);
+        let dividend_roots = [additional_dividend_roots, divisor_roots].concat();
+        let dividend = Polynomial::zerofier(&dividend_roots);
+        dbg!(dividend.to_string());
+        dbg!(divisor.to_string());
+        let quotient = dividend.clone().clean_divide(divisor.clone());
+        prop_assert_eq!(dividend / divisor, quotient);
+    }
+
+    #[proptest]
+    fn clean_division_gives_quotient_and_remainder_with_expected_properties(
+        #[filter(!#a_roots.is_empty())] a_roots: Vec<BFieldElement>,
+        #[strategy(vec(0..#a_roots.len(), 1..=#a_roots.len()))]
+        #[filter(#b_root_indices.iter().all_unique())]
+        b_root_indices: Vec<usize>,
+    ) {
+        let b_roots = b_root_indices.into_iter().map(|i| a_roots[i]).collect_vec();
+        let a = Polynomial::zerofier(&a_roots);
+        let b = Polynomial::zerofier(&b_roots);
+        let quotient = a.clone().clean_divide(b.clone());
+        prop_assert_eq!(a, quotient * b);
     }
 
     #[proptest]
@@ -2093,7 +2316,7 @@ mod test_polynomials {
         #[filter(!#b.is_zero())] b: BFieldElement,
     ) {
         let b_poly = Polynomial::from_constant(b);
-        let (_, remainder) = a.divide(b_poly);
+        let (_, remainder) = a.naive_divide(&b_poly);
         prop_assert_eq!(Polynomial::zero(), remainder);
     }
 
@@ -2103,12 +2326,12 @@ mod test_polynomials {
 
         let shah = XFieldElement::shah_polynomial();
         let x_to_the_3 = polynomial(&[1]).shift_coefficients(3);
-        let (shah_div_x_to_the_3, shah_mod_x_to_the_3) = shah.divide(x_to_the_3);
+        let (shah_div_x_to_the_3, shah_mod_x_to_the_3) = shah.naive_divide(&x_to_the_3);
         assert_eq!(polynomial(&[1]), shah_div_x_to_the_3);
         assert_eq!(polynomial(&[1, BFieldElement::P - 1]), shah_mod_x_to_the_3);
 
         let x_to_the_6 = polynomial(&[1]).shift_coefficients(6);
-        let (x_to_the_6_div_shah, x_to_the_6_mod_shah) = x_to_the_6.divide(shah);
+        let (x_to_the_6_div_shah, x_to_the_6_mod_shah) = x_to_the_6.naive_divide(&shah);
 
         // x^3 + x - 1
         let expected_quot = polynomial(&[BFieldElement::P - 1, 1, 0, 1]);
