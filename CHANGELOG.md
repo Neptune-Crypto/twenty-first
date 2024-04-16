@@ -3,6 +3,75 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.40.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.39.0..v0.40.0) – 2024-04-16
+
+### ✨ Features
+
+- Make fast polynomial division complete ([0edb2902](https://github.com/Neptune-Crypto/twenty-first/commit/0edb2902))
+- Add fast polynomial modulo for x^n ([21411be3](https://github.com/Neptune-Crypto/twenty-first/commit/21411be3))
+- Add fast method for clean divisions ([f4a43450](https://github.com/Neptune-Crypto/twenty-first/commit/f4a43450))
+
+### 🐛 Bug Fixes
+
+- *(test)* Avoid test failure in edge case ([c7f753f0](https://github.com/Neptune-Crypto/twenty-first/commit/c7f753f0))
+
+### ⚡️ Performance
+
+- Parallelize `fast_evaluate` ([601ba840](https://github.com/Neptune-Crypto/twenty-first/commit/601ba840))
+- Parallelize `fast_zerofier_inner` ([f0fdf92f](https://github.com/Neptune-Crypto/twenty-first/commit/f0fdf92f))
+- Use `zerofier` without `fast` ([a9823c97](https://github.com/Neptune-Crypto/twenty-first/commit/a9823c97))
+- (!) Remove special cases ([20242688](https://github.com/Neptune-Crypto/twenty-first/commit/20242688))
+- Use fastest interpolation technique ([90c9cc89](https://github.com/Neptune-Crypto/twenty-first/commit/90c9cc89))
+- Use fastest evaluation technique ([7a91f776](https://github.com/Neptune-Crypto/twenty-first/commit/7a91f776))
+- Speed up `fast_evaluate` by smarter division ([d7edc17c](https://github.com/Neptune-Crypto/twenty-first/commit/d7edc17c))
+- Use fastest field mul for polynomial “scale” ([d89da0da](https://github.com/Neptune-Crypto/twenty-first/commit/d89da0da))
+- Reduce polynomial long divisions in xgcd ([ca4995fe](https://github.com/Neptune-Crypto/twenty-first/commit/ca4995fe))
+- Make `Polynomial::scale` faster ([408838e7](https://github.com/Neptune-Crypto/twenty-first/commit/408838e7))
+- Benchmark coset evaluate and interpolate ([070e6133](https://github.com/Neptune-Crypto/twenty-first/commit/070e6133))
+- Collapse loops in Lagrange interpolation ([71c892f2](https://github.com/Neptune-Crypto/twenty-first/commit/71c892f2))
+- Parallelize `Polynomial::fast_interpolate` ([504633c4](https://github.com/Neptune-Crypto/twenty-first/commit/504633c4))
+- Add makefile `bench` target for publishing ([43c4d645](https://github.com/Neptune-Crypto/twenty-first/commit/43c4d645))
+- Avoid allocation for scalar·polynomial ([87a21ee7](https://github.com/Neptune-Crypto/twenty-first/commit/87a21ee7))
+- Speed up polynomial operations ([69a55edb](https://github.com/Neptune-Crypto/twenty-first/commit/69a55edb))
+- *(bench)* Reduce sample size of some benchmarks ([bafe3620](https://github.com/Neptune-Crypto/twenty-first/commit/bafe3620))
+
+### 📚 Documentation
+
+- Document polynomial's `leading_coefficient()` ([0124d0bd](https://github.com/Neptune-Crypto/twenty-first/commit/0124d0bd))
+- Explain extension field's “Shah polynomial” ([e9813ea4](https://github.com/Neptune-Crypto/twenty-first/commit/e9813ea4))
+- Describe performance critical arguments ([9be21d6f](https://github.com/Neptune-Crypto/twenty-first/commit/9be21d6f))
+- Add publishing instructions to README ([d8cd0465](https://github.com/Neptune-Crypto/twenty-first/commit/d8cd0465))
+
+### ⚙️ Miscellaneous
+
+- *(bench)* Remove oranges from comparison ([4f2fbd49](https://github.com/Neptune-Crypto/twenty-first/commit/4f2fbd49))
+
+### ♻️ Refactor
+
+- (!) Remove deprecated functions ([0ec7453a](https://github.com/Neptune-Crypto/twenty-first/commit/0ec7453a))
+- *(bench)* Simplify zerofier cutoff search ([aaefc79f](https://github.com/Neptune-Crypto/twenty-first/commit/aaefc79f))
+- (!) *(bench)* Add “smart” zerofier ([c56eb5e8](https://github.com/Neptune-Crypto/twenty-first/commit/c56eb5e8))
+- (!) Improve polynomial multiplication names ([48370ec6](https://github.com/Neptune-Crypto/twenty-first/commit/48370ec6))
+- *(test)* Use property test framework more ([bde30c79](https://github.com/Neptune-Crypto/twenty-first/commit/bde30c79))
+- Remove superfluous threshold constants ([00be8309](https://github.com/Neptune-Crypto/twenty-first/commit/00be8309))
+- (!) Don't “ref” `Copy` arg in `evaluate` ([5700e50b](https://github.com/Neptune-Crypto/twenty-first/commit/5700e50b))
+
+### ✅ Testing
+
+- Add “evaluation” benchmark ([478d4c5b](https://github.com/Neptune-Crypto/twenty-first/commit/478d4c5b))
+- Benchmark polynomial multiplication ([37902ebc](https://github.com/Neptune-Crypto/twenty-first/commit/37902ebc))
+- Other `evaluate` parallelization to bench ([e6454ed4](https://github.com/Neptune-Crypto/twenty-first/commit/e6454ed4))
+- Add property test for polynomial division ([524d11b7](https://github.com/Neptune-Crypto/twenty-first/commit/524d11b7))
+- Benchmark polynomial “scale” ([4a7f89c0](https://github.com/Neptune-Crypto/twenty-first/commit/4a7f89c0))
+- Poly scale is equivalent in extension field ([d738d9b5](https://github.com/Neptune-Crypto/twenty-first/commit/d738d9b5))
+- Un-ignore ignored tests ([ac9e5b96](https://github.com/Neptune-Crypto/twenty-first/commit/ac9e5b96))
+- Use `proptest` framework more ([ec5b4943](https://github.com/Neptune-Crypto/twenty-first/commit/ec5b4943))
+
+### 🎨 Styling
+
+- Improve code style of polynomial division ([9110c732](https://github.com/Neptune-Crypto/twenty-first/commit/9110c732))
+- Improve code to convert to `XFieldElement` ([9af85baf](https://github.com/Neptune-Crypto/twenty-first/commit/9af85baf))
+
 ## [0.39.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.38.0..v0.39.0) – 2024-04-08
 
 ### ✨ Features
