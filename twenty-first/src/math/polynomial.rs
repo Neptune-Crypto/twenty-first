@@ -1480,6 +1480,33 @@ mod test_polynomials {
     }
 
     #[proptest]
+    fn polynomial_scaling_is_equivalent_in_extension_field(
+        bfe_polynomial: Polynomial<BFieldElement>,
+        alpha: BFieldElement,
+    ) {
+        let bfe_coefficients = bfe_polynomial.coefficients.iter();
+        let xfe_coefficients = bfe_coefficients.map(|bfe| bfe.lift()).collect();
+        let xfe_polynomial = Polynomial::<XFieldElement>::new(xfe_coefficients);
+
+        let xfe_poly_bfe_scalar = xfe_polynomial.scale(alpha);
+        let bfe_poly_xfe_scalar = bfe_polynomial.scale(alpha.lift());
+        prop_assert_eq!(xfe_poly_bfe_scalar, bfe_poly_xfe_scalar);
+    }
+
+    #[proptest]
+    fn evaluating_scaled_polynomial_is_equivalent_to_evaluating_original_in_offset_point(
+        polynomial: Polynomial<BFieldElement>,
+        alpha: BFieldElement,
+        x: BFieldElement,
+    ) {
+        let scaled_polynomial = polynomial.scale(alpha);
+        prop_assert_eq!(
+            polynomial.evaluate(&(alpha * x)),
+            scaled_polynomial.evaluate(&x)
+        );
+    }
+
+    #[proptest]
     fn slow_lagrange_interpolation(
         polynomial: Polynomial<BFieldElement>,
         #[strategy(Just(#polynomial.coefficients.len().max(1)))] _min_points: usize,
