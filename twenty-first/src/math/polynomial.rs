@@ -362,7 +362,7 @@ where
     /// let polynomial = Polynomial::interpolate(&domain, &values);
     ///
     /// assert_eq!(1, polynomial.degree());
-    /// assert_eq!(bfe!(9), polynomial.evaluate(&bfe!(4)));
+    /// assert_eq!(bfe!(9), polynomial.evaluate(bfe!(4)));
     /// ```
     ///
     /// # Panics
@@ -635,7 +635,7 @@ where
     pub fn batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         // According to `cargo bench --bench evaluation` on mjolnir, parallel evaluation is always
         // faster than fast evaluation.
-        domain.par_iter().map(|p| self.evaluate(p)).collect()
+        domain.par_iter().map(|&p| self.evaluate(p)).collect()
     }
 
     /// Only `pub` to allow benchmarking; not considered part of the public API.
@@ -961,7 +961,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         self.degree() == 1 && self.coefficients[0].is_zero() && self.coefficients[1].is_one()
     }
 
-    pub fn evaluate(&self, &x: &FF) -> FF {
+    pub fn evaluate(&self, x: FF) -> FF {
         let mut acc = FF::zero();
         for &c in self.coefficients.iter().rev() {
             acc = c + x * acc;
@@ -1501,8 +1501,8 @@ mod test_polynomials {
     ) {
         let scaled_polynomial = polynomial.scale(alpha);
         prop_assert_eq!(
-            polynomial.evaluate(&(alpha * x)),
-            scaled_polynomial.evaluate(&x)
+            polynomial.evaluate(alpha * x),
+            scaled_polynomial.evaluate(x)
         );
     }
 
@@ -1514,7 +1514,7 @@ mod test_polynomials {
     ) {
         let evaluations = points
             .into_iter()
-            .map(|x| (x, polynomial.evaluate(&x)))
+            .map(|x| (x, polynomial.evaluate(x)))
             .collect_vec();
         let interpolation_polynomial = Polynomial::lagrange_interpolate_zipped(&evaluations);
         prop_assert_eq!(polynomial, interpolation_polynomial);
@@ -1527,7 +1527,7 @@ mod test_polynomials {
         #[filter(#p0.0 != #p2_x && #p1.0 != #p2_x)] p2_x: BFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let p2 = (p2_x, line.evaluate(&p2_x));
+        let p2 = (p2_x, line.evaluate(p2_x));
         prop_assert!(Polynomial::are_colinear_3(p0, p1, p2));
     }
 
@@ -1539,7 +1539,7 @@ mod test_polynomials {
         #[filter(!#disturbance.is_zero())] disturbance: BFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let p2 = (p2_x, line.evaluate(&p2_x) + disturbance);
+        let p2 = (p2_x, line.evaluate(p2_x) + disturbance);
         prop_assert!(!Polynomial::are_colinear_3(p0, p1, p2));
     }
 
@@ -1574,7 +1574,7 @@ mod test_polynomials {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
         let additional_points = additional_points_xs
             .into_iter()
-            .map(|x| (x, line.evaluate(&x)))
+            .map(|x| (x, line.evaluate(x)))
             .collect_vec();
         let all_points = [p0, p1].into_iter().chain(additional_points).collect_vec();
         prop_assert!(Polynomial::are_colinear(&all_points));
@@ -1596,7 +1596,7 @@ mod test_polynomials {
         x: BFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let y = line.evaluate(&x);
+        let y = line.evaluate(x);
         let y_from_get_point_on_line = Polynomial::get_colinear_y(p0, p1, x);
         prop_assert_eq!(y, y_from_get_point_on_line);
     }
@@ -1608,7 +1608,7 @@ mod test_polynomials {
         x: XFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let y = line.evaluate(&x);
+        let y = line.evaluate(x);
         let y_from_get_point_on_line = Polynomial::get_colinear_y(p0, p1, x);
         prop_assert_eq!(y, y_from_get_point_on_line);
     }
@@ -1976,10 +1976,10 @@ mod test_polynomials {
     ) {
         let zerofier = Polynomial::zerofier(&domain);
         for point in domain {
-            prop_assert_eq!(BFieldElement::zero(), zerofier.evaluate(&point));
+            prop_assert_eq!(BFieldElement::zero(), zerofier.evaluate(point));
         }
         for point in out_of_domain_points {
-            prop_assert_ne!(BFieldElement::zero(), zerofier.evaluate(&point));
+            prop_assert_ne!(BFieldElement::zero(), zerofier.evaluate(point));
         }
     }
 
@@ -2011,7 +2011,7 @@ mod test_polynomials {
         poly: Polynomial<BFieldElement>,
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
     ) {
-        let evaluations = domain.iter().map(|x| poly.evaluate(x)).collect_vec();
+        let evaluations = domain.iter().map(|&x| poly.evaluate(x)).collect_vec();
         let fast_evaluations = poly.fast_evaluate(&domain);
         prop_assert_eq!(evaluations, fast_evaluations);
     }

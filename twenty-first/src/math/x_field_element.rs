@@ -1207,7 +1207,7 @@ mod x_field_element_test {
             let pol_degree_i_minus_1: Polynomial<XFieldElement> = Polynomial::from(&inputs);
             let x_domain = root.get_cyclic_group_elements(None);
             for i in 0..inputs.len() {
-                assert_eq!(pol_degree_i_minus_1.evaluate(&x_domain[i]), rv[i]);
+                assert_eq!(pol_degree_i_minus_1.evaluate(x_domain[i]), rv[i]);
             }
 
             // Verify that polynomial interpolation produces the same polynomial

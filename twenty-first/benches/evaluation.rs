@@ -28,7 +28,7 @@ fn evaluation<const SIZE: usize>(c: &mut Criterion) {
     let eval_points: Vec<BFieldElement> = random_elements(SIZE);
 
     let id = BenchmarkId::new("Parallel", log2_of_size);
-    let par_eval = || -> Vec<_> { eval_points.par_iter().map(|p| poly.evaluate(p)).collect() };
+    let par_eval = || -> Vec<_> { eval_points.par_iter().map(|&p| poly.evaluate(p)).collect() };
     group.bench_function(id, |b| b.iter(par_eval));
 
     // `vector_batch_evaluate` exists, but is super slow. Put it here if you plan to run benchmarks
