@@ -143,7 +143,7 @@ where
     /// [Lagrange interpolation](Self::lagrange_interpolate) below this threshold.
     ///
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
-    const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 9;
+    const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
@@ -463,30 +463,38 @@ where
         );
         debug_assert_eq!(domain.len(), values.len());
 
-        let hadamard_mul = |x: &[_], y: Vec<_>| x.iter().zip(y).map(|(&n, d)| n * d).collect_vec();
-
         let mid_point = domain.len() / 2;
         let left_domain_half = &domain[..mid_point];
         let left_values_half = &values[..mid_point];
         let right_domain_half = &domain[mid_point..];
         let right_values_half = &values[mid_point..];
 
-        let left_zerofier = Self::zerofier(left_domain_half);
-        let right_zerofier = Self::zerofier(right_domain_half);
+        let (left_zerofier, right_zerofier) = rayon::join(
+            || Self::zerofier(left_domain_half),
+            || Self::zerofier(right_domain_half),
+        );
 
-        let left_offset = right_zerofier.fast_evaluate(left_domain_half);
-        let right_offset = left_zerofier.fast_evaluate(right_domain_half);
+        let (left_offset, right_offset) = rayon::join(
+            || right_zerofier.batch_evaluate(left_domain_half),
+            || left_zerofier.batch_evaluate(right_domain_half),
+        );
 
-        let left_offset_inverse = FF::batch_inversion(left_offset);
-        let left_targets: Vec<FF> = hadamard_mul(left_values_half, left_offset_inverse);
-        let left_interpolant = Self::interpolate(left_domain_half, &left_targets);
+        let hadamard_mul = |x: &[_], y: Vec<_>| x.iter().zip(y).map(|(&n, d)| n * d).collect_vec();
+        let interpolate_half = |offset, domain_half, values_half| {
+            let offset_inverse = FF::batch_inversion(offset);
+            let targets = hadamard_mul(values_half, offset_inverse);
+            Self::interpolate(domain_half, &targets)
+        };
+        let (left_interpolant, right_interpolant) = rayon::join(
+            || interpolate_half(left_offset, left_domain_half, left_values_half),
+            || interpolate_half(right_offset, right_domain_half, right_values_half),
+        );
 
-        let right_offset_inverse = FF::batch_inversion(right_offset);
-        let right_targets: Vec<FF> = hadamard_mul(right_values_half, right_offset_inverse);
-        let right_interpolant = Self::interpolate(right_domain_half, &right_targets);
+        let (left_term, right_term) = rayon::join(
+            || left_interpolant.multiply(&right_zerofier),
+            || right_interpolant.multiply(&left_zerofier),
+        );
 
-        let left_term = left_interpolant.multiply(&right_zerofier);
-        let right_term = right_interpolant.multiply(&left_zerofier);
         left_term + right_term
     }
 
