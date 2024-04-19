@@ -13,7 +13,7 @@ use rand_distr::Standard;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::error::TryFromDigestError;
+use crate::error::{FromHexDigestError, TryFromDigestError};
 use crate::math::b_field_element::BFieldElement;
 use crate::math::b_field_element::BFIELD_ZERO;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
@@ -122,7 +122,7 @@ impl TryFrom<Vec<BFieldElement>> for Digest {
     type Error = TryFromDigestError;
 
     fn try_from(value: Vec<BFieldElement>) -> Result<Self, Self::Error> {
-        Digest::try_from(value.as_ref())
+        Digest::try_from(&value as &[BFieldElement])
     }
 }
 
@@ -159,6 +159,16 @@ impl From<[u8; Digest::BYTES]> for Digest {
             .unwrap();
 
         Self(digest_innards)
+    }
+}
+
+impl TryFrom<&[u8]> for Digest {
+    type Error = TryFromDigestError;
+
+    fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
+        let array = <[u8; Self::BYTES]>::try_from(slice)
+            .map_err(|_e| TryFromDigestError::InvalidLength(slice.len()))?;
+        Ok(Self::from(array))
     }
 }
 
@@ -205,6 +215,18 @@ impl Digest {
     /// virtual machine.
     pub fn hash<H: AlgebraicHasher>(self) -> Digest {
         H::hash_pair(self, Digest::new([BFieldElement::zero(); DIGEST_LENGTH]))
+    }
+
+    /// Encode digest as hex
+    pub fn to_hex(&self) -> String {
+        let bytes = <[u8; Digest::BYTES]>::from(*self);
+        hex::encode(bytes)
+    }
+
+    /// Decode hex string to Digest
+    pub fn try_from_hex(string: &str) -> Result<Self, FromHexDigestError> {
+        let slice = hex::decode(string)?;
+        Ok(Self::try_from(&slice as &[u8])?)
     }
 }
 
@@ -415,5 +437,143 @@ pub(crate) mod digest_tests {
         let digest = Digest::from(bytes);
         let bytes_again: [u8; Digest::BYTES] = digest.into();
         prop_assert_eq!(bytes, bytes_again);
+    }
+
+    // note: this test is failing due to:
+    //       https://github.com/Neptune-Crypto/twenty-first/issues/195
+    #[test]
+    pub fn bytes_in_matches_bytes_out() {
+        let bytes1: [u8; 40] = [255; 40];
+        let d1 = Digest::from(bytes1);
+
+        let bytes2: [u8; 40] = d1.into();
+        let d2 = Digest::from(bytes2);
+
+        println!("bytes1: {:?}", bytes1);
+        println!("bytes2: {:?}", bytes2);
+
+        assert_eq!(d1, d2);
+        assert_eq!(bytes1, bytes2);
+    }
+
+    // note: this test is failing due to:
+    //       https://github.com/Neptune-Crypto/twenty-first/issues/195
+    #[test]
+    pub fn bytes_in_matches_bytes_out_extended() {
+        for x in 0..40 {
+            let mut bytes = vec![];
+            for y in 0..40 {
+                match y < x {
+                    true => bytes.push(255),
+                    false => bytes.push(254),
+                }
+            }
+            let bytes1 = <[u8; 40]>::try_from(bytes).unwrap();
+
+            let d1 = Digest::from(bytes1);
+            let bytes2: [u8; 40] = d1.into();
+
+            let d2 = Digest::from(bytes2);
+
+            if bytes1 != bytes2 {
+                println!("bytes1: {:?}", bytes1);
+                println!("bytes2: {:?}", bytes2);
+            }
+
+            assert_eq!(d1, d2);
+            assert_eq!(bytes1, bytes2);
+        }
+    }
+
+    // note: this test is failing due to:
+    //       https://github.com/Neptune-Crypto/twenty-first/issues/195
+    #[test]
+    pub fn digest_to_hex() {
+        assert_eq!(
+            &Digest::default().to_hex(),
+            "00000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        );
+
+        assert_eq!(
+            &Digest::new(bfe_array![0, 1, 10, 15, 255]).to_hex(),
+            "000000000000000001000000000000000a000000000000000f00000000000000ff00000000000000"
+        );
+
+        assert_eq!(
+            &Digest::new(bfe_array![u64::MAX, u64::MAX, u64::MAX, u64::MAX, u64::MAX]).to_hex(),
+            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        );
+    }
+
+    #[proptest]
+    fn to_hex_and_from_hex_are_reciprocal_proptest(bytes: [u8; Digest::BYTES]) {
+        let digest = Digest::from(bytes);
+        let hex = digest.to_hex();
+        let digest_again = Digest::try_from_hex(&hex).unwrap();
+        let hex_again = digest_again.to_hex();
+
+        prop_assert_eq!(digest, digest_again);
+        prop_assert_eq!(hex, hex_again);
+    }
+
+    // note: this test is failing due to:
+    //       https://github.com/Neptune-Crypto/twenty-first/issues/195
+    #[test]
+    fn to_hex_and_from_hex_are_reciprocal() {
+        let hex_vals = vec![
+            "00000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "10000000000000000000000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000000000000000000000f",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        ];
+        for hex in hex_vals.into_iter() {
+            let digest = Digest::try_from_hex(hex).unwrap();
+            assert_eq!(hex, &digest.to_hex())
+        }
+    }
+
+    #[test]
+    pub fn digest_from_hex() -> Result<(), FromHexDigestError> {
+        assert_eq!(
+            Digest::default(),
+            Digest::try_from_hex(
+                "00000000000000000000000000000000000000000000000000000000000000000000000000000000"
+            )?
+        );
+
+        assert_eq!(
+            Digest::new(bfe_array![0, 1, 10, 15, 255]),
+            Digest::try_from_hex(
+                "000000000000000001000000000000000a000000000000000f00000000000000ff00000000000000"
+            )?
+        );
+
+        assert_eq!(
+            Digest::new(bfe_array![u64::MAX, u64::MAX, u64::MAX, u64::MAX, u64::MAX]),
+            Digest::try_from_hex(
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            )?
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    pub fn digest_from_invalid_hex_errors() {
+        use hex::FromHexError;
+
+        assert!(Digest::try_from_hex("taco").is_err_and(|e| matches!(
+            e,
+            FromHexDigestError::HexDecode(FromHexError::InvalidHexCharacter { .. })
+        )));
+
+        assert!(Digest::try_from_hex("0")
+            .is_err_and(|e| matches!(e, FromHexDigestError::HexDecode(FromHexError::OddLength))));
+
+        assert!(Digest::try_from_hex("00").is_err_and(|e| matches!(
+            e,
+            FromHexDigestError::Digest(TryFromDigestError::InvalidLength(_))
+        )));
     }
 }

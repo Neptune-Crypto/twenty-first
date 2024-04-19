@@ -37,6 +37,7 @@ bfieldcodec_derive = "0.7"
 blake3 = "1.5.1"
 get-size = { version = "^0.1.4", features = ["derive"] }
 hashbrown = "0.14"
+hex = "0.4.3"
 itertools = "0.12"
 lazy_static = "1.4.0"
 num-bigint = { version = "0.4", features = ["serde"] }
