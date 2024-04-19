@@ -317,6 +317,22 @@ where
     }
 
     /// Compute the lowest degree polynomial with the provided roots.
+    /// Also known as “vanishing polynomial.”
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use num_traits::Zero;
+    /// # use twenty_first::prelude::*;
+    /// let roots = bfe_array![2, 4, 6];
+    /// let zerofier = Polynomial::zerofier(&roots);
+    ///
+    /// assert_eq!(3, zerofier.degree());
+    /// assert_eq!(bfe_vec![0, 0, 0], zerofier.batch_evaluate(&roots));
+    ///
+    /// let  non_roots = bfe_vec![0, 1, 3, 5];
+    /// assert!(zerofier.batch_evaluate(&non_roots).iter().all(|x| !x.is_zero()));
+    /// ```
     pub fn zerofier(roots: &[FF]) -> Self {
         if roots.len() < Self::FAST_ZEROFIER_CUTOFF_THRESHOLD {
             Self::smart_zerofier(roots)
