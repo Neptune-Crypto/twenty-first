@@ -42,3 +42,13 @@ pub enum TryFromDigestError {
     #[error("overflow converting to Digest")]
     Overflow,
 }
+
+#[derive(Debug, Clone, PartialEq, Error)]
+#[non_exhaustive]
+pub enum FromHexDigestError {
+    #[error("hex decoding error")]
+    HexDecode(#[from] hex::FromHexError),
+
+    #[error("digest error")]
+    Digest(#[from] TryFromDigestError),
+}
