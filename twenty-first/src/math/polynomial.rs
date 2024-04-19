@@ -2048,16 +2048,12 @@ mod test_polynomials {
 
     #[test]
     fn fast_evaluate_on_hardcoded_domain_and_polynomial() {
-        // x^5 + x^3
-        let poly = Polynomial::<BFieldElement>::from([0, 0, 0, 1, 0, 1]);
-        let domain = [6, 12].map(BFieldElement::new);
-        let evaluation = poly.fast_evaluate(&domain);
+        let domain = bfe_array![6, 12];
+        let x_to_the_5_plus_x_to_the_3 = Polynomial::new(bfe_vec![0, 0, 0, 1, 0, 1]);
 
-        let expected_0 = domain[0].mod_pow(5u64) + domain[0].mod_pow(3u64);
-        assert_eq!(expected_0, evaluation[0]);
-
-        let expected_1 = domain[1].mod_pow(5u64) + domain[1].mod_pow(3u64);
-        assert_eq!(expected_1, evaluation[1]);
+        let manual_evaluations = domain.map(|x| x.mod_pow(5) + x.mod_pow(3)).to_vec();
+        let fast_evaluations = x_to_the_5_plus_x_to_the_3.fast_evaluate(&domain);
+        assert_eq!(manual_evaluations, fast_evaluations);
     }
 
     #[proptest]
