@@ -15,8 +15,9 @@ use serde::Deserializer;
 use serde::Serialize;
 use serde::Serializer;
 
-use crate::error::FromHexDigestError;
+use crate::error::ParseBFieldElementError;
 use crate::error::TryFromDigestError;
+use crate::error::TryFromHexDigestError;
 use crate::math::b_field_element::BFieldElement;
 use crate::math::b_field_element::BFIELD_ZERO;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
@@ -100,11 +101,18 @@ impl FromStr for Digest {
     type Err = TryFromDigestError;
 
     fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let maybe_parsed_bfes: Result<Vec<_>, _> =
-            string.split(',').map(str::parse::<BFieldElement>).collect();
-        let parsed_bfes = maybe_parsed_bfes?;
-        let invalid_len_err = Self::Err::InvalidLength(parsed_bfes.len());
-        let digest_innards = parsed_bfes.try_into().map_err(|_| invalid_len_err)?;
+        let maybe_parsed_u64s: Result<Vec<_>, _> =
+            string.split(',').map(str::parse::<u64>).collect();
+        let parsed_u64s = maybe_parsed_u64s.map_err(ParseBFieldElementError::ParseU64Error)?;
+        let mut bfes = vec![];
+        for val in parsed_u64s {
+            if !BFieldElement::is_canonical(val) {
+                return Err(TryFromDigestError::NotCanonical(val));
+            }
+            bfes.push(BFieldElement::from(val))
+        }
+        let invalid_len_err = Self::Err::InvalidLength(bfes.len());
+        let digest_innards = bfes.try_into().map_err(|_| invalid_len_err)?;
 
         Ok(Digest(digest_innards))
     }
@@ -145,22 +153,26 @@ impl From<Digest> for [u8; Digest::BYTES] {
     }
 }
 
-impl From<[u8; Digest::BYTES]> for Digest {
-    fn from(item: [u8; Digest::BYTES]) -> Self {
-        let chunk_into_bfe = |chunk: &[u8]| {
+impl TryFrom<[u8; Digest::BYTES]> for Digest {
+    type Error = TryFromDigestError;
+
+    fn try_from(item: [u8; Digest::BYTES]) -> Result<Self, Self::Error> {
+        fn chunk_into_bfe(chunk: &[u8]) -> Result<BFieldElement, TryFromDigestError> {
             let mut arr = [0u8; BFieldElement::BYTES];
             arr.copy_from_slice(chunk);
-            BFieldElement::from(arr)
-        };
+            let int = u64::from_le_bytes(arr);
+            match BFieldElement::is_canonical(int) {
+                true => Ok(BFieldElement::from(arr)),
+                false => Err(TryFromDigestError::NotCanonical(int)),
+            }
+        }
 
-        let digest_innards = item
+        let digest_innards: Vec<_> = item
             .chunks_exact(BFieldElement::BYTES)
             .map(chunk_into_bfe)
-            .collect_vec()
-            .try_into()
-            .unwrap();
+            .try_collect()?;
 
-        Self(digest_innards)
+        Ok(Self(digest_innards.try_into().unwrap()))
     }
 }
 
@@ -170,7 +182,7 @@ impl TryFrom<&[u8]> for Digest {
     fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
         let array = <[u8; Self::BYTES]>::try_from(slice)
             .map_err(|_e| TryFromDigestError::InvalidLength(slice.len()))?;
-        Ok(Self::from(array))
+        Self::try_from(array)
     }
 }
 
@@ -225,7 +237,7 @@ impl Digest {
     }
 
     /// Decode hex string to Digest
-    pub fn try_from_hex(data: impl AsRef<[u8]>) -> Result<Self, FromHexDigestError> {
+    pub fn try_from_hex(data: impl AsRef<[u8]>) -> Result<Self, TryFromHexDigestError> {
         let slice = hex::decode(data)?;
         Ok(Self::try_from(&slice as &[u8])?)
     }
@@ -466,63 +478,49 @@ pub(crate) mod digest_tests {
 
     #[proptest]
     fn forty_bytes_can_be_converted_to_digest(bytes: [u8; Digest::BYTES]) {
-        let digest = Digest::from(bytes);
+        let digest = Digest::try_from(bytes).unwrap();
         let bytes_again: [u8; Digest::BYTES] = digest.into();
         prop_assert_eq!(bytes, bytes_again);
     }
 
-    // note: this test panics due to:
-    //       https://github.com/Neptune-Crypto/twenty-first/issues/195
-    //
-    //       for now we use a #[should_panic]. Depending on resolution
-    //       of #195, we may be able to remove it.
+    // note: for background on this test, see issue 195
     #[test]
-    #[should_panic]
-    fn bytes_in_matches_bytes_out() {
-        let bytes1: [u8; Digest::BYTES] = [255; Digest::BYTES];
-        let d1 = Digest::from(bytes1);
+    fn try_from_bytes_not_canonical() -> Result<(), TryFromDigestError> {
+        let bytes: [u8; Digest::BYTES] = [255; Digest::BYTES];
+
+        assert!(Digest::try_from(bytes)
+            .is_err_and(|e| matches!(e, TryFromDigestError::NotCanonical(_))));
+
+        Ok(())
+    }
+
+    // note: for background on this test, see issue 195
+    #[test]
+    fn from_str_not_canonical() -> Result<(), TryFromDigestError> {
+        let str = format!("0,0,0,0,{}", u64::MAX);
+
+        assert!(
+            Digest::from_str(&str).is_err_and(|e| matches!(e, TryFromDigestError::NotCanonical(_)))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn bytes_in_matches_bytes_out() -> Result<(), TryFromDigestError> {
+        let bytes1: [u8; Digest::BYTES] = [254; Digest::BYTES];
+        let d1 = Digest::try_from(bytes1)?;
 
         let bytes2: [u8; Digest::BYTES] = d1.into();
-        let d2 = Digest::from(bytes2);
+        let d2 = Digest::try_from(bytes2)?;
 
         println!("bytes1: {:?}", bytes1);
         println!("bytes2: {:?}", bytes2);
 
         assert_eq!(d1, d2);
         assert_eq!(bytes1, bytes2);
-    }
 
-    // note: this test panics due to:
-    //       https://github.com/Neptune-Crypto/twenty-first/issues/195
-    //
-    //       for now we use a #[should_panic]. Depending on resolution
-    //       of #195, we may be able to remove it.
-    #[test]
-    #[should_panic]
-    fn bytes_in_matches_bytes_out_extended() {
-        for x in 0..Digest::BYTES {
-            let mut bytes = vec![];
-            for y in 0..Digest::BYTES {
-                match y < x {
-                    true => bytes.push(255),
-                    false => bytes.push(254),
-                }
-            }
-            let bytes1 = <[u8; Digest::BYTES]>::try_from(bytes).unwrap();
-
-            let d1 = Digest::from(bytes1);
-            let bytes2: [u8; Digest::BYTES] = d1.into();
-
-            let d2 = Digest::from(bytes2);
-
-            if bytes1 != bytes2 {
-                println!("bytes1: {:?}", bytes1);
-                println!("bytes2: {:?}", bytes2);
-            }
-
-            assert_eq!(d1, d2);
-            assert_eq!(bytes1, bytes2);
-        }
+        Ok(())
     }
 
     mod hex_test {
@@ -545,8 +543,7 @@ pub(crate) mod digest_tests {
                         "000000000f00000000000000ff00000000000000"
                     ),
                 ),
-                // note: this would cause test failure due to:
-                //       https://github.com/Neptune-Crypto/twenty-first/issues/195
+                // note: this would result in NotCanonical error. See issue 195
                 // (
                 //     Digest::new(bfe_array![0, 1, 10, 15, 255]),
                 //     concat!("ffffffffffffffffffffffffffffffffffffffff",
@@ -564,7 +561,7 @@ pub(crate) mod digest_tests {
 
         #[proptest]
         fn to_hex_and_from_hex_are_reciprocal_proptest(bytes: [u8; Digest::BYTES]) {
-            let digest = Digest::from(bytes);
+            let digest = Digest::try_from(bytes).unwrap();
             let hex = digest.to_hex();
             let digest_again = Digest::try_from_hex(&hex).unwrap();
             let hex_again = digest_again.to_hex();
@@ -574,24 +571,24 @@ pub(crate) mod digest_tests {
         }
 
         #[test]
-        fn to_hex_and_from_hex_are_reciprocal() {
+        fn to_hex_and_from_hex_are_reciprocal() -> Result<(), TryFromHexDigestError> {
             let hex_vals = vec![
                 "00000000000000000000000000000000000000000000000000000000000000000000000000000000",
                 "10000000000000000000000000000000000000000000000000000000000000000000000000000000",
                 "0000000000000000000000000000000000000000000000000000000000000000000000000000000f",
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                // note: this would cause test failures due to:
-                //       https://github.com/Neptune-Crypto/twenty-first/issues/195
+                // note: this would result in NotCanonical error. See issue 195
                 // "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             ];
             for hex in hex_vals {
-                let digest = Digest::try_from_hex(hex).unwrap();
+                let digest = Digest::try_from_hex(hex)?;
                 assert_eq!(hex, &digest.to_hex())
             }
+            Ok(())
         }
 
         #[test]
-        fn digest_from_hex() -> Result<(), FromHexDigestError> {
+        fn digest_from_hex() -> Result<(), TryFromHexDigestError> {
             for (digest, hex) in hex_examples() {
                 assert_eq!(digest, Digest::try_from_hex(hex)?);
             }
@@ -605,17 +602,26 @@ pub(crate) mod digest_tests {
 
             assert!(Digest::try_from_hex("taco").is_err_and(|e| matches!(
                 e,
-                FromHexDigestError::HexDecode(FromHexError::InvalidHexCharacter { .. })
+                TryFromHexDigestError::HexDecode(FromHexError::InvalidHexCharacter { .. })
             )));
 
             assert!(Digest::try_from_hex("0").is_err_and(|e| matches!(
                 e,
-                FromHexDigestError::HexDecode(FromHexError::OddLength)
+                TryFromHexDigestError::HexDecode(FromHexError::OddLength)
             )));
 
             assert!(Digest::try_from_hex("00").is_err_and(|e| matches!(
                 e,
-                FromHexDigestError::Digest(TryFromDigestError::InvalidLength(_))
+                TryFromHexDigestError::Digest(TryFromDigestError::InvalidLength(_))
+            )));
+
+            // NotCanonical error. See issue 195
+            assert!(Digest::try_from_hex(
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            )
+            .is_err_and(|e| matches!(
+                e,
+                TryFromHexDigestError::Digest(TryFromDigestError::NotCanonical(_))
             )));
         }
     }
