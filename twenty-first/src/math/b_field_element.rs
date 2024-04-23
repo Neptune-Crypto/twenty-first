@@ -366,6 +366,11 @@ impl BFieldElement {
     pub fn raw_u64(&self) -> u64 {
         self.0
     }
+
+    #[inline]
+    pub const fn is_canonical(x: u64) -> bool {
+        x < Self::P
+    }
 }
 
 impl fmt::Display for BFieldElement {

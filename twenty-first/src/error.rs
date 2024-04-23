@@ -39,13 +39,16 @@ pub enum TryFromDigestError {
     #[error("invalid `BFieldElement`")]
     InvalidBFieldElement(#[from] ParseBFieldElementError),
 
+    #[error("Not Canonical. ({0})")]
+    NotCanonical(u64),
+
     #[error("overflow converting to Digest")]
     Overflow,
 }
 
 #[derive(Debug, Clone, PartialEq, Error)]
 #[non_exhaustive]
-pub enum FromHexDigestError {
+pub enum TryFromHexDigestError {
     #[error("hex decoding error")]
     HexDecode(#[from] hex::FromHexError),
 
