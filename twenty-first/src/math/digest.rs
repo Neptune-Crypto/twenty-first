@@ -15,7 +15,8 @@ use serde::Deserializer;
 use serde::Serialize;
 use serde::Serializer;
 
-use crate::error::{FromHexDigestError, TryFromDigestError};
+use crate::error::FromHexDigestError;
+use crate::error::TryFromDigestError;
 use crate::math::b_field_element::BFieldElement;
 use crate::math::b_field_element::BFIELD_ZERO;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
@@ -210,30 +211,28 @@ impl From<Digest> for BigUint {
 }
 
 impl Digest {
-    /// Simulates the VM as it hashes a digest. This
-    /// method invokes hash_pair with the right operand being the zero
-    /// digest, agreeing with the standard way to hash a digest in the
-    /// virtual machine.
+    /// Simulates the VM as it hashes a digest. This method invokes hash_pair
+    /// with the right operand being the zero digest, agreeing with the standard
+    /// way to hash a digest in the virtual machine.
     pub fn hash<H: AlgebraicHasher>(self) -> Digest {
         H::hash_pair(self, Digest::new([BFieldElement::zero(); DIGEST_LENGTH]))
     }
 
     /// Encode digest as hex
-    pub fn to_hex(&self) -> String {
-        let bytes = <[u8; Digest::BYTES]>::from(*self);
+    pub fn to_hex(self) -> String {
+        let bytes = <[u8; Digest::BYTES]>::from(self);
         hex::encode(bytes)
     }
 
     /// Decode hex string to Digest
-    pub fn try_from_hex(string: &str) -> Result<Self, FromHexDigestError> {
-        let slice = hex::decode(string)?;
+    pub fn try_from_hex(data: impl AsRef<[u8]>) -> Result<Self, FromHexDigestError> {
+        let slice = hex::decode(data)?;
         Ok(Self::try_from(&slice as &[u8])?)
     }
 }
 
-// we implement Serialize so that we can serialize as
-// hex for human readable formats like JSON but use
-// default serializer for other formats likes bincode
+// we implement Serialize so that we can serialize as hex for human readable
+// formats like JSON but use default serializer for other formats likes bincode
 impl Serialize for Digest {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         if serializer.is_human_readable() {
@@ -244,18 +243,17 @@ impl Serialize for Digest {
     }
 }
 
-// we implement Deerialize so that we can deserialize as
-// hex for human readable formats like JSON but use
-// default deserializer for other formats likes bincode
+// we impl Deserialize so that we can deserialize as hex for human readable
+// formats like JSON but use default deserializer for other formats like bincode
 impl<'de> Deserialize<'de> for Digest {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         if deserializer.is_human_readable() {
-            let str = String::deserialize(deserializer)?;
-            let slice = hex::decode(str).map_err(serde::de::Error::custom)?;
-            Ok(Self::try_from(&slice as &[u8]).map_err(serde::de::Error::custom)?)
+            let hex_string = String::deserialize(deserializer)?;
+            let bytes = hex::decode(hex_string).map_err(serde::de::Error::custom)?;
+            Ok(Self::try_from(&bytes as &[u8]).map_err(serde::de::Error::custom)?)
         } else {
             Ok(Self::new(<[BFieldElement; DIGEST_LENGTH]>::deserialize(
                 deserializer,
@@ -336,7 +334,7 @@ pub(crate) mod digest_tests {
     }
 
     #[test]
-    pub fn digest_from_str() {
+    fn digest_from_str() {
         let valid_digest_string = "12063201067205522823,\
             1529663126377206632,\
             2090171368883726200,\
@@ -480,11 +478,11 @@ pub(crate) mod digest_tests {
     //       of #195, we may be able to remove it.
     #[test]
     #[should_panic]
-    pub fn bytes_in_matches_bytes_out() {
-        let bytes1: [u8; 40] = [255; 40];
+    fn bytes_in_matches_bytes_out() {
+        let bytes1: [u8; Digest::BYTES] = [255; Digest::BYTES];
         let d1 = Digest::from(bytes1);
 
-        let bytes2: [u8; 40] = d1.into();
+        let bytes2: [u8; Digest::BYTES] = d1.into();
         let d2 = Digest::from(bytes2);
 
         println!("bytes1: {:?}", bytes1);
@@ -501,19 +499,19 @@ pub(crate) mod digest_tests {
     //       of #195, we may be able to remove it.
     #[test]
     #[should_panic]
-    pub fn bytes_in_matches_bytes_out_extended() {
-        for x in 0..40 {
+    fn bytes_in_matches_bytes_out_extended() {
+        for x in 0..Digest::BYTES {
             let mut bytes = vec![];
-            for y in 0..40 {
+            for y in 0..Digest::BYTES {
                 match y < x {
                     true => bytes.push(255),
                     false => bytes.push(254),
                 }
             }
-            let bytes1 = <[u8; 40]>::try_from(bytes).unwrap();
+            let bytes1 = <[u8; Digest::BYTES]>::try_from(bytes).unwrap();
 
             let d1 = Digest::from(bytes1);
-            let bytes2: [u8; 40] = d1.into();
+            let bytes2: [u8; Digest::BYTES] = d1.into();
 
             let d2 = Digest::from(bytes2);
 
@@ -535,25 +533,31 @@ pub(crate) mod digest_tests {
             vec![
                 (
                     Digest::default(),
-                    "00000000000000000000000000000000000000000000000000000000000000000000000000000000",
+                    concat!(
+                        "0000000000000000000000000000000000000000",
+                        "0000000000000000000000000000000000000000"
+                    ),
                 ),
                 (
                     Digest::new(bfe_array![0, 1, 10, 15, 255]),
-                    "000000000000000001000000000000000a000000000000000f00000000000000ff00000000000000",
+                    concat!(
+                        "000000000000000001000000000000000a000000",
+                        "000000000f00000000000000ff00000000000000"
+                    ),
                 ),
-
                 // note: this would cause test failure due to:
                 //       https://github.com/Neptune-Crypto/twenty-first/issues/195
                 // (
                 //     Digest::new(bfe_array![0, 1, 10, 15, 255]),
-                //     "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                //     concat!("ffffffffffffffffffffffffffffffffffffffff",
+                //             "ffffffffffffffffffffffffffffffffffffffff"),
                 // ),
             ]
         }
 
         #[test]
-        pub fn digest_to_hex() {
-            for (digest, hex) in hex_examples().into_iter() {
+        fn digest_to_hex() {
+            for (digest, hex) in hex_examples() {
                 assert_eq!(&digest.to_hex(), hex);
             }
         }
@@ -580,15 +584,15 @@ pub(crate) mod digest_tests {
                 //       https://github.com/Neptune-Crypto/twenty-first/issues/195
                 // "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             ];
-            for hex in hex_vals.into_iter() {
+            for hex in hex_vals {
                 let digest = Digest::try_from_hex(hex).unwrap();
                 assert_eq!(hex, &digest.to_hex())
             }
         }
 
         #[test]
-        pub fn digest_from_hex() -> Result<(), FromHexDigestError> {
-            for (digest, hex) in hex_examples().into_iter() {
+        fn digest_from_hex() -> Result<(), FromHexDigestError> {
+            for (digest, hex) in hex_examples() {
                 assert_eq!(digest, Digest::try_from_hex(hex)?);
             }
 
@@ -596,7 +600,7 @@ pub(crate) mod digest_tests {
         }
 
         #[test]
-        pub fn digest_from_invalid_hex_errors() {
+        fn digest_from_invalid_hex_errors() {
             use hex::FromHexError;
 
             assert!(Digest::try_from_hex("taco").is_err_and(|e| matches!(
@@ -624,16 +628,16 @@ pub(crate) mod digest_tests {
             use super::*;
 
             #[test]
-            pub fn serialize() -> Result<(), serde_json::Error> {
-                for (digest, hex) in hex_examples().into_iter() {
+            fn serialize() -> Result<(), serde_json::Error> {
+                for (digest, hex) in hex_examples() {
                     assert_eq!(serde_json::to_string(&digest)?, format!("\"{}\"", hex));
                 }
                 Ok(())
             }
 
             #[test]
-            pub fn deserialize() -> Result<(), serde_json::Error> {
-                for (digest, hex) in hex_examples().into_iter() {
+            fn deserialize() -> Result<(), serde_json::Error> {
+                for (digest, hex) in hex_examples() {
                     let json_hex = format!("\"{}\"", hex);
                     let digest_deserialized: Digest = serde_json::from_str::<Digest>(&json_hex)?;
                     assert_eq!(digest_deserialized, digest);
@@ -645,9 +649,9 @@ pub(crate) mod digest_tests {
         mod bincode_test {
             use super::*;
 
-            fn bincode_examples() -> Vec<(Digest, [u8; 40])> {
+            fn bincode_examples() -> Vec<(Digest, [u8; Digest::BYTES])> {
                 vec![
-                    (Digest::default(), [0u8; 40]),
+                    (Digest::default(), [0u8; Digest::BYTES]),
                     (
                         Digest::new(bfe_array![0, 1, 10, 15, 255]),
                         [
@@ -659,15 +663,15 @@ pub(crate) mod digest_tests {
             }
 
             #[test]
-            pub fn serialize() {
-                for (digest, bytes) in bincode_examples().into_iter() {
+            fn serialize() {
+                for (digest, bytes) in bincode_examples() {
                     assert_eq!(bincode::serialize(&digest).unwrap(), bytes);
                 }
             }
 
             #[test]
-            pub fn deserialize() {
-                for (digest, bytes) in bincode_examples().into_iter() {
+            fn deserialize() {
+                for (digest, bytes) in bincode_examples() {
                     assert_eq!(bincode::deserialize::<Digest>(&bytes).unwrap(), digest);
                 }
             }
