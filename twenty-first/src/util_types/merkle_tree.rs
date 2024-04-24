@@ -1,6 +1,5 @@
 use std::collections::hash_map::Entry::*;
 use std::collections::*;
-use std::env;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::result;
@@ -17,10 +16,11 @@ use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 
 const DEFAULT_PARALLELIZATION_CUTOFF: usize = 256;
 lazy_static! {
-    static ref PARALLELIZATION_CUTOFF: usize = env::var("MERKLE_TREE_PARALLELIZATION_CUTOFF")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(DEFAULT_PARALLELIZATION_CUTOFF);
+    static ref PARALLELIZATION_CUTOFF: usize =
+        std::env::var("TWENTY_FIRST_MERKLE_TREE_PARALLELIZATION_CUTOFF")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(DEFAULT_PARALLELIZATION_CUTOFF);
 }
 
 /// Enforces that all compilation targets have a consistent [`MAX_TREE_HEIGHT`].
