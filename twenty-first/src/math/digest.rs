@@ -104,13 +104,14 @@ impl FromStr for Digest {
         let maybe_parsed_u64s: Result<Vec<_>, _> =
             string.split(',').map(str::parse::<u64>).collect();
         let parsed_u64s = maybe_parsed_u64s.map_err(ParseBFieldElementError::ParseU64Error)?;
-        let mut bfes = vec![];
-        for val in parsed_u64s {
-            if !BFieldElement::is_canonical(val) {
-                return Err(TryFromDigestError::NotCanonical(val));
-            }
-            bfes.push(BFieldElement::from(val))
-        }
+
+        // checks if each u64 is canonical before instantiating into BFE.
+        let bfe_try_from = |v: u64| -> Result<BFieldElement, _> {
+            let bfe = BFieldElement::is_canonical(v).then(|| BFieldElement::new(v));
+            bfe.ok_or(TryFromDigestError::NotCanonical(v))
+        };
+        let bfes: Vec<_> = parsed_u64s.into_iter().map(bfe_try_from).try_collect()?;
+
         let invalid_len_err = Self::Err::InvalidLength(bfes.len());
         let digest_innards = bfes.try_into().map_err(|_| invalid_len_err)?;
 
@@ -157,15 +158,16 @@ impl TryFrom<[u8; Digest::BYTES]> for Digest {
     type Error = TryFromDigestError;
 
     fn try_from(item: [u8; Digest::BYTES]) -> Result<Self, Self::Error> {
-        fn chunk_into_bfe(chunk: &[u8]) -> Result<BFieldElement, TryFromDigestError> {
+        let chunk_into_bfe = |chunk: &[u8]| -> Result<BFieldElement, _> {
             let mut arr = [0u8; BFieldElement::BYTES];
             arr.copy_from_slice(chunk);
             let int = u64::from_le_bytes(arr);
-            match BFieldElement::is_canonical(int) {
-                true => Ok(BFieldElement::from(arr)),
-                false => Err(TryFromDigestError::NotCanonical(int)),
-            }
-        }
+
+            // return bfe, or error if not canonical
+            BFieldElement::is_canonical(int)
+                .then(|| BFieldElement::new(int))
+                .ok_or(TryFromDigestError::NotCanonical(int))
+        };
 
         let digest_innards: Vec<_> = item
             .chunks_exact(BFieldElement::BYTES)

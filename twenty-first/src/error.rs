@@ -4,6 +4,7 @@ use thiserror::Error;
 pub use crate::math::bfield_codec::BFieldCodecError;
 use crate::prelude::tip5::DIGEST_LENGTH;
 use crate::prelude::x_field_element::EXTENSION_DEGREE;
+use crate::prelude::BFieldElement;
 pub use crate::util_types::merkle_tree::MerkleTreeError;
 
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
@@ -39,7 +40,7 @@ pub enum TryFromDigestError {
     #[error("invalid `BFieldElement`")]
     InvalidBFieldElement(#[from] ParseBFieldElementError),
 
-    #[error("Not Canonical. ({0})")]
+    #[error("non-canonical {0} >= {} == `BFieldElement::P`", BFieldElement::P)]
     NotCanonical(u64),
 
     #[error("overflow converting to Digest")]
