@@ -50,9 +50,6 @@ pub enum BFieldCodecError {
     #[error("invalid length indicator")]
     InvalidLengthIndicator,
 
-    #[error("trailing zeros in encoded polynomial")]
-    TrailingZerosInPolynomialCoefficients,
-
     #[error("inner decoding error: {0}")]
     InnerDecodingFailure(#[from] Box<dyn Error + Send + Sync>),
 }
@@ -378,19 +375,31 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum PolynomialBFieldCodecError {
+    #[error("trailing zeros in polynomial-encoding")]
+    TrailingZerosInPolynomialEncoding,
+
+    #[error("inner decoding error: {0}")]
+    VectorEncodingError(BFieldCodecError),
+}
+
 impl<T: BFieldCodec + FiniteField> BFieldCodec for Polynomial<T> {
-    type Error = BFieldCodecError;
+    type Error = PolynomialBFieldCodecError;
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
-        let decoded_vec = Vec::<T>::decode(sequence)?;
-
-        let contains_trailing_zeros = match decoded_vec.last() {
-            Some(last_coeff) => last_coeff.is_zero(),
-            None => false,
+        let decoded_vec = match Vec::<T>::decode(sequence) {
+            Ok(decoded_vec) => decoded_vec,
+            Err(inner_err) => {
+                return Err(PolynomialBFieldCodecError::VectorEncodingError(inner_err))
+            }
         };
 
-        if contains_trailing_zeros {
-            return Err(BFieldCodecError::TrailingZerosInPolynomialCoefficients);
+        let encoding_contains_trailing_zeros = decoded_vec
+            .last()
+            .is_some_and(|last_coeff| last_coeff.is_zero());
+        if encoding_contains_trailing_zeros {
+            return Err(PolynomialBFieldCodecError::TrailingZerosInPolynomialEncoding);
         }
 
         Ok(Box::new(Polynomial::new(*decoded_vec)))
@@ -522,11 +531,7 @@ mod tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::bfe;
-    use crate::prelude::Digest;
-    use crate::prelude::Tip5;
-    use crate::prelude::XFieldElement;
-    use crate::xfe;
+    use crate::prelude::*;
 
     use super::*;
 
@@ -691,31 +696,31 @@ mod tests {
     neg_test_case! { fn vec_of_vec_of_xfield_elements_neg for Vec<Vec<XFieldElement>> }
 
     #[test]
-    fn trailing_zeros_have_no_effect_on_encoding_empty_poly_bfe() {
-        let poly_no_trailing_zeros: Polynomial<BFieldElement> = Polynomial::new(vec![]);
-        let encoded = poly_no_trailing_zeros.encode();
+    fn leading_zero_coefficient_have_no_effect_on_encoding_empty_poly_bfe() {
+        let poly_no_leading_zeros: Polynomial<BFieldElement> = Polynomial::new(vec![]);
+        let encoded = poly_no_leading_zeros.encode();
 
-        let mut poly_w_trailing_zeros: Polynomial<BFieldElement> = Polynomial::new(vec![]);
-        poly_w_trailing_zeros.coefficients.push(bfe!(0));
-        let encoded_of_trailing_zeros_poly = poly_w_trailing_zeros.encode();
+        let mut poly_w_leading_zeros: Polynomial<BFieldElement> = Polynomial::new(vec![]);
+        poly_w_leading_zeros.coefficients.push(bfe!(0));
+        let poly_w_leading_zeros_encoded = poly_w_leading_zeros.encode();
 
-        assert_eq!(encoded, encoded_of_trailing_zeros_poly);
+        assert_eq!(encoded, poly_w_leading_zeros_encoded);
     }
 
     #[test]
-    fn trailing_zeros_have_no_effect_on_encoding_empty_poly_xfe() {
+    fn leading_zero_coefficients_have_no_effect_on_encoding_empty_poly_xfe() {
         let poly_no_trailing_zeros: Polynomial<XFieldElement> = Polynomial::new(vec![]);
         let encoded = poly_no_trailing_zeros.encode();
 
-        let mut poly_w_trailing_zeros: Polynomial<XFieldElement> = Polynomial::new(vec![]);
-        poly_w_trailing_zeros.coefficients.push(xfe!(0));
-        let encoded_of_trailing_zeros_poly = poly_w_trailing_zeros.encode();
+        let mut poly_w_leading_zeros: Polynomial<XFieldElement> = Polynomial::new(vec![]);
+        poly_w_leading_zeros.coefficients.push(xfe!(0));
+        let poly_w_leading_zeros_encoded = poly_w_leading_zeros.encode();
 
-        assert_eq!(encoded, encoded_of_trailing_zeros_poly);
+        assert_eq!(encoded, poly_w_leading_zeros_encoded);
     }
 
     #[proptest]
-    fn trailing_zeros_have_no_effect_on_encoding_poly_bfe_pbt(
+    fn leading_zero_coefficients_have_no_effect_on_encoding_poly_bfe_pbt(
         mut polynomial: Polynomial<BFieldElement>,
         #[strategy(0usize..30)] num_leading_zeros: usize,
     ) {
@@ -723,12 +728,12 @@ mod tests {
         polynomial
             .coefficients
             .extend(vec![BFieldElement::zero(); num_leading_zeros]);
-        let encoded_of_trailing_zeros_poly = polynomial.encode();
-        prop_assert_eq!(encoded, encoded_of_trailing_zeros_poly);
+        let poly_w_leading_zeros_encoded = polynomial.encode();
+        prop_assert_eq!(encoded, poly_w_leading_zeros_encoded);
     }
 
     #[proptest]
-    fn trailing_zeros_have_no_effect_on_encoding_poly_xfe_pbt(
+    fn leading_zero_coefficients_have_no_effect_on_encoding_poly_xfe_pbt(
         mut polynomial: Polynomial<XFieldElement>,
         #[strategy(0usize..30)] num_leading_zeros: usize,
     ) {
@@ -736,8 +741,8 @@ mod tests {
         polynomial
             .coefficients
             .extend(vec![XFieldElement::zero(); num_leading_zeros]);
-        let encoded_of_trailing_zeros_poly = polynomial.encode();
-        prop_assert_eq!(encoded, encoded_of_trailing_zeros_poly);
+        let poly_w_leading_zeros_encoded = polynomial.encode();
+        prop_assert_eq!(encoded, poly_w_leading_zeros_encoded);
     }
 
     #[proptest]
@@ -761,13 +766,10 @@ mod tests {
         let vec_encoding_with_trailing_zeros = polynomial.coefficients.encode();
         let decoding_result =
             Polynomial::<BFieldElement>::decode(&vec_encoding_with_trailing_zeros);
-        assert!(
-            matches!(
-                decoding_result.unwrap_err(),
-                BFieldCodecError::TrailingZerosInPolynomialCoefficients
-            ),
-            "Decoding a polynomial from a list with trailing zeros must fail with expected error"
-        );
+        assert!(matches!(
+            decoding_result.unwrap_err(),
+            PolynomialBFieldCodecError::TrailingZerosInPolynomialEncoding
+        ));
     }
 
     #[proptest]
@@ -791,13 +793,10 @@ mod tests {
         let vec_encoding_with_trailing_zeros = polynomial.coefficients.encode();
         let decoding_result =
             Polynomial::<XFieldElement>::decode(&vec_encoding_with_trailing_zeros);
-        assert!(
-            matches!(
-                decoding_result.unwrap_err(),
-                BFieldCodecError::TrailingZerosInPolynomialCoefficients
-            ),
-            "Decoding a polynomial from a list with trailing zeros must fail with expected error"
-        );
+        assert!(matches!(
+            decoding_result.unwrap_err(),
+            PolynomialBFieldCodecError::TrailingZerosInPolynomialEncoding
+        ));
     }
 
     /// Depending on the test helper [`BFieldCodecPropertyTestData`] in the bfieldcodec_derive crate
