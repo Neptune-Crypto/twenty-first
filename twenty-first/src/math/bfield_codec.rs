@@ -380,20 +380,15 @@ pub enum PolynomialBFieldCodecError {
     #[error("trailing zeros in polynomial-encoding")]
     TrailingZerosInPolynomialEncoding,
 
-    #[error("inner decoding error: {0}")]
-    VectorEncodingError(BFieldCodecError),
+    #[error(transparent)]
+    VectorEncodingError(#[from] BFieldCodecError),
 }
 
 impl<T: BFieldCodec + FiniteField> BFieldCodec for Polynomial<T> {
     type Error = PolynomialBFieldCodecError;
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
-        let decoded_vec = match Vec::<T>::decode(sequence) {
-            Ok(decoded_vec) => decoded_vec,
-            Err(inner_err) => {
-                return Err(PolynomialBFieldCodecError::VectorEncodingError(inner_err))
-            }
-        };
+        let decoded_vec = Vec::<T>::decode(sequence)?;
 
         let encoding_contains_trailing_zeros = decoded_vec
             .last()
