@@ -898,10 +898,7 @@ mod b_prime_field_element_test {
     fn decrement(mut bfe: BFieldElement) {
         let old_value = bfe.value();
         bfe.decrement();
-        let expected_value = match old_value.checked_sub(1) {
-            Some(value) => value,
-            None => BFieldElement::P - 1,
-        };
+        let expected_value = old_value.checked_sub(1).unwrap_or(BFieldElement::P - 1);
         prop_assert_eq!(expected_value, bfe.value());
     }
 

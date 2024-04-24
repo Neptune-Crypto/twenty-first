@@ -309,13 +309,11 @@ mod mmr_test {
     #[test]
     fn leaf_index_node_index_pbt() {
         let mut rng = rand::thread_rng();
-        for _ in 0..10000 {
+        for _ in 0..10_000 {
             let rand = rng.next_u32();
             let inversion_result = node_index_to_leaf_index(leaf_index_to_node_index(rand as u64));
-            match inversion_result {
-                None => panic!(),
-                Some(inversion) => assert_eq!(rand, inversion as u32),
-            }
+            let inversion = inversion_result.unwrap();
+            assert_eq!(rand, inversion as u32);
         }
     }
 

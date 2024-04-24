@@ -319,10 +319,8 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
             own_node_indices_hash_set.intersection(&affected_node_indices_hash_set);
 
         // If intersection is empty no change is needed
-        let intersection_index_res: Option<&u64> = intersection.next();
-        let intersection_index: u64 = match intersection_index_res {
-            None => return false,
-            Some(&index) => index,
+        let Some(&intersection_index) = intersection.next() else {
+            return false;
         };
 
         // Sanity check, should always be true, since `intersection` can at most
@@ -507,26 +505,26 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
                 }
 
                 // If sibling node is something that has already been calculated, we use that
-                // hash digest. Otherwise we use the one in our authentication path.
+                // hash digest. Otherwise, we use the one in our authentication path.
 
                 let (right_ancestor_count, height) =
                     shared_advanced::right_lineage_length_and_own_height(node_index);
                 if right_ancestor_count != 0 {
                     let left_sibling_index = shared_advanced::left_sibling(node_index, height);
-                    let sibling_hash: Digest = match new_ap_digests.get(&left_sibling_index) {
-                        Some(&h) => h,
-                        None => hash,
-                    };
+                    let sibling_hash: Digest = new_ap_digests
+                        .get(&left_sibling_index)
+                        .copied()
+                        .unwrap_or(hash);
                     acc_hash = H::hash_pair(sibling_hash, acc_hash);
 
                     // Find parent node index
                     node_index += 1;
                 } else {
                     let right_sibling_index = shared_advanced::right_sibling(node_index, height);
-                    let sibling_hash: Digest = match new_ap_digests.get(&right_sibling_index) {
-                        Some(&h) => h,
-                        None => hash,
-                    };
+                    let sibling_hash: Digest = new_ap_digests
+                        .get(&right_sibling_index)
+                        .copied()
+                        .unwrap_or(hash);
                     acc_hash = H::hash_pair(acc_hash, sibling_hash);
 
                     // Find parent node index

@@ -180,10 +180,8 @@ where
         let result_degree: u64 = 2 * self.degree() as u64;
         let order = (result_degree + 1).next_power_of_two();
         let root_res = BFieldElement::primitive_root_of_unity(order);
-        let root = match root_res {
-            Some(n) => n,
-            None => panic!("Failed to find primitive root for order = {order}"),
-        };
+        let root =
+            root_res.unwrap_or_else(|| panic!("primitive root for order {order} should exist"));
 
         let mut coefficients = self.coefficients.to_vec();
         coefficients.resize(order as usize, FF::zero());

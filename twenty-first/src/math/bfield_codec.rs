@@ -164,14 +164,11 @@ impl BFieldCodec for bool {
         if sequence.len() > 1 {
             return Err(Self::Error::SequenceTooLong);
         }
-        if sequence[0].value() > 1 {
-            return Err(Self::Error::ElementOutOfRange);
-        }
 
         let element = match sequence[0].value() {
             0 => false,
             1 => true,
-            _ => unreachable!(),
+            _ => return Err(Self::Error::ElementOutOfRange),
         };
         Ok(Box::new(element))
     }
@@ -236,10 +233,9 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
         if S::static_length().is_none() && sequence.first().is_none() {
             return Err(Self::Error::MissingLengthIndicator);
         }
-        let (length_of_s, sequence) = match S::static_length() {
-            Some(length) => (length, sequence),
-            None => (sequence[0].value() as usize, &sequence[1..]),
-        };
+        let (length_of_s, sequence) = S::static_length()
+            .map(|length| (length, sequence))
+            .unwrap_or_else(|| (sequence[0].value() as usize, &sequence[1..]));
         if sequence.len() < length_of_s {
             return Err(Self::Error::SequenceTooShort);
         }
@@ -250,10 +246,9 @@ impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
         if T::static_length().is_none() && sequence.first().is_none() {
             return Err(Self::Error::MissingLengthIndicator);
         }
-        let (length_of_t, sequence) = match T::static_length() {
-            Some(length) => (length, sequence),
-            None => (sequence[0].value() as usize, &sequence[1..]),
-        };
+        let (length_of_t, sequence) = T::static_length()
+            .map(|length| (length, sequence))
+            .unwrap_or_else(|| (sequence[0].value() as usize, &sequence[1..]));
         if sequence.len() < length_of_t {
             return Err(Self::Error::SequenceTooShort);
         }
@@ -301,11 +296,8 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
         }
         let is_some = *bool::decode(&sequence[0..1])?;
         let sequence = &sequence[1..];
-
-        let element = match is_some {
-            true => Some(*T::decode(sequence).map_err(|err| err.into())?),
-            false => None,
-        };
+        let maybe_result = is_some.then(|| T::decode(sequence).map_err(|e| e.into()));
+        let element = maybe_result.transpose()?.map(|boxed_self| *boxed_self);
 
         if !is_some && !sequence.is_empty() {
             return Err(Self::Error::SequenceTooLong);
