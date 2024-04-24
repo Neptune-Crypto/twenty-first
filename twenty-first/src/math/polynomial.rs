@@ -54,8 +54,11 @@ impl<FF: FiniteField> One for Polynomial<FF> {
     }
 }
 
+/// A univariate polynomial with coefficients in a [finite field](FiniteField), in monomial form.
 #[derive(Clone, Arbitrary)]
 pub struct Polynomial<FF: FiniteField> {
+    /// The polynomial's coefficients, in order of increasing degree. That is, the polynomial's
+    /// leading coefficient is the last element of the vector.
     pub coefficients: Vec<FF>,
 }
 
@@ -67,6 +70,7 @@ impl<FF: FiniteField> Debug for Polynomial<FF> {
     }
 }
 
+// Not derived because `PartialEq` is also not derived.
 impl<FF: FiniteField> Hash for Polynomial<FF> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.coefficients.hash(state);
@@ -103,6 +107,7 @@ impl<FF: FiniteField> Display for Polynomial<FF> {
     }
 }
 
+// Manually implemented to correctly handle leading zeros.
 impl<FF: FiniteField> PartialEq for Polynomial<FF> {
     fn eq(&self, other: &Self) -> bool {
         if self.degree() != other.degree() {
