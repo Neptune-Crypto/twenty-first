@@ -3,6 +3,30 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.41.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.40.0..v0.41.0) – 2024-04-24
+
+### ✨ Features
+
+- Add hex encoding and decoding for Digest ([0f649786](https://github.com/Neptune-Crypto/twenty-first/commit/0f649786))
+- Implement `BFieldCodec` for `Polynomial<FF>` ([3d994271](https://github.com/Neptune-Crypto/twenty-first/commit/3d994271))
+
+### 📚 Documentation
+
+- Provide example for `Polynomial::zerofier` ([0278f560](https://github.com/Neptune-Crypto/twenty-first/commit/0278f560))
+- Document coefficient order of `Polynomial` ([c237e859](https://github.com/Neptune-Crypto/twenty-first/commit/c237e859))
+- Motivate Merkle tree's constants ([53522191](https://github.com/Neptune-Crypto/twenty-first/commit/53522191))
+
+### ♻️ Refactor
+
+- (!) Don't return root hash on MMR's verify ([2a331dd3](https://github.com/Neptune-Crypto/twenty-first/commit/2a331dd3))
+- Avoid environment variable collisions ([0340bf54](https://github.com/Neptune-Crypto/twenty-first/commit/0340bf54))
+- (!) Make Merkle tree's `ROOT_INDEX` private ([d0dddeb5](https://github.com/Neptune-Crypto/twenty-first/commit/d0dddeb5))
+
+### 🎨 Styling
+
+- *(test)* Refactor `fast_evaluate` unit test ([182abc05](https://github.com/Neptune-Crypto/twenty-first/commit/182abc05))
+- Avoid `match`ing on `bool` or `Option` ([729adc91](https://github.com/Neptune-Crypto/twenty-first/commit/729adc91))
+
 ## [0.40.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.39.0..v0.40.0) – 2024-04-16
 
 ### ✨ Features

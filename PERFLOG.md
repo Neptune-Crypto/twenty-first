@@ -3,6 +3,143 @@
 At every release, a dedicated benchmark suite is run to ensure that the performance of the library
 is not regressing. The results are recorded here.
 
+## 0.41.0 – 2024-04-24
+
+Various Evaluations in 2^10 Points/Parallel/10
+                        time:   [239.93 µs 240.68 µs 241.38 µs]
+                        thrpt:  [4.2423 Melem/s 4.2547 Melem/s 4.2679 Melem/s]
+
+Various Evaluations in 2^10 Points/Fast/10
+                        time:   [1.3966 ms 1.4002 ms 1.4039 ms]
+                        thrpt:  [729.39 Kelem/s 731.34 Kelem/s 733.23 Kelem/s]
+
+Various Evaluations in 2^10 Points/Faster of the two/10
+                        time:   [241.08 µs 241.74 µs 242.39 µs]
+                        thrpt:  [4.2246 Melem/s 4.2359 Melem/s 4.2476 Melem/s]
+
+Various Evaluations in 2^14 Points/Parallel/14
+                        time:   [9.2073 ms 9.2173 ms 9.2318 ms]
+                        thrpt:  [1.7747 Melem/s 1.7775 Melem/s 1.7795 Melem/s]
+
+Various Evaluations in 2^14 Points/Fast/14
+                        time:   [23.926 ms 24.004 ms 24.086 ms]
+                        thrpt:  [680.23 Kelem/s 682.55 Kelem/s 684.79 Kelem/s]
+
+Various Evaluations in 2^14 Points/Faster of the two/14
+                        time:   [9.2455 ms 9.2562 ms 9.2711 ms]
+                        thrpt:  [1.7672 Melem/s 1.7701 Melem/s 1.7721 Melem/s]
+
+Various Evaluations in 2^16 Points/Parallel/16
+                        time:   [143.79 ms 143.95 ms 144.11 ms]
+                        thrpt:  [454.77 Kelem/s 455.28 Kelem/s 455.79 Kelem/s]
+
+Various Evaluations in 2^16 Points/Fast/16
+                        time:   [256.71 ms 257.05 ms 257.41 ms]
+                        thrpt:  [254.60 Kelem/s 254.95 Kelem/s 255.29 Kelem/s]
+
+Various Evaluations in 2^16 Points/Faster of the two/16
+                        time:   [144.80 ms 144.87 ms 144.93 ms]
+                        thrpt:  [452.18 Kelem/s 452.38 Kelem/s 452.60 Kelem/s]
+
+Various Interpolations in 2^8 Points/Lagrange/8
+                        time:   [419.69 µs 420.95 µs 422.53 µs]
+                        thrpt:  [605.88 Kelem/s 608.15 Kelem/s 609.97 Kelem/s]
+
+Various Interpolations in 2^8 Points/Fast/8
+                        time:   [553.19 µs 554.59 µs 555.84 µs]
+                        thrpt:  [460.56 Kelem/s 461.61 Kelem/s 462.77 Kelem/s]
+
+Various Interpolations in 2^8 Points/Faster of the two/8
+                        time:   [421.68 µs 424.45 µs 427.52 µs]
+                        thrpt:  [598.80 Kelem/s 603.13 Kelem/s 607.10 Kelem/s]
+
+Various Interpolations in 2^9 Points/Lagrange/9
+                        time:   [1.7140 ms 1.7152 ms 1.7163 ms]
+                        thrpt:  [298.32 Kelem/s 298.51 Kelem/s 298.72 Kelem/s]
+
+Various Interpolations in 2^9 Points/Fast/9
+                        time:   [1.2160 ms 1.2182 ms 1.2201 ms]
+                        thrpt:  [419.62 Kelem/s 420.30 Kelem/s 421.04 Kelem/s]
+
+Various Interpolations in 2^9 Points/Faster of the two/9
+                        time:   [1.2189 ms 1.2200 ms 1.2212 ms]
+                        thrpt:  [419.27 Kelem/s 419.66 Kelem/s 420.06 Kelem/s]
+
+Various Interpolations in 2^10 Points/Lagrange/10
+                        time:   [5.7082 ms 5.7155 ms 5.7243 ms]
+                        thrpt:  [178.89 Kelem/s 179.16 Kelem/s 179.39 Kelem/s]
+
+Various Interpolations in 2^10 Points/Fast/10
+                        time:   [1.8447 ms 1.8486 ms 1.8523 ms]
+                        thrpt:  [552.82 Kelem/s 553.94 Kelem/s 555.12 Kelem/s]
+
+Various Interpolations in 2^10 Points/Faster of the two/10
+                        time:   [1.8373 ms 1.8422 ms 1.8474 ms]
+                        thrpt:  [554.28 Kelem/s 555.85 Kelem/s 557.35 Kelem/s]
+
+Multiplication of Polynomials of Degree 2^7 (Product Degree: 2^8)/Naïve/8
+                        time:   [22.973 µs 22.983 µs 22.994 µs]
+
+Multiplication of Polynomials of Degree 2^7 (Product Degree: 2^8)/Fast/8
+                        time:   [25.106 µs 25.119 µs 25.133 µs]
+
+Multiplication of Polynomials of Degree 2^7 (Product Degree: 2^8)/Faster of the two/8
+                        time:   [25.127 µs 25.141 µs 25.155 µs]
+
+Multiplication of Polynomials of Degree 2^8 (Product Degree: 2^9)/Naïve/9
+                        time:   [89.025 µs 89.055 µs 89.089 µs]
+
+Multiplication of Polynomials of Degree 2^8 (Product Degree: 2^9)/Fast/9
+                        time:   [54.460 µs 54.476 µs 54.496 µs]
+
+Multiplication of Polynomials of Degree 2^8 (Product Degree: 2^9)/Faster of the two/9
+                        time:   [54.467 µs 54.482 µs 54.501 µs]
+                        change: [-0.2581% -0.1616% -0.0781%] (p = 0.00 < 0.05)
+
+Multiplication of Polynomials of Degree 2^9 (Product Degree: 2^10)/Naïve/10
+                        time:   [352.32 µs 352.43 µs 352.56 µs]
+                        change: [-0.2588% -0.1979% -0.1323%] (p = 0.00 < 0.05)
+
+Multiplication of Polynomials of Degree 2^9 (Product Degree: 2^10)/Fast/10
+                        time:   [118.72 µs 118.76 µs 118.81 µs]
+                        change: [-0.1116% -0.0229% +0.0442%] (p = 0.61 > 0.05)
+
+Multiplication of Polynomials of Degree 2^9 (Product Degree: 2^10)/Faster of the two/10
+                        time:   [118.77 µs 118.93 µs 119.16 µs]
+                        change: [-0.0836% +0.0666% +0.2156%] (p = 0.40 > 0.05)
+
+polynomial coset of degree 2^10/coset-evaluate bfe-pol/1024
+                        time:   [20.231 µs 20.237 µs 20.246 µs]
+                        thrpt:  [50.578 Melem/s 50.599 Melem/s 50.615 Melem/s]
+
+polynomial coset of degree 2^10/coset-evaluate xfe-pol/1024
+                        time:   [38.810 µs 38.834 µs 38.860 µs]
+                        thrpt:  [26.351 Melem/s 26.369 Melem/s 26.385 Melem/s]
+
+polynomial coset of degree 2^10/coset-interpolate bfe-pol/1024
+                        time:   [23.560 µs 23.571 µs 23.584 µs]
+                        thrpt:  [43.419 Melem/s 43.443 Melem/s 43.463 Melem/s]
+
+polynomial coset of degree 2^10/coset-interpolate xfe-pol/1024
+                        time:   [47.874 µs 47.901 µs 47.925 µs]
+                        thrpt:  [21.367 Melem/s 21.377 Melem/s 21.390 Melem/s]
+
+polynomial coset of degree 2^17/coset-evaluate bfe-pol/131072
+                        time:   [4.2960 ms 4.2972 ms 4.2985 ms]
+                        thrpt:  [30.493 Melem/s 30.501 Melem/s 30.510 Melem/s]
+
+polynomial coset of degree 2^17/coset-evaluate xfe-pol/131072
+                        time:   [8.4138 ms 8.4565 ms 8.4999 ms]
+                        thrpt:  [15.420 Melem/s 15.500 Melem/s 15.578 Melem/s]
+
+polynomial coset of degree 2^17/coset-interpolate bfe-pol/131072
+                        time:   [5.1712 ms 5.1726 ms 5.1741 ms]
+                        thrpt:  [25.332 Melem/s 25.340 Melem/s 25.347 Melem/s]
+
+polynomial coset of degree 2^17/coset-interpolate xfe-pol/131072
+                        time:   [13.387 ms 13.413 ms 13.438 ms]
+                        thrpt:  [9.7537 Melem/s 9.7724 Melem/s 9.7910 Melem/s]
+
 ## 0.40.0 – 2024-04-16
 
 Various Evaluations in 2^10 Points/Parallel/10
