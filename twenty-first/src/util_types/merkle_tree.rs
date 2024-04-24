@@ -39,7 +39,7 @@ pub const MAX_TREE_HEIGHT: usize = MAX_NUM_LEAVES.ilog2() as usize;
 
 /// The index of the root node in a [Merkle tree](MerkleTree).
 /// It is recommended to use [`root()`](MerkleTree::root) instead.
-pub const ROOT_INDEX: usize = 1;
+const ROOT_INDEX: usize = 1;
 
 type Result<T> = result::Result<T, MerkleTreeError>;
 
@@ -548,7 +548,7 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
         }
 
         // Sequential digest calculations
-        for i in (1..(digests.len() - count_acc)).rev() {
+        for i in (ROOT_INDEX..(digests.len() - count_acc)).rev() {
             nodes[i] = H::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
         }
 
