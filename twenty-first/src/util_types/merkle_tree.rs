@@ -23,8 +23,18 @@ lazy_static! {
         .unwrap_or(DEFAULT_PARALLELIZATION_CUTOFF);
 }
 
+/// Enforces that all compilation targets have a consistent [`MAX_TREE_HEIGHT`].
+/// In particular, if `usize` has more than 32 bits, the maximum height of a
+/// Merkle tree is limited as if only 32 bits were available. If `usize` has
+/// less than 32 bits, compilation will fail.
+///
+/// Using a type other than `usize` could enable a higher maximum height, but
+/// would require a different storage mechanism for the Merkle tree's nodes:
+/// indexing into a `Vec<_>` can only be done with `usize`.
 const MAX_NUM_NODES: usize = 1 << 32;
 const MAX_NUM_LEAVES: usize = MAX_NUM_NODES / 2;
+
+/// The maximum height of a Merkle tree.
 pub const MAX_TREE_HEIGHT: usize = MAX_NUM_LEAVES.ilog2() as usize;
 
 /// The index of the root node in a [Merkle tree](MerkleTree).
@@ -33,8 +43,9 @@ pub const ROOT_INDEX: usize = 1;
 
 type Result<T> = result::Result<T, MerkleTreeError>;
 
-/// A [Merkle tree][merkle_tree] is a binary tree of [digests](Digest) that is used to efficiently prove the
-/// inclusion of items in a set. Set inclusion can be verified through an [inclusion proof](MerkleTreeInclusionProof).
+/// A [Merkle tree][merkle_tree] is a binary tree of [digests](Digest) that is
+/// used to efficiently prove the inclusion of items in a set. Set inclusion can
+/// be verified through an [inclusion proof](MerkleTreeInclusionProof).
 ///
 /// [merkle_tree]: https://en.wikipedia.org/wiki/Merkle_tree
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,9 +57,10 @@ where
     _hasher: PhantomData<H>,
 }
 
-/// A full inclusion proof for the leaves at the supplied indices, including the leaves themselves.
-/// The proof is relative to some [Merkle tree](MerkleTree), which is not necessarily (and generally cannot be) known in
-/// its entirety by the verifier.
+/// A full inclusion proof for the leaves at the supplied indices, including the
+/// leaves themselves. The proof is relative to some [Merkle tree](MerkleTree),
+/// which is not necessarily (and generally cannot be) known in its entirety by
+/// the verifier.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MerkleTreeInclusionProof<H>
 where
@@ -59,12 +71,17 @@ where
 
     /// The leaves the proof is about, _i.e._, the revealed leaves.
     ///
-    /// Purposefully not a [`HashMap`] to preserve order of the keys, which is relevant for
-    /// [`into_authentication_paths`](MerkleTreeInclusionProof::into_authentication_paths).
+    /// Purposefully not a [`HashMap`] to preserve order of the keys, which is
+    /// relevant for [`into_authentication_paths`][paths].
+    ///
+    /// [paths]: MerkleTreeInclusionProof::into_authentication_paths
     pub indexed_leaves: Vec<(usize, Digest)>,
 
-    /// The proof's witness: de-duplicated authentication structure for the leaves this proof is about.
-    /// See [`authentication_structure`](MerkleTree::authentication_structure) for details.
+    /// The proof's witness: de-duplicated authentication structure for the
+    /// leaves this proof is about. See [`authentication_structure`][auth_structure]
+    /// for details.
+    ///
+    /// [auth_structure]: MerkleTree::authentication_structure
     pub authentication_structure: Vec<Digest>,
 
     pub _hasher: PhantomData<H>,
@@ -72,9 +89,9 @@ where
 
 /// Helper struct for verifying inclusion of items in a Merkle tree.
 ///
-/// Continuing the example from [`authentication_structure`][authentication_structure], the partial
-/// tree for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively, with nodes [11, 9, 3] from the authentication
-/// structure is:
+/// Continuing the example from [`authentication_structure`][auth_structure],
+/// the partial tree for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively,
+/// with nodes [11, 9, 3] from the authentication structure is:
 ///
 /// ```markdown
 ///         ──── _ ────
@@ -87,7 +104,7 @@ where
 ///  8   9  10 11
 /// ```
 ///
-/// [authentication_structure]: MerkleTree::authentication_structure
+/// [auth_structure]: MerkleTree::authentication_structure
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct PartialMerkleTree<H>
 where
@@ -107,23 +124,24 @@ where
         Maker::from_digests(leafs)
     }
 
-    /// Given a list of leaf indices, return the indices of exactly those nodes that are needed to
-    /// prove (or verify) that the indicated leaves are in the Merkle tree.
-    // This function is not defined as a method (taking self as argument) since it's needed by the
-    // verifier, who does not have access to the Merkle tree.
+    /// Given a list of leaf indices, return the indices of exactly those nodes that
+    /// are needed to prove (or verify) that the indicated leaves are in the Merkle
+    /// tree.
+    // This function is not defined as a method (taking self as argument) since it's
+    // needed by the verifier, who does not have access to the Merkle tree.
     fn authentication_structure_node_indices(
         num_leaves: usize,
         leaf_indices: &[usize],
     ) -> Result<impl ExactSizeIterator<Item = usize>> {
-        // The set of indices of nodes that need to be included in the authentications structure.
-        // In principle, every node of every authentication path is needed. The root is never
-        // needed. Hence, it is not considered in the computation below.
+        // The set of indices of nodes that need to be included in the authentications
+        // structure. In principle, every node of every authentication path is needed.
+        // The root is never needed. Hence, it is not considered below.
         let mut node_is_needed = HashSet::new();
 
-        // The set of indices of nodes that can be computed from other nodes in the authentication
-        // structure or the leafs that are explicitly supplied during verification.
-        // Every node on the direct path from the leaf to the root can be computed by the very
-        // nature of “authentication path”.
+        // The set of indices of nodes that can be computed from other nodes in the
+        // authentication structure or the leafs that are explicitly supplied during
+        // verification. Every node on the direct path from the leaf to the root can
+        // be computed by the very nature of “authentication path”.
         let mut node_can_be_computed = HashSet::new();
 
         for &leaf_index in leaf_indices {
@@ -145,7 +163,8 @@ where
     }
 
     /// Generate a de-duplicated authentication structure for the given leaf indices.
-    /// If a single index is supplied, the authentication structure is the authentication path for the indicated leaf.
+    /// If a single index is supplied, the authentication structure is the
+    /// authentication path for the indicated leaf.
     ///
     /// For example, consider the following Merkle tree.
     ///
@@ -164,15 +183,17 @@ where
     ///
     /// The authentication path for leaf 2, _i.e._, node 10, is nodes [11, 4, 3].
     ///
-    /// The authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively, is nodes [11, 9, 3].
+    /// The authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10
+    /// respectively, is nodes [11, 9, 3].
     /// Note how:
-    /// - Node 3 is included only once, even though the individual authentication paths for leaves 0 and 2 both include
-    /// node 3. This is one part of the de-duplication.
-    /// - Node 4 is not included at all, even though the authentication path for leaf 2 requires the node. Instead,
-    /// node 4 can be computed from nodes 8 and 9;
-    /// the former is supplied explicitly during [verification][verify],
-    /// the latter is included in the authentication structure.
-    /// This is the other part of the de-duplication.
+    /// - Node 3 is included only once, even though the individual authentication
+    ///   paths for leaves 0 and 2 both include node 3. This is one part of the
+    ///   de-duplication.
+    /// - Node 4 is not included at all, even though the authentication path for
+    ///   leaf 2 requires the node: node 4 can be computed from nodes 8 and 9;
+    ///   the former is supplied explicitly during [verification][verify],
+    ///   the latter is included in the authentication structure.
+    ///   This is the other part of the de-duplication.
     ///
     /// [verify]: MerkleTreeInclusionProof::verify
     pub fn authentication_structure(&self, leaf_indices: &[usize]) -> Result<Vec<Digest>> {
@@ -228,9 +249,12 @@ where
         indices.iter().map(maybe_indexed_leaf).collect()
     }
 
-    /// A full inclusion proof for the leaves at the supplied indices, including the leaves. Generally, using
-    /// [`authentication_structure`](Self::authentication_structure) is preferable. Use this method only if the
-    /// verifier needs explicit access to the leaves, _i.e._, cannot compute them from other information.
+    /// A full inclusion proof for the leaves at the supplied indices, including the
+    /// leaves. Generally, using [`authentication_structure`][auth_structure] is
+    /// preferable. Use this method only if the verifier needs explicit access to the
+    /// leaves, _i.e._, cannot compute them from other information.
+    ///
+    /// [auth_structure]: Self::authentication_structure
     pub fn inclusion_proof_for_leaf_indices(
         &self,
         indices: &[usize],
@@ -272,7 +296,8 @@ where
         self.indexed_leaves.is_empty() && self.authentication_structure.is_empty()
     }
 
-    /// Verify that the given root digest is the root of a Merkle tree that contains the indicated leaves.
+    /// Verify that the given root digest is the root of a Merkle tree that contains
+    /// the indicated leaves.
     pub fn verify(self, expected_root: Digest) -> bool {
         if self.is_trivial() {
             return true;
@@ -289,11 +314,12 @@ where
     /// Transform the inclusion proof into a list of authentication paths.
     ///
     /// This corresponds to a decompression of the authentication structure.
-    /// In some contexts, it is easier to deal with individual authentication paths than with the de-duplicated
-    /// authentication structure.
+    /// In some contexts, it is easier to deal with individual authentication paths
+    /// than with the de-duplicated authentication structure.
     ///
-    /// Continuing the example from [`authentication_structure`][authentication_structure],
-    /// the authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10 respectively, is nodes [11, 9, 3].
+    /// Continuing the example from [`authentication_structure`][auth_structure],
+    /// the authentication structure for leaves 0 and 2, _i.e._, nodes 8 and 10
+    /// respectively, is nodes [11, 9, 3].
     ///
     /// The authentication path
     /// - for leaf 0 is [9, 5, 3], and
@@ -310,7 +336,7 @@ where
     ///  8   9  10 11  12 13  14 15
     /// ```
     ///
-    /// [authentication_structure]: MerkleTree::authentication_structure
+    /// [auth_structure]: MerkleTree::authentication_structure
     pub fn into_authentication_paths(self) -> Result<Vec<Vec<Digest>>> {
         let partial_tree = PartialMerkleTree::try_from(self)?;
         partial_tree.into_authentication_paths()
@@ -342,9 +368,12 @@ where
         Ok(1 << self.tree_height)
     }
 
-    /// Compute all computable digests of the partial Merkle tree, modifying self. Returns an error if self is either
-    /// - incomplete, _i.e._, does not contain all the nodes required to compute the root, or
-    /// - not minimal, _i.e._, if it contains nodes that can be computed from other nodes.
+    /// Compute all computable digests of the partial Merkle tree, modifying self.
+    /// Returns an error if self is either
+    /// - incomplete, _i.e._, does not contain all the nodes required to compute
+    ///   the root, or
+    /// - not minimal, _i.e._, if it contains nodes that can be computed from other
+    ///   nodes.
     pub fn fill(&mut self) -> Result<()> {
         let mut parent_node_indices = self.first_layer_parent_node_indices()?;
 
@@ -358,7 +387,8 @@ where
         Ok(())
     }
 
-    /// Any parent node index is included only once. This guarantees that the number of hash operations is minimal.
+    /// Any parent node index is included only once. This guarantees that the number
+    /// of hash operations is minimal.
     fn first_layer_parent_node_indices(&self) -> Result<Vec<usize>> {
         let num_leaves = self.num_leaves()?;
         let leaf_to_parent_node_index = |&leaf_index| (leaf_index + num_leaves) / 2;
@@ -404,9 +434,11 @@ where
             .collect()
     }
 
-    /// Given a single leaf index and a partial Merkle tree, collect the authentication path for the indicated leaf.
+    /// Given a single leaf index and a partial Merkle tree, collect the
+    /// authentication path for the indicated leaf.
     ///
-    /// Fails if the partial Merkle tree does not contain the entire authentication path.
+    /// Fails if the partial Merkle tree does not contain the entire
+    /// authentication path.
     fn authentication_path_for_index(&self, leaf_index: usize) -> Result<Vec<Digest>> {
         let num_leaves = self.num_leaves()?;
         let mut authentication_path = vec![];
@@ -472,8 +504,8 @@ where
 pub struct CpuParallel;
 
 impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
-    /// Takes an array of digests and builds a MerkleTree over them. The digests are copied as the
-    /// leaves of the tree.
+    /// Takes an array of digests and builds a MerkleTree over them. The digests are
+    /// copied as the leaves of the tree.
     ///
     /// # Errors
     ///
@@ -638,7 +670,7 @@ pub mod merkle_tree_test {
     }
 
     #[proptest]
-    fn building_merkle_tree_from_list_of_digests_with_incorrect_number_of_leaves_fails_with_expected_error(
+    fn building_merkle_tree_from_list_of_digests_with_incorrect_number_of_leaves_fails(
         #[filter(!#num_leaves.is_power_of_two())]
         #[strategy(1_usize..1 << 13)]
         num_leaves: usize,
@@ -712,8 +744,8 @@ pub mod merkle_tree_test {
     #[proptest(cases = 30)]
     fn corrupt_leaf_digests_lead_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
-        #[strategy(vec(0..#test_tree.proof().indexed_leaves.len(), 1..=#test_tree.proof().indexed_leaves.len()))]
-        leaves_to_corrupt: Vec<usize>,
+        #[strategy(Just(#test_tree.proof().indexed_leaves.len()))] _n_leaves: usize,
+        #[strategy(vec(0..#_n_leaves, 1..=#_n_leaves))] leaves_to_corrupt: Vec<usize>,
         #[strategy(vec(any::<DigestCorruptor>(), #leaves_to_corrupt.len()))] digest_corruptors: Vec<
             DigestCorruptor,
         >,
@@ -736,8 +768,8 @@ pub mod merkle_tree_test {
     #[proptest(cases = 30)]
     fn removing_leaves_from_proof_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
-        #[strategy(vec(0..#test_tree.proof().indexed_leaves.len(), 1..=#test_tree.proof().indexed_leaves.len()))]
-        leaf_indices_to_remove: Vec<usize>,
+        #[strategy(Just(#test_tree.proof().indexed_leaves.len()))] _n_leaves: usize,
+        #[strategy(vec(0..#_n_leaves, 1..=#_n_leaves))] leaf_indices_to_remove: Vec<usize>,
     ) {
         let mut proof = test_tree.proof();
         let leaves_to_keep = proof
@@ -775,8 +807,8 @@ pub mod merkle_tree_test {
     #[proptest(cases = 30)]
     fn honestly_generated_proof_with_duplicate_leaves_can_be_verified(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
-        #[strategy(vec(0..#test_tree.proof().indexed_leaves.len(), 1..=#test_tree.proof().indexed_leaves.len()))]
-        indices_to_duplicate: Vec<usize>,
+        #[strategy(Just(#test_tree.proof().indexed_leaves.len()))] _n_leaves: usize,
+        #[strategy(vec(0..#_n_leaves, 1..=#_n_leaves))] indices_to_duplicate: Vec<usize>,
     ) {
         let mut proof = test_tree.proof();
         let duplicate_leaves = indices_to_duplicate
