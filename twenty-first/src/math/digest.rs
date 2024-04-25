@@ -228,6 +228,7 @@ impl Digest {
     /// Simulates the VM as it hashes a digest. This method invokes hash_pair
     /// with the right operand being the zero digest, agreeing with the standard
     /// way to hash a digest in the virtual machine.
+    #[deprecated(since = "0.42.0", note = "use `AlgebraicHasher::hash_pair` instead")]
     pub fn hash<H: AlgebraicHasher>(self) -> Digest {
         H::hash_pair(self, Digest::new([BFieldElement::zero(); DIGEST_LENGTH]))
     }
