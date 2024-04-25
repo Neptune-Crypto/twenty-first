@@ -12,6 +12,8 @@ use num_traits::One;
 use num_traits::Zero;
 use thiserror::Error;
 
+use crate::bfe_vec;
+
 use super::b_field_element::BFieldElement;
 use super::polynomial::Polynomial;
 use super::traits::FiniteField;
@@ -373,14 +375,32 @@ pub enum PolynomialBFieldCodecError {
     TrailingZerosInPolynomialEncoding,
 
     #[error(transparent)]
-    VectorEncodingError(#[from] BFieldCodecError),
+    Other(#[from] BFieldCodecError),
 }
 
 impl<T: BFieldCodec + FiniteField> BFieldCodec for Polynomial<T> {
     type Error = PolynomialBFieldCodecError;
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
-        let decoded_vec = Vec::<T>::decode(sequence)?;
+        if sequence.is_empty() {
+            return Err(Self::Error::Other(BFieldCodecError::EmptySequence));
+        }
+
+        let coefficients_field_length_indicator: Result<usize, _> = sequence[0].value().try_into();
+        let Ok(coefficients_field_length_indicator) = coefficients_field_length_indicator else {
+            return Err(Self::Error::Other(BFieldCodecError::InvalidLengthIndicator));
+        };
+
+        let indicated_sequence_length = coefficients_field_length_indicator + 1;
+        if sequence.len() < indicated_sequence_length {
+            return Err(Self::Error::Other(BFieldCodecError::SequenceTooShort));
+        }
+
+        if sequence.len() > indicated_sequence_length {
+            return Err(Self::Error::Other(BFieldCodecError::SequenceTooLong));
+        }
+
+        let decoded_vec = Vec::<T>::decode(&sequence[1..])?;
 
         let encoding_contains_trailing_zeros = decoded_vec
             .last()
@@ -397,9 +417,17 @@ impl<T: BFieldCodec + FiniteField> BFieldCodec for Polynomial<T> {
 
         // It's critical to normalize the polynomial, i.e. remove trailing zeros from the
         // coefficients list, to make the encoding non-degenerate such that a polynomial maps to a
-        // unique encoding.
+        // unique encoding. Length of the coefficients field is prepended to the encoding to make
+        // the encoding consistent with a derived implementation, with the only difference that
+        // trailing zeros in the encoding is not allowed.
         normalized_self.normalize();
-        normalized_self.coefficients.encode()
+        let coefficients_encoded = normalized_self.coefficients.encode();
+
+        [
+            bfe_vec!(coefficients_encoded.len() as u64),
+            coefficients_encoded,
+        ]
+        .concat()
     }
 
     fn static_length() -> Option<usize> {
@@ -681,6 +709,8 @@ mod tests {
     neg_test_case! { fn vec_of_digests_neg for Vec<Digest> }
     neg_test_case! { fn vec_of_vec_of_bfield_elements_neg for Vec<Vec<BFieldElement>> }
     neg_test_case! { fn vec_of_vec_of_xfield_elements_neg for Vec<Vec<XFieldElement>> }
+    neg_test_case! { fn poly_of_bfe_neg for Polynomial<BFieldElement> }
+    neg_test_case! { fn poly_of_xfe_neg for Polynomial<XFieldElement> }
 
     #[test]
     fn leading_zero_coefficient_have_no_effect_on_encoding_empty_poly_bfe() {
@@ -732,27 +762,30 @@ mod tests {
         prop_assert_eq!(encoded, poly_w_leading_zeros_encoded);
     }
 
-    #[proptest]
-    fn disallow_trailing_zeros_in_poly_encoding_bfe(
-        mut polynomial: Polynomial<BFieldElement>,
-        #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
-        #[strategy(1usize..30)] num_leading_zeros: usize,
+    fn disallow_trailing_zeros_in_poly_encoding_prop<T: FiniteField + BFieldCodec>(
+        mut polynomial: Polynomial<T>,
+        leading_coefficient: T,
+        num_leading_zeros: usize,
     ) {
         polynomial.coefficients.push(leading_coefficient);
         let vec_encoding = polynomial.coefficients.encode();
         let poly_encoding = polynomial.encode();
-        prop_assert_eq!(
-            vec_encoding,
+        assert_eq!(
+            [bfe_vec!(vec_encoding.len() as u64), vec_encoding].concat(),
             poly_encoding,
-            "This test expects equivalence of Vec and Polynomial encoding"
+            "This test expects similarity of Vec and Polynomial encoding"
         );
 
         polynomial
             .coefficients
-            .extend(vec![bfe!(0); num_leading_zeros]);
+            .extend(vec![T::zero(); num_leading_zeros]);
         let vec_encoding_with_trailing_zeros = polynomial.coefficients.encode();
-        let decoding_result =
-            Polynomial::<BFieldElement>::decode(&vec_encoding_with_trailing_zeros);
+        let poly_encoding_with_trailing_zeros = [
+            bfe_vec!(vec_encoding_with_trailing_zeros.len() as u64),
+            vec_encoding_with_trailing_zeros,
+        ]
+        .concat();
+        let decoding_result = Polynomial::<T>::decode(&poly_encoding_with_trailing_zeros);
         assert!(matches!(
             decoding_result.unwrap_err(),
             PolynomialBFieldCodecError::TrailingZerosInPolynomialEncoding
@@ -760,30 +793,29 @@ mod tests {
     }
 
     #[proptest]
+    fn disallow_trailing_zeros_in_poly_encoding_bfe(
+        polynomial: Polynomial<BFieldElement>,
+        #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
+        #[strategy(1usize..30)] num_leading_zeros: usize,
+    ) {
+        disallow_trailing_zeros_in_poly_encoding_prop(
+            polynomial,
+            leading_coefficient,
+            num_leading_zeros,
+        )
+    }
+
+    #[proptest]
     fn disallow_trailing_zeros_in_poly_encoding_xfe(
-        mut polynomial: Polynomial<XFieldElement>,
+        polynomial: Polynomial<XFieldElement>,
         #[filter(!#leading_coefficient.is_zero())] leading_coefficient: XFieldElement,
         #[strategy(1usize..30)] num_leading_zeros: usize,
     ) {
-        polynomial.coefficients.push(leading_coefficient);
-        let vec_encoding = polynomial.coefficients.encode();
-        let poly_encoding = polynomial.encode();
-        prop_assert_eq!(
-            vec_encoding,
-            poly_encoding,
-            "This test expects equivalence of Vec and Polynomial encoding"
-        );
-
-        polynomial
-            .coefficients
-            .extend(vec![xfe!(0); num_leading_zeros]);
-        let vec_encoding_with_trailing_zeros = polynomial.coefficients.encode();
-        let decoding_result =
-            Polynomial::<XFieldElement>::decode(&vec_encoding_with_trailing_zeros);
-        assert!(matches!(
-            decoding_result.unwrap_err(),
-            PolynomialBFieldCodecError::TrailingZerosInPolynomialEncoding
-        ));
+        disallow_trailing_zeros_in_poly_encoding_prop(
+            polynomial,
+            leading_coefficient,
+            num_leading_zeros,
+        )
     }
 
     /// Depending on the test helper [`BFieldCodecPropertyTestData`] in the bfieldcodec_derive crate
@@ -871,6 +903,7 @@ mod tests {
         }
 
         test_case! { fn enum_with_variant_with_poly_field for EnumWithVariantWithPolyField: None }
+        neg_test_case! { fn enum_with_variant_with_poly_field_neg for EnumWithVariantWithPolyField }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct DeriveTestStructE(Vec<u128>, u128, u64, Vec<bool>, u32, Vec<u128>);
@@ -1238,6 +1271,39 @@ mod tests {
 
         test_case! {
             fn enum_with_boxed_variant_and_boxed_struct for EnumWithBoxedVariantAndBoxedStruct: None
+        }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct DummyPolynomial<T: FiniteField + BFieldCodec> {
+            coefficients: Vec<T>,
+        }
+
+        impl<T: FiniteField + BFieldCodec> From<Polynomial<T>> for DummyPolynomial<T> {
+            fn from(value: Polynomial<T>) -> Self {
+                Self {
+                    coefficients: value.coefficients,
+                }
+            }
+        }
+
+        #[proptest]
+        fn manual_poly_encoding_implementation_is_consistent_with_derived_bfe(
+            mut polynomial: Polynomial<BFieldElement>,
+            #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
+        ) {
+            polynomial.coefficients.push(leading_coefficient);
+            let as_dummy: DummyPolynomial<BFieldElement> = polynomial.clone().into();
+            prop_assert_eq!(as_dummy.encode(), polynomial.encode());
+        }
+
+        #[proptest]
+        fn manual_poly_encoding_implementation_is_consistent_with_derived_xfe(
+            mut polynomial: Polynomial<XFieldElement>,
+            #[filter(!#leading_coefficient.is_zero())] leading_coefficient: XFieldElement,
+        ) {
+            polynomial.coefficients.push(leading_coefficient);
+            let as_dummy: DummyPolynomial<XFieldElement> = polynomial.clone().into();
+            prop_assert_eq!(as_dummy.encode(), polynomial.encode());
         }
     }
 }
