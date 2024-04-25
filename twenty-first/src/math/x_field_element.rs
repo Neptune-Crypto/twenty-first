@@ -655,13 +655,10 @@ mod tests {
     #[test]
     fn x_field_random_element_generation_test() {
         let rand_xs: Vec<XFieldElement> = random_elements(14);
-
-        // Assert correct length
         assert_eq!(14, rand_xs.len());
 
         // TODO: Consider doing a statistical test.
-        // Assert (probable) uniqueness of all generated elements
-        assert_eq!(rand_xs.len(), rand_xs.into_iter().unique().count());
+        assert!(rand_xs.into_iter().all_unique());
     }
 
     #[test]

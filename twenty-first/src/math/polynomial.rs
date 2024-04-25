@@ -478,6 +478,11 @@ where
         );
         debug_assert_eq!(domain.len(), values.len());
 
+        // prevent edge case failure where the left half would be empty
+        if domain.len() == 1 {
+            return Self::from_constant(values[0]);
+        }
+
         let mid_point = domain.len() / 2;
         let left_domain_half = &domain[..mid_point];
         let left_values_half = &values[..mid_point];
@@ -1624,7 +1629,7 @@ mod test_polynomials {
         #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
         #[filter(!#additional_points_xs.contains(&#p0.0))]
         #[filter(!#additional_points_xs.contains(&#p1.0))]
-        #[filter(#additional_points_xs.iter().unique().count() == #additional_points_xs.len())]
+        #[filter(#additional_points_xs.iter().all_unique())]
         #[any(size_range(1..100).lift())]
         additional_points_xs: Vec<BFieldElement>,
     ) {
@@ -2094,7 +2099,7 @@ mod test_polynomials {
     #[proptest(cases = 10)]
     fn lagrange_and_fast_interpolation_are_identical(
         #[any(size_range(1..2048).lift())]
-        #[filter(#domain.iter().unique().count() == #domain.len())]
+        #[filter(#domain.iter().all_unique())]
         domain: Vec<BFieldElement>,
         #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
     ) {
@@ -2103,10 +2108,16 @@ mod test_polynomials {
         prop_assert_eq!(lagrange_interpolant, fast_interpolant);
     }
 
+    #[test]
+    fn fast_interpolation_through_a_single_point_succeeds() {
+        let zero_arr = bfe_array![0];
+        let _ = Polynomial::fast_interpolate(&zero_arr, &zero_arr);
+    }
+
     #[proptest(cases = 20)]
     fn interpolation_then_evaluation_is_identity(
         #[any(size_range(1..2048).lift())]
-        #[filter(#domain.iter().unique().count() == #domain.len())]
+        #[filter(#domain.iter().all_unique())]
         domain: Vec<BFieldElement>,
         #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
     ) {
@@ -2118,7 +2129,7 @@ mod test_polynomials {
     #[proptest(cases = 1)]
     fn fast_batch_interpolation_is_equivalent_to_fast_interpolation(
         #[any(size_range(1..2048).lift())]
-        #[filter(#domain.iter().unique().count() == #domain.len())]
+        #[filter(#domain.iter().all_unique())]
         domain: Vec<BFieldElement>,
         #[strategy(vec(vec(arb(), #domain.len()), 0..10))] value_vecs: Vec<Vec<BFieldElement>>,
     ) {
