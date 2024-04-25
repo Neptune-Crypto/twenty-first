@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -391,16 +392,13 @@ impl<T: BFieldCodec + FiniteField> BFieldCodec for Polynomial<T> {
             return Err(Self::Error::Other(BFieldCodecError::InvalidLengthIndicator));
         };
 
+        // Indicated sequence length is 1 + field size, as the size indicator takes up 1 word.
         let indicated_sequence_length = coefficients_field_length_indicator + 1;
-        if sequence.len() < indicated_sequence_length {
-            return Err(Self::Error::Other(BFieldCodecError::SequenceTooShort));
-        }
-
-        if sequence.len() > indicated_sequence_length {
-            return Err(Self::Error::Other(BFieldCodecError::SequenceTooLong));
-        }
-
-        let decoded_vec = Vec::<T>::decode(&sequence[1..])?;
+        let decoded_vec = match sequence.len().cmp(&indicated_sequence_length) {
+            Ordering::Equal => Vec::<T>::decode(&sequence[1..]),
+            Ordering::Less => Err(BFieldCodecError::SequenceTooShort),
+            Ordering::Greater => Err(BFieldCodecError::SequenceTooLong),
+        }?;
 
         let encoding_contains_trailing_zeros = decoded_vec
             .last()
@@ -543,6 +541,7 @@ mod tests {
     use proptest::collection::size_range;
     use proptest::collection::vec;
     use proptest::prelude::*;
+    use proptest::test_runner::TestCaseResult;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
@@ -766,11 +765,11 @@ mod tests {
         mut polynomial: Polynomial<T>,
         leading_coefficient: T,
         num_leading_zeros: usize,
-    ) {
+    ) -> TestCaseResult {
         polynomial.coefficients.push(leading_coefficient);
         let vec_encoding = polynomial.coefficients.encode();
         let poly_encoding = polynomial.encode();
-        assert_eq!(
+        prop_assert_eq!(
             [bfe_vec!(vec_encoding.len() as u64), vec_encoding].concat(),
             poly_encoding,
             "This test expects similarity of Vec and Polynomial encoding"
@@ -786,10 +785,12 @@ mod tests {
         ]
         .concat();
         let decoding_result = Polynomial::<T>::decode(&poly_encoding_with_trailing_zeros);
-        assert!(matches!(
+        prop_assert!(matches!(
             decoding_result.unwrap_err(),
             PolynomialBFieldCodecError::TrailingZerosInPolynomialEncoding
         ));
+
+        Ok(())
     }
 
     #[proptest]
@@ -802,7 +803,7 @@ mod tests {
             polynomial,
             leading_coefficient,
             num_leading_zeros,
-        )
+        )?
     }
 
     #[proptest]
@@ -815,7 +816,7 @@ mod tests {
             polynomial,
             leading_coefficient,
             num_leading_zeros,
-        )
+        )?
     }
 
     /// Depending on the test helper [`BFieldCodecPropertyTestData`] in the bfieldcodec_derive crate
