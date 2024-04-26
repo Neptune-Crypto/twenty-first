@@ -1164,7 +1164,7 @@ impl<FF: FiniteField> Polynomial<FF> {
 
     /// Multiply a polynomial with a scalar, _i.e._, compute `scalar · self(x)`.
     ///
-    /// Slightly faster than [`Self::scalar_mul`].
+    /// Slightly faster but slightly less general than [`Self::scalar_mul`].
     ///
     /// # Examples
     ///
@@ -1174,15 +1174,19 @@ impl<FF: FiniteField> Polynomial<FF> {
     /// f.scalar_mul_mut(bfe!(2));
     /// assert_eq!(Polynomial::new(bfe_vec![2, 4, 6]), f);
     /// ```
-    pub fn scalar_mul_mut(&mut self, scalar: FF) {
+    pub fn scalar_mul_mut<S>(&mut self, scalar: S)
+    where
+        S: Clone,
+        FF: MulAssign<S>,
+    {
         for coefficient in &mut self.coefficients {
-            *coefficient *= scalar;
+            *coefficient *= scalar.clone();
         }
     }
 
     /// Multiply a polynomial with a scalar, _i.e._, compute `scalar · self(x)`.
     ///
-    /// Slightly slower than [`Self::scalar_mul_mut`].
+    /// Slightly slower but slightly more general than [`Self::scalar_mul_mut`].
     ///
     /// # Examples
     ///
@@ -1193,8 +1197,15 @@ impl<FF: FiniteField> Polynomial<FF> {
     /// assert_eq!(Polynomial::new(bfe_vec![2, 4, 6]), g);
     /// ```
     #[must_use]
-    pub fn scalar_mul(&self, scalar: FF) -> Self {
-        Self::new(self.coefficients.iter().map(|&c| c * scalar).collect())
+    pub fn scalar_mul<S, FF2>(&self, scalar: S) -> Polynomial<FF2>
+    where
+        S: Clone,
+        FF: Mul<S, Output = FF2>,
+        FF2: FiniteField,
+    {
+        let coeff_iter = self.coefficients.iter();
+        let new_coeffs = coeff_iter.map(|&c| c * scalar.clone()).collect();
+        Polynomial::new(new_coeffs)
     }
 
     /// Return (quotient, remainder).
@@ -1566,6 +1577,24 @@ mod test_polynomials {
         let new_polynomial = polynomial.scalar_mul(scalar);
         polynomial.scalar_mul_mut(scalar);
         prop_assert_eq!(polynomial, new_polynomial);
+    }
+
+    #[test]
+    fn polynomial_multiplication_with_scalar_works_for_various_types() {
+        let bfe_poly = Polynomial::new(bfe_vec![0, 1, 2]);
+        let _: Polynomial<BFieldElement> = bfe_poly.scalar_mul(bfe!(42));
+        let _: Polynomial<XFieldElement> = bfe_poly.scalar_mul(xfe!(42));
+
+        let xfe_poly = Polynomial::new(xfe_vec![0, 1, 2]);
+        let _: Polynomial<XFieldElement> = xfe_poly.scalar_mul(bfe!(42));
+        let _: Polynomial<XFieldElement> = xfe_poly.scalar_mul(xfe!(42));
+
+        let mut bfe_poly = bfe_poly;
+        bfe_poly.scalar_mul_mut(bfe!(42));
+
+        let mut xfe_poly = xfe_poly;
+        xfe_poly.scalar_mul_mut(bfe!(42));
+        xfe_poly.scalar_mul_mut(xfe!(42));
     }
 
     #[proptest]
