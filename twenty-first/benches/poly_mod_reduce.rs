@@ -28,5 +28,8 @@ fn poly_mod_reduce<const SIZE_LHS: usize, const SIZE_RHS: usize>(c: &mut Criteri
     let id = BenchmarkId::new("long division", log2_of_size);
     group.bench_function(id, |b| b.iter(|| lhs.clone() % rhs.clone()));
 
+    let id = BenchmarkId::new("fast division", log2_of_size);
+    group.bench_function(id, |b| b.iter(|| lhs.clone().fast_divide(&rhs).1));
+
     group.finish();
 }

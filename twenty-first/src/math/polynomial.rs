@@ -779,15 +779,26 @@ where
     /// runtime complexity. Concretely, this method has time complexity in O(n·log(n)), whereas
     /// [`divide`](Self::naive_divide) has time complexity in O(n^2).
     #[doc(hidden)]
-    pub fn fast_divide(&self, divisor: &Self) -> Self {
+    pub fn fast_divide(&self, divisor: &Self) -> (Self, Self) {
         // The math for this function: [0]. There are very slight deviations, for example around the
         // requirement that the divisor is monic.
         //
         // [0] https://cs.uwaterloo.ca/~r5olivei/courses/2021-winter-cs487/lecture5-post.pdf
 
         let Ok(quotient_degree) = usize::try_from(self.degree() - divisor.degree()) else {
-            return Self::zero();
+            return (Self::zero(), self.clone());
         };
+
+        // if self.degree() >= Self::FAST_MULTIPLY_CUTOFF_THRESHOLD {
+        if self.degree() >= 4 {
+            return self.naive_divide(divisor);
+        }
+
+        if divisor.degree() == 0 {
+            let quotient = self.scalar_mul(divisor.leading_coefficient().unwrap().inverse());
+            let remainder = Polynomial::zero();
+            return (quotient, remainder);
+        }
 
         let divisor_lc = divisor.leading_coefficient();
         let divisor_lc_inv = divisor_lc.expect("divisor should be non-zero").inverse();
@@ -812,7 +823,10 @@ where
         let rev_divisor_inverse = f;
 
         let rev_quotient = reverse(self).multiply(&rev_divisor_inverse);
-        reverse(&rev_quotient).truncate(quotient_degree)
+        let quotient = reverse(&rev_quotient).truncate(quotient_degree);
+
+        let remainder = self.clone() - quotient.multiply(divisor);
+        (quotient, remainder)
     }
 
     /// The degree-`k` polynomial with the same `k + 1` leading coefficients as `self`. To be more
@@ -2254,7 +2268,7 @@ mod test_polynomials {
         a: Polynomial<BFieldElement>,
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
     ) {
-        let quotient = a.fast_divide(&b);
+        let (quotient, _remainder) = a.fast_divide(&b);
         prop_assert_eq!(a / b, quotient);
     }
 
@@ -2582,5 +2596,11 @@ mod test_polynomials {
         let product_formal_derivative = (a.clone() * b.clone()).formal_derivative();
         let product_rule = a.formal_derivative() * b.clone() + a * b.formal_derivative();
         prop_assert_eq!(product_rule, product_formal_derivative);
+    }
+
+    #[test]
+    fn zero_is_zero() {
+        let f = Polynomial::new(vec![BFieldElement::new(0)]);
+        assert!(f.is_zero());
     }
 }
