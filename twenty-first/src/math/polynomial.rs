@@ -807,22 +807,57 @@ where
         // Re-interpret as a polynomial to benefit from the already-implemented multiplication
         // method, which mechanically work the same in FF[X] and FF[[x]].
         let reverse = |poly: &Self| Self::new(poly.coefficients.iter().copied().rev().collect());
-        let rev_divisor = reverse(divisor);
 
         // Newton iteration to invert divisor up to required precision. Why is this the required
         // precision? Good question.
         // The initialization of `f` makes up for the divisor not necessarily being monic.
         let precision = (quotient_degree + 1).next_power_of_two();
         let num_rounds = precision.ilog2();
-        let mut f = Self::from_constant(divisor_lc_inv);
-        for _ in 0..num_rounds {
-            let subtrahend = rev_divisor.multiply(&f).multiply(&f);
-            f.scalar_mul_mut(FF::from(2));
-            f = f - subtrahend;
-        }
-        let rev_divisor_inverse = f;
 
-        let rev_quotient = reverse(self).multiply(&rev_divisor_inverse);
+        let domain_length =
+            (self.coefficients.len() + divisor.coefficients.len()).next_power_of_two();
+        let log_domain_length = domain_length.ilog2();
+        let omega = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
+
+        let mut f_ntt = vec![divisor_lc_inv; domain_length];
+
+        let rev_divisor = reverse(divisor);
+        let mut rev_divisor_ntt = [
+            rev_divisor.coefficients.clone(),
+            vec![FF::from(0); domain_length - rev_divisor.coefficients.len()],
+        ]
+        .concat();
+        ntt(&mut rev_divisor_ntt, omega, log_domain_length);
+
+        for _ in 0..num_rounds {
+            let subtrahend_ntt = rev_divisor_ntt
+                .iter()
+                .zip(f_ntt.iter())
+                .map(|(&dd, &ff)| dd * ff * ff)
+                .collect_vec();
+            f_ntt
+                .iter_mut()
+                .zip(subtrahend_ntt)
+                .for_each(|(ff, ss)| *ff = FF::from(2) * *ff - ss);
+        }
+        let rev_divisor_inverse_ntt = f_ntt;
+
+        let self_reverse = reverse(self);
+        let mut self_reverse_ntt = [
+            self_reverse.coefficients.clone(),
+            vec![FF::from(0); domain_length - self_reverse.coefficients.len()],
+        ]
+        .concat();
+        ntt(&mut self_reverse_ntt, omega, log_domain_length);
+
+        let mut rev_quotient_ntt = self_reverse_ntt
+            .into_iter()
+            .zip(rev_divisor_inverse_ntt)
+            .map(|(l, r)| l * r)
+            .collect_vec();
+        intt(&mut rev_quotient_ntt, omega, log_domain_length);
+        let rev_quotient = Polynomial::new(rev_quotient_ntt);
+
         let quotient = reverse(&rev_quotient).truncate(quotient_degree);
 
         let remainder = self.clone() - quotient.multiply(divisor);
