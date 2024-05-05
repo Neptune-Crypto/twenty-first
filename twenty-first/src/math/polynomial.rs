@@ -789,11 +789,6 @@ where
             return (Self::zero(), self.clone());
         };
 
-        // if self.degree() >= Self::FAST_MULTIPLY_CUTOFF_THRESHOLD {
-        if self.degree() >= 4 {
-            return self.naive_divide(divisor);
-        }
-
         if divisor.degree() == 0 {
             let quotient = self.scalar_mul(divisor.leading_coefficient().unwrap().inverse());
             let remainder = Polynomial::zero();
@@ -814,48 +809,49 @@ where
         let precision = (quotient_degree + 1).next_power_of_two();
         let num_rounds = precision.ilog2();
 
-        let domain_length =
-            (self.coefficients.len() + divisor.coefficients.len()).next_power_of_two();
-        let log_domain_length = domain_length.ilog2();
-        let omega = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
+        let last_domain_length = usize::max(
+            1usize + 2usize * usize::try_from(self.degree()).unwrap(),
+            (1usize << num_rounds) * usize::try_from(divisor.degree()).unwrap(),
+        )
+        .next_power_of_two();
+        let log_last_domain_length = last_domain_length.ilog2();
+        let last_omega = BFieldElement::primitive_root_of_unity(last_domain_length as u64).unwrap();
 
-        let mut f_ntt = vec![divisor_lc_inv; domain_length];
+        // df = 0
+        let mut f_ntt = vec![divisor_lc_inv; last_domain_length];
 
         let rev_divisor = reverse(divisor);
         let mut rev_divisor_ntt = [
             rev_divisor.coefficients.clone(),
-            vec![FF::from(0); domain_length - rev_divisor.coefficients.len()],
+            vec![FF::from(0); last_domain_length - rev_divisor.coefficients.len()],
         ]
         .concat();
-        ntt(&mut rev_divisor_ntt, omega, log_domain_length);
+        ntt(&mut rev_divisor_ntt, last_omega, log_last_domain_length);
 
         for _ in 0..num_rounds {
-            let subtrahend_ntt = rev_divisor_ntt
-                .iter()
-                .zip(f_ntt.iter())
-                .map(|(&dd, &ff)| dd * ff * ff)
-                .collect_vec();
+            // df' = dd + 2*df
             f_ntt
                 .iter_mut()
-                .zip(subtrahend_ntt)
-                .for_each(|(ff, ss)| *ff = FF::from(2) * *ff - ss);
+                .zip(rev_divisor_ntt.iter())
+                .for_each(|(ff, dd)| *ff = FF::from(2) * *ff - *dd * *ff * *ff);
         }
-        let rev_divisor_inverse_ntt = f_ntt;
+        // di = (2^r -  1) * dd
+        let rev_inverse_ntt = f_ntt;
 
         let self_reverse = reverse(self);
         let mut self_reverse_ntt = [
             self_reverse.coefficients.clone(),
-            vec![FF::from(0); domain_length - self_reverse.coefficients.len()],
+            vec![FF::from(0); last_domain_length - self_reverse.coefficients.len()],
         ]
         .concat();
-        ntt(&mut self_reverse_ntt, omega, log_domain_length);
+        ntt(&mut self_reverse_ntt, last_omega, log_last_domain_length);
 
         let mut rev_quotient_ntt = self_reverse_ntt
             .into_iter()
-            .zip(rev_divisor_inverse_ntt)
+            .zip(rev_inverse_ntt)
             .map(|(l, r)| l * r)
             .collect_vec();
-        intt(&mut rev_quotient_ntt, omega, log_domain_length);
+        intt(&mut rev_quotient_ntt, last_omega, log_last_domain_length);
         let rev_quotient = Polynomial::new(rev_quotient_ntt);
 
         let quotient = reverse(&rev_quotient).truncate(quotient_degree);
