@@ -1148,8 +1148,8 @@ impl<FF: FiniteField> Polynomial<FF> {
         acc
     }
 
-    pub fn shift_coefficients_mut(&mut self, power: usize, zero: FF) {
-        self.coefficients.splice(0..0, vec![zero; power]);
+    pub fn shift_coefficients_mut(&mut self, power: usize) {
+        self.coefficients.splice(0..0, vec![FF::zero(); power]);
     }
 
     /// Multiply a polynomial with x^power
@@ -1749,19 +1749,30 @@ mod test_polynomials {
 
     #[test]
     fn polynomial_shift_test() {
-        let polynomial = Polynomial::<BFieldElement>::from([17, 14]);
+        let polynomial = |coeffs: &[u64]| Polynomial::<BFieldElement>::from(coeffs);
+
         assert_eq!(
-            bfe_vec![17, 14],
-            polynomial.shift_coefficients(0).coefficients
+            polynomial(&[17, 14]),
+            polynomial(&[17, 14]).shift_coefficients(0)
         );
         assert_eq!(
-            bfe_vec![0, 17, 14],
-            polynomial.shift_coefficients(1).coefficients
+            polynomial(&[0, 17, 14]),
+            polynomial(&[17, 14]).shift_coefficients(1)
         );
         assert_eq!(
-            bfe_vec![0, 0, 0, 0, 17, 14],
-            polynomial.shift_coefficients(4).coefficients
+            polynomial(&[0, 0, 0, 0, 17, 14]),
+            polynomial(&[17, 14]).shift_coefficients(4)
         );
+
+        let mut poly = polynomial(&[17, 14]);
+        poly.shift_coefficients_mut(0);
+        assert_eq!(polynomial(&[17, 14]), poly);
+
+        poly.shift_coefficients_mut(1);
+        assert_eq!(polynomial(&[0, 17, 14]), poly);
+
+        poly.shift_coefficients_mut(3);
+        assert_eq!(polynomial(&[0, 0, 0, 0, 17, 14]), poly);
     }
 
     #[proptest]
