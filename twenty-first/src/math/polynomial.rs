@@ -1448,6 +1448,33 @@ mod test_polynomials {
     }
 
     #[test]
+    fn polynomial_can_be_debug_printed() {
+        let polynomial = Polynomial::new(bfe_vec![1, 2, 3]);
+        println!("{polynomial:?}");
+    }
+
+    #[proptest]
+    fn unequal_hash_implies_unequal_polynomials(
+        poly_0: Polynomial<BFieldElement>,
+        poly_1: Polynomial<BFieldElement>,
+    ) {
+        let hash = |poly: &Polynomial<_>| {
+            let mut hasher = std::hash::DefaultHasher::new();
+            poly.hash(&mut hasher);
+            std::hash::Hasher::finish(&hasher)
+        };
+
+        // The `Hash` trait requires:
+        // poly_0 == poly_1 => hash(poly_0) == hash(poly_1)
+        //
+        // By De-Morgan's law, this is equivalent to the more meaningful test:
+        // hash(poly_0) != hash(poly_1) => poly_0 != poly_1
+        if hash(&poly_0) != hash(&poly_1) {
+            prop_assert_ne!(poly_0, poly_1);
+        }
+    }
+
+    #[test]
     fn polynomial_display_test() {
         let polynomial = |cs: &[u64]| Polynomial::<BFieldElement>::from(cs);
 
@@ -2103,10 +2130,55 @@ mod test_polynomials {
         prop_assert_eq!(evaluations, fast_evaluations);
     }
 
+    #[proptest]
+    fn slow_and_vector_batch_polynomial_evaluation_are_equivalent(
+        poly: Polynomial<BFieldElement>,
+        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
+    ) {
+        let evaluations = domain.iter().map(|&x| poly.evaluate(x)).collect_vec();
+        let vector_batch_evaluations = poly.vector_batch_evaluate(&domain);
+        prop_assert_eq!(evaluations, vector_batch_evaluations);
+    }
+
+    #[test]
+    #[should_panic(expected = "zero points")]
+    fn interpolation_through_no_points_is_impossible() {
+        let _ = Polynomial::<BFieldElement>::interpolate(&[], &[]);
+    }
+
     #[test]
     #[should_panic(expected = "zero points")]
     fn lagrange_interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::lagrange_interpolate(&[], &[]);
+    }
+
+    #[test]
+    #[should_panic(expected = "zero points")]
+    fn zipped_lagrange_interpolation_through_no_points_is_impossible() {
+        let _ = Polynomial::<BFieldElement>::lagrange_interpolate_zipped(&[]);
+    }
+
+    #[test]
+    #[should_panic(expected = "zero points")]
+    fn fast_interpolation_through_no_points_is_impossible() {
+        let _ = Polynomial::<BFieldElement>::fast_interpolate(&[], &[]);
+    }
+
+    #[test]
+    #[should_panic(expected = "equal length")]
+    fn interpolation_with_domain_size_different_from_number_of_points_is_impossible() {
+        let domain = bfe_array![1, 2, 3];
+        let points = bfe_array![1, 2];
+        let _ = Polynomial::interpolate(&domain, &points);
+    }
+
+    #[test]
+    #[should_panic(expected = "Repeated")]
+    fn zipped_lagrange_interpolate_using_repeated_domain_points_is_impossible() {
+        let domain = bfe_array![1, 1, 2];
+        let points = bfe_array![1, 2, 3];
+        let zipped = domain.into_iter().zip(points).collect_vec();
+        let _ = Polynomial::lagrange_interpolate_zipped(&zipped);
     }
 
     #[proptest]
@@ -2117,12 +2189,6 @@ mod test_polynomials {
         let interpolant = Polynomial::lagrange_interpolate(&[x], &[y]);
         let polynomial = Polynomial::from_constant(y);
         prop_assert_eq!(polynomial, interpolant);
-    }
-
-    #[test]
-    #[should_panic(expected = "zero points")]
-    fn fast_interpolation_through_no_points_is_impossible() {
-        let _ = Polynomial::<BFieldElement>::fast_interpolate(&[], &[]);
     }
 
     #[proptest(cases = 10)]
