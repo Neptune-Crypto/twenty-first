@@ -10,9 +10,9 @@ criterion_main!(benches);
 criterion_group!(
     name = benches;
     config = Criterion::default().sample_size(50);
-    targets = poly_mod_reduce<{ 1 << 14 }, {1<<4}>,
-        poly_mod_reduce<{ 1 << 14 }, {1<<6}>,
-        poly_mod_reduce<{ 1 << 14 }, {1<<8}>,
+    targets = poly_mod_reduce<{ 1 << 20 }, {1<<4}>,
+        poly_mod_reduce<{ 1 << 20 }, {1<<6}>,
+        poly_mod_reduce<{ 1 << 20 }, {1<<8}>,
 );
 
 fn poly_mod_reduce<const SIZE_LHS: usize, const SIZE_RHS: usize>(c: &mut Criterion) {
