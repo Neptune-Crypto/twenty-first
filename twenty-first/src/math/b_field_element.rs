@@ -292,11 +292,13 @@ impl BFieldElement {
         acc
     }
 
-    /// Convert a `BFieldElement` from a byte slice in native endianness.
-    pub fn from_ne_bytes(bytes: &[u8]) -> BFieldElement {
-        let mut bytes_copied: [u8; 8] = [0; 8];
-        bytes_copied.copy_from_slice(bytes);
-        BFieldElement::new(u64::from_ne_bytes(bytes_copied))
+    pub fn to_ne_bytes(&self) -> [u8; 8] {
+        self.value().to_ne_bytes()
+    }
+
+    /// Convert a `BFieldElement` from a byte array in native endianness.
+    pub fn from_ne_bytes(bytes: [u8; 8]) -> BFieldElement {
+        BFieldElement::new(u64::from_ne_bytes(bytes))
     }
 
     /// Montgomery reduction
@@ -703,6 +705,12 @@ mod b_prime_field_element_test {
         let serialized = serde_json::to_string(&bfe).unwrap();
         let deserialized: BFieldElement = serde_json::from_str(&serialized).unwrap();
         prop_assert_eq!(bfe, deserialized);
+    }
+
+    #[proptest]
+    fn serialization_and_deserialization_to_and_from_bytes_is_identity(bfe: BFieldElement) {
+        let bfe_again = BFieldElement::from_ne_bytes(bfe.to_ne_bytes());
+        prop_assert_eq!(bfe, bfe_again);
     }
 
     #[proptest]
