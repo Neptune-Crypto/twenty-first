@@ -809,11 +809,10 @@ where
         let precision = (quotient_degree + 1).next_power_of_two();
         let num_rounds = precision.ilog2();
 
-        let last_domain_length = usize::max(
-            1usize + 2usize * usize::try_from(self.degree()).unwrap(),
-            (1usize << num_rounds) * usize::try_from(divisor.degree()).unwrap(),
-        )
-        .next_power_of_two();
+        let last_domain_length = (1usize << (num_rounds + 1))
+            * usize::try_from(divisor.degree())
+                .unwrap()
+                .next_power_of_two();
         let log_last_domain_length = last_domain_length.ilog2();
         let last_omega = BFieldElement::primitive_root_of_unity(last_domain_length as u64).unwrap();
 
@@ -836,23 +835,12 @@ where
                 .for_each(|(ff, dd)| *ff = FF::from(2) * *ff - *dd * *ff * *ff);
         }
         // di = (2^r -  1) * dd
-        let rev_inverse_ntt = f_ntt;
+        let mut rev_inverse_ntt = f_ntt;
+        intt(&mut rev_inverse_ntt, last_omega, log_last_domain_length);
+        let rev_inverse = Polynomial::new(rev_inverse_ntt.clone());
 
         let self_reverse = reverse(self);
-        let mut self_reverse_ntt = [
-            self_reverse.coefficients.clone(),
-            vec![FF::from(0); last_domain_length - self_reverse.coefficients.len()],
-        ]
-        .concat();
-        ntt(&mut self_reverse_ntt, last_omega, log_last_domain_length);
-
-        let mut rev_quotient_ntt = self_reverse_ntt
-            .into_iter()
-            .zip(rev_inverse_ntt)
-            .map(|(l, r)| l * r)
-            .collect_vec();
-        intt(&mut rev_quotient_ntt, last_omega, log_last_domain_length);
-        let rev_quotient = Polynomial::new(rev_quotient_ntt);
+        let rev_quotient = self_reverse.multiply(&rev_inverse);
 
         let quotient = reverse(&rev_quotient).truncate(quotient_degree);
 
