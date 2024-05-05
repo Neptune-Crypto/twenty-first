@@ -765,11 +765,13 @@ where
     /// # Panics
     ///
     /// Panics if the `divisor` is zero.
-    pub fn divide(&self, divisor: &Self) -> Self {
-        // According to `cargo bench --bench poly_div` on mjolnir, naive division is always faster
-        // than fast division.
-        let (quotient, _) = self.naive_divide(divisor);
-        quotient
+    pub fn divide(&self, divisor: &Self) -> (Self, Self) {
+        const FAST_DIVIDE_THRESHOLD: isize = 1000;
+        if self.degree() > FAST_DIVIDE_THRESHOLD {
+            self.fast_divide(divisor)
+        } else {
+            self.naive_divide(divisor)
+        }
     }
 
     /// Polynomial long division with `self` as the dividend, divided by some `divisor`.
@@ -913,7 +915,7 @@ impl Polynomial<BFieldElement> {
     #[must_use]
     pub fn clean_divide(mut self, mut divisor: Self) -> Self {
         if divisor.degree() < Self::CLEAN_DIVIDE_CUTOFF_THRESHOLD {
-            return self.divide(&divisor);
+            return self.divide(&divisor).0;
         }
 
         // Incompleteness workaround: Manually check whether 0 is a root of the divisor.
@@ -2299,11 +2301,11 @@ mod test_polynomials {
         b: Polynomial<BFieldElement>,
     ) {
         let product = a.clone() * b.clone();
-        let (naive_quotient, remainder) = product.naive_divide(&b);
+        let (naive_quotient, naive_remainder) = product.naive_divide(&b);
         let clean_quotient = product.clone().clean_divide(b.clone());
         let err = format!("{product} / {b} == {naive_quotient} != {clean_quotient}");
         prop_assert_eq!(naive_quotient, clean_quotient, "{}", err);
-        prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
+        prop_assert_eq!(Polynomial::<BFieldElement>::zero(), naive_remainder);
     }
 
     #[proptest]
