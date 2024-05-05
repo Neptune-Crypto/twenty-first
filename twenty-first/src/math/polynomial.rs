@@ -822,11 +822,8 @@ where
         let mut f_ntt = vec![divisor_lc_inv; last_domain_length];
 
         let rev_divisor = reverse(divisor);
-        let mut rev_divisor_ntt = [
-            rev_divisor.coefficients.clone(),
-            vec![FF::from(0); last_domain_length - rev_divisor.coefficients.len()],
-        ]
-        .concat();
+        let mut rev_divisor_ntt = rev_divisor.coefficients.clone();
+        rev_divisor_ntt.resize(last_domain_length, FF::from(0));
         ntt(&mut rev_divisor_ntt, last_omega, log_last_domain_length);
 
         for _ in 0..num_rounds {
