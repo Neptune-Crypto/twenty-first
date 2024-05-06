@@ -150,6 +150,10 @@ where
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
     const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
+    /// Inside `formal_power_series_inverse`, when to multiply naively and when
+    /// to use NTT-based multiplication.
+    const FORMAL_POWER_SERIES_INVERSE_CUTOFF: usize = 1 << 8;
+
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
     /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then corresponds to
@@ -774,6 +778,75 @@ where
         }
     }
 
+    /// Compute a polynomial g(X) from a given polynomial f(X) such that
+    /// g(X) * f(X) = 1 mod X^n , where n is the precision.
+    ///
+    /// In formal terms, g(X) is the approximate multiplicative inverse in
+    /// the formal power series ring FF[[X]], where elements obey the same
+    /// algebraic rules as polynomials do but can have an infinite number of
+    /// coefficients. To represent these elements on a computer, one has to
+    /// truncate the coefficient vectors somewhere. The resulting truncation
+    /// error is considered "small" when it lives on large powers of X. This
+    /// function works by applying Newton's method in this ring.
+    ///
+    /// @panics when f(X) is not invertible in the formal power series ring,
+    /// _i.e._, when its constant coefficient is zero.
+    pub fn formal_power_series_inverse(&self, precision: usize) -> Polynomial<FF> {
+        // nonzero polynomials of degree zero have an exact inverse
+        if self.degree() == 0 {
+            return Polynomial::from_constant(self.coefficients[0].inverse());
+        }
+
+        // otherwise we need to run some iterations of Newton's method
+        let num_rounds = precision.next_power_of_two().ilog2();
+
+        // for small polynomials we use schoolbook multiplication,
+        // but for larger ones we want to stay in the ntt domain
+        let switch_point = if Self::FORMAL_POWER_SERIES_INVERSE_CUTOFF < self.degree() as usize {
+            0
+        } else {
+            (Self::FORMAL_POWER_SERIES_INVERSE_CUTOFF / self.degree() as usize).ilog2()
+        };
+
+        let cc = self.coefficients[0];
+
+        // schoolbook part
+        let mut f = Polynomial::from_constant(cc.inverse());
+        for _ in 0..u32::min(num_rounds, switch_point) {
+            let sub = f.multiply(&f).multiply(self);
+            f.scalar_mul_mut(FF::from(2));
+            f = f - sub;
+        }
+
+        // if we already have the required precision, terminate early
+        if switch_point >= num_rounds {
+            return f;
+        }
+
+        // ntt-domain part
+        let domain_length = ((1 << (num_rounds + 1)) * self.degree() as usize).next_power_of_two();
+        let omega = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
+        let log_domain_length = domain_length.ilog2();
+
+        let mut f_ntt = f.coefficients;
+        f_ntt.resize(domain_length, FF::from(0));
+        ntt(&mut f_ntt, omega, log_domain_length);
+
+        let mut self_ntt = self.coefficients.clone();
+        self_ntt.resize(domain_length, FF::zero());
+        ntt(&mut self_ntt, omega, log_domain_length);
+
+        for _ in switch_point..num_rounds {
+            f_ntt
+                .iter_mut()
+                .zip(self_ntt.iter())
+                .for_each(|(ff, dd)| *ff = FF::from(2) * *ff - *ff * *ff * *dd);
+        }
+
+        intt(&mut f_ntt, omega, log_domain_length);
+        Polynomial::new(f_ntt)
+    }
+
     /// Polynomial long division with `self` as the dividend, divided by some `divisor`.
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     ///
@@ -797,9 +870,6 @@ where
             return (quotient, remainder);
         }
 
-        let divisor_lc = divisor.leading_coefficient();
-        let divisor_lc_inv = divisor_lc.expect("divisor should be non-zero").inverse();
-
         // Reverse coefficient vectors to move into formal power series ring over FF, i.e., FF[[x]].
         // Re-interpret as a polynomial to benefit from the already-implemented multiplication
         // method, which mechanically work the same in FF[X] and FF[[x]].
@@ -807,39 +877,13 @@ where
 
         // Newton iteration to invert divisor up to required precision. Why is this the required
         // precision? Good question.
-        // The initialization of `f` makes up for the divisor not necessarily being monic.
         let precision = (quotient_degree + 1).next_power_of_two();
-        let num_rounds = precision.ilog2();
-
-        let last_domain_length = (1usize << (num_rounds + 1))
-            * usize::try_from(divisor.degree())
-                .unwrap()
-                .next_power_of_two();
-        let log_last_domain_length = last_domain_length.ilog2();
-        let last_omega = BFieldElement::primitive_root_of_unity(last_domain_length as u64).unwrap();
-
-        // df = 0
-        let mut f_ntt = vec![divisor_lc_inv; last_domain_length];
 
         let rev_divisor = reverse(divisor);
-        let mut rev_divisor_ntt = rev_divisor.coefficients.clone();
-        rev_divisor_ntt.resize(last_domain_length, FF::from(0));
-        ntt(&mut rev_divisor_ntt, last_omega, log_last_domain_length);
-
-        for _ in 0..num_rounds {
-            // df' = dd + 2*df
-            f_ntt
-                .iter_mut()
-                .zip(rev_divisor_ntt.iter())
-                .for_each(|(ff, dd)| *ff = FF::from(2) * *ff - *dd * *ff * *ff);
-        }
-        // di = (2^r -  1) * dd
-        let mut rev_inverse_ntt = f_ntt;
-        intt(&mut rev_inverse_ntt, last_omega, log_last_domain_length);
-        let rev_inverse = Polynomial::new(rev_inverse_ntt.clone());
+        let rev_divisor_inverse = rev_divisor.formal_power_series_inverse(precision);
 
         let self_reverse = reverse(self);
-        let rev_quotient = self_reverse.multiply(&rev_inverse);
+        let rev_quotient = self_reverse.multiply(&rev_divisor_inverse);
 
         let quotient = reverse(&rev_quotient).truncate(quotient_degree);
 
@@ -2620,5 +2664,42 @@ mod test_polynomials {
     fn zero_is_zero() {
         let f = Polynomial::new(vec![BFieldElement::new(0)]);
         assert!(f.is_zero());
+    }
+
+    #[proptest]
+    fn formal_power_series_inverse(
+        #[strategy(2usize..20)] precision: usize,
+        #[filter(!#f.coefficients.is_empty())]
+        #[filter(!#f.coefficients[0].is_zero())]
+        #[filter(#precision > 1 + #f.degree() as usize)]
+        f: Polynomial<BFieldElement>,
+    ) {
+        let g = f.formal_power_series_inverse(precision);
+        let mut coefficients = vec![BFieldElement::new(0); precision + 1];
+        coefficients[precision] = BFieldElement::new(1);
+        let xn = Polynomial::new(coefficients);
+        let (_quotient, remainder) = g.multiply(&f).divide(&xn);
+        prop_assert!(remainder.is_one());
+    }
+
+    #[test]
+    fn formal_power_series_inverse_concrete() {
+        let f = Polynomial::<BFieldElement>::new(vec![
+            BFieldElement::new(3618372803227210457),
+            BFieldElement::new(14620511201754172786),
+            BFieldElement::new(2577803283145951105),
+            BFieldElement::new(1723541458268087404),
+            BFieldElement::new(4119508755381840018),
+            BFieldElement::new(8592072587377832596),
+            BFieldElement::new(236223201225),
+        ]);
+        let precision = 8;
+
+        let g = f.formal_power_series_inverse(precision);
+        let mut coefficients = vec![BFieldElement::new(0); precision + 1];
+        coefficients[precision] = BFieldElement::new(1);
+        let xn = Polynomial::new(coefficients);
+        let (_quotient, remainder) = g.multiply(&f).divide(&xn);
+        assert!(remainder.is_one());
     }
 }
