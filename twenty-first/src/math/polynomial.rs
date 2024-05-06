@@ -151,7 +151,9 @@ where
     const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
     /// Inside `formal_power_series_inverse`, when to multiply naively and when
-    /// to use NTT-based multiplication.
+    /// to use NTT-based multiplication. Use benchmark
+    /// `formal_power_series_inverse` to find the optimum. Based on benchmarks,
+    /// the optimum probably lies somewhere between 2^5 and 2^9.
     const FORMAL_POWER_SERIES_INVERSE_CUTOFF: usize = 1 << 8;
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
@@ -823,27 +825,70 @@ where
             return f;
         }
 
-        // ntt-domain part
-        let domain_length = ((1 << (num_rounds + 1)) * self.degree() as usize).next_power_of_two();
-        let omega = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
-        let log_domain_length = domain_length.ilog2();
+        // ntt-based multiplication from here on out
 
-        let mut f_ntt = f.coefficients;
-        f_ntt.resize(domain_length, FF::from(0));
-        ntt(&mut f_ntt, omega, log_domain_length);
+        // final NTT domain
+        let full_domain_length =
+            ((1 << (num_rounds + 1)) * self.degree() as usize).next_power_of_two();
+        let full_omega = BFieldElement::primitive_root_of_unity(full_domain_length as u64).unwrap();
+        let log_full_domain_length = full_domain_length.ilog2();
 
         let mut self_ntt = self.coefficients.clone();
-        self_ntt.resize(domain_length, FF::zero());
-        ntt(&mut self_ntt, omega, log_domain_length);
+        self_ntt.resize(full_domain_length, FF::zero());
+        ntt(&mut self_ntt, full_omega, log_full_domain_length);
+
+        // while possible we calculate over a smaller domain
+        let mut current_domain_length = f.coefficients.len().next_power_of_two();
+
+        // migrate to a larger domain as necessary
+        let lde = |v: &mut [FF], old_domain_length: usize, new_domain_length: usize| {
+            intt(
+                &mut v[..old_domain_length],
+                BFieldElement::primitive_root_of_unity(old_domain_length as u64).unwrap(),
+                old_domain_length.ilog2(),
+            );
+            ntt(
+                &mut v[..new_domain_length],
+                BFieldElement::primitive_root_of_unity(new_domain_length as u64).unwrap(),
+                new_domain_length.ilog2(),
+            );
+        };
+
+        // use degree to track when domain-changes are necessary
+        let mut f_degree = f.degree();
+        let self_degree = self.degree();
+
+        // allocate enough space for f and set initial values of elements used later to zero
+        let mut f_ntt = f.coefficients;
+        f_ntt.resize(full_domain_length, FF::from(0));
+        ntt(
+            &mut f_ntt[..current_domain_length],
+            BFieldElement::primitive_root_of_unity(current_domain_length as u64).unwrap(),
+            current_domain_length.ilog2(),
+        );
 
         for _ in switch_point..num_rounds {
+            f_degree = 2 * f_degree + self_degree;
+            if f_degree as usize >= current_domain_length {
+                let next_domain_length = (1 + f_degree as usize).next_power_of_two();
+                lde(&mut f_ntt, current_domain_length, next_domain_length);
+                current_domain_length = next_domain_length;
+            }
             f_ntt
                 .iter_mut()
-                .zip(self_ntt.iter())
+                .zip(
+                    self_ntt
+                        .iter()
+                        .step_by(full_domain_length / current_domain_length),
+                )
                 .for_each(|(ff, dd)| *ff = FF::from(2) * *ff - *ff * *ff * *dd);
         }
 
-        intt(&mut f_ntt, omega, log_domain_length);
+        intt(
+            &mut f_ntt[..current_domain_length],
+            BFieldElement::primitive_root_of_unity(current_domain_length as u64).unwrap(),
+            current_domain_length.ilog2(),
+        );
         Polynomial::new(f_ntt)
     }
 
