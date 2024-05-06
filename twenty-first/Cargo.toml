@@ -121,3 +121,7 @@ harness = false
 [[bench]]
 name = "zerofier"
 harness = false
+
+[[bench]]
+name = "formal_power_series_inverse"
+harness = false
