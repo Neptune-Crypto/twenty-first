@@ -30,6 +30,50 @@ use crate::prelude::XFieldElement;
 
 use super::traits::PrimitiveRootOfUnity;
 
+/// Helper data for storing useful objects for fast preprocessed modular
+/// reduction.
+#[derive(Debug, Clone)]
+pub struct PreprocessedFastReductionModulus<FF: FiniteField + MulAssign<BFieldElement>> {
+    pub modulus: Polynomial<FF>,
+    pub m: usize,
+    pub shift_coefficients: Vec<FF>,
+    pub standard_multiple: Polynomial<FF>,
+}
+
+impl<FF: FiniteField + MulAssign<BFieldElement>> PreprocessedFastReductionModulus<FF> {
+    pub fn new(modulus: Polynomial<FF>) -> Self {
+        let n = usize::max(
+            Polynomial::<FF>::FAST_MULTIPLY_CUTOFF_THRESHOLD as usize / 4,
+            modulus.degree() as usize * 2,
+        )
+        .next_power_of_two();
+        let ntt_friendly_multiple = modulus.structured_multiple_of_degree(n);
+        let m = 1 + ntt_friendly_multiple
+            .coefficients
+            .iter()
+            .enumerate()
+            .rev()
+            .skip(1)
+            .find_map(|(i, c)| if !c.is_zero() { Some(i) } else { None })
+            .unwrap_or(0);
+        let mut shift_coefficients = ntt_friendly_multiple.coefficients[..n].to_vec();
+        ntt(
+            &mut shift_coefficients,
+            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+            n.ilog2(),
+        );
+
+        let standard_multiple = modulus.structured_multiple();
+
+        Self {
+            modulus,
+            m,
+            shift_coefficients,
+            standard_multiple,
+        }
+    }
+}
+
 impl<FF: FiniteField> Zero for Polynomial<FF> {
     fn zero() -> Self {
         Self {
@@ -1038,6 +1082,87 @@ where
         Polynomial::new(working_window)
     }
 
+    /// Reduces f(X) by a structured modulus, which is of the form
+    /// X^{m+n} + (something of degree less than m). When the modulus has this
+    /// form, polynomial modular reductions can be computed faster than in the
+    /// generic case.
+    ///
+    /// This method uses NTT-based multiplication, meaning that the unstructured
+    /// part of the structured multiple must be given in NTT-domain.
+    fn reduce_by_ntt_friendly_modulus(&self, shift_ntt: &[FF], m: usize) -> Self {
+        let domain_length = shift_ntt.len();
+        assert!(domain_length.is_power_of_two());
+        let log_domain_length = domain_length.ilog2();
+        let omega = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
+        let n = domain_length - m;
+
+        if self.coefficients.len() < n + m {
+            return self.clone();
+        }
+        let num_reducible_chunks = (self.coefficients.len() - (m + n) + n - 1) / n;
+
+        let range_start = num_reducible_chunks * n;
+        let mut working_window = if range_start >= self.coefficients.len() {
+            vec![FF::from(0); n + m]
+        } else {
+            self.coefficients[range_start..].to_vec()
+        };
+        working_window.resize(n + m, FF::from(0));
+
+        for chunk_index in (0..num_reducible_chunks).rev() {
+            let mut product = [working_window[m..].to_vec(), vec![FF::from(0); m]].concat();
+            ntt(&mut product, omega, log_domain_length);
+            product
+                .iter_mut()
+                .zip(shift_ntt.iter())
+                .for_each(|(l, r)| *l *= *r);
+            intt(&mut product, omega, log_domain_length);
+
+            working_window = [vec![FF::from(0); n], working_window[0..m].to_vec()].concat();
+            for (i, wwi) in working_window.iter_mut().enumerate().take(n) {
+                *wwi = self.coefficients[chunk_index * n + i];
+            }
+
+            for (i, wwi) in working_window.iter_mut().enumerate().take(n + m) {
+                *wwi -= product[i];
+            }
+        }
+
+        Polynomial::new(working_window)
+    }
+
+    /// Do preprocessing for fast modular reduction.
+    pub fn preprocess_as_modulus(&self) -> PreprocessedFastReductionModulus<FF> {
+        PreprocessedFastReductionModulus::new(self.clone())
+    }
+
+    /// Compute the remainder after division of one (online) polynomial by
+    /// another (preprocessed) polynomial.
+    pub fn reduce_by_preprocessed_modulus(
+        &self,
+        preprocessed_modulus: &PreprocessedFastReductionModulus<FF>,
+    ) -> Self {
+        if preprocessed_modulus.modulus.degree() == 0 {
+            return Self::zero();
+        }
+        if self.degree() < preprocessed_modulus.modulus.degree() {
+            return self.clone();
+        }
+        let mut working_remainder = self.clone();
+        if working_remainder.degree() as usize >= preprocessed_modulus.shift_coefficients.len() {
+            working_remainder = working_remainder.reduce_by_ntt_friendly_modulus(
+                &preprocessed_modulus.shift_coefficients,
+                preprocessed_modulus.m,
+            );
+        }
+        if working_remainder.degree() > 2 * preprocessed_modulus.standard_multiple.degree() {
+            working_remainder = working_remainder
+                .reduce_by_structured_modulus(&preprocessed_modulus.standard_multiple);
+        }
+
+        working_remainder.reduce(&preprocessed_modulus.modulus)
+    }
+
     /// Polynomial long division with `self` as the dividend, divided by some `divisor`.
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     ///
@@ -1688,6 +1813,7 @@ mod test_polynomials {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
+    use rand::thread_rng;
     use test_strategy::proptest;
 
     use crate::prelude::*;
@@ -3045,9 +3171,9 @@ mod test_polynomials {
 
     #[proptest]
     fn structured_multiple_of_degree_has_given_degree(
-        #[strategy(1usize..100)] n: usize,
+        #[strategy(2usize..100)] n: usize,
         #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
-        #[strategy(vec(arb(), 0..usize::min(30, #n)))]
+        #[strategy(vec(arb(), 1..usize::min(30, #n)))]
         coefficients: Vec<BFieldElement>,
     ) {
         let polynomial = Polynomial::<BFieldElement>::new(coefficients);
@@ -3129,6 +3255,69 @@ mod test_polynomials {
     }
 
     #[proptest]
+    fn reduce_by_ntt_friendly_modulus_and_reduce_agree(
+        #[strategy(1usize..10)] m: usize,
+        #[strategy(vec(arb(), #m))] b_coefficients: Vec<BFieldElement>,
+        #[strategy(1usize..100)] _deg_a: usize,
+        #[strategy(vec(arb(), #_deg_a + 1))] _a_coefficients: Vec<BFieldElement>,
+        #[strategy(Just(Polynomial::new(#_a_coefficients)))] a: Polynomial<BFieldElement>,
+    ) {
+        if !b_coefficients.iter().all(|c| c.is_zero()) {
+            let n = (b_coefficients.len() + 1).next_power_of_two();
+            let mut full_modulus_coefficients = b_coefficients.clone();
+            full_modulus_coefficients.resize(n + 1, BFieldElement::from(0));
+            *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
+            let full_modulus = Polynomial::new(full_modulus_coefficients);
+
+            let long_remainder = a.reduce(&full_modulus);
+
+            let mut shift_ntt = b_coefficients.clone();
+            shift_ntt.resize(n, BFieldElement::from(0));
+            ntt(
+                &mut shift_ntt,
+                BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+                n.ilog2(),
+            );
+            let structured_remainder = a.reduce_by_ntt_friendly_modulus(&shift_ntt, m);
+
+            prop_assert_eq!(long_remainder, structured_remainder);
+        }
+    }
+
+    #[test]
+    fn reduce_by_ntt_friendly_modulus_and_reduce_agree_concrete() {
+        let m = 1;
+        let a_coefficients = [0, 0, 532575944580]
+            .into_iter()
+            .map(BFieldElement::new)
+            .collect_vec();
+        let a = Polynomial::new(a_coefficients);
+        let b_coefficients = vec![BFieldElement::new(944892804900)];
+        let n = (b_coefficients.len() + 1).next_power_of_two();
+        let mut full_modulus_coefficients = b_coefficients.clone();
+        full_modulus_coefficients.resize(n + 1, BFieldElement::from(0));
+        *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
+        let full_modulus = Polynomial::new(full_modulus_coefficients);
+
+        let long_remainder = a.reduce(&full_modulus);
+
+        let mut shift_ntt = b_coefficients.clone();
+        shift_ntt.resize(n, BFieldElement::from(0));
+        ntt(
+            &mut shift_ntt,
+            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+            n.ilog2(),
+        );
+        let structured_remainder = a.reduce_by_ntt_friendly_modulus(&shift_ntt, m);
+
+        assert_eq!(
+            long_remainder, structured_remainder,
+            "full modulus: {}",
+            full_modulus
+        );
+    }
+
+    #[proptest]
     fn fast_reduce_agrees_with_reduce(
         #[filter(!#a.is_zero())] a: Polynomial<BFieldElement>,
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
@@ -3153,5 +3342,37 @@ mod test_polynomials {
         let long_remainder = a.reduce(&b);
         let fast_remainder = a.reduce_with_structured_multiple(&b, &multiple);
         assert_eq!(long_remainder, fast_remainder);
+    }
+
+    #[proptest]
+    fn preprocessed_reduce_agrees_with_reduce(
+        #[filter(!#a.is_zero())] a: Polynomial<BFieldElement>,
+        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
+    ) {
+        let standard_remainder = a.reduce(&b);
+        let preprocessed_modulus = PreprocessedFastReductionModulus::new(b);
+        let preprocessed_remainder = a.reduce_by_preprocessed_modulus(&preprocessed_modulus);
+        prop_assert_eq!(standard_remainder, preprocessed_remainder);
+    }
+
+    #[test]
+    fn preprocessed_reduce_agrees_with_reduce_on_huge_polynomials() {
+        let mut rng = thread_rng();
+        let deg_a = rng.gen_range((1 << 15)..(1 << 16));
+        let a_coefficients = (0..=deg_a)
+            .into_iter()
+            .map(|_| rng.gen::<BFieldElement>())
+            .collect_vec();
+        let deg_b = rng.gen_range((1 << 5)..(1 << 6));
+        let b_coefficients = (0..=deg_b)
+            .into_iter()
+            .map(|_| rng.gen::<BFieldElement>())
+            .collect_vec();
+        let a = Polynomial::new(a_coefficients);
+        let b = Polynomial::new(b_coefficients);
+        let standard_remainder = a.reduce(&b);
+        let preprocessed_modulus = PreprocessedFastReductionModulus::new(b);
+        let preprocessed_remainder = a.reduce_by_preprocessed_modulus(&preprocessed_modulus);
+        assert_eq!(standard_remainder, preprocessed_remainder);
     }
 }
