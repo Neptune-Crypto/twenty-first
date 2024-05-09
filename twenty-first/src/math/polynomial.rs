@@ -928,10 +928,36 @@ where
         )
     }
 
+    /// Divide (with remainder) and throw away the quotient.
+    fn reduce(&self, modulus: &Self) -> Self {
+        let (_quotient, remainder) = self.divide(modulus);
+        remainder
+    }
+
+    /// Given a polynomial to be reduced, a modulus, and a structured multiple
+    /// of that modulus, compute the remainder after division by that modulus.
+    /// This method is faster than [`reduce`](reduce) even with the
+    /// preprocessing step (in which the structured multiple is calculated) but
+    /// the point is that for many cost calculations the main processing step
+    /// dominates.
+    pub fn reduce_with_structured_multiple(&self, modulus: &Self, multiple: &Self) -> Self {
+        let degree = modulus.degree();
+        if degree == -1 {
+            panic!("Cannot reduce by zero.");
+        } else if degree == 0 {
+            return Self::zero();
+        } else if self.degree() < modulus.degree() {
+            return self.clone();
+        }
+
+        let somewhat_reduced = self.reduce_by_structured_modulus(multiple);
+        somewhat_reduced.reduce(modulus)
+    }
+
     /// Given a polynomial f(X) of degree n, find a multiple of f(X) of the form
     /// X^{3*n+1} + (something of degree at most 2*n).
     /// @panics if f(X) = 0.
-    fn structured_multiple(&self) -> Self {
+    pub fn structured_multiple(&self) -> Self {
         let n = self.degree();
         let reverse = self.reverse();
         let inverse_reverse = reverse.formal_power_series_inverse_minimal(n as usize);
@@ -939,18 +965,53 @@ where
         product_reverse.reverse()
     }
 
+    /// Given a polynomial f(X) and an integer n, find a multiple of f(X) of the
+    /// form X^n + (something of much smaller degree).
+    ///
+    /// @panics if the polynomial is zero, or if its degree is larger than n
+    pub fn structured_multiple_of_degree(&self, n: usize) -> Self {
+        if self.is_zero() {
+            panic!("Cannot compute multiples of zero.");
+        }
+        let degree = self.degree() as usize;
+        if degree > n {
+            panic!("Cannot compute multiple of smaller degree.");
+        }
+        if degree == 0 {
+            return Polynomial::new(
+                [vec![FF::from(0); n], vec![self.coefficients[0].inverse()]].concat(),
+            );
+        }
+        let reverse = self.reverse();
+        // The next function gives back a polynomial g(X) of degree at most arg,
+        // such that f(X) * g(X) = 1 mod X^arg.
+        // Without modular reduction, the degree of the product f(X) * g(X) is
+        // deg(f) + arg -- even after coefficient reversal. So n = deg(f) + arg
+        // and arg = n - deg(f).
+        let inverse_reverse = reverse.formal_power_series_inverse_minimal(n - degree);
+        let product_reverse = reverse.multiply(&inverse_reverse);
+        product_reverse.reverse()
+    }
+
     /// Reduces f(X) by a structured modulus, which is of the form
     /// X^{m+n} + (something of degree less than m). When the modulus has this
     /// form, polynomial modular reductions can be computed faster than in the
-    /// generic case. Only the unstructured part of the modulus is explicitly
-    /// represented.
-    fn reduce_by_structured_modulus(&self, shift_factor: &[FF], n: usize) -> Self {
-        let m = shift_factor.len();
+    /// generic case.
+    fn reduce_by_structured_modulus(&self, multiple: &Self) -> Self {
+        let leading_term = Polynomial::new(
+            [
+                vec![FF::from(0); multiple.degree() as usize],
+                vec![FF::from(1); 1],
+            ]
+            .concat(),
+        );
+        let shift_polynomial = multiple.clone() - leading_term.clone();
+        let m = shift_polynomial.degree() as usize + 1;
+        let n = multiple.degree() as usize - m;
         if self.coefficients.len() < n + m {
             return self.clone();
         }
         let num_reducible_chunks = (self.coefficients.len() - (m + n) + n - 1) / n;
-        let shift_polynomial = Polynomial::new(shift_factor.to_vec());
 
         let range_start = num_reducible_chunks * n;
         let mut working_window = if range_start >= self.coefficients.len() {
@@ -2884,7 +2945,7 @@ mod test_polynomials {
             ]
             .concat(),
         );
-        let (_quotient, remainder) = structured_multiple.divide(&x2n);
+        let remainder = structured_multiple.reduce(&x2n);
         assert_eq!(remainder.degree() as usize, n - 1);
         assert_eq!(
             (structured_multiple.clone() - remainder.clone())
@@ -2938,6 +2999,69 @@ mod test_polynomials {
     }
 
     #[proptest]
+    fn structured_multiple_of_degree_is_multiple(
+        #[strategy(2usize..100)] n: usize,
+        #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
+        #[strategy(vec(arb(), 1..usize::min(30, #n)))]
+        coefficients: Vec<BFieldElement>,
+    ) {
+        let polynomial = Polynomial::<BFieldElement>::new(coefficients);
+        let multiple = polynomial.structured_multiple_of_degree(n);
+        let remainder = multiple.reduce(&polynomial);
+        prop_assert!(remainder.is_zero());
+    }
+
+    #[proptest]
+    fn structured_multiple_of_degree_generates_structure(
+        #[strategy(4usize..100)] n: usize,
+        #[strategy(vec(arb(), 3..usize::min(30, #n)))] mut coefficients: Vec<BFieldElement>,
+    ) {
+        *coefficients.last_mut().unwrap() = BFieldElement::new(1);
+        let polynomial = Polynomial::<BFieldElement>::new(coefficients);
+        let structured_multiple = polynomial.structured_multiple_of_degree(n);
+
+        let xn = Polynomial::new(
+            [
+                vec![BFieldElement::new(0); n],
+                vec![BFieldElement::new(1); 1],
+            ]
+            .concat(),
+        );
+        let remainder = structured_multiple.reduce(&xn);
+        assert_eq!(
+            (structured_multiple.clone() - remainder.clone())
+                .reverse()
+                .degree() as usize,
+            0
+        );
+        assert_eq!(
+            *(structured_multiple.clone() - remainder)
+                .coefficients
+                .last()
+                .unwrap(),
+            BFieldElement::new(1)
+        );
+    }
+
+    #[proptest]
+    fn structured_multiple_of_degree_has_given_degree(
+        #[strategy(1usize..100)] n: usize,
+        #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
+        #[strategy(vec(arb(), 0..usize::min(30, #n)))]
+        coefficients: Vec<BFieldElement>,
+    ) {
+        let polynomial = Polynomial::<BFieldElement>::new(coefficients);
+        let multiple = polynomial.structured_multiple_of_degree(n);
+        prop_assert_eq!(
+            multiple.degree() as usize,
+            n,
+            "polynomial: {} whereas multiple {}",
+            polynomial,
+            multiple
+        );
+    }
+
+    #[proptest]
     fn reverse_polynomial_with_nonzero_constant_term_twice_gives_original_back(
         f: Polynomial<BFieldElement>,
     ) {
@@ -2959,7 +3083,7 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn reduce_by_structured_modulus_and_naive_division_agree(
+    fn reduce_by_structured_modulus_and_reduce_agree(
         #[strategy(1usize..10)] n: usize,
         #[strategy(1usize..10)] m: usize,
         #[strategy(vec(arb(), #m))] b_coefficients: Vec<BFieldElement>,
@@ -2972,33 +3096,62 @@ mod test_polynomials {
         *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
         let full_modulus = Polynomial::new(full_modulus_coefficients);
 
-        let (_naive_quotient, naive_remainder) = a.divide(&full_modulus);
-        let structured_remainder = a.reduce_by_structured_modulus(&b_coefficients, n);
+        let long_remainder = a.reduce(&full_modulus);
+        let structured_remainder = a.reduce_by_structured_modulus(&full_modulus);
 
-        prop_assert_eq!(naive_remainder, structured_remainder);
+        prop_assert_eq!(long_remainder, structured_remainder);
     }
 
     #[test]
-    fn reduce_by_structured_modulus_and_naive_division_agree_concrete() {
+    fn reduce_by_structured_modulus_and_reduce_agree_concrete() {
         let a = Polynomial::new(
             [1, 0, 0, 3, 4, 3, 1, 5, 1, 0, 1, 2, 9, 2, 0, 3, 1]
                 .into_iter()
                 .map(BFieldElement::new)
                 .collect_vec(),
         );
-        let b = Polynomial::new([5, 6, 3].into_iter().map(BFieldElement::new).collect_vec());
-        let n = (b.coefficients.len() + 1) / 2;
-        let mut xm_coefficients = vec![BFieldElement::from(0); b.degree() as usize + n + 2];
-        *xm_coefficients.last_mut().unwrap() = BFieldElement::from(1);
-        let xm = Polynomial::new(xm_coefficients);
+        let mut full_modulus_coefficients =
+            [5, 6, 3].into_iter().map(BFieldElement::new).collect_vec();
+        let m = full_modulus_coefficients.len();
+        let n = 2;
+        full_modulus_coefficients.resize(m + n + 1, BFieldElement::from(0));
+        *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
+        let full_modulus = Polynomial::new(full_modulus_coefficients);
 
-        let (_naive_quotient, naive_remainder) = a.divide(&(b.clone() + xm));
-        let structured_remainder = a.reduce_by_structured_modulus(&b.coefficients, n);
+        let long_remainder = a.reduce(&full_modulus);
+        let structured_remainder = a.reduce_by_structured_modulus(&full_modulus);
 
         assert_eq!(
-            naive_remainder, structured_remainder,
+            long_remainder, structured_remainder,
             "naive: {}\nstructured: {}",
-            naive_remainder, structured_remainder
+            long_remainder, structured_remainder
         );
+    }
+
+    #[proptest]
+    fn fast_reduce_agrees_with_reduce(
+        #[filter(!#a.is_zero())] a: Polynomial<BFieldElement>,
+        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
+    ) {
+        let multiple = b.structured_multiple();
+        let long_remainder = a.reduce(&b);
+        let fast_remainder = a.reduce_with_structured_multiple(&b, &multiple);
+        prop_assert_eq!(long_remainder, fast_remainder);
+    }
+
+    #[test]
+    fn fast_reduce_agrees_with_reduce_concrete() {
+        let a = Polynomial::new(
+            vec![1, 2, 3, 3, 4, 5, 5, 4, 3, 5, 6]
+                .into_iter()
+                .map(BFieldElement::new)
+                .collect_vec(),
+        );
+        let b = Polynomial::new(vec![1, 3].into_iter().map(BFieldElement::new).collect_vec());
+        let multiple = b.structured_multiple();
+
+        let long_remainder = a.reduce(&b);
+        let fast_remainder = a.reduce_with_structured_multiple(&b, &multiple);
+        assert_eq!(long_remainder, fast_remainder);
     }
 }
