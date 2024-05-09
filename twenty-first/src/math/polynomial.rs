@@ -30,50 +30,6 @@ use crate::prelude::XFieldElement;
 
 use super::traits::PrimitiveRootOfUnity;
 
-/// Helper data for storing useful objects for fast preprocessed modular
-/// reduction.
-#[derive(Debug, Clone)]
-pub struct PreprocessedFastReductionModulus<FF: FiniteField + MulAssign<BFieldElement>> {
-    pub modulus: Polynomial<FF>,
-    pub m: usize,
-    pub shift_coefficients: Vec<FF>,
-    pub standard_multiple: Polynomial<FF>,
-}
-
-impl<FF: FiniteField + MulAssign<BFieldElement>> PreprocessedFastReductionModulus<FF> {
-    pub fn new(modulus: Polynomial<FF>) -> Self {
-        let n = usize::max(
-            Polynomial::<FF>::FAST_MULTIPLY_CUTOFF_THRESHOLD as usize / 4,
-            modulus.degree() as usize * 2,
-        )
-        .next_power_of_two();
-        let ntt_friendly_multiple = modulus.structured_multiple_of_degree(n);
-        let m = 1 + ntt_friendly_multiple
-            .coefficients
-            .iter()
-            .enumerate()
-            .rev()
-            .skip(1)
-            .find_map(|(i, c)| if !c.is_zero() { Some(i) } else { None })
-            .unwrap_or(0);
-        let mut shift_coefficients = ntt_friendly_multiple.coefficients[..n].to_vec();
-        ntt(
-            &mut shift_coefficients,
-            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
-            n.ilog2(),
-        );
-
-        let standard_multiple = modulus.structured_multiple();
-
-        Self {
-            modulus,
-            m,
-            shift_coefficients,
-            standard_multiple,
-        }
-    }
-}
-
 impl<FF: FiniteField> Zero for Polynomial<FF> {
     fn zero() -> Self {
         Self {
@@ -199,6 +155,14 @@ where
     /// `formal_power_series_inverse` to find the optimum. Based on benchmarks,
     /// the optimum probably lies somewhere between 2^5 and 2^9.
     const FORMAL_POWER_SERIES_INVERSE_CUTOFF: usize = 1 << 8;
+
+    /// Modular reduction is made fast by first finding a multiple of the
+    /// denominator that allows for chunk-wise reduction, and then finishing off
+    /// by reducing by the plain denominator using plain long division. The
+    /// "fast"ness comes from using NTT-based multiplication in the chunk-wise
+    /// reduction step. This const regulates the chunk size and thus the domain
+    /// size of the NTT.
+    const FAST_REDUCE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
@@ -1001,7 +965,7 @@ where
     /// Given a polynomial f(X) of degree n, find a multiple of f(X) of the form
     /// X^{3*n+1} + (something of degree at most 2*n).
     /// @panics if f(X) = 0.
-    pub fn structured_multiple(&self) -> Self {
+    fn structured_multiple(&self) -> Self {
         let n = self.degree();
         let reverse = self.reverse();
         let inverse_reverse = reverse.formal_power_series_inverse_minimal(n as usize);
@@ -1131,36 +1095,66 @@ where
         Polynomial::new(working_window)
     }
 
-    /// Do preprocessing for fast modular reduction.
-    pub fn preprocess_as_modulus(&self) -> PreprocessedFastReductionModulus<FF> {
-        PreprocessedFastReductionModulus::new(self.clone())
-    }
-
-    /// Compute the remainder after division of one (online) polynomial by
-    /// another (preprocessed) polynomial.
-    pub fn reduce_by_preprocessed_modulus(
-        &self,
-        preprocessed_modulus: &PreprocessedFastReductionModulus<FF>,
-    ) -> Self {
-        if preprocessed_modulus.modulus.degree() == 0 {
+    /// Compute the remainder after division of one polynomial by another. This
+    /// method first reduces the numerator by a multiple of the denominator that
+    /// was constructed to enable NTT-based chunk-wise reduction, before
+    /// invoking the standard long division based algorithm to finalize. As a
+    /// result, it works best for large numerators being reduced by small
+    /// denominators.
+    pub fn fast_reduce(&self, modulus: &Self) -> Self {
+        if modulus.degree() == 0 {
             return Self::zero();
         }
-        if self.degree() < preprocessed_modulus.modulus.degree() {
+        if self.degree() < modulus.degree() {
             return self.clone();
         }
-        let mut working_remainder = self.clone();
-        if working_remainder.degree() as usize >= preprocessed_modulus.shift_coefficients.len() {
-            working_remainder = working_remainder.reduce_by_ntt_friendly_modulus(
-                &preprocessed_modulus.shift_coefficients,
-                preprocessed_modulus.m,
-            );
-        }
-        if working_remainder.degree() > 2 * preprocessed_modulus.standard_multiple.degree() {
-            working_remainder = working_remainder
-                .reduce_by_structured_modulus(&preprocessed_modulus.standard_multiple);
+
+        // 1. Chunk-wise reduction in NTT domain.
+        // We generate a structured multiple of the modulus of the form
+        // 1, (many zeros), *, *, *, *, *; where
+        //                  -------------
+        //                        |- m coefficients
+        //    ---------------------------
+        //               |- n=2^k coefficients.
+        // This allows us to reduce the numerator's coefficients in chunks of
+        // n-m using NTT-based multiplication over a domain of size n = 2^k.
+        let n = usize::max(
+            Polynomial::<FF>::FAST_REDUCE_CUTOFF_THRESHOLD,
+            modulus.degree() as usize * 2,
+        )
+        .next_power_of_two();
+        let ntt_friendly_multiple = modulus.structured_multiple_of_degree(n);
+        // m = 1 + degree(ntt_friendly_multiple - leading term)
+        let m = 1 + ntt_friendly_multiple
+            .coefficients
+            .iter()
+            .enumerate()
+            .rev()
+            .skip(1)
+            .find_map(|(i, c)| if !c.is_zero() { Some(i) } else { None })
+            .unwrap_or(0);
+        let mut shift_factor_ntt = ntt_friendly_multiple.coefficients[..n].to_vec();
+        ntt(
+            &mut shift_factor_ntt,
+            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+            n.ilog2(),
+        );
+        let mut intermediate_remainder = self.reduce_by_ntt_friendly_modulus(&shift_factor_ntt, m);
+
+        // 2. Chunk-wise reduction with schoolbook multiplication.
+        // We generate a smaller structured multiple of the denominator that
+        // that also admits chunk-wise reduction but not NTT-based
+        // multiplication within. While asymptotically on par with long
+        // division, this schoolbook chunk-wise reduction is concretely more
+        // performant.
+        if intermediate_remainder.degree() > 4 * modulus.degree() {
+            let structured_multiple = modulus.structured_multiple();
+            intermediate_remainder =
+                intermediate_remainder.reduce_by_structured_modulus(&structured_multiple);
         }
 
-        working_remainder.reduce(&preprocessed_modulus.modulus)
+        // 3. Long division based reduction by the (unmultiplied) modulus.
+        intermediate_remainder.reduce(modulus)
     }
 
     /// Polynomial long division with `self` as the dividend, divided by some `divisor`.
@@ -3350,29 +3344,27 @@ mod test_polynomials {
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
     ) {
         let standard_remainder = a.reduce(&b);
-        let preprocessed_modulus = PreprocessedFastReductionModulus::new(b);
-        let preprocessed_remainder = a.reduce_by_preprocessed_modulus(&preprocessed_modulus);
+        let preprocessed_remainder = a.fast_reduce(&b);
         prop_assert_eq!(standard_remainder, preprocessed_remainder);
     }
 
     #[test]
     fn preprocessed_reduce_agrees_with_reduce_on_huge_polynomials() {
+        // This test could be made into a proptest but to make test time
+        // manageable we would have to set cases=1. And then what's the point?
         let mut rng = thread_rng();
         let deg_a = rng.gen_range((1 << 15)..(1 << 16));
         let a_coefficients = (0..=deg_a)
-            .into_iter()
             .map(|_| rng.gen::<BFieldElement>())
             .collect_vec();
         let deg_b = rng.gen_range((1 << 5)..(1 << 6));
         let b_coefficients = (0..=deg_b)
-            .into_iter()
             .map(|_| rng.gen::<BFieldElement>())
             .collect_vec();
         let a = Polynomial::new(a_coefficients);
         let b = Polynomial::new(b_coefficients);
         let standard_remainder = a.reduce(&b);
-        let preprocessed_modulus = PreprocessedFastReductionModulus::new(b);
-        let preprocessed_remainder = a.reduce_by_preprocessed_modulus(&preprocessed_modulus);
+        let preprocessed_remainder = a.fast_reduce(&b);
         assert_eq!(standard_remainder, preprocessed_remainder);
     }
 }

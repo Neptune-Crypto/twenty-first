@@ -40,20 +40,8 @@ fn poly_mod_reduce<const SIZE_LHS: usize, const SIZE_RHS: usize>(c: &mut Criteri
         });
     }
 
-    let id = BenchmarkId::new("preprocessing step", SIZE_RHS.ilog2());
-    let mut preprocessed_modulus = rhs.preprocess_as_modulus();
-    group.bench_function(id, |b| {
-        b.iter(|| preprocessed_modulus = rhs.preprocess_as_modulus())
-    });
-
-    let id = BenchmarkId::new("preprocessed reduce", log2_of_size);
-    group.bench_function(id, |b| {
-        b.iter(|| {
-            remainder = lhs
-                .clone()
-                .reduce_by_preprocessed_modulus(&preprocessed_modulus)
-        })
-    });
+    let id = BenchmarkId::new("fast reduce", log2_of_size);
+    group.bench_function(id, |b| b.iter(|| remainder = lhs.clone().fast_reduce(&rhs)));
 
     group.finish();
 }

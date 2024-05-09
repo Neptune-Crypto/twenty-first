@@ -14,7 +14,7 @@ criterion_group!(
 );
 
 fn fpsi(c: &mut Criterion) {
-    let mut group = c.benchmark_group(format!("Formal power series ring inverse"));
+    let mut group = c.benchmark_group("Formal power series ring inverse".to_string());
 
     for log2_degree in 1..11 {
         let degree = (1 << log2_degree) - 1;
