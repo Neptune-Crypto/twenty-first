@@ -11,6 +11,7 @@ use std::ops::MulAssign;
 use std::ops::Neg;
 use std::ops::Rem;
 use std::ops::Sub;
+use std::thread::available_parallelism;
 
 use arbitrary::Arbitrary;
 use itertools::EitherOrBoth;
@@ -132,6 +133,10 @@ where
     ///
     /// Extracted from `cargo bench --bench poly_mul` on mjolnir.
     const FAST_MULTIPLY_CUTOFF_THRESHOLD: isize = 1 << 8;
+
+    /// [Fast egvaluation](Self::fast_evaluate) is slower than [parallel evaluation](Self::parallel_evaluate)
+    /// for polynomials of degree less than this threshold.
+    const FAST_EVALUATE_CUTOFF_THRESHOLD: usize = 1 << 10;
 
     /// Computing the [fast zerofier][fast] is slower than computing the [smart zerofier][smart] for
     /// domain sizes smaller than this threshold. The [naïve zerofier][naive] is always slower to
@@ -670,9 +675,35 @@ where
         interpolants
     }
 
+    /// Evaluate the polynomial on a batch of points.
     pub fn batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        // According to `cargo bench --bench evaluation` on mjolnir, parallel evaluation is always
-        // faster than fast evaluation.
+        if domain.len() > Self::FAST_EVALUATE_CUTOFF_THRESHOLD {
+            self.fast_evaluate(domain)
+        } else {
+            self.iterative_batch_evaluate(domain)
+        }
+    }
+
+    /// Parallel version of [`batch_evaluate`](Self::batch_evalaute).
+    pub fn par_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        let num_threads = available_parallelism().map(|nzu| nzu.get()).unwrap_or(1);
+        let chunk_size = (domain.len() + num_threads - 1) / num_threads;
+        let chunks = domain.chunks(chunk_size).collect_vec();
+        chunks
+            .into_par_iter()
+            .flat_map(|ch| self.batch_evaluate(ch))
+            .collect()
+    }
+
+    /// Only marked `pub` for benchmarking; not considered part of hte public API.
+    #[doc(hidden)]
+    pub fn iterative_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        domain.iter().map(|&p| self.evaluate(p)).collect()
+    }
+
+    /// Only marked `pub` for benchmarking; not considered part of hte public API.
+    #[doc(hidden)]
+    pub fn parallel_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         domain.par_iter().map(|&p| self.evaluate(p)).collect()
     }
 
@@ -698,15 +729,12 @@ where
         let right_half = &domain[mid_point..];
 
         [left_half, right_half]
-            .into_par_iter()
-            .map(|half_domain| {
+            .into_iter()
+            .flat_map(|half_domain| {
                 let zerofier = Self::zerofier(half_domain);
-                let (_, zerofier_inverse, _) = Self::xgcd(zerofier.clone(), Self::zero());
-                let quotient = self.multiply(&zerofier_inverse);
-                let remainder = self.clone() - quotient.multiply(&zerofier);
+                let remainder = self.clone() - self.multiply(&zerofier);
                 remainder.batch_evaluate(half_domain)
             })
-            .flatten()
             .collect()
     }
 
