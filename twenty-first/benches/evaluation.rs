@@ -18,6 +18,7 @@ criterion_group!(
               evaluation<{ 1 << 19 }, { 1 << 8 }>,
               evaluation<{ 1 << 20 }, { 1 << 6 }>,
               evaluation<{ 1 << 20 }, { 1 << 7 }>,
+              evaluation<{ 1 << 20 }, { 1 << 8 }>,
 );
 
 fn evaluation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {
@@ -42,7 +43,7 @@ fn evaluation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {
     let id = BenchmarkId::new("Fast", log2_of_size);
     group.bench_function(id, |b| b.iter(|| poly.fast_evaluate(&eval_points)));
 
-    let id = BenchmarkId::new("Faster of the two", log2_of_size);
+    let id = BenchmarkId::new("Dispatcher", log2_of_size);
     group.bench_function(id, |b| b.iter(|| poly.batch_evaluate(&eval_points)));
 
     group.finish();

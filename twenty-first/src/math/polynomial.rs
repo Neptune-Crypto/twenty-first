@@ -169,6 +169,11 @@ where
     /// size of the NTT.
     const FAST_REDUCE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
+    /// When doing batch evaluation, sometimes it makes sense to reduce the
+    /// polynomial modulo the zerofier of the domain first. This const regulates
+    /// when.
+    const REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO: isize = 4;
+
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
     /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then corresponds to
@@ -677,11 +682,19 @@ where
 
     /// Evaluate the polynomial on a batch of points.
     pub fn batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        if domain.len() > Self::FAST_EVALUATE_CUTOFF_THRESHOLD {
+        if self.degree() >= Self::REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO * (domain.len() as isize) {
+            self.reduce_then_batch_evaluate(domain)
+        } else if domain.len() > Self::FAST_EVALUATE_CUTOFF_THRESHOLD {
             self.fast_evaluate(domain)
         } else {
             self.iterative_batch_evaluate(domain)
         }
+    }
+
+    fn reduce_then_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        let zerofier = Self::zerofier(domain);
+        let remainder = self.fast_reduce(&zerofier);
+        remainder.batch_evaluate(domain)
     }
 
     /// Parallel version of [`batch_evaluate`](Self::batch_evalaute).
@@ -3394,5 +3407,19 @@ mod test_polynomials {
         let standard_remainder = a.reduce(&b);
         let preprocessed_remainder = a.fast_reduce(&b);
         assert_eq!(standard_remainder, preprocessed_remainder);
+    }
+
+    #[proptest]
+    fn batch_evaluate_methods_are_equivalent(
+        #[strategy(vec(arb(), (1<<10)..(1<<11)))] coefficients: Vec<BFieldElement>,
+        #[strategy(vec(arb(), (1<<5)..(1<<7)))] domain: Vec<BFieldElement>,
+    ) {
+        let polynomial = Polynomial::new(coefficients);
+        let evaluations_iterative = polynomial.iterative_batch_evaluate(&domain);
+        let evaluations_fast = polynomial.fast_evaluate(&domain);
+        let evaluations_reduce_then = polynomial.reduce_then_batch_evaluate(&domain);
+
+        prop_assert_eq!(evaluations_iterative.clone(), evaluations_fast);
+        prop_assert_eq!(evaluations_iterative, evaluations_reduce_then);
     }
 }
