@@ -40,8 +40,10 @@ fn evaluation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {
     // `vector_batch_evaluate` exists, but is super slow. Put it here if you plan to run benchmarks
     // during a coffee break.
 
-    let id = BenchmarkId::new("Fast", log2_of_size);
-    group.bench_function(id, |b| b.iter(|| poly.fast_evaluate(&eval_points)));
+    let id = BenchmarkId::new("Divide-and-Conquer", log2_of_size);
+    group.bench_function(id, |b| {
+        b.iter(|| poly.divide_and_conquer_batch_evaluate(&eval_points))
+    });
 
     let id = BenchmarkId::new("Dispatcher", log2_of_size);
     group.bench_function(id, |b| b.iter(|| poly.batch_evaluate(&eval_points)));

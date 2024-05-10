@@ -134,9 +134,10 @@ where
     /// Extracted from `cargo bench --bench poly_mul` on mjolnir.
     const FAST_MULTIPLY_CUTOFF_THRESHOLD: isize = 1 << 8;
 
-    /// [Fast egvaluation](Self::fast_evaluate) is slower than [parallel evaluation](Self::parallel_evaluate)
-    /// for polynomials of degree less than this threshold.
-    const FAST_EVALUATE_CUTOFF_THRESHOLD: usize = 1 << 10;
+    /// [Divide and conquer batch evaluation](Self::divide_and_conquer_batch_evaluate)
+    /// is slower than [iterative evaluation](Self::iterative_batch_evaluate)
+    /// on domains smaller than this threshold
+    const DIVIDE_AND_CONQUER_EVALUATE_CUTOFF_THRESHOLD: usize = 1 << 5;
 
     /// Computing the [fast zerofier][fast] is slower than computing the [smart zerofier][smart] for
     /// domain sizes smaller than this threshold. The [naïve zerofier][naive] is always slower to
@@ -613,7 +614,8 @@ where
         let left_offset_inverse = match offset_inverse_dictionary.get(&left_key) {
             Some(vector) => vector.to_owned(),
             None => {
-                let left_offset: Vec<FF> = Self::fast_evaluate(&right_zerofier, &domain[..half]);
+                let left_offset: Vec<FF> =
+                    Self::divide_and_conquer_batch_evaluate(&right_zerofier, &domain[..half]);
                 let left_offset_inverse = FF::batch_inversion(left_offset);
                 offset_inverse_dictionary.insert(left_key, left_offset_inverse.clone());
                 left_offset_inverse
@@ -622,7 +624,8 @@ where
         let right_offset_inverse = match offset_inverse_dictionary.get(&right_key) {
             Some(vector) => vector.to_owned(),
             None => {
-                let right_offset: Vec<FF> = Self::fast_evaluate(&left_zerofier, &domain[half..]);
+                let right_offset: Vec<FF> =
+                    Self::divide_and_conquer_batch_evaluate(&left_zerofier, &domain[half..]);
                 let right_offset_inverse = FF::batch_inversion(right_offset);
                 offset_inverse_dictionary.insert(right_key, right_offset_inverse.clone());
                 right_offset_inverse
@@ -684,8 +687,8 @@ where
     pub fn batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         if self.degree() >= Self::REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO * (domain.len() as isize) {
             self.reduce_then_batch_evaluate(domain)
-        } else if domain.len() > Self::FAST_EVALUATE_CUTOFF_THRESHOLD {
-            self.fast_evaluate(domain)
+        } else if domain.len() >= Self::DIVIDE_AND_CONQUER_EVALUATE_CUTOFF_THRESHOLD {
+            self.divide_and_conquer_batch_evaluate(domain)
         } else {
             self.iterative_batch_evaluate(domain)
         }
@@ -736,18 +739,14 @@ where
 
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
-    pub fn fast_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+    pub fn divide_and_conquer_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         let mid_point = domain.len() / 2;
         let left_half = &domain[..mid_point];
         let right_half = &domain[mid_point..];
 
         [left_half, right_half]
             .into_iter()
-            .flat_map(|half_domain| {
-                let zerofier = Self::zerofier(half_domain);
-                let remainder = self.clone() - self.multiply(&zerofier);
-                remainder.batch_evaluate(half_domain)
-            })
+            .flat_map(|half_domain| self.batch_evaluate(half_domain))
             .collect()
     }
 
@@ -2517,7 +2516,8 @@ mod test_polynomials {
         let x_to_the_5_plus_x_to_the_3 = Polynomial::new(bfe_vec![0, 0, 0, 1, 0, 1]);
 
         let manual_evaluations = domain.map(|x| x.mod_pow(5) + x.mod_pow(3)).to_vec();
-        let fast_evaluations = x_to_the_5_plus_x_to_the_3.fast_evaluate(&domain);
+        let fast_evaluations =
+            x_to_the_5_plus_x_to_the_3.divide_and_conquer_batch_evaluate(&domain);
         assert_eq!(manual_evaluations, fast_evaluations);
     }
 
@@ -2527,7 +2527,7 @@ mod test_polynomials {
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
     ) {
         let evaluations = domain.iter().map(|&x| poly.evaluate(x)).collect_vec();
-        let fast_evaluations = poly.fast_evaluate(&domain);
+        let fast_evaluations = poly.divide_and_conquer_batch_evaluate(&domain);
         prop_assert_eq!(evaluations, fast_evaluations);
     }
 
@@ -2579,7 +2579,7 @@ mod test_polynomials {
         #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
     ) {
         let interpolant = Polynomial::fast_interpolate(&domain, &values);
-        let evaluations = interpolant.fast_evaluate(&domain);
+        let evaluations = interpolant.divide_and_conquer_batch_evaluate(&domain);
         prop_assert_eq!(values, evaluations);
     }
 
@@ -2629,7 +2629,7 @@ mod test_polynomials {
         let domain =
             coset_domain_of_size_from_generator_with_offset(root_order, root_of_unity, offset);
 
-        let fast_values = polynomial.fast_evaluate(&domain);
+        let fast_values = polynomial.divide_and_conquer_batch_evaluate(&domain);
         let fast_coset_values = polynomial.fast_coset_evaluate(offset, root_of_unity, root_order);
         prop_assert_eq!(fast_values, fast_coset_values);
     }
@@ -3416,7 +3416,7 @@ mod test_polynomials {
     ) {
         let polynomial = Polynomial::new(coefficients);
         let evaluations_iterative = polynomial.iterative_batch_evaluate(&domain);
-        let evaluations_fast = polynomial.fast_evaluate(&domain);
+        let evaluations_fast = polynomial.divide_and_conquer_batch_evaluate(&domain);
         let evaluations_reduce_then = polynomial.reduce_then_batch_evaluate(&domain);
 
         prop_assert_eq!(evaluations_iterative.clone(), evaluations_fast);
