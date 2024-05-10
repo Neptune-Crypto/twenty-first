@@ -44,6 +44,11 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 
     /// Verify a membership proof for an MMR.
     pub fn verify(&self, peaks: &[Digest], leaf_hash: Digest, leaf_count: u64) -> bool {
+        // Return false if leaf index is out-of-bounds.
+        if self.leaf_index >= leaf_count {
+            return false;
+        }
+
         let (mut mt_index, peak_index) =
             shared_basic::leaf_index_to_mt_index_and_peak_index(self.leaf_index, leaf_count);
 
@@ -571,6 +576,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 mod mmr_membership_proof_test {
     use itertools::Itertools;
     use rand::{random, thread_rng, Rng, RngCore};
+    use test_strategy::proptest;
 
     use crate::math::b_field_element::BFieldElement;
     use crate::math::digest::Digest;
@@ -700,6 +706,28 @@ mod mmr_membership_proof_test {
                 expected_peak_index,
                 membership_proof.get_peak_index_and_height()
             );
+        }
+    }
+
+    #[proptest(cases = 10)]
+    fn mmr_verification_if_leaf_index_is_out_of_bounds(
+        #[strategy(0..=121usize)] leaf_count: usize,
+    ) {
+        type H = Tip5;
+        let leafs: Vec<Digest> = random_elements(leaf_count);
+        let archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leafs.clone());
+        let mut all_mps: Vec<MmrMembershipProof<H>> = vec![];
+        for i in 0..leaf_count {
+            let leaf_index = i as u64;
+            all_mps.push(archival_mmr.prove_membership(leaf_index).0);
+        }
+
+        let peaks = archival_mmr.get_peaks();
+        for (mp, leaf) in all_mps.into_iter().zip_eq(leafs) {
+            assert!(mp.verify(&peaks, leaf, leaf_count as u64));
+            let mut bad_mp = mp;
+            bad_mp.leaf_index += leaf_count as u64;
+            assert!(!bad_mp.verify(&peaks, leaf, leaf_count as u64));
         }
     }
 
