@@ -614,8 +614,7 @@ where
         let left_offset_inverse = match offset_inverse_dictionary.get(&left_key) {
             Some(vector) => vector.to_owned(),
             None => {
-                let left_offset: Vec<FF> =
-                    Self::divide_and_conquer_batch_evaluate(&right_zerofier, &domain[..half]);
+                let left_offset: Vec<FF> = Self::batch_evaluate(&right_zerofier, &domain[..half]);
                 let left_offset_inverse = FF::batch_inversion(left_offset);
                 offset_inverse_dictionary.insert(left_key, left_offset_inverse.clone());
                 left_offset_inverse
@@ -624,8 +623,7 @@ where
         let right_offset_inverse = match offset_inverse_dictionary.get(&right_key) {
             Some(vector) => vector.to_owned(),
             None => {
-                let right_offset: Vec<FF> =
-                    Self::divide_and_conquer_batch_evaluate(&left_zerofier, &domain[half..]);
+                let right_offset: Vec<FF> = Self::batch_evaluate(&left_zerofier, &domain[half..]);
                 let right_offset_inverse = FF::batch_inversion(right_offset);
                 offset_inverse_dictionary.insert(right_key, right_offset_inverse.clone());
                 right_offset_inverse
@@ -976,8 +974,24 @@ where
         )
     }
 
-    /// Divide (with remainder) and throw away the quotient.
-    fn reduce(&self, modulus: &Self) -> Self {
+    /// Divide (with remainder) and throw away the quotient. Note that the self
+    /// object is the numerator and the argument is the denominator (or
+    /// modulus).
+    pub fn reduce(&self, modulus: &Self) -> Self {
+        if modulus.is_zero() {
+            panic!("Cannot divide by zero; needed for reduce.");
+        } else if modulus.degree() == 0 {
+            Self::zero()
+        } else if self.degree() < modulus.degree() {
+            self.clone()
+        } else if self.degree() > 4 * modulus.degree() {
+            self.fast_reduce(modulus)
+        } else {
+            self.reduce_long_division(modulus)
+        }
+    }
+
+    fn reduce_long_division(&self, modulus: &Self) -> Self {
         let (_quotient, remainder) = self.divide(modulus);
         remainder
     }
@@ -999,7 +1013,7 @@ where
         }
 
         let somewhat_reduced = self.reduce_by_structured_modulus(multiple);
-        somewhat_reduced.reduce(modulus)
+        somewhat_reduced.reduce_long_division(modulus)
     }
 
     /// Given a polynomial f(X) of degree n, find a multiple of f(X) of the form
@@ -1194,7 +1208,7 @@ where
         }
 
         // 3. Long division based reduction by the (unmultiplied) modulus.
-        intermediate_remainder.reduce(modulus)
+        intermediate_remainder.reduce_long_division(modulus)
     }
 
     /// Polynomial long division with `self` as the dividend, divided by some `divisor`.
@@ -2516,8 +2530,7 @@ mod test_polynomials {
         let x_to_the_5_plus_x_to_the_3 = Polynomial::new(bfe_vec![0, 0, 0, 1, 0, 1]);
 
         let manual_evaluations = domain.map(|x| x.mod_pow(5) + x.mod_pow(3)).to_vec();
-        let fast_evaluations =
-            x_to_the_5_plus_x_to_the_3.divide_and_conquer_batch_evaluate(&domain);
+        let fast_evaluations = x_to_the_5_plus_x_to_the_3.batch_evaluate(&domain);
         assert_eq!(manual_evaluations, fast_evaluations);
     }
 
@@ -2527,7 +2540,7 @@ mod test_polynomials {
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
     ) {
         let evaluations = domain.iter().map(|&x| poly.evaluate(x)).collect_vec();
-        let fast_evaluations = poly.divide_and_conquer_batch_evaluate(&domain);
+        let fast_evaluations = poly.batch_evaluate(&domain);
         prop_assert_eq!(evaluations, fast_evaluations);
     }
 
@@ -2579,7 +2592,7 @@ mod test_polynomials {
         #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
     ) {
         let interpolant = Polynomial::fast_interpolate(&domain, &values);
-        let evaluations = interpolant.divide_and_conquer_batch_evaluate(&domain);
+        let evaluations = interpolant.batch_evaluate(&domain);
         prop_assert_eq!(values, evaluations);
     }
 
@@ -2629,7 +2642,7 @@ mod test_polynomials {
         let domain =
             coset_domain_of_size_from_generator_with_offset(root_order, root_of_unity, offset);
 
-        let fast_values = polynomial.divide_and_conquer_batch_evaluate(&domain);
+        let fast_values = polynomial.batch_evaluate(&domain);
         let fast_coset_values = polynomial.fast_coset_evaluate(offset, root_of_unity, root_order);
         prop_assert_eq!(fast_values, fast_coset_values);
     }
@@ -3106,7 +3119,7 @@ mod test_polynomials {
             ]
             .concat(),
         );
-        let remainder = structured_multiple.reduce(&x2n);
+        let remainder = structured_multiple.reduce_long_division(&x2n);
         assert_eq!(remainder.degree() as usize, n - 1);
         assert_eq!(
             (structured_multiple.clone() - remainder.clone())
@@ -3168,7 +3181,7 @@ mod test_polynomials {
     ) {
         let polynomial = Polynomial::<BFieldElement>::new(coefficients);
         let multiple = polynomial.structured_multiple_of_degree(n);
-        let remainder = multiple.reduce(&polynomial);
+        let remainder = multiple.reduce_long_division(&polynomial);
         prop_assert!(remainder.is_zero());
     }
 
@@ -3188,7 +3201,7 @@ mod test_polynomials {
             ]
             .concat(),
         );
-        let remainder = structured_multiple.reduce(&xn);
+        let remainder = structured_multiple.reduce_long_division(&xn);
         assert_eq!(
             (structured_multiple.clone() - remainder.clone())
                 .reverse()
@@ -3244,7 +3257,7 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn reduce_by_structured_modulus_and_reduce_agree(
+    fn reduce_by_structured_modulus_and_reduce_long_division_agree(
         #[strategy(1usize..10)] n: usize,
         #[strategy(1usize..10)] m: usize,
         #[strategy(vec(arb(), #m))] b_coefficients: Vec<BFieldElement>,
@@ -3257,14 +3270,14 @@ mod test_polynomials {
         *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
         let full_modulus = Polynomial::new(full_modulus_coefficients);
 
-        let long_remainder = a.reduce(&full_modulus);
+        let long_remainder = a.reduce_long_division(&full_modulus);
         let structured_remainder = a.reduce_by_structured_modulus(&full_modulus);
 
         prop_assert_eq!(long_remainder, structured_remainder);
     }
 
     #[test]
-    fn reduce_by_structured_modulus_and_reduce_agree_concrete() {
+    fn reduce_by_structured_modulus_and_reduce_agree_long_division_concrete() {
         let a = Polynomial::new(
             [1, 0, 0, 3, 4, 3, 1, 5, 1, 0, 1, 2, 9, 2, 0, 3, 1]
                 .into_iter()
@@ -3279,7 +3292,7 @@ mod test_polynomials {
         *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
         let full_modulus = Polynomial::new(full_modulus_coefficients);
 
-        let long_remainder = a.reduce(&full_modulus);
+        let long_remainder = a.reduce_long_division(&full_modulus);
         let structured_remainder = a.reduce_by_structured_modulus(&full_modulus);
 
         assert_eq!(
@@ -3290,7 +3303,7 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn reduce_by_ntt_friendly_modulus_and_reduce_agree(
+    fn reduce_by_ntt_friendly_modulus_and_reduce_long_division_agree(
         #[strategy(1usize..10)] m: usize,
         #[strategy(vec(arb(), #m))] b_coefficients: Vec<BFieldElement>,
         #[strategy(1usize..100)] _deg_a: usize,
@@ -3304,7 +3317,7 @@ mod test_polynomials {
             *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
             let full_modulus = Polynomial::new(full_modulus_coefficients);
 
-            let long_remainder = a.reduce(&full_modulus);
+            let long_remainder = a.reduce_long_division(&full_modulus);
 
             let mut shift_ntt = b_coefficients.clone();
             shift_ntt.resize(n, BFieldElement::from(0));
@@ -3334,7 +3347,7 @@ mod test_polynomials {
         *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
         let full_modulus = Polynomial::new(full_modulus_coefficients);
 
-        let long_remainder = a.reduce(&full_modulus);
+        let long_remainder = a.reduce_long_division(&full_modulus);
 
         let mut shift_ntt = b_coefficients.clone();
         shift_ntt.resize(n, BFieldElement::from(0));
@@ -3353,18 +3366,18 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn fast_reduce_agrees_with_reduce(
+    fn reduce_with_structured_multiple_agrees_with_reduce_long_division(
         #[filter(!#a.is_zero())] a: Polynomial<BFieldElement>,
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
     ) {
         let multiple = b.structured_multiple();
-        let long_remainder = a.reduce(&b);
+        let long_remainder = a.reduce_long_division(&b);
         let fast_remainder = a.reduce_with_structured_multiple(&b, &multiple);
         prop_assert_eq!(long_remainder, fast_remainder);
     }
 
     #[test]
-    fn fast_reduce_agrees_with_reduce_concrete() {
+    fn reduce_with_structured_multiple_agrees_with_reduce_long_division_concrete() {
         let a = Polynomial::new(
             vec![1, 2, 3, 3, 4, 5, 5, 4, 3, 5, 6]
                 .into_iter()
@@ -3374,23 +3387,23 @@ mod test_polynomials {
         let b = Polynomial::new(vec![1, 3].into_iter().map(BFieldElement::new).collect_vec());
         let multiple = b.structured_multiple();
 
-        let long_remainder = a.reduce(&b);
+        let long_remainder = a.reduce_long_division(&b);
         let fast_remainder = a.reduce_with_structured_multiple(&b, &multiple);
         assert_eq!(long_remainder, fast_remainder);
     }
 
     #[proptest]
-    fn preprocessed_reduce_agrees_with_reduce(
+    fn fast_reduce_agrees_with_reduce_long_division(
         #[filter(!#a.is_zero())] a: Polynomial<BFieldElement>,
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
     ) {
-        let standard_remainder = a.reduce(&b);
+        let standard_remainder = a.reduce_long_division(&b);
         let preprocessed_remainder = a.fast_reduce(&b);
         prop_assert_eq!(standard_remainder, preprocessed_remainder);
     }
 
     #[test]
-    fn preprocessed_reduce_agrees_with_reduce_on_huge_polynomials() {
+    fn fast_reduce_agrees_with_reduce_long_division_on_huge_polynomials() {
         // This test could be made into a proptest but to make test time
         // manageable we would have to set cases=1. And then what's the point?
         let mut rng = thread_rng();
@@ -3404,7 +3417,7 @@ mod test_polynomials {
             .collect_vec();
         let a = Polynomial::new(a_coefficients);
         let b = Polynomial::new(b_coefficients);
-        let standard_remainder = a.reduce(&b);
+        let standard_remainder = a.reduce_long_division(&b);
         let preprocessed_remainder = a.fast_reduce(&b);
         assert_eq!(standard_remainder, preprocessed_remainder);
     }
@@ -3421,5 +3434,13 @@ mod test_polynomials {
 
         prop_assert_eq!(evaluations_iterative.clone(), evaluations_fast);
         prop_assert_eq!(evaluations_iterative, evaluations_reduce_then);
+    }
+
+    #[proptest]
+    fn reduce_agrees_with_division(
+        a: Polynomial<BFieldElement>,
+        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
+    ) {
+        prop_assert_eq!(a.divide(&b).1, a.reduce(&b));
     }
 }
