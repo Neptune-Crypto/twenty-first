@@ -698,7 +698,7 @@ where
         remainder.batch_evaluate(domain)
     }
 
-    /// Parallel version of [`batch_evaluate`](Self::batch_evalaute).
+    /// Parallel version of [`batch_evaluate`](Self::batch_evaluate).
     pub fn par_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         let num_threads = available_parallelism().map(|nzu| nzu.get()).unwrap_or(1);
         let chunk_size = (domain.len() + num_threads - 1) / num_threads;
@@ -830,7 +830,7 @@ where
     /// g(X) * f(X) = 1 mod X^n , where n is the precision.
     ///
     /// In formal terms, g(X) is the approximate multiplicative inverse in
-    /// the formal power series ring FF[[X]], where elements obey the same
+    /// the formal power series ring, where elements obey the same
     /// algebraic rules as polynomials do but can have an infinite number of
     /// coefficients. To represent these elements on a computer, one has to
     /// truncate the coefficient vectors somewhere. The resulting truncation
@@ -994,26 +994,6 @@ where
     fn reduce_long_division(&self, modulus: &Self) -> Self {
         let (_quotient, remainder) = self.divide(modulus);
         remainder
-    }
-
-    /// Given a polynomial to be reduced, a modulus, and a structured multiple
-    /// of that modulus, compute the remainder after division by that modulus.
-    /// This method is faster than [`reduce`](reduce) even with the
-    /// preprocessing step (in which the structured multiple is calculated) but
-    /// the point is that for many cost calculations the main processing step
-    /// dominates.
-    pub fn reduce_with_structured_multiple(&self, modulus: &Self, multiple: &Self) -> Self {
-        let degree = modulus.degree();
-        if degree == -1 {
-            panic!("Cannot reduce by zero.");
-        } else if degree == 0 {
-            return Self::zero();
-        } else if self.degree() < modulus.degree() {
-            return self.clone();
-        }
-
-        let somewhat_reduced = self.reduce_by_structured_modulus(multiple);
-        somewhat_reduced.reduce_long_division(modulus)
     }
 
     /// Given a polynomial f(X) of degree n, find a multiple of f(X) of the form
@@ -3363,33 +3343,6 @@ mod test_polynomials {
             "full modulus: {}",
             full_modulus
         );
-    }
-
-    #[proptest]
-    fn reduce_with_structured_multiple_agrees_with_reduce_long_division(
-        #[filter(!#a.is_zero())] a: Polynomial<BFieldElement>,
-        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
-    ) {
-        let multiple = b.structured_multiple();
-        let long_remainder = a.reduce_long_division(&b);
-        let fast_remainder = a.reduce_with_structured_multiple(&b, &multiple);
-        prop_assert_eq!(long_remainder, fast_remainder);
-    }
-
-    #[test]
-    fn reduce_with_structured_multiple_agrees_with_reduce_long_division_concrete() {
-        let a = Polynomial::new(
-            vec![1, 2, 3, 3, 4, 5, 5, 4, 3, 5, 6]
-                .into_iter()
-                .map(BFieldElement::new)
-                .collect_vec(),
-        );
-        let b = Polynomial::new(vec![1, 3].into_iter().map(BFieldElement::new).collect_vec());
-        let multiple = b.structured_multiple();
-
-        let long_remainder = a.reduce_long_division(&b);
-        let fast_remainder = a.reduce_with_structured_multiple(&b, &multiple);
-        assert_eq!(long_remainder, fast_remainder);
     }
 
     #[proptest]
