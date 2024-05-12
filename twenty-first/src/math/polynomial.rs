@@ -431,6 +431,25 @@ where
         }
     }
 
+    /// Parallel version of [`interpolate`](Self::interpolate).
+    pub fn par_interpolate(domain: &[FF], values: &[FF]) -> Self {
+        assert!(
+            !domain.is_empty(),
+            "interpolation must happen through more than zero points"
+        );
+        assert_eq!(
+            domain.len(),
+            values.len(),
+            "The domain and values lists have to be of equal length."
+        );
+
+        if domain.len() <= Self::FAST_INTERPOLATE_CUTOFF_THRESHOLD {
+            Self::lagrange_interpolate(domain, values)
+        } else {
+            Self::par_fast_interpolate(domain, values)
+        }
+    }
+
     /// Any fast interpolation will use NTT, so this is mainly used for testing/integrity
     /// purposes. This also means that it is not pivotal that this function has an optimal
     /// runtime.
@@ -497,6 +516,55 @@ where
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
     pub fn fast_interpolate(domain: &[FF], values: &[FF]) -> Self {
+        debug_assert!(
+            !domain.is_empty(),
+            "interpolation domain cannot have zero points"
+        );
+        debug_assert_eq!(domain.len(), values.len());
+
+        // prevent edge case failure where the left half would be empty
+        if domain.len() == 1 {
+            return Self::from_constant(values[0]);
+        }
+
+        let mid_point = domain.len() / 2;
+        let left_domain_half = &domain[..mid_point];
+        let left_values_half = &values[..mid_point];
+        let right_domain_half = &domain[mid_point..];
+        let right_values_half = &values[mid_point..];
+
+        let (left_zerofier, right_zerofier) = (
+            Self::zerofier(left_domain_half),
+            Self::zerofier(right_domain_half),
+        );
+
+        let (left_offset, right_offset) = (
+            right_zerofier.batch_evaluate(left_domain_half),
+            left_zerofier.batch_evaluate(right_domain_half),
+        );
+
+        let hadamard_mul = |x: &[_], y: Vec<_>| x.iter().zip(y).map(|(&n, d)| n * d).collect_vec();
+        let interpolate_half = |offset, domain_half, values_half| {
+            let offset_inverse = FF::batch_inversion(offset);
+            let targets = hadamard_mul(values_half, offset_inverse);
+            Self::interpolate(domain_half, &targets)
+        };
+        let (left_interpolant, right_interpolant) = (
+            interpolate_half(left_offset, left_domain_half, left_values_half),
+            interpolate_half(right_offset, right_domain_half, right_values_half),
+        );
+
+        let (left_term, right_term) = (
+            left_interpolant.multiply(&right_zerofier),
+            right_interpolant.multiply(&left_zerofier),
+        );
+
+        left_term + right_term
+    }
+
+    /// Only `pub` to allow benchmarking; not considered part of the public API.
+    #[doc(hidden)]
+    pub fn par_fast_interpolate(domain: &[FF], values: &[FF]) -> Self {
         debug_assert!(
             !domain.is_empty(),
             "interpolation domain cannot have zero points"
@@ -2556,6 +2624,18 @@ mod test_polynomials {
         let lagrange_interpolant = Polynomial::lagrange_interpolate(&domain, &values);
         let fast_interpolant = Polynomial::fast_interpolate(&domain, &values);
         prop_assert_eq!(lagrange_interpolant, fast_interpolant);
+    }
+
+    #[proptest(cases = 10)]
+    fn par_fast_interpolate_and_fast_interpolation_are_identical(
+        #[any(size_range(1..2048).lift())]
+        #[filter(#domain.iter().all_unique())]
+        domain: Vec<BFieldElement>,
+        #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
+    ) {
+        let par_fast_interpolant = Polynomial::par_fast_interpolate(&domain, &values);
+        let fast_interpolant = Polynomial::fast_interpolate(&domain, &values);
+        prop_assert_eq!(par_fast_interpolant, fast_interpolant);
     }
 
     #[test]
