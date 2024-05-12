@@ -67,6 +67,10 @@ name = "evaluation"
 harness = false
 
 [[bench]]
+name = "extrapolation"
+harness = false
+
+[[bench]]
 name = "poly_mod_reduce"
 harness = false
 
