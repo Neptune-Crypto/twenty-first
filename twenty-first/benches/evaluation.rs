@@ -4,6 +4,7 @@ use criterion::BenchmarkId;
 use criterion::Criterion;
 
 use twenty_first::math::other::random_elements;
+use twenty_first::math::zerofier_tree::ZerofierTree;
 use twenty_first::prelude::*;
 
 criterion_main!(benches);
@@ -36,15 +37,18 @@ fn evaluation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {
         b.iter(|| poly.iterative_batch_evaluate(&eval_points))
     });
 
-    // `vector_batch_evaluate` exists, but is super slow. Put it here if you plan to run benchmarks
-    // during a coffee break.
-
-    let id = BenchmarkId::new("Divide-and-Conquer", log2_of_size);
+    let id = BenchmarkId::new("Zerofier Tree", log2_of_size);
     group.bench_function(id, |b| {
-        b.iter(|| poly.divide_and_conquer_batch_evaluate(&eval_points))
+        b.iter(|| ZerofierTree::new_from_domain(&eval_points))
     });
 
-    let id = BenchmarkId::new("Dispatcher", log2_of_size);
+    let id = BenchmarkId::new("Divide-and-Conquer", log2_of_size);
+    let zerofier_tree = ZerofierTree::new_from_domain(&eval_points);
+    group.bench_function(id, |b| {
+        b.iter(|| poly.divide_and_conquer_batch_evaluate(&zerofier_tree))
+    });
+
+    let id = BenchmarkId::new("Entrypoint", log2_of_size);
     group.bench_function(id, |b| b.iter(|| poly.batch_evaluate(&eval_points)));
 
     group.finish();

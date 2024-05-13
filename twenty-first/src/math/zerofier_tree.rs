@@ -9,13 +9,13 @@ use num_traits::One;
 use super::{b_field_element::BFieldElement, polynomial::Polynomial, traits::FiniteField};
 
 #[derive(Debug, Clone)]
-pub(crate) struct Leaf<FF: FiniteField + MulAssign<BFieldElement>> {
+pub struct Leaf<FF: FiniteField + MulAssign<BFieldElement>> {
     pub points: Vec<FF>,
     zerofier: Polynomial<FF>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Branch<FF: FiniteField + MulAssign<BFieldElement>> {
+pub struct Branch<FF: FiniteField + MulAssign<BFieldElement>> {
     zerofier: Polynomial<FF>,
     left: ZerofierTree<FF>,
     right: ZerofierTree<FF>,
@@ -26,14 +26,14 @@ pub(crate) struct Branch<FF: FiniteField + MulAssign<BFieldElement>> {
 /// linear polynomial that evaluates to zero there and no-where else. Every
 /// non-leaf node is the product of its two children.
 #[derive(Debug, Clone)]
-pub(crate) enum ZerofierTree<FF: FiniteField + MulAssign<BFieldElement>> {
+pub enum ZerofierTree<FF: FiniteField + MulAssign<BFieldElement>> {
     Leaf(Arc<OnceLock<Leaf<FF>>>),
     Branch(Arc<OnceLock<Branch<FF>>>),
     Padding,
 }
 
 impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<FF> {
-    const ZEROFIER_TREE_RECURSION_CUTOFF_THRESHOLD: usize = 32;
+    const ZEROFIER_TREE_RECURSION_CUTOFF_THRESHOLD: usize = 16;
 
     pub fn new_from_domain(domain: &[FF]) -> Self {
         let mut nodes = domain
@@ -88,6 +88,13 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<FF> {
     pub fn right_branch(&self) -> Option<ZerofierTree<FF>> {
         match self {
             ZerofierTree::Branch(branch) => Some(branch.get().unwrap().right.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn leaf(&self) -> Option<Leaf<FF>> {
+        match self {
+            ZerofierTree::Leaf(leaf) => Some(leaf.get().unwrap().clone()),
             _ => None,
         }
     }
