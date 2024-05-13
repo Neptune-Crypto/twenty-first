@@ -143,12 +143,12 @@ where
     /// domain sizes smaller than this threshold. The [naïve zerofier][naive] is always slower to
     /// compute than the [smart zerofier][smart] for domain sizes smaller than the threshold.
     ///
-    /// Extracted from `cargo bench --bench zerofier` on mjolnir.
+    /// Extracted from `cargo bench --bench zerofier`.
     ///
     /// [naive]: Self::naive_zerofier
     /// [smart]: Self::smart_zerofier
     /// [fast]: Self::fast_zerofier
-    const FAST_ZEROFIER_CUTOFF_THRESHOLD: usize = 200;
+    const FAST_ZEROFIER_CUTOFF_THRESHOLD: usize = 100;
 
     /// [Fast interpolation](Self::fast_interpolate) is slower than
     /// [Lagrange interpolation](Self::lagrange_interpolate) below this threshold.
@@ -347,6 +347,28 @@ where
         Self::new(hadamard_product)
     }
 
+    pub fn batch_multiply(factors: &[Self]) -> Self {
+        factors.iter().fold(Self::one(), |l, r| l.multiply(r))
+    }
+
+    pub fn par_batch_multiply(factors: &[Self]) -> Self {
+        let num_threads = available_parallelism().map(|nzu| nzu.get()).unwrap_or(1);
+        let mut products = factors.to_vec();
+        while products.len() != 1 {
+            let chunk_size = usize::max(2, products.len() / num_threads);
+            let num_chunks = (products.len() + chunk_size - 1) / chunk_size;
+            products = (0..num_chunks)
+                .into_par_iter()
+                .map(|i| {
+                    let start = i * chunk_size;
+                    let stop = usize::min((i + 1) * chunk_size, products.len());
+                    Self::batch_multiply(&products[start..stop])
+                })
+                .collect();
+        }
+        products.first().unwrap().clone()
+    }
+
     /// Compute the lowest degree polynomial with the provided roots.
     /// Also known as “vanishing polynomial.”
     ///
@@ -372,6 +394,28 @@ where
         }
     }
 
+    /// Parallel version of [`zerofier`](Self::zerofier).
+    pub fn par_zerofier(roots: &[FF]) -> Self {
+        if roots.len() == 0 {
+            return Self::one();
+        }
+        let num_threads = available_parallelism().map(|nzu| nzu.get()).unwrap_or(1);
+        let chunk_size = usize::max(
+            Self::FAST_ZEROFIER_CUTOFF_THRESHOLD,
+            (roots.len() + num_threads - 1) / num_threads,
+        );
+        let num_chunks = (roots.len() + chunk_size - 1) / chunk_size;
+        let factors = (0..num_chunks)
+            .into_par_iter()
+            .map(|i| {
+                let start = i * chunk_size;
+                let stop = usize::min(roots.len(), (i + 1) * chunk_size);
+                Self::zerofier(&roots[start..stop])
+            })
+            .collect::<Vec<_>>();
+        Self::par_batch_multiply(&factors)
+    }
+
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
     pub fn smart_zerofier(roots: &[FF]) -> Self {
@@ -392,9 +436,9 @@ where
     #[doc(hidden)]
     pub fn fast_zerofier(roots: &[FF]) -> Self {
         let mid_point = roots.len() / 2;
-        let (left, right) = rayon::join(
-            || Self::zerofier(&roots[..mid_point]),
-            || Self::zerofier(&roots[mid_point..]),
+        let (left, right) = (
+            Self::zerofier(&roots[..mid_point]),
+            Self::zerofier(&roots[mid_point..]),
         );
 
         left.multiply(&right)
@@ -2577,6 +2621,16 @@ mod test_polynomials {
         prop_assert_eq!(a * b, product);
     }
 
+    #[proptest]
+    fn par_batch_multiply_agrees_with_batch_multiply(
+        #[strategy(vec(arb(), 20))] a: Vec<Polynomial<BFieldElement>>,
+    ) {
+        prop_assert_eq!(
+            Polynomial::batch_multiply(&a),
+            Polynomial::par_batch_multiply(&a)
+        );
+    }
+
     #[proptest(cases = 50)]
     fn naive_zerofier_and_fast_zerofier_are_identical(
         #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
@@ -2628,6 +2682,13 @@ mod test_polynomials {
         prop_assert_eq!(
             BFieldElement::one(),
             zerofier.leading_coefficient().unwrap()
+        );
+    }
+    #[proptest]
+    fn par_zerofier_agrees_with_zerofier(domain: Vec<BFieldElement>) {
+        prop_assert_eq!(
+            Polynomial::<BFieldElement>::zerofier(&domain),
+            Polynomial::<BFieldElement>::par_zerofier(&domain)
         );
     }
 
