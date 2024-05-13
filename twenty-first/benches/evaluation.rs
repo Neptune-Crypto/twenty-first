@@ -27,7 +27,6 @@ fn evaluation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {
         "Evaluation of degree-{} polynomial in {NUM_POINTS} Points",
         SIZE - 1
     ));
-    group.sample_size(10);
 
     let poly = Polynomial::new(random_elements(SIZE));
     let eval_points: Vec<BFieldElement> = random_elements(NUM_POINTS);

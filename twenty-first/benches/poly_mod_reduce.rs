@@ -3,7 +3,6 @@ use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
 
-use num_traits::Zero;
 use twenty_first::math::other::random_elements;
 use twenty_first::prelude::*;
 
@@ -25,23 +24,20 @@ fn poly_mod_reduce<const SIZE_LHS: usize, const SIZE_RHS: usize>(c: &mut Criteri
         SIZE_LHS - 1,
         SIZE_RHS - 1
     ));
-    let mut remainder = Polynomial::zero();
-    group.sample_size(10);
     let lhs = Polynomial::new(random_elements::<BFieldElement>(SIZE_LHS));
     let rhs = Polynomial::new(random_elements::<BFieldElement>(SIZE_RHS));
 
     let id = BenchmarkId::new("long division", log2_of_size);
-    group.bench_function(id, |b| b.iter(|| remainder = lhs.clone() % rhs.clone()));
+    group.bench_function(id, |b| b.iter(|| lhs.clone() % rhs.clone()));
 
+    // despite its name, `.fast_divide()` is slow – ignore for big inputs
     if SIZE_LHS < 1 << 13 && SIZE_RHS < 1 << 13 {
         let id = BenchmarkId::new("fast division", log2_of_size);
-        group.bench_function(id, |b| {
-            b.iter(|| remainder = lhs.clone().fast_divide(&rhs).1)
-        });
+        group.bench_function(id, |b| b.iter(|| lhs.fast_divide(&rhs)));
     }
 
     let id = BenchmarkId::new("fast reduce", log2_of_size);
-    group.bench_function(id, |b| b.iter(|| remainder = lhs.clone().fast_reduce(&rhs)));
+    group.bench_function(id, |b| b.iter(|| lhs.fast_reduce(&rhs)));
 
     group.finish();
 }

@@ -160,7 +160,7 @@ where
     /// to use NTT-based multiplication. Use benchmark
     /// `formal_power_series_inverse` to find the optimum. Based on benchmarks,
     /// the optimum probably lies somewhere between 2^5 and 2^9.
-    const FORMAL_POWER_SERIES_INVERSE_CUTOFF: usize = 1 << 8;
+    const FORMAL_POWER_SERIES_INVERSE_CUTOFF: isize = 1 << 8;
 
     /// Modular reduction is made fast by first finding a multiple of the
     /// denominator that allows for chunk-wise reduction, and then finishing off
@@ -174,6 +174,9 @@ where
     /// polynomial modulo the zerofier of the domain first. This const regulates
     /// when.
     const REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO: isize = 4;
+
+    /// Regulates when to use long division and when to use NTT-based divide.
+    const FAST_DIVIDE_THRESHOLD: isize = 1000;
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
@@ -432,6 +435,10 @@ where
     }
 
     /// Parallel version of [`interpolate`](Self::interpolate).
+    ///
+    /// # Panics
+    ///
+    /// See [`interpolate`](Self::interpolate).
     pub fn par_interpolate(domain: &[FF], values: &[FF]) -> Self {
         assert!(
             !domain.is_empty(),
@@ -443,6 +450,8 @@ where
             "The domain and values lists have to be of equal length."
         );
 
+        // Reuse sequential threshold. We don't know how speed up this task with
+        // parallelism below this threshold.
         if domain.len() <= Self::FAST_INTERPOLATE_CUTOFF_THRESHOLD {
             Self::lagrange_interpolate(domain, values)
         } else {
@@ -533,15 +542,11 @@ where
         let right_domain_half = &domain[mid_point..];
         let right_values_half = &values[mid_point..];
 
-        let (left_zerofier, right_zerofier) = (
-            Self::zerofier(left_domain_half),
-            Self::zerofier(right_domain_half),
-        );
+        let left_zerofier = Self::zerofier(left_domain_half);
+        let right_zerofier = Self::zerofier(right_domain_half);
 
-        let (left_offset, right_offset) = (
-            right_zerofier.batch_evaluate(left_domain_half),
-            left_zerofier.batch_evaluate(right_domain_half),
-        );
+        let left_offset = right_zerofier.batch_evaluate(left_domain_half);
+        let right_offset = left_zerofier.batch_evaluate(right_domain_half);
 
         let hadamard_mul = |x: &[_], y: Vec<_>| x.iter().zip(y).map(|(&n, d)| n * d).collect_vec();
         let interpolate_half = |offset, domain_half, values_half| {
@@ -769,23 +774,22 @@ where
     /// Parallel version of [`batch_evaluate`](Self::batch_evaluate).
     pub fn par_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         let num_threads = available_parallelism().map(|nzu| nzu.get()).unwrap_or(1);
-        let chunk_size = (domain.len() + num_threads - 1) / num_threads;
-        let chunks = domain.chunks(chunk_size).collect_vec();
-        chunks
-            .into_par_iter()
+        let chunk_size = domain.len().next_multiple_of(num_threads) / num_threads;
+        domain
+            .par_chunks(chunk_size)
             .flat_map(|ch| self.batch_evaluate(ch))
             .collect()
     }
 
-    /// Only marked `pub` for benchmarking; not considered part of hte public API.
+    /// Only marked `pub` for benchmarking; not considered part of the public API.
     #[doc(hidden)]
     pub fn iterative_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         domain.iter().map(|&p| self.evaluate(p)).collect()
     }
 
-    /// Only marked `pub` for benchmarking; not considered part of hte public API.
+    /// Only marked `pub` for benchmarking; not considered part of the public API.
     #[doc(hidden)]
-    pub fn parallel_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+    pub fn par_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         domain.par_iter().map(|&p| self.evaluate(p)).collect()
     }
 
@@ -886,8 +890,7 @@ where
     ///
     /// Panics if the `divisor` is zero.
     pub fn divide(&self, divisor: &Self) -> (Self, Self) {
-        const FAST_DIVIDE_THRESHOLD: isize = 1000;
-        if self.degree() > FAST_DIVIDE_THRESHOLD {
+        if self.degree() > Self::FAST_DIVIDE_THRESHOLD {
             self.fast_divide(divisor)
         } else {
             self.naive_divide(divisor)
@@ -905,10 +908,24 @@ where
     /// error is considered "small" when it lives on large powers of X. This
     /// function works by applying Newton's method in this ring.
     ///
-    /// @panics when f(X) is not invertible in the formal power series ring,
+    /// # Example
+    ///
+    /// ```
+    /// # use num_traits::One;
+    /// # use twenty_first::prelude::*;
+    /// let precision = 8;
+    /// let f = Polynomial::new(bfe_vec![42; precision]);
+    /// let g = f.formal_power_series_inverse_newton(precision);
+    /// let x_to_the_n = Polynomial::one().shift_coefficients(precision);
+    /// let (_quotient, remainder) = g.multiply(&f).divide(&x_to_the_n);
+    /// assert!(remainder.is_one());
+    /// ```
+    /// #Panics
+    ///
+    /// Panics when f(X) is not invertible in the formal power series ring,
     /// _i.e._, when its constant coefficient is zero.
-    pub fn formal_power_series_inverse_newton(&self, precision: usize) -> Polynomial<FF> {
-        // nonzero polynomials of degree zero have an exact inverse
+    pub fn formal_power_series_inverse_newton(&self, precision: usize) -> Self {
+        // polynomials of degree zero are non-zero and have an exact inverse
         if self.degree() == 0 {
             return Polynomial::from_constant(self.coefficients[0].inverse());
         }
@@ -918,10 +935,10 @@ where
 
         // for small polynomials we use standard multiplication,
         // but for larger ones we want to stay in the ntt domain
-        let switch_point = if Self::FORMAL_POWER_SERIES_INVERSE_CUTOFF < self.degree() as usize {
+        let switch_point = if Self::FORMAL_POWER_SERIES_INVERSE_CUTOFF < self.degree() {
             0
         } else {
-            (Self::FORMAL_POWER_SERIES_INVERSE_CUTOFF / self.degree() as usize).ilog2()
+            (Self::FORMAL_POWER_SERIES_INVERSE_CUTOFF / self.degree()).ilog2()
         };
 
         let cc = self.coefficients[0];
@@ -1008,7 +1025,9 @@ where
 
     /// Given a polynomial f(X), find the polynomial g(X) of degree at most n
     /// such that f(X) * g(X) = 1 mod X^{n+1} where n is the precision.
-    /// @panics if f(X) does not have an inverse in the formal power series
+    /// # Panics
+    ///
+    /// Panics if f(X) does not have an inverse in the formal power series
     /// ring, _i.e._ if its constant coefficient is zero.
     fn formal_power_series_inverse_minimal(&self, precision: usize) -> Self {
         let lc_inv = self.coefficients.first().unwrap().inverse();
@@ -1046,13 +1065,14 @@ where
     /// object is the numerator and the argument is the denominator (or
     /// modulus).
     pub fn reduce(&self, modulus: &Self) -> Self {
+        const FAST_REDUCE_MAKES_SENSE_MULTIPLE: isize = 4;
         if modulus.is_zero() {
             panic!("Cannot divide by zero; needed for reduce.");
         } else if modulus.degree() == 0 {
             Self::zero()
         } else if self.degree() < modulus.degree() {
             self.clone()
-        } else if self.degree() > 4 * modulus.degree() {
+        } else if self.degree() > FAST_REDUCE_MAKES_SENSE_MULTIPLE * modulus.degree() {
             self.fast_reduce(modulus)
         } else {
             self.reduce_long_division(modulus)
@@ -1066,7 +1086,10 @@ where
 
     /// Given a polynomial f(X) of degree n, find a multiple of f(X) of the form
     /// X^{3*n+1} + (something of degree at most 2*n).
-    /// @panics if f(X) = 0.
+    ///
+    /// #Panics
+    ///
+    /// Panics if f(X) = 0.
     fn structured_multiple(&self) -> Self {
         let n = self.degree();
         let reverse = self.reverse();
@@ -1078,15 +1101,14 @@ where
     /// Given a polynomial f(X) and an integer n, find a multiple of f(X) of the
     /// form X^n + (something of much smaller degree).
     ///
-    /// @panics if the polynomial is zero, or if its degree is larger than n
+    /// #Panics
+    ///
+    /// Panics if the polynomial is zero, or if its degree is larger than n
     pub fn structured_multiple_of_degree(&self, n: usize) -> Self {
-        if self.is_zero() {
-            panic!("Cannot compute multiples of zero.");
-        }
-        let degree = self.degree() as usize;
-        if degree > n {
-            panic!("Cannot compute multiple of smaller degree.");
-        }
+        let Ok(degree) = usize::try_from(self.degree()) else {
+            panic!("cannot compute multiples of zero");
+        };
+        assert!(degree <= n, "cannot compute multiple of smaller degree.");
         if degree == 0 {
             return Polynomial::new(
                 [vec![FF::from(0); n], vec![self.coefficients[0].inverse()]].concat(),
@@ -1909,7 +1931,6 @@ mod test_polynomials {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use rand::thread_rng;
     use test_strategy::proptest;
 
     use crate::prelude::*;
@@ -3100,7 +3121,7 @@ mod test_polynomials {
         f: Polynomial<BFieldElement>,
     ) {
         let g = f.formal_power_series_inverse_newton(precision);
-        let mut coefficients = vec![BFieldElement::new(0); precision + 1];
+        let mut coefficients = bfe_vec![0; precision + 1];
         coefficients[precision] = BFieldElement::new(1);
         let xn = Polynomial::new(coefficients);
         let (_quotient, remainder) = g.multiply(&f).divide(&xn);
@@ -3370,35 +3391,34 @@ mod test_polynomials {
         #[strategy(vec(arb(), #_deg_a + 1))] _a_coefficients: Vec<BFieldElement>,
         #[strategy(Just(Polynomial::new(#_a_coefficients)))] a: Polynomial<BFieldElement>,
     ) {
-        if !b_coefficients.iter().all(|c| c.is_zero()) {
-            let n = (b_coefficients.len() + 1).next_power_of_two();
-            let mut full_modulus_coefficients = b_coefficients.clone();
-            full_modulus_coefficients.resize(n + 1, BFieldElement::from(0));
-            *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
-            let full_modulus = Polynomial::new(full_modulus_coefficients);
-
-            let long_remainder = a.reduce_long_division(&full_modulus);
-
-            let mut shift_ntt = b_coefficients.clone();
-            shift_ntt.resize(n, BFieldElement::from(0));
-            ntt(
-                &mut shift_ntt,
-                BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
-                n.ilog2(),
-            );
-            let structured_remainder = a.reduce_by_ntt_friendly_modulus(&shift_ntt, m);
-
-            prop_assert_eq!(long_remainder, structured_remainder);
+        let b = Polynomial::new(b_coefficients.clone());
+        if b.is_zero() {
+            return Err(TestCaseError::Reject("some reason".into()));
         }
+        let n = (b_coefficients.len() + 1).next_power_of_two();
+        let mut full_modulus_coefficients = b_coefficients.clone();
+        full_modulus_coefficients.resize(n + 1, BFieldElement::from(0));
+        *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
+        let full_modulus = Polynomial::new(full_modulus_coefficients);
+
+        let long_remainder = a.reduce_long_division(&full_modulus);
+
+        let mut shift_ntt = b_coefficients.clone();
+        shift_ntt.resize(n, BFieldElement::from(0));
+        ntt(
+            &mut shift_ntt,
+            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+            n.ilog2(),
+        );
+        let structured_remainder = a.reduce_by_ntt_friendly_modulus(&shift_ntt, m);
+
+        prop_assert_eq!(long_remainder, structured_remainder);
     }
 
     #[test]
     fn reduce_by_ntt_friendly_modulus_and_reduce_agree_concrete() {
         let m = 1;
-        let a_coefficients = [0, 0, 532575944580]
-            .into_iter()
-            .map(BFieldElement::new)
-            .collect_vec();
+        let a_coefficients = bfe_vec![0, 0, 75944580];
         let a = Polynomial::new(a_coefficients);
         let b_coefficients = vec![BFieldElement::new(944892804900)];
         let n = (b_coefficients.len() + 1).next_power_of_two();
@@ -3433,26 +3453,6 @@ mod test_polynomials {
         let standard_remainder = a.reduce_long_division(&b);
         let preprocessed_remainder = a.fast_reduce(&b);
         prop_assert_eq!(standard_remainder, preprocessed_remainder);
-    }
-
-    #[test]
-    fn fast_reduce_agrees_with_reduce_long_division_on_huge_polynomials() {
-        // This test could be made into a proptest but to make test time
-        // manageable we would have to set cases=1. And then what's the point?
-        let mut rng = thread_rng();
-        let deg_a = rng.gen_range((1 << 15)..(1 << 16));
-        let a_coefficients = (0..=deg_a)
-            .map(|_| rng.gen::<BFieldElement>())
-            .collect_vec();
-        let deg_b = rng.gen_range((1 << 5)..(1 << 6));
-        let b_coefficients = (0..=deg_b)
-            .map(|_| rng.gen::<BFieldElement>())
-            .collect_vec();
-        let a = Polynomial::new(a_coefficients);
-        let b = Polynomial::new(b_coefficients);
-        let standard_remainder = a.reduce_long_division(&b);
-        let preprocessed_remainder = a.fast_reduce(&b);
-        assert_eq!(standard_remainder, preprocessed_remainder);
     }
 
     #[proptest]
