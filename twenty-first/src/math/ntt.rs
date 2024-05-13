@@ -55,7 +55,7 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
     // `n` must be a power of 2, or be zero
     debug_assert!(
         n == 1 << log_2_of_n || n == 0 && log_2_of_n == 0,
-        "2^log2(n) == n || n == 0 && log_2_of_n == 0 must evaluate to true"
+        "2^log2(n) == n || n == 0 && log_2_of_n == 0 must evaluate to true, but n was {n} and log_2_of_n was {log_2_of_n}"
     );
 
     // `omega` must be a primitive root of unity of order `n`

@@ -625,8 +625,9 @@ mod accumulator_mmr_tests {
             // that we are preparing to execute
             let new_leafs: Vec<Digest> = random_elements(mutated_leaf_count);
             let mut terminal_leafs: Vec<Digest> = initial_leaf_digests;
-            for (&i, &new_leaf) in mutated_leaf_indices.iter().zip(&new_leafs) {
-                terminal_leafs[i as usize] = new_leaf;
+
+            for (i, new_leaf) in mutated_leaf_indices.iter().zip(new_leafs.iter()) {
+                new_leaf.clone_into(&mut terminal_leafs[*i as usize]);
             }
 
             // Calculate the leafs digests associated with the membership proofs, as they look

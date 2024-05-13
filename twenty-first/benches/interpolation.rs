@@ -31,7 +31,7 @@ fn interpolation<const SIZE: usize>(c: &mut Criterion) {
     let id = BenchmarkId::new("Fast", log2_of_size);
     group.bench_function(id, |b| b.iter(|| Polynomial::fast_interpolate(&xs, &ys)));
 
-    let id = BenchmarkId::new("Faster of the two", log2_of_size);
+    let id = BenchmarkId::new("Dispatcher", log2_of_size);
     group.bench_function(id, |b| b.iter(|| Polynomial::interpolate(&xs, &ys)));
 
     group.finish();

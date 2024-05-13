@@ -67,6 +67,10 @@ name = "evaluation"
 harness = false
 
 [[bench]]
+name = "poly_mod_reduce"
+harness = false
+
+[[bench]]
 name = "interpolation"
 harness = false
 
@@ -116,4 +120,8 @@ harness = false
 
 [[bench]]
 name = "zerofier"
+harness = false
+
+[[bench]]
+name = "formal_power_series_inverse"
 harness = false
