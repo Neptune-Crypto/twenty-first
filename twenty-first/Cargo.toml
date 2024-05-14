@@ -71,6 +71,10 @@ name = "extrapolation"
 harness = false
 
 [[bench]]
+name = "coset_extrapolation"
+harness = false
+
+[[bench]]
 name = "poly_mod_reduce"
 harness = false
 

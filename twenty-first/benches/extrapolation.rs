@@ -84,6 +84,7 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
     group.sample_size(10);
 
     let codeword = random_elements(SIZE);
+    let offset = BFieldElement::new(7);
     let eval_points: Vec<BFieldElement> = random_elements(NUM_POINTS);
 
     let id = BenchmarkId::new("INTT-then-Evaluate", log2_of_size);
@@ -94,6 +95,11 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
     let id = BenchmarkId::new("Iterative Barycentric", log2_of_size);
     group.bench_function(id, |b| {
         b.iter(|| iterative_barycentric(&codeword, &eval_points))
+    });
+
+    let id = BenchmarkId::new("Fast Codeword Extrapolation", log2_of_size);
+    group.bench_function(id, |b| {
+        b.iter(|| Polynomial::<BFieldElement>::coset_extrapolation(offset, &codeword, &eval_points))
     });
 
     group.finish();

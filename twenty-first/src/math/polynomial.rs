@@ -153,9 +153,8 @@ where
     const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
     /// Regulates the recursion depth at which [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
-    /// is slower than switches to [Lagrange interpolation](Self::lagrange_interpolate).
-    /// Small for now -- testing purposes.
-    const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 3;
+    /// is slower and switches to [Lagrange interpolation](Self::lagrange_interpolate).
+    const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 7;
 
     /// Inside `formal_power_series_inverse`, when to multiply naively and when
     /// to use NTT-based multiplication. Use benchmark
@@ -1384,19 +1383,30 @@ where
         offset: BFieldElement,
         modulus: &Polynomial<FF>,
     ) -> Self {
+        let Ok(modulus_degree) = TryInto::<usize>::try_into(modulus.degree()) else {
+            panic!("cannot reduce modulo zero")
+        };
         let n = values.len();
         let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
-        let domain = (0..n)
-            .scan(FF::from(offset.value()), |acc: &mut FF, _| {
-                let yld = *acc;
-                *acc *= omega;
-                Some(yld)
-            })
-            .collect::<Vec<FF>>();
 
-        if n < Self::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD {
+        if n < Self::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD && n <= 2 * modulus_degree {
+            let domain = (0..n)
+                .scan(FF::from(offset.value()), |acc: &mut FF, _| {
+                    let yld = *acc;
+                    *acc *= omega;
+                    Some(yld)
+                })
+                .collect::<Vec<FF>>();
             let interpolant = Self::lagrange_interpolate(&domain, values);
             return interpolant.reduce(modulus);
+        } else if n <= 2 * modulus_degree {
+            let mut coefficients = values.to_vec();
+            intt(&mut coefficients, omega, n.ilog2());
+            let interpolant = Polynomial::new(coefficients);
+
+            return interpolant
+                .scale(FF::from(offset.inverse().value()))
+                .reduce(modulus);
         }
 
         // Use even-odd domain split.
@@ -3730,7 +3740,7 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce(
+    fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce_property(
         #[filter(!#modulus.is_zero())] modulus: Polynomial<BFieldElement>,
         #[strategy(0usize..10)] _logn: usize,
         #[strategy(Just(1 << #_logn))] n: usize,
@@ -3753,7 +3763,7 @@ mod test_polynomials {
 
     #[test]
     fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce_concrete() {
-        let logn = 5;
+        let logn = 8;
         let n = 1u64 << logn;
         let modulus = Polynomial::<BFieldElement>::new(bfe_vec![2, 3, 1]);
         let values = (0..n).map(|i| BFieldElement::new(i / 5)).collect_vec();
