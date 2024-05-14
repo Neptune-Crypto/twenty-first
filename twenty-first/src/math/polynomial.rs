@@ -152,6 +152,11 @@ where
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
     const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
+    /// Regulates the recursion depth at which [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
+    /// is slower than switches to [Lagrange interpolation](Self::lagrange_interpolate).
+    /// Small for now -- testing purposes.
+    const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 3;
+
     /// Inside `formal_power_series_inverse`, when to multiply naively and when
     /// to use NTT-based multiplication. Use benchmark
     /// `formal_power_series_inverse` to find the optimum. Based on benchmarks,
@@ -1183,6 +1188,7 @@ where
     /// form, polynomial modular reductions can be computed faster than in the
     /// generic case.
     fn reduce_by_structured_modulus(&self, multiple: &Self) -> Self {
+        assert_ne!(multiple.degree(), 0);
         let leading_term = Polynomial::new(
             [
                 vec![FF::from(0); multiple.degree() as usize],
@@ -1371,6 +1377,116 @@ where
     pub fn mod_x_to_the_n(&self, n: usize) -> Self {
         let num_coefficients_to_retain = n.min(self.coefficients.len());
         Self::new(self.coefficients[..num_coefficients_to_retain].into())
+    }
+
+    fn fast_modular_coset_interpolate(
+        values: &[FF],
+        offset: BFieldElement,
+        modulus: &Polynomial<FF>,
+    ) -> Self {
+        let n = values.len();
+        let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
+        let domain = (0..n)
+            .scan(FF::from(offset.value()), |acc: &mut FF, _| {
+                let yld = *acc;
+                *acc *= omega;
+                Some(yld)
+            })
+            .collect::<Vec<FF>>();
+
+        if n < Self::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD {
+            let interpolant = Self::lagrange_interpolate(&domain, values);
+            return interpolant.reduce(modulus);
+        }
+
+        // Use even-odd domain split.
+        // Even: {offset * omega^{2*i} | i in 0..n/2}
+        // Odd: {offset * omega^{2*i+1} | i in 0..n/2} = {(offset * omega) * omega^{2*i} | i in 0..n/2}
+        // But we don't actually need to represent the domains explicitly.
+
+        // 1. Get zerofiers.
+        // The zerofiers are sparse because the domain is structured.
+        // Even: (offset^-1 * X)^(n/2) - 1 = offset^{-n/2} * X^{n/2} - 1
+        // Odd: ((offset * omega)^-1 * X)^(n/2) - 1 = offset^{-n/2} * omega^{n/2} * X^{n/2} - 1
+        // We also don't need to explicitly represent the zerofiers, but we do
+        // need their leading coefficients later.
+        let even_lc = offset.inverse().mod_pow((n / 2) as u64);
+        let odd_lc = (offset * omega).inverse().mod_pow((n / 2) as u64);
+
+        // 2. Evaluate zerofiers on opposite domains.
+        // Actually, the values are compressible because the zerofiers are
+        // sparse and the domains are structured (compatibly).
+        // Even zerofier on odd domain:
+        // (offset^-1 * X)^(n/2) - 1 on {(offset * omega) * omega^{2*i} | i in 0..n/2}
+        // = {omega^{n/2}-1 | i in 0..n/2} = {-2, -2, -2, ...}
+        // Odd zerofier on even domain: {omega^-i | i in 0..n/2}
+        // ((offset * omega)^-1 * X)^(n/2) - 1 on {offset * omega^{2*i} | i in 0..n/2}
+        // = {omega^{-n/2} - 1 | i in 0..n/2} = {-2, -2, -2, ...}
+        // Since these values are always the same, there's no point generating
+        // them at runtime. Moreover, we need their batch-inverses in the next
+        // step.
+
+        // 3. Batch-invert zerofiers on opposite domains.
+        const MINUS_TWO_INVERSE: BFieldElement = BFieldElement::new(9223372034707292160);
+        let even_zerofier_on_odd_domain_inverted = vec![FF::from(MINUS_TWO_INVERSE.value()); n / 2];
+        let odd_zerofier_on_even_domain_inverted = vec![FF::from(MINUS_TWO_INVERSE.value()); n / 2];
+
+        // 4. Construct interpolation values through Hadamard products.
+        let mut odd_domain_targets = even_zerofier_on_odd_domain_inverted;
+        let mut even_domain_targets = odd_zerofier_on_even_domain_inverted;
+        for i in 0..(n / 2) {
+            even_domain_targets[i] *= values[2 * i];
+            odd_domain_targets[i] *= values[2 * i + 1];
+        }
+        // 5. Interpolate using recursion
+        let even_interpolant =
+            Self::fast_modular_coset_interpolate(&even_domain_targets, offset, modulus);
+        let odd_interpolant =
+            Self::fast_modular_coset_interpolate(&odd_domain_targets, offset * omega, modulus);
+
+        // 6. Multiply with zerofiers and add.
+        // Construct the coefficients smartly to exploit the structure.
+        let even_interpolant_with_odd_zeros = [
+            even_interpolant.coefficients.clone(),
+            vec![FF::from(0); n / 2 - even_interpolant.coefficients.len()],
+            even_interpolant
+                .scalar_mul(-FF::from(odd_lc.value()))
+                .coefficients,
+        ]
+        .concat();
+        let odd_interpolant_with_even_zeros = [
+            odd_interpolant.coefficients.clone(),
+            vec![FF::from(0); n / 2 - odd_interpolant.coefficients.len()],
+            odd_interpolant
+                .scalar_mul(-FF::from(even_lc.value()))
+                .coefficients,
+        ]
+        .concat();
+
+        let interpolant = Polynomial::new(
+            even_interpolant_with_odd_zeros
+                .into_iter()
+                .zip(odd_interpolant_with_even_zeros)
+                .map(|(l, r)| -(l + r))
+                .collect_vec(),
+        );
+
+        // 7. Reduce by modulus and return.
+        interpolant.reduce(modulus)
+    }
+
+    pub fn coset_extrapolation(
+        domain_offset: BFieldElement,
+        codeword: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let zerofier_tree = ZerofierTree::new_from_domain(points);
+        let minimal_interpolant = Self::fast_modular_coset_interpolate(
+            codeword,
+            domain_offset,
+            &zerofier_tree.zerofier(),
+        );
+        minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
     }
 }
 
@@ -3613,44 +3729,69 @@ mod test_polynomials {
         prop_assert_eq!(remainder, Polynomial::zero());
     }
 
-    #[test]
-    fn monomial_term_divided_by_smaller_monomial_term_gives_clean_division_concrete() {
-        let high_degree = 1001;
-        let low_degree = 830;
-        let high_lc = bfe!(1);
-        let low_lc = bfe!(3);
-        let numerator = Polynomial::new([bfe_vec![0; high_degree], vec![high_lc]].concat());
-        let denominator = Polynomial::new([bfe_vec![0; low_degree], vec![low_lc]].concat());
-        let (quotient, remainder) = numerator.divide(&denominator);
-        assert_eq!(
-            quotient
-                .coefficients
-                .iter()
-                .filter(|c| !c.is_zero())
-                .count(),
-            1
-        );
-        assert_eq!(remainder, Polynomial::zero());
+    #[proptest]
+    fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce(
+        #[filter(!#modulus.is_zero())] modulus: Polynomial<BFieldElement>,
+        #[strategy(0usize..10)] _logn: usize,
+        #[strategy(Just(1 << #_logn))] n: usize,
+        #[strategy(vec(arb(), #n))] values: Vec<BFieldElement>,
+        #[strategy(arb())] offset: BFieldElement,
+    ) {
+        let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
+        let domain = (0..n)
+            .scan(offset, |acc: &mut BFieldElement, _| {
+                let yld = *acc;
+                *acc *= omega;
+                Some(yld)
+            })
+            .collect_vec();
+        prop_assert_eq!(
+            Polynomial::<BFieldElement>::fast_modular_coset_interpolate(&values, offset, &modulus),
+            Polynomial::interpolate(&domain, &values).reduce(&modulus)
+        )
     }
 
     #[test]
-    fn structured_multiple_of_monomial_term_is_actually_multiple_and_of_right_degree_concrete() {
-        let degree = 830;
-        let leading_coefficient = bfe!(3);
-        let target_degree = 1001;
-        let coefficients = [
-            vec![BFieldElement::new(0); degree],
-            vec![leading_coefficient],
-        ]
-        .concat();
-        let polynomial = Polynomial::new(coefficients);
-        let multiple = polynomial.structured_multiple_of_degree(target_degree);
-        let (quotient, remainder) = multiple.divide(&polynomial);
-        println!("numerator: {}", multiple);
-        println!("denominator: {}", polynomial);
-        println!("quotient: {}", quotient);
-        println!("remainder: {}", remainder);
-        assert_eq!(multiple.reduce(&polynomial), Polynomial::zero());
-        assert_eq!(multiple.degree() as usize, target_degree);
+    fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce_concrete() {
+        let logn = 5;
+        let n = 1u64 << logn;
+        let modulus = Polynomial::<BFieldElement>::new(bfe_vec![2, 3, 1]);
+        let values = (0..n).map(|i| BFieldElement::new(i / 5)).collect_vec();
+        let offset = BFieldElement::new(7);
+
+        let omega = BFieldElement::primitive_root_of_unity(n).unwrap();
+        let domain = (0..n)
+            .scan(offset, |acc: &mut BFieldElement, _| {
+                let yld = *acc;
+                *acc *= omega;
+                Some(yld)
+            })
+            .collect_vec();
+        assert_eq!(
+            Polynomial::<BFieldElement>::fast_modular_coset_interpolate(&values, offset, &modulus),
+            Polynomial::interpolate(&domain, &values).reduce(&modulus)
+        )
+    }
+
+    #[proptest]
+    fn coset_extrapolation_agrees_with_interpolate_then_evaluate(
+        #[strategy(0usize..10)] _logn: usize,
+        #[strategy(Just(1 << #_logn))] n: usize,
+        #[strategy(vec(arb(), #n))] values: Vec<BFieldElement>,
+        #[strategy(arb())] offset: BFieldElement,
+        #[strategy(vec(arb(), 1..1000))] points: Vec<BFieldElement>,
+    ) {
+        let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
+        let domain = (0..n)
+            .scan(offset, |acc: &mut BFieldElement, _| {
+                let yld = *acc;
+                *acc *= omega;
+                Some(yld)
+            })
+            .collect_vec();
+        prop_assert_eq!(
+            Polynomial::<BFieldElement>::coset_extrapolation(offset, &values, &points),
+            Polynomial::interpolate(&domain, &values).batch_evaluate(&points)
+        )
     }
 }
