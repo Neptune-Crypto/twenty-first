@@ -1157,7 +1157,14 @@ where
                 [vec![FF::from(0); n], vec![self.coefficients[0].inverse()]].concat(),
             );
         }
+
         let reverse = self.reverse();
+
+        // Coefficient reversal drops trailing zeros, which is okay -- we just
+        // need to keep track of them so we can add them back later.
+        let reverse_degree = reverse.degree() as usize;
+        let power = degree - reverse_degree;
+
         // The next function gives back a polynomial g(X) of degree at most arg,
         // such that f(X) * g(X) = 1 mod X^arg.
         // Without modular reduction, the degree of the product f(X) * g(X) is
@@ -1165,7 +1172,7 @@ where
         // and arg = n - deg(f).
         let inverse_reverse = reverse.formal_power_series_inverse_minimal(n - degree);
         let product_reverse = reverse.multiply(&inverse_reverse);
-        product_reverse.reverse()
+        product_reverse.reverse().shift_coefficients(power)
     }
 
     /// Reduces f(X) by a structured modulus, which is of the form
@@ -3613,5 +3620,21 @@ mod test_polynomials {
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
     ) {
         prop_assert_eq!(a.divide(&b).1, a.reduce(&b));
+    }
+
+    #[proptest]
+    fn structured_multiple_of_monomial_term_is_actually_multiple(
+        #[strategy(1usize..1000)] degree: usize,
+        #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
+        #[strategy(#degree+1..#degree+200)] target_degree: usize,
+    ) {
+        let coefficients = [
+            vec![BFieldElement::new(0); degree],
+            vec![leading_coefficient],
+        ]
+        .concat();
+        let polynomial = Polynomial::new(coefficients);
+        let multiple = polynomial.structured_multiple_of_degree(target_degree);
+        prop_assert_eq!(multiple.reduce(&polynomial), Polynomial::zero());
     }
 }
