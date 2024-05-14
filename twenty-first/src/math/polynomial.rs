@@ -171,9 +171,6 @@ where
     /// when.
     const REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO: isize = 4;
 
-    /// Regulates when to use long division and when to use NTT-based divide.
-    const FAST_DIVIDE_THRESHOLD: isize = 1000;
-
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
     /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then corresponds to
@@ -933,11 +930,9 @@ where
     ///
     /// Panics if the `divisor` is zero.
     pub fn divide(&self, divisor: &Self) -> (Self, Self) {
-        if self.degree() > Self::FAST_DIVIDE_THRESHOLD {
-            self.fast_divide(divisor)
-        } else {
-            self.naive_divide(divisor)
-        }
+        // There is an NTT-based division algorithm, but for no practical
+        // parameter set is it faster than long division.
+        self.naive_divide(divisor)
     }
 
     /// Compute a polynomial g(X) from a given polynomial f(X) such that
@@ -1138,7 +1133,16 @@ where
         let reverse = self.reverse();
         let inverse_reverse = reverse.formal_power_series_inverse_minimal(n as usize);
         let product_reverse = reverse.multiply(&inverse_reverse);
-        product_reverse.reverse()
+
+        // Correct for lost trailing coefficients, if any
+        let product = product_reverse.reverse();
+        let product_degree = product.degree();
+        let shift = if product_degree < n {
+            n - product_degree
+        } else {
+            0
+        };
+        product.shift_coefficients(shift as usize)
     }
 
     /// Given a polynomial f(X) and an integer n, find a multiple of f(X) of the
@@ -1160,11 +1164,6 @@ where
 
         let reverse = self.reverse();
 
-        // Coefficient reversal drops trailing zeros, which is okay -- we just
-        // need to keep track of them so we can add them back later.
-        let reverse_degree = reverse.degree() as usize;
-        let power = degree - reverse_degree;
-
         // The next function gives back a polynomial g(X) of degree at most arg,
         // such that f(X) * g(X) = 1 mod X^arg.
         // Without modular reduction, the degree of the product f(X) * g(X) is
@@ -1172,7 +1171,11 @@ where
         // and arg = n - deg(f).
         let inverse_reverse = reverse.formal_power_series_inverse_minimal(n - degree);
         let product_reverse = reverse.multiply(&inverse_reverse);
-        product_reverse.reverse().shift_coefficients(power)
+        let product = product_reverse.reverse();
+
+        // Coefficient reversal drops trailing zero. Correct for that.
+        let product_degree = product.degree() as usize;
+        product.shift_coefficients(n - product_degree)
     }
 
     /// Reduces f(X) by a structured modulus, which is of the form
@@ -1188,7 +1191,10 @@ where
             .concat(),
         );
         let shift_polynomial = multiple.clone() - leading_term.clone();
-        let m = shift_polynomial.degree() as usize + 1;
+        let m = match TryInto::<usize>::try_into(shift_polynomial.degree()) {
+            Ok(unsigned_degree) => unsigned_degree + 1,
+            Err(_) => 0,
+        };
         let n = multiple.degree() as usize - m;
         if self.coefficients.len() < n + m {
             return self.clone();
@@ -1329,50 +1335,6 @@ where
 
         // 3. Long division based reduction by the (unmultiplied) modulus.
         intermediate_remainder.reduce_long_division(modulus)
-    }
-
-    /// Polynomial long division with `self` as the dividend, divided by some `divisor`.
-    /// Only `pub` to allow benchmarking; not considered part of the public API.
-    ///
-    /// As the name implies, the advantage of this method over [`divide`](Self::naive_divide) is
-    /// runtime complexity. Concretely, this method has time complexity in O(n·log(n)), whereas
-    /// [`divide`](Self::naive_divide) has time complexity in O(n^2).
-    #[doc(hidden)]
-    pub fn fast_divide(&self, divisor: &Self) -> (Self, Self) {
-        // The math for this function: [0]. There are very slight deviations, for example around the
-        // requirement that the divisor is monic.
-        //
-        // [0] https://cs.uwaterloo.ca/~r5olivei/courses/2021-winter-cs487/lecture5-post.pdf
-
-        let Ok(quotient_degree) = usize::try_from(self.degree() - divisor.degree()) else {
-            return (Self::zero(), self.clone());
-        };
-
-        if divisor.degree() == 0 {
-            let quotient = self.scalar_mul(divisor.leading_coefficient().unwrap().inverse());
-            let remainder = Polynomial::zero();
-            return (quotient, remainder);
-        }
-
-        // Reverse coefficient vectors to move into formal power series ring over FF, i.e., FF[[x]].
-        // Re-interpret as a polynomial to benefit from the already-implemented multiplication
-        // method, which mechanically work the same in FF[X] and FF[[x]].
-        let reverse = |poly: &Self| Self::new(poly.coefficients.iter().copied().rev().collect());
-
-        // Newton iteration to invert divisor up to required precision. Why is this the required
-        // precision? Good question.
-        let precision = (quotient_degree + 1).next_power_of_two();
-
-        let rev_divisor = reverse(divisor);
-        let rev_divisor_inverse = rev_divisor.formal_power_series_inverse_newton(precision);
-
-        let self_reverse = reverse(self);
-        let rev_quotient = self_reverse.multiply(&rev_divisor_inverse);
-
-        let quotient = reverse(&rev_quotient).truncate(quotient_degree);
-
-        let remainder = self.clone() - quotient.multiply(divisor);
-        (quotient, remainder)
     }
 
     /// The degree-`k` polynomial with the same `k + 1` leading coefficients as `self`. To be more
@@ -2916,15 +2878,6 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn naive_division_and_fast_division_are_equivalent(
-        a: Polynomial<BFieldElement>,
-        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
-    ) {
-        let (quotient, _remainder) = a.fast_divide(&b);
-        prop_assert_eq!(a / b, quotient);
-    }
-
-    #[proptest]
     fn clean_division_agrees_with_divide_on_clean_division(
         #[strategy(arb())] a: Polynomial<BFieldElement>,
         #[strategy(arb())]
@@ -3623,7 +3576,7 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn structured_multiple_of_monomial_term_is_actually_multiple(
+    fn structured_multiple_of_monomial_term_is_actually_multiple_and_of_right_degree(
         #[strategy(1usize..1000)] degree: usize,
         #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
         #[strategy(#degree+1..#degree+200)] target_degree: usize,
@@ -3636,5 +3589,68 @@ mod test_polynomials {
         let polynomial = Polynomial::new(coefficients);
         let multiple = polynomial.structured_multiple_of_degree(target_degree);
         prop_assert_eq!(multiple.reduce(&polynomial), Polynomial::zero());
+        prop_assert_eq!(multiple.degree() as usize, target_degree);
+    }
+
+    #[proptest]
+    fn monomial_term_divided_by_smaller_monomial_term_gives_clean_division(
+        #[strategy(100usize..102)] high_degree: usize,
+        #[filter(!#high_lc.is_zero())] high_lc: BFieldElement,
+        #[strategy(83..#high_degree)] low_degree: usize,
+        #[filter(!#low_lc.is_zero())] low_lc: BFieldElement,
+    ) {
+        let numerator = Polynomial::new([bfe_vec![0; high_degree], vec![high_lc]].concat());
+        let denominator = Polynomial::new([bfe_vec![0; low_degree], vec![low_lc]].concat());
+        let (quotient, remainder) = numerator.divide(&denominator);
+        prop_assert_eq!(
+            quotient
+                .coefficients
+                .iter()
+                .filter(|c| !c.is_zero())
+                .count(),
+            1
+        );
+        prop_assert_eq!(remainder, Polynomial::zero());
+    }
+
+    #[test]
+    fn monomial_term_divided_by_smaller_monomial_term_gives_clean_division_concrete() {
+        let high_degree = 1001;
+        let low_degree = 830;
+        let high_lc = bfe!(1);
+        let low_lc = bfe!(3);
+        let numerator = Polynomial::new([bfe_vec![0; high_degree], vec![high_lc]].concat());
+        let denominator = Polynomial::new([bfe_vec![0; low_degree], vec![low_lc]].concat());
+        let (quotient, remainder) = numerator.divide(&denominator);
+        assert_eq!(
+            quotient
+                .coefficients
+                .iter()
+                .filter(|c| !c.is_zero())
+                .count(),
+            1
+        );
+        assert_eq!(remainder, Polynomial::zero());
+    }
+
+    #[test]
+    fn structured_multiple_of_monomial_term_is_actually_multiple_and_of_right_degree_concrete() {
+        let degree = 830;
+        let leading_coefficient = bfe!(3);
+        let target_degree = 1001;
+        let coefficients = [
+            vec![BFieldElement::new(0); degree],
+            vec![leading_coefficient],
+        ]
+        .concat();
+        let polynomial = Polynomial::new(coefficients);
+        let multiple = polynomial.structured_multiple_of_degree(target_degree);
+        let (quotient, remainder) = multiple.divide(&polynomial);
+        println!("numerator: {}", multiple);
+        println!("denominator: {}", polynomial);
+        println!("quotient: {}", quotient);
+        println!("remainder: {}", remainder);
+        assert_eq!(multiple.reduce(&polynomial), Polynomial::zero());
+        assert_eq!(multiple.degree() as usize, target_degree);
     }
 }
