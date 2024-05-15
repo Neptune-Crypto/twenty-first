@@ -160,6 +160,11 @@ where
     /// is slower and switches to [INTT](ntt::intt)-then-[reduce](Self::reduce).
     const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT: usize = 1 << 17;
 
+    /// Regulates when to prefer the [Fast coset extrapolation](Self::fast_coset_extrapolate)
+    /// over the [naïve method](Self::naive_coset_extrapolate). Threshold found
+    /// using `cargo criterion --bench extrapolation`.
+    const FAST_COSET_EXTRAPOLATE_THRESHOLD: usize = 100;
+
     /// Inside `formal_power_series_inverse`, when to multiply naively and when
     /// to use NTT-based multiplication. Use benchmark
     /// `formal_power_series_inverse` to find the optimum. Based on benchmarks,
@@ -1242,28 +1247,33 @@ where
     ///
     /// This method uses NTT-based multiplication, meaning that the unstructured
     /// part of the structured multiple must be given in NTT-domain.
-    fn reduce_by_ntt_friendly_modulus(&self, shift_ntt: &[FF], m: usize) -> Self {
+    fn reduce_by_ntt_friendly_modulus(&self, shift_ntt: &[FF], tail_length: usize) -> Self {
+        // m = tail_length
         let domain_length = shift_ntt.len();
         assert!(domain_length.is_power_of_two());
         let log_domain_length = domain_length.ilog2();
         let omega = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
-        let n = domain_length - m;
+        let n = domain_length - tail_length;
 
-        if self.coefficients.len() < n + m {
+        if self.coefficients.len() < n + tail_length {
             return self.clone();
         }
-        let num_reducible_chunks = (self.coefficients.len() - (m + n) + n - 1) / n;
+        let num_reducible_chunks = (self.coefficients.len() - (tail_length + n) + n - 1) / n;
 
         let range_start = num_reducible_chunks * n;
         let mut working_window = if range_start >= self.coefficients.len() {
-            vec![FF::from(0); n + m]
+            vec![FF::from(0); n + tail_length]
         } else {
             self.coefficients[range_start..].to_vec()
         };
-        working_window.resize(n + m, FF::from(0));
+        working_window.resize(n + tail_length, FF::from(0));
 
         for chunk_index in (0..num_reducible_chunks).rev() {
-            let mut product = [working_window[m..].to_vec(), vec![FF::from(0); m]].concat();
+            let mut product = [
+                working_window[tail_length..].to_vec(),
+                vec![FF::from(0); tail_length],
+            ]
+            .concat();
             ntt(&mut product, omega, log_domain_length);
             product
                 .iter_mut()
@@ -1271,12 +1281,16 @@ where
                 .for_each(|(l, r)| *l *= *r);
             intt(&mut product, omega, log_domain_length);
 
-            working_window = [vec![FF::from(0); n], working_window[0..m].to_vec()].concat();
+            working_window = [
+                vec![FF::from(0); n],
+                working_window[0..tail_length].to_vec(),
+            ]
+            .concat();
             for (i, wwi) in working_window.iter_mut().enumerate().take(n) {
                 *wwi = self.coefficients[chunk_index * n + i];
             }
 
-            for (i, wwi) in working_window.iter_mut().enumerate().take(n + m) {
+            for (i, wwi) in working_window.iter_mut().enumerate().take(n + tail_length) {
                 *wwi -= product[i];
             }
         }
@@ -1392,15 +1406,14 @@ where
         Self::new(self.coefficients[..num_coefficients_to_retain].into())
     }
 
-    /// Compute f(X) mod m(X) where m(X) is a given modulus and f(X) is the
-    /// interpolant of a list of n values on a domain which is a coset of the
-    /// size-n subgroup that is identified by some offset.
-    fn fast_modular_coset_interpolate(
-        values: &[FF],
+    /// Preprocessing data for
+    /// [fast modular coset interpolation](Self::fast_modular_coset_interpolate).
+    #[allow(clippy::type_complexity)]
+    fn fast_modular_coset_interpolate_preprocess(
+        n: usize,
         offset: BFieldElement,
         modulus: &Polynomial<FF>,
-    ) -> Self {
-        let n = values.len();
+    ) -> (Vec<Polynomial<FF>>, Vec<Polynomial<FF>>, Vec<FF>, usize) {
         let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
         // a list of polynomials whose ith element is X^(2^i) mod m(X)
         let modular_squares = (0..n.ilog2())
@@ -1433,6 +1446,24 @@ where
         // precompute NTT-friendly multiple of the modulus
         let (shift_coefficients, tail_length) = modulus.shift_factor_ntt_with_tail_size();
 
+        (
+            even_zerofiers,
+            odd_zerofiers,
+            shift_coefficients,
+            tail_length,
+        )
+    }
+
+    /// Compute f(X) mod m(X) where m(X) is a given modulus and f(X) is the
+    /// interpolant of a list of n values on a domain which is a coset of the
+    /// size-n subgroup that is identified by some offset.
+    fn fast_modular_coset_interpolate(
+        values: &[FF],
+        offset: BFieldElement,
+        modulus: &Polynomial<FF>,
+    ) -> Self {
+        let (even_zerofiers, odd_zerofiers, shift_coefficients, tail_length) =
+            Self::fast_modular_coset_interpolate_preprocess(values.len(), offset, modulus);
         Self::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
             values,
             offset,
@@ -1535,7 +1566,46 @@ where
         interpolant.reduce(modulus)
     }
 
-    pub fn coset_extrapolation(
+    /// Extrapolate a Reed-Solomon codeword, defined relative to a coset of the
+    /// subgroup of order n (codeword length), in new points.
+    pub fn coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        if points.len() < Self::FAST_COSET_EXTRAPOLATE_THRESHOLD {
+            Self::fast_coset_extrapolate(domain_offset, codeword, points)
+        } else {
+            Self::naive_coset_extrapolate(domain_offset, codeword, points)
+        }
+    }
+
+    fn naive_coset_extrapolate_preprocessing(points: &[FF]) -> (ZerofierTree<FF>, Vec<FF>, usize) {
+        let zerofier_tree = ZerofierTree::new_from_domain(points);
+        let (shift_coefficients, tail_length) =
+            Self::shift_factor_ntt_with_tail_size(&zerofier_tree.zerofier());
+        (zerofier_tree, shift_coefficients, tail_length)
+    }
+
+    fn naive_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let n = codeword.len();
+        let logn = n.ilog2();
+        let mut coefficients = codeword.to_vec();
+        intt(
+            &mut coefficients,
+            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+            logn,
+        );
+        let interpolant =
+            Polynomial::new(coefficients).scale(FF::from(domain_offset.inverse().value()));
+        interpolant.batch_evaluate(points)
+    }
+
+    fn fast_coset_extrapolate(
         domain_offset: BFieldElement,
         codeword: &[FF],
         points: &[FF],
@@ -1547,6 +1617,172 @@ where
             &zerofier_tree.zerofier(),
         );
         minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
+    }
+
+    /// Extrapolate many Reed-Solomon codewords, defined relative to the same
+    /// coset of the subgroup of order `codeword_length`, in the same set of
+    /// new points.
+    pub fn batch_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        if points.len() < Self::FAST_COSET_EXTRAPOLATE_THRESHOLD {
+            Self::batch_fast_coset_extrapolate(domain_offset, codeword_length, codewords, points)
+        } else {
+            Self::batch_naive_coset_extrapolate(domain_offset, codeword_length, codewords, points)
+        }
+    }
+
+    fn batch_fast_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let n = codeword_length;
+
+        let zerofier_tree = ZerofierTree::new_from_domain(points);
+        let modulus = zerofier_tree.zerofier();
+        let (even_zerofiers, odd_zerofiers, shift_coefficients, tail_length) =
+            Self::fast_modular_coset_interpolate_preprocess(
+                codeword_length,
+                domain_offset,
+                &modulus,
+            );
+
+        (0..codewords.len() / n)
+            .flat_map(|i| {
+                let codeword = &codewords[i * n..(i + 1) * n];
+                let minimal_interpolant =
+                    Self::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
+                        codeword,
+                        domain_offset,
+                        &modulus,
+                        &even_zerofiers,
+                        &odd_zerofiers,
+                        &shift_coefficients,
+                        tail_length,
+                    );
+                minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
+            })
+            .collect()
+    }
+
+    fn batch_naive_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let (zerofier_tree, shift_coefficients, tail_length) =
+            Self::naive_coset_extrapolate_preprocessing(points);
+        let n = codeword_length;
+        let logn = n.ilog2();
+
+        (0..codewords.len() / n)
+            .flat_map(|i| {
+                let mut coefficients = codewords[i * n..(i + 1) * n].to_vec();
+                intt(
+                    &mut coefficients,
+                    BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+                    logn,
+                );
+                Polynomial::new(coefficients)
+                    .scale(FF::from(domain_offset.inverse().value()))
+                    .reduce_by_ntt_friendly_modulus(&shift_coefficients, tail_length)
+                    .divide_and_conquer_batch_evaluate(&zerofier_tree)
+            })
+            .collect()
+    }
+
+    /// Parallel version of [`batch_coset_extrapolate`](Self::batch_coset_extrapolate).
+    pub fn par_batch_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        if points.len() < Self::FAST_COSET_EXTRAPOLATE_THRESHOLD {
+            Self::par_batch_fast_coset_extrapolate(
+                domain_offset,
+                codeword_length,
+                codewords,
+                points,
+            )
+        } else {
+            Self::par_batch_naive_coset_extrapolate(
+                domain_offset,
+                codeword_length,
+                codewords,
+                points,
+            )
+        }
+    }
+
+    pub fn par_batch_fast_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let n = codeword_length;
+
+        let zerofier_tree = ZerofierTree::new_from_domain(points);
+        let modulus = zerofier_tree.zerofier();
+        let (even_zerofiers, odd_zerofiers, shift_coefficients, tail_length) =
+            Self::fast_modular_coset_interpolate_preprocess(
+                codeword_length,
+                domain_offset,
+                &modulus,
+            );
+
+        (0..codewords.len() / n)
+            .into_par_iter()
+            .flat_map(|i| {
+                let codeword = &codewords[i * n..(i + 1) * n];
+                let minimal_interpolant =
+                    Self::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
+                        codeword,
+                        domain_offset,
+                        &modulus,
+                        &even_zerofiers,
+                        &odd_zerofiers,
+                        &shift_coefficients,
+                        tail_length,
+                    );
+                minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
+            })
+            .collect()
+    }
+
+    pub fn par_batch_naive_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let (zerofier_tree, shift_coefficients, tail_length) =
+            Self::naive_coset_extrapolate_preprocessing(points);
+        let n = codeword_length;
+        let logn = n.ilog2();
+
+        (0..codewords.len() / n)
+            .into_par_iter()
+            .flat_map(|i| {
+                let mut coefficients = codewords[i * n..(i + 1) * n].to_vec();
+                intt(
+                    &mut coefficients,
+                    BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+                    logn,
+                );
+                Polynomial::new(coefficients)
+                    .scale(FF::from(domain_offset.inverse().value()))
+                    .reduce_by_ntt_friendly_modulus(&shift_coefficients, tail_length)
+                    .divide_and_conquer_batch_evaluate(&zerofier_tree)
+            })
+            .collect()
     }
 }
 
@@ -3834,7 +4070,7 @@ mod test_polynomials {
     }
 
     #[proptest]
-    fn coset_extrapolation_agrees_with_interpolate_then_evaluate(
+    fn coset_extrapolation_methods_agree_with_interpolate_then_evaluate(
         #[strategy(0usize..10)] _logn: usize,
         #[strategy(Just(1 << #_logn))] n: usize,
         #[strategy(vec(arb(), #n))] values: Vec<BFieldElement>,
@@ -3849,9 +4085,46 @@ mod test_polynomials {
                 Some(yld)
             })
             .collect_vec();
-        prop_assert_eq!(
-            Polynomial::<BFieldElement>::coset_extrapolation(offset, &values, &points),
-            Polynomial::interpolate(&domain, &values).batch_evaluate(&points)
-        )
+        let fast_coset_extrapolation =
+            Polynomial::<BFieldElement>::fast_coset_extrapolate(offset, &values, &points);
+        let naive_coset_extrapolation =
+            Polynomial::<BFieldElement>::naive_coset_extrapolate(offset, &values, &points);
+        let interpolation_then_evaluation =
+            Polynomial::interpolate(&domain, &values).batch_evaluate(&points);
+        prop_assert_eq!(fast_coset_extrapolation.clone(), naive_coset_extrapolation);
+        prop_assert_eq!(fast_coset_extrapolation, interpolation_then_evaluation);
+    }
+
+    #[proptest]
+    fn coset_extrapolate_and_batch_coset_extrapolate_agree(
+        #[strategy(1usize..10)] _logn: usize,
+        #[strategy(Just(1usize<<#_logn))] n: usize,
+        #[strategy(0usize..5)] _m: usize,
+        #[strategy(vec(arb(), #_m*#n))] codewords: Vec<BFieldElement>,
+        #[strategy(vec(arb(), 0usize..20))] points: Vec<BFieldElement>,
+    ) {
+        let offset = BFieldElement::new(7);
+
+        let one_by_one_dispatch = codewords
+            .chunks(n)
+            .flat_map(|chunk| Polynomial::coset_extrapolate(offset, chunk, &points))
+            .collect_vec();
+        let batched_dispatch = Polynomial::batch_coset_extrapolate(offset, n, &codewords, &points);
+        prop_assert_eq!(one_by_one_dispatch, batched_dispatch);
+
+        let one_by_one_fast = codewords
+            .chunks(n)
+            .flat_map(|chunk| Polynomial::fast_coset_extrapolate(offset, chunk, &points))
+            .collect_vec();
+        let batched_fast = Polynomial::batch_fast_coset_extrapolate(offset, n, &codewords, &points);
+        prop_assert_eq!(one_by_one_fast, batched_fast);
+
+        let one_by_one_naive = codewords
+            .chunks(n)
+            .flat_map(|chunk| Polynomial::naive_coset_extrapolate(offset, chunk, &points))
+            .collect_vec();
+        let batched_naive =
+            Polynomial::batch_naive_coset_extrapolate(offset, n, &codewords, &points);
+        prop_assert_eq!(one_by_one_naive, batched_naive);
     }
 }

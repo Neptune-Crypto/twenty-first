@@ -31,7 +31,7 @@ fn coset_extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Crite
 
     let id = BenchmarkId::new("Fast Codeword Extrapolation", log2_of_size);
     group.bench_function(id, |b| {
-        b.iter(|| Polynomial::<BFieldElement>::coset_extrapolation(offset, &codeword, &eval_points))
+        b.iter(|| Polynomial::<BFieldElement>::coset_extrapolate(offset, &codeword, &eval_points))
     });
 
     group.finish();
