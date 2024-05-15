@@ -30,17 +30,21 @@ criterion_group!(
 fn intt_then_evaluate(
     codeword: &[BFieldElement],
     offset: BFieldElement,
-    points: &[BFieldElement],
+    zerofier_tree: &ZerofierTree<BFieldElement>,
+    shift_coefficients: &[BFieldElement],
+    tail_length: usize,
 ) -> Vec<BFieldElement> {
     let omega = BFieldElement::primitive_root_of_unity(codeword.len() as u64).unwrap();
     let log_domain_length = codeword.len().ilog2();
     let mut coefficients = codeword.to_vec();
     intt(&mut coefficients, omega, log_domain_length);
-    let polynomial: Polynomial<BFieldElement> =
-        Polynomial::new(coefficients).scale(offset.inverse());
-    polynomial.batch_evaluate(points)
+    let polynomial: Polynomial<BFieldElement> = Polynomial::new(coefficients)
+        .scale(offset.inverse())
+        .reduce_by_ntt_friendly_modulus(shift_coefficients, tail_length);
+    polynomial.divide_and_conquer_batch_evaluate(zerofier_tree)
 }
 
+#[allow(dead_code)]
 fn iterative_barycentric(
     codeword: &[BFieldElement],
     points: &[BFieldElement],
@@ -164,6 +168,7 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
     let codeword = random_elements(SIZE);
     let offset = BFieldElement::new(7);
     let eval_points: Vec<BFieldElement> = random_elements(NUM_POINTS);
+
     let zerofier_tree = ZerofierTree::new_from_domain(&eval_points);
     let modulus = zerofier_tree.zerofier();
     let (even_zerofiers, odd_zerofiers, shift_coefficients, tail_length) =
@@ -171,13 +176,22 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
 
     let id = BenchmarkId::new("INTT-then-Evaluate", log2_of_size);
     group.bench_function(id, |b| {
-        b.iter(|| intt_then_evaluate(&codeword, offset, &eval_points))
+        b.iter(|| {
+            intt_then_evaluate(
+                &codeword,
+                offset,
+                &zerofier_tree,
+                &shift_coefficients,
+                tail_length,
+            )
+        })
     });
 
-    let id = BenchmarkId::new("Iterative Barycentric", log2_of_size);
-    group.bench_function(id, |b| {
-        b.iter(|| iterative_barycentric(&codeword, &eval_points))
-    });
+    // Iterative barycentric is never close to faster.
+    // let id = BenchmarkId::new("Iterative Barycentric", log2_of_size);
+    // group.bench_function(id, |b| {
+    //     b.iter(|| iterative_barycentric(&codeword, &eval_points))
+    // });
 
     let id = BenchmarkId::new("Fast Codeword Extrapolation", log2_of_size);
     group.bench_function(id, |b| {
@@ -192,6 +206,11 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
                 tail_length,
             )
         })
+    });
+
+    let id = BenchmarkId::new("Dispatcher (includes preprocessing)", log2_of_size);
+    group.bench_function(id, |b| {
+        b.iter(|| Polynomial::coset_extrapolate(offset, &codeword, &eval_points))
     });
 
     group.finish();

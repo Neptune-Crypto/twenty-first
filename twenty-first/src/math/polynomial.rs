@@ -1247,7 +1247,11 @@ where
     ///
     /// This method uses NTT-based multiplication, meaning that the unstructured
     /// part of the structured multiple must be given in NTT-domain.
-    fn reduce_by_ntt_friendly_modulus(&self, shift_ntt: &[FF], tail_length: usize) -> Self {
+    ///
+    /// This function is marked `pub` for benchmarking. Not considered part of
+    /// the public API
+    #[doc(hidden)]
+    pub fn reduce_by_ntt_friendly_modulus(&self, shift_ntt: &[FF], tail_length: usize) -> Self {
         // m = tail_length
         let domain_length = shift_ntt.len();
         assert!(domain_length.is_power_of_two());
@@ -1580,6 +1584,9 @@ where
         }
     }
 
+    /// Marked `pub` for benchmarking purposes. Not considered part of the
+    /// public API.
+    #[doc(hidden)]
     fn naive_coset_extrapolate_preprocessing(points: &[FF]) -> (ZerofierTree<FF>, Vec<FF>, usize) {
         let zerofier_tree = ZerofierTree::new_from_domain(points);
         let (shift_coefficients, tail_length) =
