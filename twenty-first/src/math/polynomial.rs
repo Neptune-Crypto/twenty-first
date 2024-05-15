@@ -154,7 +154,11 @@ where
 
     /// Regulates the recursion depth at which [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
     /// is slower and switches to [Lagrange interpolation](Self::lagrange_interpolate).
-    const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 7;
+    const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE: usize = 1 << 7;
+
+    /// Regulates the recursion depth at which [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
+    /// is slower and switches to [INTT](ntt::intt)-then-[reduce](Self::reduce).
+    const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT: usize = 1 << 17;
 
     /// Inside `formal_power_series_inverse`, when to multiply naively and when
     /// to use NTT-based multiplication. Use benchmark
@@ -1280,6 +1284,34 @@ where
         Polynomial::new(working_window)
     }
 
+    /// Only marked `pub` for benchmarking purposes. Not considered part of the
+    /// public API.
+    #[doc(hidden)]
+    pub fn shift_factor_ntt_with_tail_size(&self) -> (Vec<FF>, usize) {
+        let n = usize::max(
+            Polynomial::<FF>::FAST_REDUCE_CUTOFF_THRESHOLD,
+            self.degree() as usize * 2,
+        )
+        .next_power_of_two();
+        let ntt_friendly_multiple = self.structured_multiple_of_degree(n);
+        // m = 1 + degree(ntt_friendly_multiple - leading term)
+        let m = 1 + ntt_friendly_multiple
+            .coefficients
+            .iter()
+            .enumerate()
+            .rev()
+            .skip(1)
+            .find_map(|(i, c)| if !c.is_zero() { Some(i) } else { None })
+            .unwrap_or(0);
+        let mut shift_factor_ntt = ntt_friendly_multiple.coefficients[..n].to_vec();
+        ntt(
+            &mut shift_factor_ntt,
+            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+            n.ilog2(),
+        );
+        (shift_factor_ntt, m)
+    }
+
     /// Compute the remainder after division of one polynomial by another. This
     /// method first reduces the numerator by a multiple of the denominator that
     /// was constructed to enable NTT-based chunk-wise reduction, before
@@ -1303,28 +1335,9 @@ where
         //               |- n=2^k coefficients.
         // This allows us to reduce the numerator's coefficients in chunks of
         // n-m using NTT-based multiplication over a domain of size n = 2^k.
-        let n = usize::max(
-            Polynomial::<FF>::FAST_REDUCE_CUTOFF_THRESHOLD,
-            modulus.degree() as usize * 2,
-        )
-        .next_power_of_two();
-        let ntt_friendly_multiple = modulus.structured_multiple_of_degree(n);
-        // m = 1 + degree(ntt_friendly_multiple - leading term)
-        let m = 1 + ntt_friendly_multiple
-            .coefficients
-            .iter()
-            .enumerate()
-            .rev()
-            .skip(1)
-            .find_map(|(i, c)| if !c.is_zero() { Some(i) } else { None })
-            .unwrap_or(0);
-        let mut shift_factor_ntt = ntt_friendly_multiple.coefficients[..n].to_vec();
-        ntt(
-            &mut shift_factor_ntt,
-            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
-            n.ilog2(),
-        );
-        let mut intermediate_remainder = self.reduce_by_ntt_friendly_modulus(&shift_factor_ntt, m);
+        let (shift_factor_ntt, tail_size) = self.shift_factor_ntt_with_tail_size();
+        let mut intermediate_remainder =
+            self.reduce_by_ntt_friendly_modulus(&shift_factor_ntt, tail_size);
 
         // 2. Chunk-wise reduction with schoolbook multiplication.
         // We generate a smaller structured multiple of the denominator that
@@ -1378,18 +1391,77 @@ where
         Self::new(self.coefficients[..num_coefficients_to_retain].into())
     }
 
+    /// Compute f(X) mod m(X) where m(X) is a given modulus and f(X) is the
+    /// interpolant of a list of n values on a domain which is a coset of the
+    /// size-n subgroup that is identified by some offset.
     fn fast_modular_coset_interpolate(
         values: &[FF],
         offset: BFieldElement,
         modulus: &Polynomial<FF>,
     ) -> Self {
-        let Ok(modulus_degree) = TryInto::<usize>::try_into(modulus.degree()) else {
+        let n = values.len();
+        let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
+        // a list of polynomials whose ith element is X^(2^i) mod m(X)
+        let modular_squares = (0..n.ilog2())
+            .scan(
+                Polynomial::<FF>::new(vec![FF::from(0), FF::from(1)]),
+                |acc: &mut Polynomial<FF>, _| {
+                    let yld = acc.clone();
+                    *acc = acc.multiply(acc).reduce(modulus);
+                    Some(yld)
+                },
+            )
+            .collect_vec();
+        let even_zerofier_lcs = (0..n.ilog2())
+            .map(|i| offset.inverse().mod_pow(1u64 << i))
+            .collect_vec();
+        let even_zerofiers = even_zerofier_lcs
+            .into_iter()
+            .zip(modular_squares.iter())
+            .map(|(lc, sq)| sq.scalar_mul(FF::from(lc.value())) - Polynomial::one())
+            .collect_vec();
+        let odd_zerofier_lcs = (0..n.ilog2())
+            .map(|i| (offset * omega).inverse().mod_pow(1u64 << i))
+            .collect_vec();
+        let odd_zerofiers = odd_zerofier_lcs
+            .into_iter()
+            .zip(modular_squares.iter())
+            .map(|(lc, sq)| sq.scalar_mul(FF::from(lc.value())) - Polynomial::one())
+            .collect_vec();
+
+        // precompute NTT-friendly multiple of the modulus
+        let (shift_coefficients, tail_length) = modulus.shift_factor_ntt_with_tail_size();
+
+        Self::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
+            values,
+            offset,
+            modulus,
+            &even_zerofiers,
+            &odd_zerofiers,
+            &shift_coefficients,
+            tail_length,
+        )
+    }
+
+    /// Only marked `pub` for benchmarking purposes. Not considered part of the
+    /// interface.
+    #[doc(hidden)]
+    pub fn fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
+        values: &[FF],
+        offset: BFieldElement,
+        modulus: &Polynomial<FF>,
+        even_zerofiers: &[Polynomial<FF>],
+        odd_zerofiers: &[Polynomial<FF>],
+        shift_coefficients: &[FF],
+        tail_length: usize,
+    ) -> Self {
+        let Ok(_modulus_degree) = TryInto::<usize>::try_into(modulus.degree()) else {
             panic!("cannot reduce modulo zero")
         };
         let n = values.len();
         let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
 
-        if n < Self::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD && n <= 2 * modulus_degree {
+        if n < Self::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE {
             let domain = (0..n)
                 .scan(FF::from(offset.value()), |acc: &mut FF, _| {
                     let yld = *acc;
@@ -1399,13 +1471,14 @@ where
                 .collect::<Vec<FF>>();
             let interpolant = Self::lagrange_interpolate(&domain, values);
             return interpolant.reduce(modulus);
-        } else if n <= 2 * modulus_degree {
+        } else if n <= Self::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT {
             let mut coefficients = values.to_vec();
             intt(&mut coefficients, omega, n.ilog2());
             let interpolant = Polynomial::new(coefficients);
 
             return interpolant
                 .scale(FF::from(offset.inverse().value()))
+                .reduce_by_ntt_friendly_modulus(shift_coefficients, tail_length)
                 .reduce(modulus);
         }
 
@@ -1418,10 +1491,8 @@ where
         // The zerofiers are sparse because the domain is structured.
         // Even: (offset^-1 * X)^(n/2) - 1 = offset^{-n/2} * X^{n/2} - 1
         // Odd: ((offset * omega)^-1 * X)^(n/2) - 1 = offset^{-n/2} * omega^{n/2} * X^{n/2} - 1
-        // We also don't need to explicitly represent the zerofiers, but we do
-        // need their leading coefficients later.
-        let even_lc = offset.inverse().mod_pow((n / 2) as u64);
-        let odd_lc = (offset * omega).inverse().mod_pow((n / 2) as u64);
+        // Note that we are getting the (modularly reduced) zerofiers as
+        // function arguments.
 
         // 2. Evaluate zerofiers on opposite domains.
         // Actually, the values are compressible because the zerofiers are
@@ -1448,6 +1519,7 @@ where
             even_domain_targets[i] *= values[2 * i];
             odd_domain_targets[i] *= values[2 * i + 1];
         }
+
         // 5. Interpolate using recursion
         let even_interpolant =
             Self::fast_modular_coset_interpolate(&even_domain_targets, offset, modulus);
@@ -1455,31 +1527,8 @@ where
             Self::fast_modular_coset_interpolate(&odd_domain_targets, offset * omega, modulus);
 
         // 6. Multiply with zerofiers and add.
-        // Construct the coefficients smartly to exploit the structure.
-        let even_interpolant_with_odd_zeros = [
-            even_interpolant.coefficients.clone(),
-            vec![FF::from(0); n / 2 - even_interpolant.coefficients.len()],
-            even_interpolant
-                .scalar_mul(-FF::from(odd_lc.value()))
-                .coefficients,
-        ]
-        .concat();
-        let odd_interpolant_with_even_zeros = [
-            odd_interpolant.coefficients.clone(),
-            vec![FF::from(0); n / 2 - odd_interpolant.coefficients.len()],
-            odd_interpolant
-                .scalar_mul(-FF::from(even_lc.value()))
-                .coefficients,
-        ]
-        .concat();
-
-        let interpolant = Polynomial::new(
-            even_interpolant_with_odd_zeros
-                .into_iter()
-                .zip(odd_interpolant_with_even_zeros)
-                .map(|(l, r)| -(l + r))
-                .collect_vec(),
-        );
+        let interpolant = even_interpolant.multiply(&odd_zerofiers[(n / 2).ilog2() as usize])
+            + odd_interpolant.multiply(&even_zerofiers[(n / 2).ilog2() as usize]);
 
         // 7. Reduce by modulus and return.
         interpolant.reduce(modulus)
