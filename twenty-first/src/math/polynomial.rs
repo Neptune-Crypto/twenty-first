@@ -154,7 +154,7 @@ where
 
     /// Regulates the recursion depth at which [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
     /// is slower and switches to [Lagrange interpolation](Self::lagrange_interpolate).
-    const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE: usize = 1 << 7;
+    const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE: usize = 1 << 8;
 
     /// Regulates the recursion depth at which [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
     /// is slower and switches to [INTT](ntt::intt)-then-[reduce](Self::reduce).
@@ -1335,7 +1335,8 @@ where
         //               |- n=2^k coefficients.
         // This allows us to reduce the numerator's coefficients in chunks of
         // n-m using NTT-based multiplication over a domain of size n = 2^k.
-        let (shift_factor_ntt, tail_size) = self.shift_factor_ntt_with_tail_size();
+
+        let (shift_factor_ntt, tail_size) = modulus.shift_factor_ntt_with_tail_size();
         let mut intermediate_remainder =
             self.reduce_by_ntt_friendly_modulus(&shift_factor_ntt, tail_size);
 
