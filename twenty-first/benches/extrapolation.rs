@@ -55,6 +55,7 @@ fn iterative_barycentric(
         .collect_vec()
 }
 
+#[allow(clippy::type_complexity)]
 fn even_and_odd_zerofiers_and_shift_coefficients_with_tail_length(
     n: usize,
     offset: BFieldElement,
@@ -155,7 +156,7 @@ pub fn coset_extrapolation(
             shift_coefficients,
             tail_length
         );
-    minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
+    minimal_interpolant.divide_and_conquer_batch_evaluate(zerofier_tree)
 }
 
 fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {
