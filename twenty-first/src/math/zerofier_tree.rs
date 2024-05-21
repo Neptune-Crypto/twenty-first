@@ -1,7 +1,5 @@
 use std::collections::VecDeque;
 use std::ops::MulAssign;
-use std::sync::Arc;
-use std::sync::OnceLock;
 
 use num_traits::One;
 
@@ -9,19 +7,39 @@ use super::b_field_element::BFieldElement;
 use super::polynomial::Polynomial;
 use super::traits::FiniteField;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Leaf<FF: FiniteField + MulAssign<BFieldElement>> {
     pub points: Vec<FF>,
     zerofier: Polynomial<FF>,
 }
-
-#[derive(Debug, Clone)]
+impl<FF> Leaf<FF>
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    pub fn new(points: Vec<FF>) -> Self {
+        let zerofier = Polynomial::zerofier(&points);
+        Self { points, zerofier }
+    }
+}
+#[derive(Debug, Clone, PartialEq)]
 pub struct Branch<FF: FiniteField + MulAssign<BFieldElement>> {
     zerofier: Polynomial<FF>,
-    left: ZerofierTree<FF>,
-    right: ZerofierTree<FF>,
+    pub(crate) left: ZerofierTree<FF>,
+    pub(crate) right: ZerofierTree<FF>,
 }
-
+impl<FF> Branch<FF>
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    pub fn new(left: ZerofierTree<FF>, right: ZerofierTree<FF>) -> Self {
+        let zerofier = left.zerofier().multiply(&right.zerofier());
+        Self {
+            zerofier,
+            left,
+            right,
+        }
+    }
+}
 /// A zerofier tree is a balanced binary tree of vanishing polynomials.
 /// Conceptually, every leaf corresponds to a single point, and the value of
 /// that leaf is the monic linear polynomial that evaluates to zero there and
@@ -29,10 +47,10 @@ pub struct Branch<FF: FiniteField + MulAssign<BFieldElement>> {
 /// In practice, it makes sense to truncate the tree depth, in which case every
 /// leaf contains a chunk of points whose size is upper-bounded and more or less
 /// equal to some constant threshold.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ZerofierTree<FF: FiniteField + MulAssign<BFieldElement>> {
-    Leaf(Arc<OnceLock<Leaf<FF>>>),
-    Branch(Arc<OnceLock<Branch<FF>>>),
+    Leaf(Leaf<FF>),
+    Branch(Box<Branch<FF>>),
     Padding,
 }
 
@@ -45,30 +63,19 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<FF> {
         let mut nodes = domain
             .chunks(Self::ZEROFIER_TREE_RECURSION_CUTOFF_THRESHOLD)
             .map(|chunk| {
-                let zerofier = Polynomial::zerofier(chunk);
-                let points = chunk.to_vec();
-                let leaf = Leaf { zerofier, points };
-                let leaf_once_lock = OnceLock::new();
-                leaf_once_lock.get_or_init(|| leaf);
-                ZerofierTree::Leaf(Arc::new(leaf_once_lock))
+                let leaf = Leaf::new(chunk.to_vec());
+                ZerofierTree::Leaf(leaf)
             })
             .collect::<VecDeque<_>>();
         nodes.resize(nodes.len().next_power_of_two(), ZerofierTree::Padding);
         while nodes.len() > 1 {
             let right = nodes.pop_back().unwrap();
             let left = nodes.pop_back().unwrap();
-            if matches!(left, ZerofierTree::Padding) {
+            if left == ZerofierTree::Padding {
                 nodes.push_front(ZerofierTree::Padding);
             } else {
-                let zerofier = left.zerofier().multiply(&right.zerofier());
-                let new_node = Branch {
-                    zerofier,
-                    left,
-                    right,
-                };
-                let new_node_once_lock = OnceLock::new();
-                new_node_once_lock.get_or_init(|| new_node);
-                nodes.push_front(ZerofierTree::Branch(Arc::new(new_node_once_lock)));
+                let new_node = Branch::new(left, right);
+                nodes.push_front(ZerofierTree::Branch(Box::new(new_node)));
             }
         }
         nodes.front().unwrap().clone()
@@ -76,30 +83,9 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<FF> {
 
     pub fn zerofier(&self) -> Polynomial<FF> {
         match self {
-            ZerofierTree::Leaf(leaf) => leaf.get().unwrap().zerofier.clone(),
-            ZerofierTree::Branch(branch) => branch.get().unwrap().zerofier.clone(),
+            ZerofierTree::Leaf(leaf) => leaf.zerofier.clone(),
+            ZerofierTree::Branch(branch) => branch.zerofier.clone(),
             ZerofierTree::Padding => Polynomial::<FF>::one(),
-        }
-    }
-
-    pub fn left_branch(&self) -> Option<ZerofierTree<FF>> {
-        match self {
-            ZerofierTree::Branch(branch) => Some(branch.get().unwrap().left.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn right_branch(&self) -> Option<ZerofierTree<FF>> {
-        match self {
-            ZerofierTree::Branch(branch) => Some(branch.get().unwrap().right.clone()),
-            _ => None,
-        }
-    }
-
-    pub fn leaf(&self) -> Option<Leaf<FF>> {
-        match self {
-            ZerofierTree::Leaf(leaf) => Some(leaf.get().unwrap().clone()),
-            _ => None,
         }
     }
 }
@@ -107,14 +93,14 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<FF> {
 #[cfg(test)]
 mod test {
     use num_traits::Zero;
-    use proptest::{collection::vec, prop_assert_eq};
+    use proptest::collection::vec;
+    use proptest::prop_assert_eq;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::{
-        math::zerofier_tree::ZerofierTree,
-        prelude::{BFieldElement, Polynomial},
-    };
+    use crate::math::zerofier_tree::ZerofierTree;
+    use crate::prelude::BFieldElement;
+    use crate::prelude::Polynomial;
 
     #[proptest]
     fn zerofier_tree_root_is_multiple_of_children(
@@ -122,17 +108,17 @@ mod test {
         points: Vec<BFieldElement>,
     ) {
         let zerofier_tree = ZerofierTree::new_from_domain(&points);
+        let (left, right) = match &zerofier_tree {
+            ZerofierTree::Branch(branch) => (&branch.left, &branch.right),
+            _ => panic!("not enough leafs"),
+        };
         prop_assert_eq!(
             Polynomial::zero(),
-            zerofier_tree
-                .zerofier()
-                .reduce(&zerofier_tree.left_branch().unwrap().zerofier())
+            zerofier_tree.zerofier().reduce(&left.zerofier())
         );
         prop_assert_eq!(
             Polynomial::zero(),
-            zerofier_tree
-                .zerofier()
-                .reduce(&zerofier_tree.right_branch().unwrap().zerofier())
+            zerofier_tree.zerofier().reduce(&right.zerofier())
         );
     }
 

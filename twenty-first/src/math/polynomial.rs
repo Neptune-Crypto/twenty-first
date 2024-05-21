@@ -845,12 +845,12 @@ where
     #[doc(hidden)]
     pub fn divide_and_conquer_batch_evaluate(&self, zerofier_tree: &ZerofierTree<FF>) -> Vec<FF> {
         match zerofier_tree {
-            ZerofierTree::Leaf(_) => self
+            ZerofierTree::Leaf(leaf) => self
                 .reduce(&zerofier_tree.zerofier())
-                .iterative_batch_evaluate(&zerofier_tree.leaf().unwrap().points),
-            ZerofierTree::Branch(_) => [
-                self.divide_and_conquer_batch_evaluate(&zerofier_tree.left_branch().unwrap()),
-                self.divide_and_conquer_batch_evaluate(&zerofier_tree.right_branch().unwrap()),
+                .iterative_batch_evaluate(&leaf.points),
+            ZerofierTree::Branch(branch) => [
+                self.divide_and_conquer_batch_evaluate(&branch.left),
+                self.divide_and_conquer_batch_evaluate(&branch.right),
             ]
             .concat(),
             ZerofierTree::Padding => vec![],
