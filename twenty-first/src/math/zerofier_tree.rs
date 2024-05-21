@@ -1,12 +1,13 @@
-use std::{
-    collections::VecDeque,
-    ops::MulAssign,
-    sync::{Arc, OnceLock},
-};
+use std::collections::VecDeque;
+use std::ops::MulAssign;
+use std::sync::Arc;
+use std::sync::OnceLock;
 
 use num_traits::One;
 
-use super::{b_field_element::BFieldElement, polynomial::Polynomial, traits::FiniteField};
+use super::b_field_element::BFieldElement;
+use super::polynomial::Polynomial;
+use super::traits::FiniteField;
 
 #[derive(Debug, Clone)]
 pub struct Leaf<FF: FiniteField + MulAssign<BFieldElement>> {
@@ -21,10 +22,13 @@ pub struct Branch<FF: FiniteField + MulAssign<BFieldElement>> {
     right: ZerofierTree<FF>,
 }
 
-/// A zerofier tree is a balanced binary tree of vanishing polynomials. Every
-/// leaf corresponds to a single point, and the value of that leaf is the monic
-/// linear polynomial that evaluates to zero there and no-where else. Every
-/// non-leaf node is the product of its two children.
+/// A zerofier tree is a balanced binary tree of vanishing polynomials.
+/// Conceptually, every leaf corresponds to a single point, and the value of
+/// that leaf is the monic linear polynomial that evaluates to zero there and
+/// no-where else. Every non-leaf node is the product of its two children.
+/// In practice, it makes sense to truncate the tree depth, in which case every
+/// leaf contains a chunk of points whose size is upper-bounded and more or less
+/// equal to some constant threshold.
 #[derive(Debug, Clone)]
 pub enum ZerofierTree<FF: FiniteField + MulAssign<BFieldElement>> {
     Leaf(Arc<OnceLock<Leaf<FF>>>),
@@ -33,6 +37,8 @@ pub enum ZerofierTree<FF: FiniteField + MulAssign<BFieldElement>> {
 }
 
 impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<FF> {
+    /// Regulates the depth at which the tree is truncated. Phrased differently,
+    /// regulates the number of points contained by each leaf.
     const ZEROFIER_TREE_RECURSION_CUTOFF_THRESHOLD: usize = 16;
 
     pub fn new_from_domain(domain: &[FF]) -> Self {
@@ -47,9 +53,7 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<FF> {
                 ZerofierTree::Leaf(Arc::new(leaf_once_lock))
             })
             .collect::<VecDeque<_>>();
-        for _ in nodes.len()..nodes.len().next_power_of_two() {
-            nodes.push_back(ZerofierTree::Padding);
-        }
+        nodes.resize(nodes.len().next_power_of_two(), ZerofierTree::Padding);
         while nodes.len() > 1 {
             let right = nodes.pop_back().unwrap();
             let left = nodes.pop_back().unwrap();

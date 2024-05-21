@@ -177,7 +177,7 @@ where
     /// "fast"ness comes from using NTT-based multiplication in the chunk-wise
     /// reduction step. This const regulates the chunk size and thus the domain
     /// size of the NTT.
-    pub const FAST_REDUCE_CUTOFF_THRESHOLD: usize = 1 << 8;
+    const FAST_REDUCE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
     /// When doing batch evaluation, sometimes it makes sense to reduce the
     /// polynomial modulo the zerofier of the domain first. This const regulates
@@ -353,23 +353,22 @@ where
         Self::new(hadamard_product)
     }
 
+    /// Multiply a bunch of polynomials together.
     pub fn batch_multiply(factors: &[Self]) -> Self {
         factors.iter().fold(Self::one(), |l, r| l.multiply(r))
     }
 
+    /// Parallel version of [`batch_multiply`](Self::batch_multiply).
     pub fn par_batch_multiply(factors: &[Self]) -> Self {
-        let num_threads = available_parallelism().map(|nzu| nzu.get()).unwrap_or(1);
+        let num_threads = available_parallelism()
+            .map(|non_zero_usize| non_zero_usize.get())
+            .unwrap_or(1);
         let mut products = factors.to_vec();
         while products.len() != 1 {
             let chunk_size = usize::max(2, products.len() / num_threads);
-            let num_chunks = (products.len() + chunk_size - 1) / chunk_size;
-            products = (0..num_chunks)
-                .into_par_iter()
-                .map(|i| {
-                    let start = i * chunk_size;
-                    let stop = usize::min((i + 1) * chunk_size, products.len());
-                    Self::batch_multiply(&products[start..stop])
-                })
+            products = products
+                .par_chunks(chunk_size)
+                .map(Self::batch_multiply)
                 .collect();
         }
         products.first().unwrap().clone()
@@ -405,19 +404,16 @@ where
         if roots.is_empty() {
             return Self::one();
         }
-        let num_threads = available_parallelism().map(|nzu| nzu.get()).unwrap_or(1);
+        let num_threads = available_parallelism()
+            .map(|non_zero_usize| non_zero_usize.get())
+            .unwrap_or(1);
         let chunk_size = usize::max(
             Self::FAST_ZEROFIER_CUTOFF_THRESHOLD,
             (roots.len() + num_threads - 1) / num_threads,
         );
-        let num_chunks = (roots.len() + chunk_size - 1) / chunk_size;
-        let factors = (0..num_chunks)
-            .into_par_iter()
-            .map(|i| {
-                let start = i * chunk_size;
-                let stop = usize::min(roots.len(), (i + 1) * chunk_size);
-                Self::zerofier(&roots[start..stop])
-            })
+        let factors = roots
+            .par_chunks(chunk_size)
+            .map(|chunk| Self::zerofier(chunk))
             .collect::<Vec<_>>();
         Self::par_batch_multiply(&factors)
     }
@@ -823,7 +819,9 @@ where
 
     /// Parallel version of [`batch_evaluate`](Self::batch_evaluate).
     pub fn par_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        let num_threads = available_parallelism().map(|nzu| nzu.get()).unwrap_or(1);
+        let num_threads = available_parallelism()
+            .map(|non_zero_usize| non_zero_usize.get())
+            .unwrap_or(1);
         let chunk_size = domain.len().next_multiple_of(num_threads) / num_threads;
         domain
             .par_chunks(chunk_size)
@@ -841,20 +839,6 @@ where
     #[doc(hidden)]
     pub fn par_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         domain.par_iter().map(|&p| self.evaluate(p)).collect()
-    }
-
-    /// Only `pub` to allow benchmarking; not considered part of the public API.
-    #[doc(hidden)]
-    pub fn vector_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        let mut accumulators = vec![FF::zero(); domain.len()];
-        for &c in self.coefficients.iter().rev() {
-            accumulators
-                .par_iter_mut()
-                .zip(domain)
-                .for_each(|(acc, &x)| *acc = *acc * x + c);
-        }
-
-        accumulators
     }
 
     /// Only `pub` to allow benchmarking; not considered part of the public API.
@@ -3097,16 +3081,6 @@ mod test_polynomials {
         let evaluations = domain.iter().map(|&x| poly.evaluate(x)).collect_vec();
         let fast_evaluations = poly.batch_evaluate(&domain);
         prop_assert_eq!(evaluations, fast_evaluations);
-    }
-
-    #[proptest]
-    fn slow_and_vector_batch_polynomial_evaluation_are_equivalent(
-        poly: Polynomial<BFieldElement>,
-        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
-    ) {
-        let evaluations = domain.iter().map(|&x| poly.evaluate(x)).collect_vec();
-        let vector_batch_evaluations = poly.vector_batch_evaluate(&domain);
-        prop_assert_eq!(evaluations, vector_batch_evaluations);
     }
 
     #[test]

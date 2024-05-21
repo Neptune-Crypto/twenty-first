@@ -7,7 +7,6 @@ use itertools::Itertools;
 use num_traits::One;
 use twenty_first::math::ntt::intt;
 use twenty_first::math::other::random_elements;
-use twenty_first::math::traits::FiniteField;
 use twenty_first::math::traits::PrimitiveRootOfUnity;
 use twenty_first::math::zerofier_tree::ZerofierTree;
 use twenty_first::prelude::*;
@@ -44,119 +43,48 @@ fn intt_then_evaluate(
     polynomial.divide_and_conquer_batch_evaluate(zerofier_tree)
 }
 
-#[allow(dead_code)]
-fn iterative_barycentric(
-    codeword: &[BFieldElement],
-    points: &[BFieldElement],
-) -> Vec<BFieldElement> {
-    points
-        .iter()
-        .map(|&p| barycentric_evaluate(codeword, p))
-        .collect_vec()
+struct PreprocessingData {
+    pub even_zerofiers_reduced: Vec<Polynomial<BFieldElement>>,
+    pub odd_zerofiers_reduced: Vec<Polynomial<BFieldElement>>,
+    pub shift_coefficients: Vec<BFieldElement>,
+    pub tail_length: usize,
 }
 
-#[allow(clippy::type_complexity)]
-fn even_and_odd_zerofiers_and_shift_coefficients_with_tail_length(
-    n: usize,
-    offset: BFieldElement,
+fn preprocess(
+    codeword_length: usize,
+    domain_offset: BFieldElement,
     modulus: &Polynomial<BFieldElement>,
-) -> (
-    Vec<Polynomial<BFieldElement>>,
-    Vec<Polynomial<BFieldElement>>,
-    Vec<BFieldElement>,
-    usize,
-) {
+) -> PreprocessingData {
+    let n = codeword_length;
     let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
     let modular_squares = (0..n.ilog2())
-        .scan(
-            Polynomial::<BFieldElement>::new(vec![BFieldElement::from(0), BFieldElement::from(1)]),
-            |acc: &mut Polynomial<BFieldElement>, _| {
-                let yld = acc.clone();
-                *acc = acc.multiply(acc).reduce(modulus);
-                Some(yld)
-            },
-        )
+        .scan(Polynomial::new(bfe_vec![0, 1]), |acc, _| {
+            let yld = acc.clone();
+            *acc = acc.multiply(acc).reduce(modulus);
+            Some(yld)
+        })
         .collect_vec();
-    let even_zerofier_lcs = (0..n.ilog2())
-        .map(|i| offset.inverse().mod_pow(1u64 << i))
-        .collect_vec();
-    let even_zerofiers = even_zerofier_lcs
-        .into_iter()
+    let even_zerofier_lcs = (0..n.ilog2()).map(|i| domain_offset.inverse().mod_pow(1 << i));
+    let even_zerofiers_reduced = even_zerofier_lcs
         .zip(modular_squares.iter())
-        .map(|(lc, sq)| sq.scalar_mul(BFieldElement::from(lc.value())) - Polynomial::one())
+        .map(|(lc, sq)| sq.scalar_mul(lc) - Polynomial::one())
         .collect_vec();
-    let odd_zerofier_lcs = (0..n.ilog2())
-        .map(|i| (offset * omega).inverse().mod_pow(1u64 << i))
-        .collect_vec();
-    let odd_zerofiers = odd_zerofier_lcs
-        .into_iter()
+    let odd_zerofier_lcs =
+        (0..n.ilog2()).map(|i| (domain_offset * omega).inverse().mod_pow(1 << i));
+    let odd_zerofiers_reduced = odd_zerofier_lcs
         .zip(modular_squares.iter())
-        .map(|(lc, sq)| sq.scalar_mul(BFieldElement::from(lc.value())) - Polynomial::one())
+        .map(|(lc, sq)| sq.scalar_mul(lc) - Polynomial::one())
         .collect_vec();
 
     // precompute NTT-friendly multiple of the modulus
     let (shift_coefficients, tail_length) = modulus.shift_factor_ntt_with_tail_size();
 
-    (
-        even_zerofiers,
-        odd_zerofiers,
+    PreprocessingData {
+        even_zerofiers_reduced,
+        odd_zerofiers_reduced,
         shift_coefficients,
         tail_length,
-    )
-}
-
-/// Lifted from repo triton-vm file fri.rs, which in turn [Credit]s Al Kindi.
-///
-/// [Credit]: https://github.com/0xPolygonMiden/miden-vm/issues/568
-pub fn barycentric_evaluate(
-    codeword: &[BFieldElement],
-    indeterminate: BFieldElement,
-) -> BFieldElement {
-    let root_order = codeword.len().try_into().unwrap();
-    let generator = BFieldElement::primitive_root_of_unity(root_order).unwrap();
-    let domain_iter = (0..root_order)
-        .scan(bfe!(1), |acc, _| {
-            let to_yield = Some(*acc);
-            *acc *= generator;
-            to_yield
-        })
-        .collect_vec();
-
-    let domain_shift = domain_iter.iter().map(|&d| indeterminate - d).collect();
-    let domain_shift_inverses = BFieldElement::batch_inversion(domain_shift);
-    let domain_over_domain_shift = domain_iter
-        .into_iter()
-        .zip(domain_shift_inverses)
-        .map(|(d, inv)| d * inv);
-    let numerator = domain_over_domain_shift
-        .clone()
-        .zip(codeword)
-        .map(|(dsi, &abscis)| dsi * abscis)
-        .sum::<BFieldElement>();
-    let denominator = domain_over_domain_shift.sum::<BFieldElement>();
-    numerator / denominator
-}
-
-pub fn coset_extrapolation(
-    domain_offset: BFieldElement,
-    codeword: &[BFieldElement],
-    zerofier_tree: &ZerofierTree<BFieldElement>,
-    even_zerofiers: &[Polynomial<BFieldElement>],
-    odd_zerofiers: &[Polynomial<BFieldElement>],
-    shift_coefficients: &[BFieldElement],
-    tail_length: usize,
-) -> Vec<BFieldElement> {
-    let minimal_interpolant =
-        Polynomial::<BFieldElement>::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
-            codeword,
-            domain_offset,
-            &zerofier_tree.zerofier(),
-            even_zerofiers,
-            odd_zerofiers,
-            shift_coefficients,
-            tail_length
-        );
-    minimal_interpolant.divide_and_conquer_batch_evaluate(zerofier_tree)
+    }
 }
 
 fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {
@@ -164,7 +92,6 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
     let mut group = c.benchmark_group(format!(
         "Extrapolation of length-{SIZE} codeword in {NUM_POINTS} Points"
     ));
-    group.sample_size(10);
 
     let codeword = random_elements(SIZE);
     let offset = BFieldElement::new(7);
@@ -172,8 +99,7 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
 
     let zerofier_tree = ZerofierTree::new_from_domain(&eval_points);
     let modulus = zerofier_tree.zerofier();
-    let (even_zerofiers, odd_zerofiers, shift_coefficients, tail_length) =
-        even_and_odd_zerofiers_and_shift_coefficients_with_tail_length(SIZE, offset, &modulus);
+    let preprocessing_data = preprocess(SIZE, offset, &modulus);
 
     let id = BenchmarkId::new("INTT-then-Evaluate", log2_of_size);
     group.bench_function(id, |b| {
@@ -182,30 +108,29 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
                 &codeword,
                 offset,
                 &zerofier_tree,
-                &shift_coefficients,
-                tail_length,
+                &preprocessing_data.shift_coefficients,
+                preprocessing_data.tail_length,
             )
         })
     });
 
-    // Iterative barycentric is never close to faster.
-    // let id = BenchmarkId::new("Iterative Barycentric", log2_of_size);
-    // group.bench_function(id, |b| {
-    //     b.iter(|| iterative_barycentric(&codeword, &eval_points))
-    // });
-
+    // We used to have another benchmark here that used barycentric evaluation
+    // (from `fri.rs` in repo triton-vm) inside of a loop over all points. It
+    // was never close to faster.
     let id = BenchmarkId::new("Fast Codeword Extrapolation", log2_of_size);
     group.bench_function(id, |b| {
         b.iter(|| {
-            coset_extrapolation(
+            let minimal_interpolant =
+        Polynomial::<BFieldElement>::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
+            &codeword,
                 offset,
-                &codeword,
-                &zerofier_tree,
-                &even_zerofiers,
-                &odd_zerofiers,
-                &shift_coefficients,
-                tail_length,
-            )
+                &modulus,
+                &preprocessing_data.even_zerofiers_reduced,
+                &preprocessing_data.odd_zerofiers_reduced,
+                &preprocessing_data.shift_coefficients,
+                preprocessing_data.tail_length,
+            );
+            minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
         })
     });
 
