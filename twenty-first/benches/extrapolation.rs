@@ -3,8 +3,6 @@ use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
 
-use itertools::Itertools;
-use num_traits::One;
 use twenty_first::math::ntt::intt;
 use twenty_first::math::other::random_elements;
 use twenty_first::math::traits::PrimitiveRootOfUnity;
@@ -43,50 +41,6 @@ fn intt_then_evaluate(
     polynomial.divide_and_conquer_batch_evaluate(zerofier_tree)
 }
 
-struct PreprocessingData {
-    pub even_zerofiers_reduced: Vec<Polynomial<BFieldElement>>,
-    pub odd_zerofiers_reduced: Vec<Polynomial<BFieldElement>>,
-    pub shift_coefficients: Vec<BFieldElement>,
-    pub tail_length: usize,
-}
-
-fn preprocess(
-    codeword_length: usize,
-    domain_offset: BFieldElement,
-    modulus: &Polynomial<BFieldElement>,
-) -> PreprocessingData {
-    let n = codeword_length;
-    let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
-    let modular_squares = (0..n.ilog2())
-        .scan(Polynomial::new(bfe_vec![0, 1]), |acc, _| {
-            let yld = acc.clone();
-            *acc = acc.multiply(acc).reduce(modulus);
-            Some(yld)
-        })
-        .collect_vec();
-    let even_zerofier_lcs = (0..n.ilog2()).map(|i| domain_offset.inverse().mod_pow(1 << i));
-    let even_zerofiers_reduced = even_zerofier_lcs
-        .zip(modular_squares.iter())
-        .map(|(lc, sq)| sq.scalar_mul(lc) - Polynomial::one())
-        .collect_vec();
-    let odd_zerofier_lcs =
-        (0..n.ilog2()).map(|i| (domain_offset * omega).inverse().mod_pow(1 << i));
-    let odd_zerofiers_reduced = odd_zerofier_lcs
-        .zip(modular_squares.iter())
-        .map(|(lc, sq)| sq.scalar_mul(lc) - Polynomial::one())
-        .collect_vec();
-
-    // precompute NTT-friendly multiple of the modulus
-    let (shift_coefficients, tail_length) = modulus.shift_factor_ntt_with_tail_size();
-
-    PreprocessingData {
-        even_zerofiers_reduced,
-        odd_zerofiers_reduced,
-        shift_coefficients,
-        tail_length,
-    }
-}
-
 fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {
     let log2_of_size = SIZE.ilog2();
     let mut group = c.benchmark_group(format!(
@@ -99,7 +53,8 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
 
     let zerofier_tree = ZerofierTree::new_from_domain(&eval_points);
     let modulus = zerofier_tree.zerofier();
-    let preprocessing_data = preprocess(SIZE, offset, &modulus);
+    let preprocessing_data =
+        Polynomial::fast_modular_coset_interpolate_preprocess(SIZE, offset, &modulus);
 
     let id = BenchmarkId::new("INTT-then-Evaluate", log2_of_size);
     group.bench_function(id, |b| {
@@ -125,10 +80,7 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
             &codeword,
                 offset,
                 &modulus,
-                &preprocessing_data.even_zerofiers_reduced,
-                &preprocessing_data.odd_zerofiers_reduced,
-                &preprocessing_data.shift_coefficients,
-                preprocessing_data.tail_length,
+                &preprocessing_data
             );
             minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
         })

@@ -70,6 +70,9 @@ pub(crate) mod tests {
         implements_usual_auto_traits::<math::zerofier_tree::Branch<BFieldElement>>();
         implements_usual_auto_traits::<math::zerofier_tree::Leaf<BFieldElement>>();
         implements_usual_auto_traits::<math::zerofier_tree::ZerofierTree<BFieldElement>>();
+        implements_usual_auto_traits::<
+            math::polynomial::ModularInterpolationPreprocessingData<BFieldElement>,
+        >();
     }
 
     #[test]
