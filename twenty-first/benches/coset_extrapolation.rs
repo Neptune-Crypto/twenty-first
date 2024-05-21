@@ -23,7 +23,6 @@ fn coset_extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Crite
     let mut group = c.benchmark_group(format!(
         "Fast extrapolation of length-{SIZE} codeword in {NUM_POINTS} Points"
     ));
-    group.sample_size(10);
 
     let codeword = random_elements(SIZE);
     let offset = BFieldElement::new(7);

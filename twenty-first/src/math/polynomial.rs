@@ -163,11 +163,14 @@ where
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
     const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
-    /// Regulates the recursion depth at which [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
-    /// is slower and switches to [Lagrange interpolation](Self::lagrange_interpolate).
+    /// Regulates the recursion depth at which
+    /// [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
+    /// is slower and switches to
+    /// [Lagrange interpolation](Self::lagrange_interpolate).
     const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE: usize = 1 << 8;
 
-    /// Regulates the recursion depth at which [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
+    /// Regulates the recursion depth at which
+    /// [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
     /// is slower and switches to [INTT](ntt::intt)-then-[reduce](Self::reduce).
     const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT: usize = 1 << 17;
 
@@ -366,6 +369,13 @@ where
 
     /// Multiply a bunch of polynomials together.
     pub fn batch_multiply(factors: &[Self]) -> Self {
+        // Build a tree-like structure of multiplications to keep the degrees of the
+        // factors roughly equal throughout the process. This makes efficient use of
+        // the `.multiply()` dispatcher.
+        // In contrast, using a simple `.reduce()`, the accumulator polynomial would
+        // have a much higher degree than the individual factors.
+        // todo: benchmark the current approach against the “reduce” approach.
+
         if factors.is_empty() {
             return Polynomial::one();
         }
@@ -435,10 +445,10 @@ where
         let num_threads = available_parallelism()
             .map(|non_zero_usize| non_zero_usize.get())
             .unwrap_or(1);
-        let chunk_size = usize::max(
-            Self::FAST_ZEROFIER_CUTOFF_THRESHOLD,
-            (roots.len() + num_threads - 1) / num_threads,
-        );
+        let chunk_size = roots
+            .len()
+            .div_ceil(num_threads)
+            .max(Self::FAST_ZEROFIER_CUTOFF_THRESHOLD);
         let factors = roots
             .par_chunks(chunk_size)
             .map(|chunk| Self::zerofier(chunk))
@@ -466,10 +476,8 @@ where
     #[doc(hidden)]
     pub fn fast_zerofier(roots: &[FF]) -> Self {
         let mid_point = roots.len() / 2;
-        let (left, right) = (
-            Self::zerofier(&roots[..mid_point]),
-            Self::zerofier(&roots[mid_point..]),
-        );
+        let left = Self::zerofier(&roots[..mid_point]);
+        let right = Self::zerofier(&roots[mid_point..]);
 
         left.multiply(&right)
     }
@@ -830,7 +838,11 @@ where
 
     /// Evaluate the polynomial on a batch of points.
     pub fn batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        if self.degree() >= Self::REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO * (domain.len() as isize) {
+        if self.is_zero() {
+            vec![FF::zero(); domain.len()]
+        } else if self.degree()
+            >= Self::REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO * (domain.len() as isize)
+        {
             self.reduce_then_batch_evaluate(domain)
         } else {
             let zerofier_tree = ZerofierTree::new_from_domain(domain);
@@ -847,10 +859,13 @@ where
 
     /// Parallel version of [`batch_evaluate`](Self::batch_evaluate).
     pub fn par_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        if domain.is_empty() || self.is_zero() {
+            return vec![FF::zero(); domain.len()];
+        }
         let num_threads = available_parallelism()
             .map(|non_zero_usize| non_zero_usize.get())
             .unwrap_or(1);
-        let chunk_size = domain.len().next_multiple_of(num_threads) / num_threads;
+        let chunk_size = domain.len().div_ceil(num_threads);
         domain
             .par_chunks(chunk_size)
             .flat_map(|ch| self.batch_evaluate(ch))
@@ -861,12 +876,6 @@ where
     #[doc(hidden)]
     pub fn iterative_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         domain.iter().map(|&p| self.evaluate(p)).collect()
-    }
-
-    /// Only marked `pub` for benchmarking; not considered part of the public API.
-    #[doc(hidden)]
-    pub fn par_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        domain.par_iter().map(|&p| self.evaluate(p)).collect()
     }
 
     /// Only `pub` to allow benchmarking; not considered part of the public API.
@@ -1209,19 +1218,14 @@ where
     /// generic case.
     fn reduce_by_structured_modulus(&self, multiple: &Self) -> Self {
         assert_ne!(multiple.degree(), 0);
-        let leading_term = Polynomial::new(
-            [
-                vec![FF::from(0); multiple.degree() as usize],
-                vec![FF::from(1); 1],
-            ]
-            .concat(),
-        );
+        let multiple_degree = usize::try_from(multiple.degree()).expect("cannot reduce by zero");
+        let leading_term =
+            Polynomial::new([vec![FF::from(0); multiple_degree], vec![FF::from(1); 1]].concat());
         let shift_polynomial = multiple.clone() - leading_term.clone();
-        let m = match TryInto::<usize>::try_into(shift_polynomial.degree()) {
-            Ok(unsigned_degree) => unsigned_degree + 1,
-            Err(_) => 0,
-        };
-        let n = multiple.degree() as usize - m;
+        let m = usize::try_from(shift_polynomial.degree())
+            .map(|unsigned_degree| unsigned_degree + 1)
+            .unwrap_or(0);
+        let n = multiple_degree - m;
         if self.coefficients.len() < n + m {
             return self.clone();
         }
@@ -1264,25 +1268,25 @@ where
     /// the public API
     #[doc(hidden)]
     pub fn reduce_by_ntt_friendly_modulus(&self, shift_ntt: &[FF], tail_length: usize) -> Self {
-        // m = tail_length
         let domain_length = shift_ntt.len();
         assert!(domain_length.is_power_of_two());
         let log_domain_length = domain_length.ilog2();
         let omega = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
-        let n = domain_length - tail_length;
+        let chunk_size = domain_length - tail_length;
 
-        if self.coefficients.len() < n + tail_length {
+        if self.coefficients.len() < chunk_size + tail_length {
             return self.clone();
         }
-        let num_reducible_chunks = (self.coefficients.len() - (tail_length + n) + n - 1) / n;
+        let num_reducible_chunks =
+            (self.coefficients.len() - (tail_length + chunk_size)).div_ceil(chunk_size);
 
-        let range_start = num_reducible_chunks * n;
+        let range_start = num_reducible_chunks * chunk_size;
         let mut working_window = if range_start >= self.coefficients.len() {
-            vec![FF::from(0); n + tail_length]
+            vec![FF::from(0); chunk_size + tail_length]
         } else {
             self.coefficients[range_start..].to_vec()
         };
-        working_window.resize(n + tail_length, FF::from(0));
+        working_window.resize(chunk_size + tail_length, FF::from(0));
 
         for chunk_index in (0..num_reducible_chunks).rev() {
             let mut product = [
@@ -1298,15 +1302,19 @@ where
             intt(&mut product, omega, log_domain_length);
 
             working_window = [
-                vec![FF::from(0); n],
+                vec![FF::from(0); chunk_size],
                 working_window[0..tail_length].to_vec(),
             ]
             .concat();
-            for (i, wwi) in working_window.iter_mut().enumerate().take(n) {
-                *wwi = self.coefficients[chunk_index * n + i];
+            for (i, wwi) in working_window.iter_mut().enumerate().take(chunk_size) {
+                *wwi = self.coefficients[chunk_index * chunk_size + i];
             }
 
-            for (i, wwi) in working_window.iter_mut().enumerate().take(n + tail_length) {
+            for (i, wwi) in working_window
+                .iter_mut()
+                .enumerate()
+                .take(chunk_size + tail_length)
+            {
                 *wwi -= product[i];
             }
         }
@@ -1436,26 +1444,20 @@ where
         let modular_squares = (0..n.ilog2())
             .scan(
                 Polynomial::<FF>::new(vec![FF::from(0), FF::from(1)]),
-                |acc: &mut Polynomial<FF>, _| {
+                |acc, _| {
                     let yld = acc.clone();
                     *acc = acc.multiply(acc).reduce(modulus);
                     Some(yld)
                 },
             )
             .collect_vec();
-        let even_zerofier_lcs = (0..n.ilog2())
+        let even_zerofiers = (0..n.ilog2())
             .map(|i| offset.inverse().mod_pow(1u64 << i))
-            .collect_vec();
-        let even_zerofiers = even_zerofier_lcs
-            .into_iter()
             .zip(modular_squares.iter())
             .map(|(lc, sq)| sq.scalar_mul(FF::from(lc.value())) - Polynomial::one())
             .collect_vec();
-        let odd_zerofier_lcs = (0..n.ilog2())
+        let odd_zerofiers = (0..n.ilog2())
             .map(|i| (offset * omega).inverse().mod_pow(1u64 << i))
-            .collect_vec();
-        let odd_zerofiers = odd_zerofier_lcs
-            .into_iter()
             .zip(modular_squares.iter())
             .map(|(lc, sq)| sq.scalar_mul(FF::from(lc.value())) - Polynomial::one())
             .collect_vec();
@@ -1498,7 +1500,7 @@ where
         modulus: &Polynomial<FF>,
         preprocessed: &ModularInterpolationPreprocessingData<FF>,
     ) -> Self {
-        let Ok(_modulus_degree) = TryInto::<usize>::try_into(modulus.degree()) else {
+        if modulus.is_zero() {
             panic!("cannot reduce modulo zero")
         };
         let n = values.len();
@@ -1530,13 +1532,15 @@ where
 
         // Use even-odd domain split.
         // Even: {offset * omega^{2*i} | i in 0..n/2}
-        // Odd: {offset * omega^{2*i+1} | i in 0..n/2} = {(offset * omega) * omega^{2*i} | i in 0..n/2}
+        // Odd: {offset * omega^{2*i+1} | i in 0..n/2}
+        //      = {(offset * omega) * omega^{2*i} | i in 0..n/2}
         // But we don't actually need to represent the domains explicitly.
 
         // 1. Get zerofiers.
         // The zerofiers are sparse because the domain is structured.
         // Even: (offset^-1 * X)^(n/2) - 1 = offset^{-n/2} * X^{n/2} - 1
-        // Odd: ((offset * omega)^-1 * X)^(n/2) - 1 = offset^{-n/2} * omega^{n/2} * X^{n/2} - 1
+        // Odd: ((offset * omega)^-1 * X)^(n/2) - 1
+        //      = offset^{-n/2} * omega^{n/2} * X^{n/2} - 1
         // Note that we are getting the (modularly reduced) zerofiers as
         // function arguments.
 
@@ -1544,17 +1548,21 @@ where
         // Actually, the values are compressible because the zerofiers are
         // sparse and the domains are structured (compatibly).
         // Even zerofier on odd domain:
-        // (offset^-1 * X)^(n/2) - 1 on {(offset * omega) * omega^{2*i} | i in 0..n/2}
+        // (offset^-1 * X)^(n/2) - 1 on
+        // {(offset * omega) * omega^{2*i} | i in 0..n/2}
         // = {omega^{n/2}-1 | i in 0..n/2} = {-2, -2, -2, ...}
         // Odd zerofier on even domain: {omega^-i | i in 0..n/2}
-        // ((offset * omega)^-1 * X)^(n/2) - 1 on {offset * omega^{2*i} | i in 0..n/2}
+        // ((offset * omega)^-1 * X)^(n/2) - 1
+        // on {offset * omega^{2*i} | i in 0..n/2}
         // = {omega^{-n/2} - 1 | i in 0..n/2} = {-2, -2, -2, ...}
         // Since these values are always the same, there's no point generating
         // them at runtime. Moreover, we need their batch-inverses in the next
         // step.
 
         // 3. Batch-invert zerofiers on opposite domains.
-        const MINUS_TWO_INVERSE: BFieldElement = BFieldElement::new(9223372034707292160);
+        // The batch-inversion is actually not performed because we already know
+        // the result: {(-2)^-1, (-2)^-1, (-2)^-1, ...}.
+        const MINUS_TWO_INVERSE: BFieldElement = BFieldElement::MINUS_TWO_INVERSE;
         let even_zerofier_on_odd_domain_inverted = vec![FF::from(MINUS_TWO_INVERSE.value()); n / 2];
         let odd_zerofier_on_even_domain_inverted = vec![FF::from(MINUS_TWO_INVERSE.value()); n / 2];
 
@@ -1595,9 +1603,6 @@ where
         }
     }
 
-    /// Marked `pub` for benchmarking purposes. Not considered part of the
-    /// public API.
-    #[doc(hidden)]
     fn naive_coset_extrapolate_preprocessing(points: &[FF]) -> (ZerofierTree<FF>, Vec<FF>, usize) {
         let zerofier_tree = ZerofierTree::new_from_domain(points);
         let (shift_coefficients, tail_length) =
@@ -1641,7 +1646,25 @@ where
     /// coset of the subgroup of order `codeword_length`, in the same set of
     /// new points.
     ///
-    /// #Panics
+    /// # Example
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let n = 1 << 5;
+    /// let domain_offset = bfe!(7);
+    /// let codewords = [bfe_vec![3; n], bfe_vec![2; n]].concat();
+    /// let points = bfe_vec![0, 1];
+    /// assert_eq!(
+    ///     bfe_vec![3, 3, 2, 2],
+    ///     Polynomial::<BFieldElement>::batch_coset_extrapolate(
+    ///         domain_offset,
+    ///         n,
+    ///         &codewords,
+    ///         &points
+    ///     )
+    /// );
+    /// ```
+    ///
+    /// # Panics
     /// Panics if the `codeword_length` is not a power of two.
     pub fn batch_coset_extrapolate(
         domain_offset: BFieldElement,
@@ -3722,17 +3745,17 @@ mod test_polynomials {
         let remainder = structured_multiple.reduce_long_division(&x2n);
         assert_eq!(remainder.degree() as usize, n - 1);
         assert_eq!(
+            0,
             (structured_multiple.clone() - remainder.clone())
                 .reverse()
                 .degree() as usize,
-            0
         );
         assert_eq!(
+            BFieldElement::new(1),
             *(structured_multiple.clone() - remainder)
                 .coefficients
                 .last()
                 .unwrap(),
-            BFieldElement::new(1)
         );
     }
 
@@ -3756,7 +3779,7 @@ mod test_polynomials {
             .concat(),
         );
         let (_quotient, remainder) = structured_multiple.divide(&x2n);
-        assert_eq!(remainder.degree() as usize, n - 1);
+        assert_eq!(n - 1, remainder.degree() as usize);
         assert_eq!(
             (structured_multiple.clone() - remainder.clone())
                 .reverse()
@@ -4005,7 +4028,7 @@ mod test_polynomials {
         let coefficients = [bfe_vec![0; degree], vec![leading_coefficient]].concat();
         let polynomial = Polynomial::new(coefficients);
         let multiple = polynomial.structured_multiple_of_degree(target_degree);
-        prop_assert_eq!(multiple.reduce(&polynomial), Polynomial::zero());
+        prop_assert_eq!(Polynomial::zero(), multiple.reduce(&polynomial));
         prop_assert_eq!(multiple.degree() as usize, target_degree);
     }
 
@@ -4027,7 +4050,7 @@ mod test_polynomials {
                 .count(),
             1
         );
-        prop_assert_eq!(remainder, Polynomial::zero());
+        prop_assert_eq!(Polynomial::zero(), remainder);
     }
 
     #[proptest]
@@ -4047,7 +4070,7 @@ mod test_polynomials {
             })
             .collect_vec();
         prop_assert_eq!(
-            Polynomial::<BFieldElement>::fast_modular_coset_interpolate(&values, offset, &modulus),
+            Polynomial::fast_modular_coset_interpolate(&values, offset, &modulus),
             Polynomial::interpolate(&domain, &values).reduce(&modulus)
         )
     }
@@ -4056,21 +4079,19 @@ mod test_polynomials {
     fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce_concrete() {
         let logn = 8;
         let n = 1u64 << logn;
-        let modulus = Polynomial::<BFieldElement>::new(bfe_vec![2, 3, 1]);
+        let modulus = Polynomial::new(bfe_vec![2, 3, 1]);
         let values = (0..n).map(|i| BFieldElement::new(i / 5)).collect_vec();
         let offset = BFieldElement::new(7);
 
         let omega = BFieldElement::primitive_root_of_unity(n).unwrap();
-        let domain = (0..n)
-            .scan(offset, |acc: &mut BFieldElement, _| {
-                let yld = *acc;
-                *acc *= omega;
-                Some(yld)
-            })
-            .collect_vec();
+        let mut domain = bfe_vec![0; n as usize];
+        domain[0] = offset;
+        for i in 1..n as usize {
+            domain[i] = domain[i - 1] * omega;
+        }
         assert_eq!(
-            Polynomial::<BFieldElement>::fast_modular_coset_interpolate(&values, offset, &modulus),
-            Polynomial::interpolate(&domain, &values).reduce(&modulus)
+            Polynomial::interpolate(&domain, &values).reduce(&modulus),
+            Polynomial::fast_modular_coset_interpolate(&values, offset, &modulus),
         )
     }
 
@@ -4090,10 +4111,9 @@ mod test_polynomials {
                 Some(yld)
             })
             .collect_vec();
-        let fast_coset_extrapolation =
-            Polynomial::<BFieldElement>::fast_coset_extrapolate(offset, &values, &points);
+        let fast_coset_extrapolation = Polynomial::fast_coset_extrapolate(offset, &values, &points);
         let naive_coset_extrapolation =
-            Polynomial::<BFieldElement>::naive_coset_extrapolate(offset, &values, &points);
+            Polynomial::naive_coset_extrapolate(offset, &values, &points);
         let interpolation_then_evaluation =
             Polynomial::interpolate(&domain, &values).batch_evaluate(&points);
         prop_assert_eq!(fast_coset_extrapolation.clone(), naive_coset_extrapolation);
@@ -4103,10 +4123,10 @@ mod test_polynomials {
     #[proptest]
     fn coset_extrapolate_and_batch_coset_extrapolate_agree(
         #[strategy(1usize..10)] _logn: usize,
-        #[strategy(Just(1usize<<#_logn))] n: usize,
+        #[strategy(Just(1<<#_logn))] n: usize,
         #[strategy(0usize..5)] _m: usize,
         #[strategy(vec(arb(), #_m*#n))] codewords: Vec<BFieldElement>,
-        #[strategy(vec(arb(), 0usize..20))] points: Vec<BFieldElement>,
+        #[strategy(vec(arb(), 0..20))] points: Vec<BFieldElement>,
     ) {
         let offset = BFieldElement::new(7);
 
@@ -4115,14 +4135,20 @@ mod test_polynomials {
             .flat_map(|chunk| Polynomial::coset_extrapolate(offset, chunk, &points))
             .collect_vec();
         let batched_dispatch = Polynomial::batch_coset_extrapolate(offset, n, &codewords, &points);
-        prop_assert_eq!(one_by_one_dispatch, batched_dispatch);
+        let par_batched_dispatch =
+            Polynomial::par_batch_coset_extrapolate(offset, n, &codewords, &points);
+        prop_assert_eq!(one_by_one_dispatch.clone(), batched_dispatch);
+        prop_assert_eq!(one_by_one_dispatch, par_batched_dispatch);
 
         let one_by_one_fast = codewords
             .chunks(n)
             .flat_map(|chunk| Polynomial::fast_coset_extrapolate(offset, chunk, &points))
             .collect_vec();
         let batched_fast = Polynomial::batch_fast_coset_extrapolate(offset, n, &codewords, &points);
-        prop_assert_eq!(one_by_one_fast, batched_fast);
+        let par_batched_fast =
+            Polynomial::par_batch_fast_coset_extrapolate(offset, n, &codewords, &points);
+        prop_assert_eq!(one_by_one_fast.clone(), batched_fast);
+        prop_assert_eq!(one_by_one_fast, par_batched_fast);
 
         let one_by_one_naive = codewords
             .chunks(n)
@@ -4130,6 +4156,37 @@ mod test_polynomials {
             .collect_vec();
         let batched_naive =
             Polynomial::batch_naive_coset_extrapolate(offset, n, &codewords, &points);
-        prop_assert_eq!(one_by_one_naive, batched_naive);
+        let par_batched_naive =
+            Polynomial::par_batch_naive_coset_extrapolate(offset, n, &codewords, &points);
+        prop_assert_eq!(one_by_one_naive.clone(), batched_naive);
+        prop_assert_eq!(one_by_one_naive, par_batched_naive);
+    }
+
+    #[test]
+    fn fast_modular_coset_interpolate_thresholds_relate_properly() {
+        let intt = Polynomial::<BFieldElement>::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT;
+        let lagrange = Polynomial::<BFieldElement>::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE;
+        assert!(intt > lagrange);
+    }
+
+    #[proptest]
+    fn interpolate_and_par_interpolate_agree(
+        #[filter(#points.len() > 0)] points: Vec<BFieldElement>,
+        #[strategy(vec(arb(), #points.len()))] domain: Vec<BFieldElement>,
+    ) {
+        let expected_interpolant = Polynomial::interpolate(&domain, &points);
+        let observed_interpolant = Polynomial::par_interpolate(&domain, &points);
+        prop_assert_eq!(expected_interpolant, observed_interpolant);
+    }
+
+    #[proptest]
+    fn batch_evaluate_agrees_with_par_batch_evalaute(
+        polynomial: Polynomial<BFieldElement>,
+        points: Vec<BFieldElement>,
+    ) {
+        prop_assert_eq!(
+            polynomial.batch_evaluate(&points),
+            polynomial.par_batch_evaluate(&points)
+        );
     }
 }

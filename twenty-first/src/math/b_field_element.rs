@@ -215,6 +215,9 @@ impl BFieldElement {
     /// 2^128 mod P; this is used for conversion of elements into Montgomery representation.
     const R2: u64 = 0xFFFFFFFE00000001;
 
+    /// -2^-1
+    pub const MINUS_TWO_INVERSE: Self = Self::new(9223372034707292160);
+
     #[inline]
     pub const fn new(value: u64) -> Self {
         Self(Self::montyred((value as u128) * (Self::R2 as u128)))
@@ -1299,5 +1302,10 @@ mod b_prime_field_element_test {
     #[proptest]
     fn bfe_macro_produces_same_result_as_calling_new(value: u64) {
         prop_assert_eq!(BFieldElement::new(value), bfe!(value));
+    }
+
+    #[test]
+    fn const_minus_two_inverse_is_really_minus_two_inverse() {
+        assert_eq!(bfe!(-2).inverse(), BFieldElement::MINUS_TWO_INVERSE);
     }
 }
