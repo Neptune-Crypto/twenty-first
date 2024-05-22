@@ -146,7 +146,7 @@ impl From<Digest> for Vec<BFieldElement> {
 impl From<Digest> for [u8; Digest::BYTES] {
     fn from(item: Digest) -> Self {
         let u64s = item.0.iter().map(|x| x.value());
-        u64s.map(|x| x.to_ne_bytes())
+        u64s.map(|x| x.to_le_bytes())
             .collect::<Vec<_>>()
             .concat()
             .try_into()
