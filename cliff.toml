@@ -58,6 +58,7 @@ commit_parsers = [
   { body = ".*security",          group = "<!-- 70 --> 🔒️ Security" },
   { message = "^revert",          group = "<!-- 80 --> ⏪️ Revert" },
   { message = "^style",           group = "<!-- 90 --> 🎨 Styling" },
+  { message = "^support",         skip = true },
 ]
 
 protect_breaking_commits = false

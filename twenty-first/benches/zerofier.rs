@@ -35,7 +35,7 @@ fn zerofier<const SIZE: usize>(c: &mut Criterion) {
     let id = BenchmarkId::new("Fast", SIZE);
     group.bench_function(id, |b| b.iter(|| Polynomial::fast_zerofier(&roots)));
 
-    let id = BenchmarkId::new("Fastest of the three", SIZE);
+    let id = BenchmarkId::new("Dispatcher", SIZE);
     group.bench_function(id, |b| b.iter(|| Polynomial::zerofier(&roots)));
 
     group.finish();

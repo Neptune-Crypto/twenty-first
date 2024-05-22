@@ -9,3 +9,4 @@ pub mod polynomial;
 pub mod tip5;
 pub mod traits;
 pub mod x_field_element;
+pub mod zerofier_tree;

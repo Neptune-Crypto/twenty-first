@@ -40,6 +40,10 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Run tests
+        # Temporary workaround for Windows path issue, see:
+        # https://github.com/nextest-rs/nextest/issues/1493#issuecomment-2106331574
+        env:
+          RUSTUP_WINDOWS_PATH_ADD_BIN: 1
         run: cargo nextest run --no-fail-fast --all-targets
 
         # doctests are special [^1] but this step does not incur a performance penalty [^2]

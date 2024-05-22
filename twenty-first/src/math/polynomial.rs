@@ -30,6 +30,7 @@ use crate::prelude::Inverse;
 use crate::prelude::XFieldElement;
 
 use super::traits::PrimitiveRootOfUnity;
+use super::zerofier_tree::ZerofierTree;
 
 impl<FF: FiniteField> Zero for Polynomial<FF> {
     fn zero() -> Self {
@@ -53,6 +54,17 @@ impl<FF: FiniteField> One for Polynomial<FF> {
     fn is_one(&self) -> bool {
         self.degree() == 0 && self.coefficients[0].is_one()
     }
+}
+
+/// Data produced by the preprocessing phase of a batch modular interpolation.
+/// Marked `pub` for benchmarking purposes. Not part of the public API.
+#[doc(hidden)]
+#[derive(Debug, Clone)]
+pub struct ModularInterpolationPreprocessingData<FF: FiniteField> {
+    pub even_zerofiers: Vec<Polynomial<FF>>,
+    pub odd_zerofiers: Vec<Polynomial<FF>>,
+    pub shift_coefficients: Vec<FF>,
+    pub tail_length: usize,
 }
 
 /// A univariate polynomial with coefficients in a [finite field](FiniteField), in monomial form.
@@ -134,27 +146,38 @@ where
     /// Extracted from `cargo bench --bench poly_mul` on mjolnir.
     const FAST_MULTIPLY_CUTOFF_THRESHOLD: isize = 1 << 8;
 
-    /// [Divide and conquer batch evaluation](Self::divide_and_conquer_batch_evaluate)
-    /// is slower than [iterative evaluation](Self::iterative_batch_evaluate)
-    /// on domains smaller than this threshold
-    const DIVIDE_AND_CONQUER_EVALUATE_CUTOFF_THRESHOLD: usize = 1 << 5;
-
     /// Computing the [fast zerofier][fast] is slower than computing the [smart zerofier][smart] for
     /// domain sizes smaller than this threshold. The [naïve zerofier][naive] is always slower to
     /// compute than the [smart zerofier][smart] for domain sizes smaller than the threshold.
     ///
-    /// Extracted from `cargo bench --bench zerofier` on mjolnir.
+    /// Extracted from `cargo bench --bench zerofier`.
     ///
     /// [naive]: Self::naive_zerofier
     /// [smart]: Self::smart_zerofier
     /// [fast]: Self::fast_zerofier
-    const FAST_ZEROFIER_CUTOFF_THRESHOLD: usize = 200;
+    const FAST_ZEROFIER_CUTOFF_THRESHOLD: usize = 100;
 
     /// [Fast interpolation](Self::fast_interpolate) is slower than
     /// [Lagrange interpolation](Self::lagrange_interpolate) below this threshold.
     ///
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
     const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 8;
+
+    /// Regulates the recursion depth at which
+    /// [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
+    /// is slower and switches to
+    /// [Lagrange interpolation](Self::lagrange_interpolate).
+    const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE: usize = 1 << 8;
+
+    /// Regulates the recursion depth at which
+    /// [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
+    /// is slower and switches to [INTT](ntt::intt)-then-[reduce](Self::reduce).
+    const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT: usize = 1 << 17;
+
+    /// Regulates when to prefer the [Fast coset extrapolation](Self::fast_coset_extrapolate)
+    /// over the [naïve method](Self::naive_coset_extrapolate). Threshold found
+    /// using `cargo criterion --bench extrapolation`.
+    const FAST_COSET_EXTRAPOLATE_THRESHOLD: usize = 100;
 
     /// Inside `formal_power_series_inverse`, when to multiply naively and when
     /// to use NTT-based multiplication. Use benchmark
@@ -174,9 +197,6 @@ where
     /// polynomial modulo the zerofier of the domain first. This const regulates
     /// when.
     const REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO: isize = 4;
-
-    /// Regulates when to use long division and when to use NTT-based divide.
-    const FAST_DIVIDE_THRESHOLD: isize = 1000;
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
@@ -347,6 +367,51 @@ where
         Self::new(hadamard_product)
     }
 
+    /// Multiply a bunch of polynomials together.
+    pub fn batch_multiply(factors: &[Self]) -> Self {
+        // Build a tree-like structure of multiplications to keep the degrees of the
+        // factors roughly equal throughout the process. This makes efficient use of
+        // the `.multiply()` dispatcher.
+        // In contrast, using a simple `.reduce()`, the accumulator polynomial would
+        // have a much higher degree than the individual factors.
+        // todo: benchmark the current approach against the “reduce” approach.
+
+        if factors.is_empty() {
+            return Polynomial::one();
+        }
+        let mut products = factors.to_vec();
+        while products.len() != 1 {
+            products = products
+                .chunks(2)
+                .map(|chunk| match chunk.len() {
+                    2 => chunk[0].multiply(&chunk[1]),
+                    1 => chunk[0].clone(),
+                    _ => unreachable!(),
+                })
+                .collect();
+        }
+        products.pop().unwrap()
+    }
+
+    /// Parallel version of [`batch_multiply`](Self::batch_multiply).
+    pub fn par_batch_multiply(factors: &[Self]) -> Self {
+        if factors.is_empty() {
+            return Polynomial::one();
+        }
+        let num_threads = available_parallelism()
+            .map(|non_zero_usize| non_zero_usize.get())
+            .unwrap_or(1);
+        let mut products = factors.to_vec();
+        while products.len() != 1 {
+            let chunk_size = usize::max(2, products.len() / num_threads);
+            products = products
+                .par_chunks(chunk_size)
+                .map(Self::batch_multiply)
+                .collect();
+        }
+        products.pop().unwrap()
+    }
+
     /// Compute the lowest degree polynomial with the provided roots.
     /// Also known as “vanishing polynomial.”
     ///
@@ -372,6 +437,25 @@ where
         }
     }
 
+    /// Parallel version of [`zerofier`](Self::zerofier).
+    pub fn par_zerofier(roots: &[FF]) -> Self {
+        if roots.is_empty() {
+            return Self::one();
+        }
+        let num_threads = available_parallelism()
+            .map(|non_zero_usize| non_zero_usize.get())
+            .unwrap_or(1);
+        let chunk_size = roots
+            .len()
+            .div_ceil(num_threads)
+            .max(Self::FAST_ZEROFIER_CUTOFF_THRESHOLD);
+        let factors = roots
+            .par_chunks(chunk_size)
+            .map(|chunk| Self::zerofier(chunk))
+            .collect::<Vec<_>>();
+        Self::par_batch_multiply(&factors)
+    }
+
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
     pub fn smart_zerofier(roots: &[FF]) -> Self {
@@ -392,10 +476,8 @@ where
     #[doc(hidden)]
     pub fn fast_zerofier(roots: &[FF]) -> Self {
         let mid_point = roots.len() / 2;
-        let (left, right) = rayon::join(
-            || Self::zerofier(&roots[..mid_point]),
-            || Self::zerofier(&roots[mid_point..]),
-        );
+        let left = Self::zerofier(&roots[..mid_point]);
+        let right = Self::zerofier(&roots[mid_point..]);
 
         left.multiply(&right)
     }
@@ -756,25 +838,34 @@ where
 
     /// Evaluate the polynomial on a batch of points.
     pub fn batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        if self.degree() >= Self::REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO * (domain.len() as isize) {
+        if self.is_zero() {
+            vec![FF::zero(); domain.len()]
+        } else if self.degree()
+            >= Self::REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO * (domain.len() as isize)
+        {
             self.reduce_then_batch_evaluate(domain)
-        } else if domain.len() >= Self::DIVIDE_AND_CONQUER_EVALUATE_CUTOFF_THRESHOLD {
-            self.divide_and_conquer_batch_evaluate(domain)
         } else {
-            self.iterative_batch_evaluate(domain)
+            let zerofier_tree = ZerofierTree::new_from_domain(domain);
+            self.divide_and_conquer_batch_evaluate(&zerofier_tree)
         }
     }
 
     fn reduce_then_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        let zerofier = Self::zerofier(domain);
+        let zerofier_tree = ZerofierTree::new_from_domain(domain);
+        let zerofier = zerofier_tree.zerofier();
         let remainder = self.fast_reduce(&zerofier);
-        remainder.batch_evaluate(domain)
+        remainder.divide_and_conquer_batch_evaluate(&zerofier_tree)
     }
 
     /// Parallel version of [`batch_evaluate`](Self::batch_evaluate).
     pub fn par_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        let num_threads = available_parallelism().map(|nzu| nzu.get()).unwrap_or(1);
-        let chunk_size = domain.len().next_multiple_of(num_threads) / num_threads;
+        if domain.is_empty() || self.is_zero() {
+            return vec![FF::zero(); domain.len()];
+        }
+        let num_threads = available_parallelism()
+            .map(|non_zero_usize| non_zero_usize.get())
+            .unwrap_or(1);
+        let chunk_size = domain.len().div_ceil(num_threads);
         domain
             .par_chunks(chunk_size)
             .flat_map(|ch| self.batch_evaluate(ch))
@@ -787,37 +878,20 @@ where
         domain.iter().map(|&p| self.evaluate(p)).collect()
     }
 
-    /// Only marked `pub` for benchmarking; not considered part of the public API.
-    #[doc(hidden)]
-    pub fn par_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        domain.par_iter().map(|&p| self.evaluate(p)).collect()
-    }
-
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
-    pub fn vector_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        let mut accumulators = vec![FF::zero(); domain.len()];
-        for &c in self.coefficients.iter().rev() {
-            accumulators
-                .par_iter_mut()
-                .zip(domain)
-                .for_each(|(acc, &x)| *acc = *acc * x + c);
+    pub fn divide_and_conquer_batch_evaluate(&self, zerofier_tree: &ZerofierTree<FF>) -> Vec<FF> {
+        match zerofier_tree {
+            ZerofierTree::Leaf(leaf) => self
+                .reduce(&zerofier_tree.zerofier())
+                .iterative_batch_evaluate(&leaf.points),
+            ZerofierTree::Branch(branch) => [
+                self.divide_and_conquer_batch_evaluate(&branch.left),
+                self.divide_and_conquer_batch_evaluate(&branch.right),
+            ]
+            .concat(),
+            ZerofierTree::Padding => vec![],
         }
-
-        accumulators
-    }
-
-    /// Only `pub` to allow benchmarking; not considered part of the public API.
-    #[doc(hidden)]
-    pub fn divide_and_conquer_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
-        let mid_point = domain.len() / 2;
-        let left_half = &domain[..mid_point];
-        let right_half = &domain[mid_point..];
-
-        [left_half, right_half]
-            .into_iter()
-            .flat_map(|half_domain| self.batch_evaluate(half_domain))
-            .collect()
     }
 
     /// Fast evaluate on a coset domain, which is the group generated by `generator^i * offset`.
@@ -890,11 +964,9 @@ where
     ///
     /// Panics if the `divisor` is zero.
     pub fn divide(&self, divisor: &Self) -> (Self, Self) {
-        if self.degree() > Self::FAST_DIVIDE_THRESHOLD {
-            self.fast_divide(divisor)
-        } else {
-            self.naive_divide(divisor)
-        }
+        // There is an NTT-based division algorithm, but for no practical
+        // parameter set is it faster than long division.
+        self.naive_divide(divisor)
     }
 
     /// Compute a polynomial g(X) from a given polynomial f(X) such that
@@ -1095,7 +1167,16 @@ where
         let reverse = self.reverse();
         let inverse_reverse = reverse.formal_power_series_inverse_minimal(n as usize);
         let product_reverse = reverse.multiply(&inverse_reverse);
-        product_reverse.reverse()
+
+        // Correct for lost trailing coefficients, if any
+        let product = product_reverse.reverse();
+        let product_degree = product.degree();
+        let shift = if product_degree < n {
+            n - product_degree
+        } else {
+            0
+        };
+        product.shift_coefficients(shift as usize)
     }
 
     /// Given a polynomial f(X) and an integer n, find a multiple of f(X) of the
@@ -1114,7 +1195,9 @@ where
                 [vec![FF::from(0); n], vec![self.coefficients[0].inverse()]].concat(),
             );
         }
+
         let reverse = self.reverse();
+
         // The next function gives back a polynomial g(X) of degree at most arg,
         // such that f(X) * g(X) = 1 mod X^arg.
         // Without modular reduction, the degree of the product f(X) * g(X) is
@@ -1122,7 +1205,11 @@ where
         // and arg = n - deg(f).
         let inverse_reverse = reverse.formal_power_series_inverse_minimal(n - degree);
         let product_reverse = reverse.multiply(&inverse_reverse);
-        product_reverse.reverse()
+        let product = product_reverse.reverse();
+
+        // Coefficient reversal drops trailing zero. Correct for that.
+        let product_degree = product.degree() as usize;
+        product.shift_coefficients(n - product_degree)
     }
 
     /// Reduces f(X) by a structured modulus, which is of the form
@@ -1130,16 +1217,15 @@ where
     /// form, polynomial modular reductions can be computed faster than in the
     /// generic case.
     fn reduce_by_structured_modulus(&self, multiple: &Self) -> Self {
-        let leading_term = Polynomial::new(
-            [
-                vec![FF::from(0); multiple.degree() as usize],
-                vec![FF::from(1); 1],
-            ]
-            .concat(),
-        );
+        assert_ne!(multiple.degree(), 0);
+        let multiple_degree = usize::try_from(multiple.degree()).expect("cannot reduce by zero");
+        let leading_term =
+            Polynomial::new([vec![FF::from(0); multiple_degree], vec![FF::from(1); 1]].concat());
         let shift_polynomial = multiple.clone() - leading_term.clone();
-        let m = shift_polynomial.degree() as usize + 1;
-        let n = multiple.degree() as usize - m;
+        let m = usize::try_from(shift_polynomial.degree())
+            .map(|unsigned_degree| unsigned_degree + 1)
+            .unwrap_or(0);
+        let n = multiple_degree - m;
         if self.coefficients.len() < n + m {
             return self.clone();
         }
@@ -1177,28 +1263,37 @@ where
     ///
     /// This method uses NTT-based multiplication, meaning that the unstructured
     /// part of the structured multiple must be given in NTT-domain.
-    fn reduce_by_ntt_friendly_modulus(&self, shift_ntt: &[FF], m: usize) -> Self {
+    ///
+    /// This function is marked `pub` for benchmarking. Not considered part of
+    /// the public API
+    #[doc(hidden)]
+    pub fn reduce_by_ntt_friendly_modulus(&self, shift_ntt: &[FF], tail_length: usize) -> Self {
         let domain_length = shift_ntt.len();
         assert!(domain_length.is_power_of_two());
         let log_domain_length = domain_length.ilog2();
         let omega = BFieldElement::primitive_root_of_unity(domain_length as u64).unwrap();
-        let n = domain_length - m;
+        let chunk_size = domain_length - tail_length;
 
-        if self.coefficients.len() < n + m {
+        if self.coefficients.len() < chunk_size + tail_length {
             return self.clone();
         }
-        let num_reducible_chunks = (self.coefficients.len() - (m + n) + n - 1) / n;
+        let num_reducible_chunks =
+            (self.coefficients.len() - (tail_length + chunk_size)).div_ceil(chunk_size);
 
-        let range_start = num_reducible_chunks * n;
+        let range_start = num_reducible_chunks * chunk_size;
         let mut working_window = if range_start >= self.coefficients.len() {
-            vec![FF::from(0); n + m]
+            vec![FF::from(0); chunk_size + tail_length]
         } else {
             self.coefficients[range_start..].to_vec()
         };
-        working_window.resize(n + m, FF::from(0));
+        working_window.resize(chunk_size + tail_length, FF::from(0));
 
         for chunk_index in (0..num_reducible_chunks).rev() {
-            let mut product = [working_window[m..].to_vec(), vec![FF::from(0); m]].concat();
+            let mut product = [
+                working_window[tail_length..].to_vec(),
+                vec![FF::from(0); tail_length],
+            ]
+            .concat();
             ntt(&mut product, omega, log_domain_length);
             product
                 .iter_mut()
@@ -1206,17 +1301,53 @@ where
                 .for_each(|(l, r)| *l *= *r);
             intt(&mut product, omega, log_domain_length);
 
-            working_window = [vec![FF::from(0); n], working_window[0..m].to_vec()].concat();
-            for (i, wwi) in working_window.iter_mut().enumerate().take(n) {
-                *wwi = self.coefficients[chunk_index * n + i];
+            working_window = [
+                vec![FF::from(0); chunk_size],
+                working_window[0..tail_length].to_vec(),
+            ]
+            .concat();
+            for (i, wwi) in working_window.iter_mut().enumerate().take(chunk_size) {
+                *wwi = self.coefficients[chunk_index * chunk_size + i];
             }
 
-            for (i, wwi) in working_window.iter_mut().enumerate().take(n + m) {
+            for (i, wwi) in working_window
+                .iter_mut()
+                .enumerate()
+                .take(chunk_size + tail_length)
+            {
                 *wwi -= product[i];
             }
         }
 
         Polynomial::new(working_window)
+    }
+
+    /// Only marked `pub` for benchmarking purposes. Not considered part of the
+    /// public API.
+    #[doc(hidden)]
+    pub fn shift_factor_ntt_with_tail_size(&self) -> (Vec<FF>, usize) {
+        let n = usize::max(
+            Polynomial::<FF>::FAST_REDUCE_CUTOFF_THRESHOLD,
+            self.degree() as usize * 2,
+        )
+        .next_power_of_two();
+        let ntt_friendly_multiple = self.structured_multiple_of_degree(n);
+        // m = 1 + degree(ntt_friendly_multiple - leading term)
+        let m = 1 + ntt_friendly_multiple
+            .coefficients
+            .iter()
+            .enumerate()
+            .rev()
+            .skip(1)
+            .find_map(|(i, c)| if !c.is_zero() { Some(i) } else { None })
+            .unwrap_or(0);
+        let mut shift_factor_ntt = ntt_friendly_multiple.coefficients[..n].to_vec();
+        ntt(
+            &mut shift_factor_ntt,
+            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+            n.ilog2(),
+        );
+        (shift_factor_ntt, m)
     }
 
     /// Compute the remainder after division of one polynomial by another. This
@@ -1242,28 +1373,10 @@ where
         //               |- n=2^k coefficients.
         // This allows us to reduce the numerator's coefficients in chunks of
         // n-m using NTT-based multiplication over a domain of size n = 2^k.
-        let n = usize::max(
-            Polynomial::<FF>::FAST_REDUCE_CUTOFF_THRESHOLD,
-            modulus.degree() as usize * 2,
-        )
-        .next_power_of_two();
-        let ntt_friendly_multiple = modulus.structured_multiple_of_degree(n);
-        // m = 1 + degree(ntt_friendly_multiple - leading term)
-        let m = 1 + ntt_friendly_multiple
-            .coefficients
-            .iter()
-            .enumerate()
-            .rev()
-            .skip(1)
-            .find_map(|(i, c)| if !c.is_zero() { Some(i) } else { None })
-            .unwrap_or(0);
-        let mut shift_factor_ntt = ntt_friendly_multiple.coefficients[..n].to_vec();
-        ntt(
-            &mut shift_factor_ntt,
-            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
-            n.ilog2(),
-        );
-        let mut intermediate_remainder = self.reduce_by_ntt_friendly_modulus(&shift_factor_ntt, m);
+
+        let (shift_factor_ntt, tail_size) = modulus.shift_factor_ntt_with_tail_size();
+        let mut intermediate_remainder =
+            self.reduce_by_ntt_friendly_modulus(&shift_factor_ntt, tail_size);
 
         // 2. Chunk-wise reduction with schoolbook multiplication.
         // We generate a smaller structured multiple of the denominator that
@@ -1279,50 +1392,6 @@ where
 
         // 3. Long division based reduction by the (unmultiplied) modulus.
         intermediate_remainder.reduce_long_division(modulus)
-    }
-
-    /// Polynomial long division with `self` as the dividend, divided by some `divisor`.
-    /// Only `pub` to allow benchmarking; not considered part of the public API.
-    ///
-    /// As the name implies, the advantage of this method over [`divide`](Self::naive_divide) is
-    /// runtime complexity. Concretely, this method has time complexity in O(n·log(n)), whereas
-    /// [`divide`](Self::naive_divide) has time complexity in O(n^2).
-    #[doc(hidden)]
-    pub fn fast_divide(&self, divisor: &Self) -> (Self, Self) {
-        // The math for this function: [0]. There are very slight deviations, for example around the
-        // requirement that the divisor is monic.
-        //
-        // [0] https://cs.uwaterloo.ca/~r5olivei/courses/2021-winter-cs487/lecture5-post.pdf
-
-        let Ok(quotient_degree) = usize::try_from(self.degree() - divisor.degree()) else {
-            return (Self::zero(), self.clone());
-        };
-
-        if divisor.degree() == 0 {
-            let quotient = self.scalar_mul(divisor.leading_coefficient().unwrap().inverse());
-            let remainder = Polynomial::zero();
-            return (quotient, remainder);
-        }
-
-        // Reverse coefficient vectors to move into formal power series ring over FF, i.e., FF[[x]].
-        // Re-interpret as a polynomial to benefit from the already-implemented multiplication
-        // method, which mechanically work the same in FF[X] and FF[[x]].
-        let reverse = |poly: &Self| Self::new(poly.coefficients.iter().copied().rev().collect());
-
-        // Newton iteration to invert divisor up to required precision. Why is this the required
-        // precision? Good question.
-        let precision = (quotient_degree + 1).next_power_of_two();
-
-        let rev_divisor = reverse(divisor);
-        let rev_divisor_inverse = rev_divisor.formal_power_series_inverse_newton(precision);
-
-        let self_reverse = reverse(self);
-        let rev_quotient = self_reverse.multiply(&rev_divisor_inverse);
-
-        let quotient = reverse(&rev_quotient).truncate(quotient_degree);
-
-        let remainder = self.clone() - quotient.multiply(divisor);
-        (quotient, remainder)
     }
 
     /// The degree-`k` polynomial with the same `k + 1` leading coefficients as `self`. To be more
@@ -1359,6 +1428,397 @@ where
     pub fn mod_x_to_the_n(&self, n: usize) -> Self {
         let num_coefficients_to_retain = n.min(self.coefficients.len());
         Self::new(self.coefficients[..num_coefficients_to_retain].into())
+    }
+
+    /// Preprocessing data for
+    /// [fast modular coset interpolation](Self::fast_modular_coset_interpolate).
+    /// Marked `pub` for benchmarking. Not considered part of the public API.
+    #[doc(hidden)]
+    pub fn fast_modular_coset_interpolate_preprocess(
+        n: usize,
+        offset: BFieldElement,
+        modulus: &Polynomial<FF>,
+    ) -> ModularInterpolationPreprocessingData<FF> {
+        let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
+        // a list of polynomials whose ith element is X^(2^i) mod m(X)
+        let modular_squares = (0..n.ilog2())
+            .scan(
+                Polynomial::<FF>::new(vec![FF::from(0), FF::from(1)]),
+                |acc, _| {
+                    let yld = acc.clone();
+                    *acc = acc.multiply(acc).reduce(modulus);
+                    Some(yld)
+                },
+            )
+            .collect_vec();
+        let even_zerofiers = (0..n.ilog2())
+            .map(|i| offset.inverse().mod_pow(1u64 << i))
+            .zip(modular_squares.iter())
+            .map(|(lc, sq)| sq.scalar_mul(FF::from(lc.value())) - Polynomial::one())
+            .collect_vec();
+        let odd_zerofiers = (0..n.ilog2())
+            .map(|i| (offset * omega).inverse().mod_pow(1u64 << i))
+            .zip(modular_squares.iter())
+            .map(|(lc, sq)| sq.scalar_mul(FF::from(lc.value())) - Polynomial::one())
+            .collect_vec();
+
+        // precompute NTT-friendly multiple of the modulus
+        let (shift_coefficients, tail_length) = modulus.shift_factor_ntt_with_tail_size();
+
+        ModularInterpolationPreprocessingData {
+            even_zerofiers,
+            odd_zerofiers,
+            shift_coefficients,
+            tail_length,
+        }
+    }
+
+    /// Compute f(X) mod m(X) where m(X) is a given modulus and f(X) is the
+    /// interpolant of a list of n values on a domain which is a coset of the
+    /// size-n subgroup that is identified by some offset.
+    fn fast_modular_coset_interpolate(
+        values: &[FF],
+        offset: BFieldElement,
+        modulus: &Polynomial<FF>,
+    ) -> Self {
+        let preprocessing_data =
+            Self::fast_modular_coset_interpolate_preprocess(values.len(), offset, modulus);
+        Self::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
+            values,
+            offset,
+            modulus,
+            &preprocessing_data,
+        )
+    }
+
+    /// Only marked `pub` for benchmarking purposes. Not considered part of the
+    /// interface.
+    #[doc(hidden)]
+    pub fn fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
+        values: &[FF],
+        offset: BFieldElement,
+        modulus: &Polynomial<FF>,
+        preprocessed: &ModularInterpolationPreprocessingData<FF>,
+    ) -> Self {
+        if modulus.is_zero() {
+            panic!("cannot reduce modulo zero")
+        };
+        let n = values.len();
+        let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
+
+        if n < Self::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE {
+            let domain = (0..n)
+                .scan(FF::from(offset.value()), |acc: &mut FF, _| {
+                    let yld = *acc;
+                    *acc *= omega;
+                    Some(yld)
+                })
+                .collect::<Vec<FF>>();
+            let interpolant = Self::lagrange_interpolate(&domain, values);
+            return interpolant.reduce(modulus);
+        } else if n <= Self::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT {
+            let mut coefficients = values.to_vec();
+            intt(&mut coefficients, omega, n.ilog2());
+            let interpolant = Polynomial::new(coefficients);
+
+            return interpolant
+                .scale(FF::from(offset.inverse().value()))
+                .reduce_by_ntt_friendly_modulus(
+                    &preprocessed.shift_coefficients,
+                    preprocessed.tail_length,
+                )
+                .reduce(modulus);
+        }
+
+        // Use even-odd domain split.
+        // Even: {offset * omega^{2*i} | i in 0..n/2}
+        // Odd: {offset * omega^{2*i+1} | i in 0..n/2}
+        //      = {(offset * omega) * omega^{2*i} | i in 0..n/2}
+        // But we don't actually need to represent the domains explicitly.
+
+        // 1. Get zerofiers.
+        // The zerofiers are sparse because the domain is structured.
+        // Even: (offset^-1 * X)^(n/2) - 1 = offset^{-n/2} * X^{n/2} - 1
+        // Odd: ((offset * omega)^-1 * X)^(n/2) - 1
+        //      = offset^{-n/2} * omega^{n/2} * X^{n/2} - 1
+        // Note that we are getting the (modularly reduced) zerofiers as
+        // function arguments.
+
+        // 2. Evaluate zerofiers on opposite domains.
+        // Actually, the values are compressible because the zerofiers are
+        // sparse and the domains are structured (compatibly).
+        // Even zerofier on odd domain:
+        // (offset^-1 * X)^(n/2) - 1 on
+        // {(offset * omega) * omega^{2*i} | i in 0..n/2}
+        // = {omega^{n/2}-1 | i in 0..n/2} = {-2, -2, -2, ...}
+        // Odd zerofier on even domain: {omega^-i | i in 0..n/2}
+        // ((offset * omega)^-1 * X)^(n/2) - 1
+        // on {offset * omega^{2*i} | i in 0..n/2}
+        // = {omega^{-n/2} - 1 | i in 0..n/2} = {-2, -2, -2, ...}
+        // Since these values are always the same, there's no point generating
+        // them at runtime. Moreover, we need their batch-inverses in the next
+        // step.
+
+        // 3. Batch-invert zerofiers on opposite domains.
+        // The batch-inversion is actually not performed because we already know
+        // the result: {(-2)^-1, (-2)^-1, (-2)^-1, ...}.
+        const MINUS_TWO_INVERSE: BFieldElement = BFieldElement::MINUS_TWO_INVERSE;
+        let even_zerofier_on_odd_domain_inverted = vec![FF::from(MINUS_TWO_INVERSE.value()); n / 2];
+        let odd_zerofier_on_even_domain_inverted = vec![FF::from(MINUS_TWO_INVERSE.value()); n / 2];
+
+        // 4. Construct interpolation values through Hadamard products.
+        let mut odd_domain_targets = even_zerofier_on_odd_domain_inverted;
+        let mut even_domain_targets = odd_zerofier_on_even_domain_inverted;
+        for i in 0..(n / 2) {
+            even_domain_targets[i] *= values[2 * i];
+            odd_domain_targets[i] *= values[2 * i + 1];
+        }
+
+        // 5. Interpolate using recursion
+        let even_interpolant =
+            Self::fast_modular_coset_interpolate(&even_domain_targets, offset, modulus);
+        let odd_interpolant =
+            Self::fast_modular_coset_interpolate(&odd_domain_targets, offset * omega, modulus);
+
+        // 6. Multiply with zerofiers and add.
+        let interpolant = even_interpolant
+            .multiply(&preprocessed.odd_zerofiers[(n / 2).ilog2() as usize])
+            + odd_interpolant.multiply(&preprocessed.even_zerofiers[(n / 2).ilog2() as usize]);
+
+        // 7. Reduce by modulus and return.
+        interpolant.reduce(modulus)
+    }
+
+    /// Extrapolate a Reed-Solomon codeword, defined relative to a coset of the
+    /// subgroup of order n (codeword length), in new points.
+    pub fn coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        if points.len() < Self::FAST_COSET_EXTRAPOLATE_THRESHOLD {
+            Self::fast_coset_extrapolate(domain_offset, codeword, points)
+        } else {
+            Self::naive_coset_extrapolate(domain_offset, codeword, points)
+        }
+    }
+
+    fn naive_coset_extrapolate_preprocessing(points: &[FF]) -> (ZerofierTree<FF>, Vec<FF>, usize) {
+        let zerofier_tree = ZerofierTree::new_from_domain(points);
+        let (shift_coefficients, tail_length) =
+            Self::shift_factor_ntt_with_tail_size(&zerofier_tree.zerofier());
+        (zerofier_tree, shift_coefficients, tail_length)
+    }
+
+    fn naive_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let n = codeword.len();
+        let logn = n.ilog2();
+        let mut coefficients = codeword.to_vec();
+        intt(
+            &mut coefficients,
+            BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+            logn,
+        );
+        let interpolant =
+            Polynomial::new(coefficients).scale(FF::from(domain_offset.inverse().value()));
+        interpolant.batch_evaluate(points)
+    }
+
+    fn fast_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let zerofier_tree = ZerofierTree::new_from_domain(points);
+        let minimal_interpolant = Self::fast_modular_coset_interpolate(
+            codeword,
+            domain_offset,
+            &zerofier_tree.zerofier(),
+        );
+        minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
+    }
+
+    /// Extrapolate many Reed-Solomon codewords, defined relative to the same
+    /// coset of the subgroup of order `codeword_length`, in the same set of
+    /// new points.
+    ///
+    /// # Example
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let n = 1 << 5;
+    /// let domain_offset = bfe!(7);
+    /// let codewords = [bfe_vec![3; n], bfe_vec![2; n]].concat();
+    /// let points = bfe_vec![0, 1];
+    /// assert_eq!(
+    ///     bfe_vec![3, 3, 2, 2],
+    ///     Polynomial::<BFieldElement>::batch_coset_extrapolate(
+    ///         domain_offset,
+    ///         n,
+    ///         &codewords,
+    ///         &points
+    ///     )
+    /// );
+    /// ```
+    ///
+    /// # Panics
+    /// Panics if the `codeword_length` is not a power of two.
+    pub fn batch_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        if points.len() < Self::FAST_COSET_EXTRAPOLATE_THRESHOLD {
+            Self::batch_fast_coset_extrapolate(domain_offset, codeword_length, codewords, points)
+        } else {
+            Self::batch_naive_coset_extrapolate(domain_offset, codeword_length, codewords, points)
+        }
+    }
+
+    fn batch_fast_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let n = codeword_length;
+
+        let zerofier_tree = ZerofierTree::new_from_domain(points);
+        let modulus = zerofier_tree.zerofier();
+        let preprocessing_data = Self::fast_modular_coset_interpolate_preprocess(
+            codeword_length,
+            domain_offset,
+            &modulus,
+        );
+
+        (0..codewords.len() / n)
+            .flat_map(|i| {
+                let codeword = &codewords[i * n..(i + 1) * n];
+                let minimal_interpolant =
+                    Self::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
+                        codeword,
+                        domain_offset,
+                        &modulus,
+                        &preprocessing_data,
+                    );
+                minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
+            })
+            .collect()
+    }
+
+    fn batch_naive_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let (zerofier_tree, shift_coefficients, tail_length) =
+            Self::naive_coset_extrapolate_preprocessing(points);
+        let n = codeword_length;
+        let logn = n.ilog2();
+
+        (0..codewords.len() / n)
+            .flat_map(|i| {
+                let mut coefficients = codewords[i * n..(i + 1) * n].to_vec();
+                intt(
+                    &mut coefficients,
+                    BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+                    logn,
+                );
+                Polynomial::new(coefficients)
+                    .scale(FF::from(domain_offset.inverse().value()))
+                    .reduce_by_ntt_friendly_modulus(&shift_coefficients, tail_length)
+                    .divide_and_conquer_batch_evaluate(&zerofier_tree)
+            })
+            .collect()
+    }
+
+    /// Parallel version of [`batch_coset_extrapolate`](Self::batch_coset_extrapolate).
+    pub fn par_batch_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        if points.len() < Self::FAST_COSET_EXTRAPOLATE_THRESHOLD {
+            Self::par_batch_fast_coset_extrapolate(
+                domain_offset,
+                codeword_length,
+                codewords,
+                points,
+            )
+        } else {
+            Self::par_batch_naive_coset_extrapolate(
+                domain_offset,
+                codeword_length,
+                codewords,
+                points,
+            )
+        }
+    }
+
+    fn par_batch_fast_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let n = codeword_length;
+
+        let zerofier_tree = ZerofierTree::new_from_domain(points);
+        let modulus = zerofier_tree.zerofier();
+        let preprocessing_data = Self::fast_modular_coset_interpolate_preprocess(
+            codeword_length,
+            domain_offset,
+            &modulus,
+        );
+
+        (0..codewords.len() / n)
+            .into_par_iter()
+            .flat_map(|i| {
+                let codeword = &codewords[i * n..(i + 1) * n];
+                let minimal_interpolant =
+                    Self::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
+                        codeword,
+                        domain_offset,
+                        &modulus,
+                        &preprocessing_data,
+                    );
+                minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
+            })
+            .collect()
+    }
+
+    fn par_batch_naive_coset_extrapolate(
+        domain_offset: BFieldElement,
+        codeword_length: usize,
+        codewords: &[FF],
+        points: &[FF],
+    ) -> Vec<FF> {
+        let (zerofier_tree, shift_coefficients, tail_length) =
+            Self::naive_coset_extrapolate_preprocessing(points);
+        let n = codeword_length;
+        let logn = n.ilog2();
+
+        (0..codewords.len() / n)
+            .into_par_iter()
+            .flat_map(|i| {
+                let mut coefficients = codewords[i * n..(i + 1) * n].to_vec();
+                intt(
+                    &mut coefficients,
+                    BFieldElement::primitive_root_of_unity(n as u64).unwrap(),
+                    logn,
+                );
+                Polynomial::new(coefficients)
+                    .scale(FF::from(domain_offset.inverse().value()))
+                    .reduce_by_ntt_friendly_modulus(&shift_coefficients, tail_length)
+                    .divide_and_conquer_batch_evaluate(&zerofier_tree)
+            })
+            .collect()
     }
 }
 
@@ -2577,6 +3037,23 @@ mod test_polynomials {
         prop_assert_eq!(a * b, product);
     }
 
+    #[proptest]
+    fn batch_multiply_agrees_with_iterative_multiply(a: Vec<Polynomial<BFieldElement>>) {
+        let mut acc = Polynomial::one();
+        for factor in &a {
+            acc = acc.multiply(factor);
+        }
+        prop_assert_eq!(acc, Polynomial::batch_multiply(&a));
+    }
+
+    #[proptest]
+    fn par_batch_multiply_agrees_with_batch_multiply(a: Vec<Polynomial<BFieldElement>>) {
+        prop_assert_eq!(
+            Polynomial::batch_multiply(&a),
+            Polynomial::par_batch_multiply(&a)
+        );
+    }
+
     #[proptest(cases = 50)]
     fn naive_zerofier_and_fast_zerofier_are_identical(
         #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
@@ -2630,6 +3107,13 @@ mod test_polynomials {
             zerofier.leading_coefficient().unwrap()
         );
     }
+    #[proptest]
+    fn par_zerofier_agrees_with_zerofier(domain: Vec<BFieldElement>) {
+        prop_assert_eq!(
+            Polynomial::zerofier(&domain),
+            Polynomial::par_zerofier(&domain)
+        );
+    }
 
     #[test]
     fn fast_evaluate_on_hardcoded_domain_and_polynomial() {
@@ -2649,16 +3133,6 @@ mod test_polynomials {
         let evaluations = domain.iter().map(|&x| poly.evaluate(x)).collect_vec();
         let fast_evaluations = poly.batch_evaluate(&domain);
         prop_assert_eq!(evaluations, fast_evaluations);
-    }
-
-    #[proptest]
-    fn slow_and_vector_batch_polynomial_evaluation_are_equivalent(
-        poly: Polynomial<BFieldElement>,
-        #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
-    ) {
-        let evaluations = domain.iter().map(|&x| poly.evaluate(x)).collect_vec();
-        let vector_batch_evaluations = poly.vector_batch_evaluate(&domain);
-        prop_assert_eq!(evaluations, vector_batch_evaluations);
     }
 
     #[test]
@@ -2846,15 +3320,6 @@ mod test_polynomials {
         let (quot, rem) = a.naive_divide(&b);
         prop_assert!(rem.is_zero());
         prop_assert_eq!(a, quot * b);
-    }
-
-    #[proptest]
-    fn naive_division_and_fast_division_are_equivalent(
-        a: Polynomial<BFieldElement>,
-        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
-    ) {
-        let (quotient, _remainder) = a.fast_divide(&b);
-        prop_assert_eq!(a / b, quotient);
     }
 
     #[proptest]
@@ -3207,7 +3672,7 @@ mod test_polynomials {
 
     #[test]
     fn formal_power_series_inverse_newton_concrete() {
-        let f = Polynomial::<BFieldElement>::new(vec![
+        let f = Polynomial::new(vec![
             BFieldElement::new(3618372803227210457),
             BFieldElement::new(14620511201754172786),
             BFieldElement::new(2577803283145951105),
@@ -3253,7 +3718,7 @@ mod test_polynomials {
         #[strategy(vec(arb(), 1..30))]
         coefficients: Vec<BFieldElement>,
     ) {
-        let polynomial = Polynomial::<BFieldElement>::new(coefficients);
+        let polynomial = Polynomial::new(coefficients);
         let multiple = polynomial.structured_multiple();
         let (_quotient, remainder) = multiple.divide(&polynomial);
         prop_assert!(remainder.is_zero());
@@ -3265,7 +3730,7 @@ mod test_polynomials {
         #[strategy(vec(arb(), 1..30))]
         coefficients: Vec<BFieldElement>,
     ) {
-        let polynomial = Polynomial::<BFieldElement>::new(coefficients);
+        let polynomial = Polynomial::new(coefficients);
         let n = polynomial.degree() as usize;
         let structured_multiple = polynomial.structured_multiple();
         assert!(structured_multiple.degree() as usize <= 2 * n);
@@ -3280,17 +3745,17 @@ mod test_polynomials {
         let remainder = structured_multiple.reduce_long_division(&x2n);
         assert_eq!(remainder.degree() as usize, n - 1);
         assert_eq!(
+            0,
             (structured_multiple.clone() - remainder.clone())
                 .reverse()
                 .degree() as usize,
-            0
         );
         assert_eq!(
+            BFieldElement::new(1),
             *(structured_multiple.clone() - remainder)
                 .coefficients
                 .last()
                 .unwrap(),
-            BFieldElement::new(1)
         );
     }
 
@@ -3314,7 +3779,7 @@ mod test_polynomials {
             .concat(),
         );
         let (_quotient, remainder) = structured_multiple.divide(&x2n);
-        assert_eq!(remainder.degree() as usize, n - 1);
+        assert_eq!(n - 1, remainder.degree() as usize);
         assert_eq!(
             (structured_multiple.clone() - remainder.clone())
                 .reverse()
@@ -3337,7 +3802,7 @@ mod test_polynomials {
         #[strategy(vec(arb(), 1..usize::min(30, #n)))]
         coefficients: Vec<BFieldElement>,
     ) {
-        let polynomial = Polynomial::<BFieldElement>::new(coefficients);
+        let polynomial = Polynomial::new(coefficients);
         let multiple = polynomial.structured_multiple_of_degree(n);
         let remainder = multiple.reduce_long_division(&polynomial);
         prop_assert!(remainder.is_zero());
@@ -3349,7 +3814,7 @@ mod test_polynomials {
         #[strategy(vec(arb(), 3..usize::min(30, #n)))] mut coefficients: Vec<BFieldElement>,
     ) {
         *coefficients.last_mut().unwrap() = BFieldElement::new(1);
-        let polynomial = Polynomial::<BFieldElement>::new(coefficients);
+        let polynomial = Polynomial::new(coefficients);
         let structured_multiple = polynomial.structured_multiple_of_degree(n);
 
         let xn = Polynomial::new(
@@ -3382,7 +3847,7 @@ mod test_polynomials {
         #[strategy(vec(arb(), 1..usize::min(30, #n)))]
         coefficients: Vec<BFieldElement>,
     ) {
-        let polynomial = Polynomial::<BFieldElement>::new(coefficients);
+        let polynomial = Polynomial::new(coefficients);
         let multiple = polynomial.structured_multiple_of_degree(n);
         prop_assert_eq!(
             multiple.degree() as usize,
@@ -3397,8 +3862,7 @@ mod test_polynomials {
     fn reverse_polynomial_with_nonzero_constant_term_twice_gives_original_back(
         f: Polynomial<BFieldElement>,
     ) {
-        let fx_plus_1 = f.shift_coefficients(1)
-            + Polynomial::<BFieldElement>::from_constant(BFieldElement::new(1));
+        let fx_plus_1 = f.shift_coefficients(1) + Polynomial::from_constant(bfe!(1));
         prop_assert_eq!(fx_plus_1.clone(), fx_plus_1.reverse().reverse());
     }
 
@@ -3539,7 +4003,8 @@ mod test_polynomials {
     ) {
         let polynomial = Polynomial::new(coefficients);
         let evaluations_iterative = polynomial.iterative_batch_evaluate(&domain);
-        let evaluations_fast = polynomial.divide_and_conquer_batch_evaluate(&domain);
+        let zerofier_tree = ZerofierTree::new_from_domain(&domain);
+        let evaluations_fast = polynomial.divide_and_conquer_batch_evaluate(&zerofier_tree);
         let evaluations_reduce_then = polynomial.reduce_then_batch_evaluate(&domain);
 
         prop_assert_eq!(evaluations_iterative.clone(), evaluations_fast);
@@ -3552,5 +4017,176 @@ mod test_polynomials {
         #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
     ) {
         prop_assert_eq!(a.divide(&b).1, a.reduce(&b));
+    }
+
+    #[proptest]
+    fn structured_multiple_of_monomial_term_is_actually_multiple_and_of_right_degree(
+        #[strategy(1usize..1000)] degree: usize,
+        #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
+        #[strategy(#degree+1..#degree+200)] target_degree: usize,
+    ) {
+        let coefficients = [bfe_vec![0; degree], vec![leading_coefficient]].concat();
+        let polynomial = Polynomial::new(coefficients);
+        let multiple = polynomial.structured_multiple_of_degree(target_degree);
+        prop_assert_eq!(Polynomial::zero(), multiple.reduce(&polynomial));
+        prop_assert_eq!(multiple.degree() as usize, target_degree);
+    }
+
+    #[proptest]
+    fn monomial_term_divided_by_smaller_monomial_term_gives_clean_division(
+        #[strategy(100usize..102)] high_degree: usize,
+        #[filter(!#high_lc.is_zero())] high_lc: BFieldElement,
+        #[strategy(83..#high_degree)] low_degree: usize,
+        #[filter(!#low_lc.is_zero())] low_lc: BFieldElement,
+    ) {
+        let numerator = Polynomial::new([bfe_vec![0; high_degree], vec![high_lc]].concat());
+        let denominator = Polynomial::new([bfe_vec![0; low_degree], vec![low_lc]].concat());
+        let (quotient, remainder) = numerator.divide(&denominator);
+        prop_assert_eq!(
+            quotient
+                .coefficients
+                .iter()
+                .filter(|c| !c.is_zero())
+                .count(),
+            1
+        );
+        prop_assert_eq!(Polynomial::zero(), remainder);
+    }
+
+    #[proptest]
+    fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce_property(
+        #[filter(!#modulus.is_zero())] modulus: Polynomial<BFieldElement>,
+        #[strategy(0usize..10)] _logn: usize,
+        #[strategy(Just(1 << #_logn))] n: usize,
+        #[strategy(vec(arb(), #n))] values: Vec<BFieldElement>,
+        #[strategy(arb())] offset: BFieldElement,
+    ) {
+        let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
+        let domain = (0..n)
+            .scan(offset, |acc: &mut BFieldElement, _| {
+                let yld = *acc;
+                *acc *= omega;
+                Some(yld)
+            })
+            .collect_vec();
+        prop_assert_eq!(
+            Polynomial::fast_modular_coset_interpolate(&values, offset, &modulus),
+            Polynomial::interpolate(&domain, &values).reduce(&modulus)
+        )
+    }
+
+    #[test]
+    fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce_concrete() {
+        let logn = 8;
+        let n = 1u64 << logn;
+        let modulus = Polynomial::new(bfe_vec![2, 3, 1]);
+        let values = (0..n).map(|i| BFieldElement::new(i / 5)).collect_vec();
+        let offset = BFieldElement::new(7);
+
+        let omega = BFieldElement::primitive_root_of_unity(n).unwrap();
+        let mut domain = bfe_vec![0; n as usize];
+        domain[0] = offset;
+        for i in 1..n as usize {
+            domain[i] = domain[i - 1] * omega;
+        }
+        assert_eq!(
+            Polynomial::interpolate(&domain, &values).reduce(&modulus),
+            Polynomial::fast_modular_coset_interpolate(&values, offset, &modulus),
+        )
+    }
+
+    #[proptest]
+    fn coset_extrapolation_methods_agree_with_interpolate_then_evaluate(
+        #[strategy(0usize..10)] _logn: usize,
+        #[strategy(Just(1 << #_logn))] n: usize,
+        #[strategy(vec(arb(), #n))] values: Vec<BFieldElement>,
+        #[strategy(arb())] offset: BFieldElement,
+        #[strategy(vec(arb(), 1..1000))] points: Vec<BFieldElement>,
+    ) {
+        let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
+        let domain = (0..n)
+            .scan(offset, |acc: &mut BFieldElement, _| {
+                let yld = *acc;
+                *acc *= omega;
+                Some(yld)
+            })
+            .collect_vec();
+        let fast_coset_extrapolation = Polynomial::fast_coset_extrapolate(offset, &values, &points);
+        let naive_coset_extrapolation =
+            Polynomial::naive_coset_extrapolate(offset, &values, &points);
+        let interpolation_then_evaluation =
+            Polynomial::interpolate(&domain, &values).batch_evaluate(&points);
+        prop_assert_eq!(fast_coset_extrapolation.clone(), naive_coset_extrapolation);
+        prop_assert_eq!(fast_coset_extrapolation, interpolation_then_evaluation);
+    }
+
+    #[proptest]
+    fn coset_extrapolate_and_batch_coset_extrapolate_agree(
+        #[strategy(1usize..10)] _logn: usize,
+        #[strategy(Just(1<<#_logn))] n: usize,
+        #[strategy(0usize..5)] _m: usize,
+        #[strategy(vec(arb(), #_m*#n))] codewords: Vec<BFieldElement>,
+        #[strategy(vec(arb(), 0..20))] points: Vec<BFieldElement>,
+    ) {
+        let offset = BFieldElement::new(7);
+
+        let one_by_one_dispatch = codewords
+            .chunks(n)
+            .flat_map(|chunk| Polynomial::coset_extrapolate(offset, chunk, &points))
+            .collect_vec();
+        let batched_dispatch = Polynomial::batch_coset_extrapolate(offset, n, &codewords, &points);
+        let par_batched_dispatch =
+            Polynomial::par_batch_coset_extrapolate(offset, n, &codewords, &points);
+        prop_assert_eq!(one_by_one_dispatch.clone(), batched_dispatch);
+        prop_assert_eq!(one_by_one_dispatch, par_batched_dispatch);
+
+        let one_by_one_fast = codewords
+            .chunks(n)
+            .flat_map(|chunk| Polynomial::fast_coset_extrapolate(offset, chunk, &points))
+            .collect_vec();
+        let batched_fast = Polynomial::batch_fast_coset_extrapolate(offset, n, &codewords, &points);
+        let par_batched_fast =
+            Polynomial::par_batch_fast_coset_extrapolate(offset, n, &codewords, &points);
+        prop_assert_eq!(one_by_one_fast.clone(), batched_fast);
+        prop_assert_eq!(one_by_one_fast, par_batched_fast);
+
+        let one_by_one_naive = codewords
+            .chunks(n)
+            .flat_map(|chunk| Polynomial::naive_coset_extrapolate(offset, chunk, &points))
+            .collect_vec();
+        let batched_naive =
+            Polynomial::batch_naive_coset_extrapolate(offset, n, &codewords, &points);
+        let par_batched_naive =
+            Polynomial::par_batch_naive_coset_extrapolate(offset, n, &codewords, &points);
+        prop_assert_eq!(one_by_one_naive.clone(), batched_naive);
+        prop_assert_eq!(one_by_one_naive, par_batched_naive);
+    }
+
+    #[test]
+    fn fast_modular_coset_interpolate_thresholds_relate_properly() {
+        let intt = Polynomial::<BFieldElement>::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT;
+        let lagrange = Polynomial::<BFieldElement>::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE;
+        assert!(intt > lagrange);
+    }
+
+    #[proptest]
+    fn interpolate_and_par_interpolate_agree(
+        #[filter(#points.len() > 0)] points: Vec<BFieldElement>,
+        #[strategy(vec(arb(), #points.len()))] domain: Vec<BFieldElement>,
+    ) {
+        let expected_interpolant = Polynomial::interpolate(&domain, &points);
+        let observed_interpolant = Polynomial::par_interpolate(&domain, &points);
+        prop_assert_eq!(expected_interpolant, observed_interpolant);
+    }
+
+    #[proptest]
+    fn batch_evaluate_agrees_with_par_batch_evalaute(
+        polynomial: Polynomial<BFieldElement>,
+        points: Vec<BFieldElement>,
+    ) {
+        prop_assert_eq!(
+            polynomial.batch_evaluate(&points),
+            polynomial.par_batch_evaluate(&points)
+        );
     }
 }
