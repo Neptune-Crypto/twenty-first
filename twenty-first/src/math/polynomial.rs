@@ -3986,6 +3986,33 @@ mod test_polynomials {
         );
     }
 
+    #[test]
+    fn reduce_and_fast_reduce_long_division_agree_on_fixed_input() {
+        let mut failures = vec![];
+        for i in 1..100 {
+            // Is this setup convoluted? Maybe. It's the only way I've managed to trigger
+            // the discrepancy so far.
+            // The historic context of finding Bezout coefficients shimmers through. :)
+            let roots = (0..i).map(BFieldElement::new).collect_vec();
+            let dividend = Polynomial::zerofier(&roots).formal_derivative();
+
+            // Fractions of 1/4th, 1/5th, 1/6th, and so on trigger the failure. Fraction
+            // 1/5th seems to trigger both a failure for the smallest `i` (10) and the most
+            // failures (90 out of 100). Fractions 1/2 or 1/3rd don't trigger the failure.
+            let divisor_roots = &roots[..roots.len() / 5];
+            let divisor = Polynomial::zerofier(divisor_roots);
+
+            let long_div_remainder = dividend.reduce_long_division(&divisor);
+            let preprocessed_remainder = dividend.fast_reduce(&divisor);
+
+            if long_div_remainder != preprocessed_remainder {
+                failures.push(i);
+            }
+        }
+
+        assert_eq!(0, failures.len(), "failures at indices: {failures:?}");
+    }
+
     #[proptest]
     fn fast_reduce_agrees_with_reduce_long_division(
         #[filter(!#a.is_zero())] a: Polynomial<BFieldElement>,
