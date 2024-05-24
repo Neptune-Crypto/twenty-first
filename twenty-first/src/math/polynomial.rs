@@ -1156,33 +1156,21 @@ where
         remainder
     }
 
-    /// Given a polynomial f(X) of degree n, find a multiple of f(X) of the form
-    /// X^{3*n+1} + (something of degree at most 2*n).
+    /// Given a polynomial f(X) of degree n >= 0, find a multiple of f(X) of the
+    /// form X^{3*n+1} + (something of degree at most 2*n).
     ///
-    /// #Panics
+    /// # Panics
     ///
     /// Panics if f(X) = 0.
     fn structured_multiple(&self) -> Self {
-        let n = self.degree();
-        let reverse = self.reverse();
-        let inverse_reverse = reverse.formal_power_series_inverse_minimal(n as usize);
-        let product_reverse = reverse.multiply(&inverse_reverse);
-
-        // Correct for lost trailing coefficients, if any
-        let product = product_reverse.reverse();
-        let product_degree = product.degree();
-        let shift = if product_degree < n {
-            n - product_degree
-        } else {
-            0
-        };
-        product.shift_coefficients(shift as usize)
+        let n = usize::try_from(self.degree()).expect("cannot compute multiple of zero");
+        self.structured_multiple_of_degree(3 * n + 1)
     }
 
     /// Given a polynomial f(X) and an integer n, find a multiple of f(X) of the
     /// form X^n + (something of much smaller degree).
     ///
-    /// #Panics
+    /// # Panics
     ///
     /// Panics if the polynomial is zero, or if its degree is larger than n
     pub fn structured_multiple_of_degree(&self, n: usize) -> Self {
@@ -1216,39 +1204,57 @@ where
     /// X^{m+n} + (something of degree less than m). When the modulus has this
     /// form, polynomial modular reductions can be computed faster than in the
     /// generic case.
+    ///
+    /// # Panics
+    ///
+    /// Panics if
+    ///  - multiple is a constant
+    ///  - multiple is not monic
     fn reduce_by_structured_modulus(&self, multiple: &Self) -> Self {
         assert_ne!(multiple.degree(), 0);
         let multiple_degree = usize::try_from(multiple.degree()).expect("cannot reduce by zero");
+        assert_eq!(
+            FF::from(1),
+            multiple.leading_coefficient().unwrap(),
+            "multiple is not monic"
+        );
         let leading_term =
             Polynomial::new([vec![FF::from(0); multiple_degree], vec![FF::from(1); 1]].concat());
         let shift_polynomial = multiple.clone() - leading_term.clone();
-        let m = usize::try_from(shift_polynomial.degree())
+        assert!(shift_polynomial.degree() < multiple.degree());
+
+        let tail_length = usize::try_from(shift_polynomial.degree())
             .map(|unsigned_degree| unsigned_degree + 1)
             .unwrap_or(0);
-        let n = multiple_degree - m;
-        if self.coefficients.len() < n + m {
+        let window_length = multiple_degree;
+        let chunk_size = window_length - tail_length;
+        if self.coefficients.len() < chunk_size + tail_length {
             return self.clone();
         }
-        let num_reducible_chunks = (self.coefficients.len() - (m + n) + n - 1) / n;
+        let num_reducible_chunks =
+            (self.coefficients.len() - (tail_length + chunk_size)).div_ceil(chunk_size);
 
-        let range_start = num_reducible_chunks * n;
-        let mut working_window = if range_start >= self.coefficients.len() {
-            vec![FF::from(0); n + m]
-        } else {
-            self.coefficients[range_start..].to_vec()
-        };
-        working_window.resize(n + m, FF::from(0));
+        let window_stop = (tail_length + chunk_size) + num_reducible_chunks * chunk_size;
+        let mut window_start = window_stop - window_length;
+        let mut working_window = self.coefficients[window_start..].to_vec();
+        working_window.resize(chunk_size + tail_length, FF::from(0));
 
-        for chunk_index in (0..num_reducible_chunks).rev() {
-            let overflow = Polynomial::new(working_window[m..].to_vec());
+        for _ in (0..num_reducible_chunks).rev() {
+            let overflow = Polynomial::new(working_window[tail_length..].to_vec());
             let product = overflow.multiply(&shift_polynomial);
 
-            working_window = [vec![FF::from(0); n], working_window[0..m].to_vec()].concat();
-            for (i, wwi) in working_window.iter_mut().enumerate().take(n) {
-                *wwi = self.coefficients[chunk_index * n + i];
-            }
+            window_start -= chunk_size;
+            working_window = [
+                self.coefficients[window_start..window_start + chunk_size].to_vec(),
+                working_window[0..tail_length].to_vec(),
+            ]
+            .concat();
 
-            for (i, wwi) in working_window.iter_mut().enumerate().take(n + m) {
+            for (i, wwi) in working_window
+                .iter_mut()
+                .enumerate()
+                .take(chunk_size + tail_length)
+            {
                 *wwi -= *product.coefficients.get(i).unwrap_or(&FF::from(0));
             }
         }
@@ -1325,7 +1331,7 @@ where
     /// Only marked `pub` for benchmarking purposes. Not considered part of the
     /// public API.
     #[doc(hidden)]
-    pub fn shift_factor_ntt_with_tail_size(&self) -> (Vec<FF>, usize) {
+    pub fn shift_factor_ntt_with_tail_length(&self) -> (Vec<FF>, usize) {
         let n = usize::max(
             Polynomial::<FF>::FAST_REDUCE_CUTOFF_THRESHOLD,
             self.degree() as usize * 2,
@@ -1374,7 +1380,7 @@ where
         // This allows us to reduce the numerator's coefficients in chunks of
         // n-m using NTT-based multiplication over a domain of size n = 2^k.
 
-        let (shift_factor_ntt, tail_size) = modulus.shift_factor_ntt_with_tail_size();
+        let (shift_factor_ntt, tail_size) = modulus.shift_factor_ntt_with_tail_length();
         let mut intermediate_remainder =
             self.reduce_by_ntt_friendly_modulus(&shift_factor_ntt, tail_size);
 
@@ -1463,7 +1469,7 @@ where
             .collect_vec();
 
         // precompute NTT-friendly multiple of the modulus
-        let (shift_coefficients, tail_length) = modulus.shift_factor_ntt_with_tail_size();
+        let (shift_coefficients, tail_length) = modulus.shift_factor_ntt_with_tail_length();
 
         ModularInterpolationPreprocessingData {
             even_zerofiers,
@@ -1606,7 +1612,7 @@ where
     fn naive_coset_extrapolate_preprocessing(points: &[FF]) -> (ZerofierTree<FF>, Vec<FF>, usize) {
         let zerofier_tree = ZerofierTree::new_from_domain(points);
         let (shift_coefficients, tail_length) =
-            Self::shift_factor_ntt_with_tail_size(&zerofier_tree.zerofier());
+            Self::shift_factor_ntt_with_tail_length(&zerofier_tree.zerofier());
         (zerofier_tree, shift_coefficients, tail_length)
     }
 
@@ -3720,8 +3726,18 @@ mod test_polynomials {
     ) {
         let polynomial = Polynomial::new(coefficients);
         let multiple = polynomial.structured_multiple();
-        let (_quotient, remainder) = multiple.divide(&polynomial);
+        let remainder = multiple.reduce_long_division(&polynomial);
         prop_assert!(remainder.is_zero());
+    }
+
+    #[proptest]
+    fn structured_multiple_of_modulus_with_trailing_zeros_is_multiple(
+        #[filter(!#raw_modulus.is_zero())] raw_modulus: Polynomial<BFieldElement>,
+        #[strategy(0usize..100)] num_trailing_zeros: usize,
+    ) {
+        let modulus = raw_modulus.shift_coefficients(num_trailing_zeros);
+        let multiple = modulus.structured_multiple();
+        prop_assert!(multiple.reduce_long_division(&modulus).is_zero());
     }
 
     #[proptest]
@@ -3731,24 +3747,24 @@ mod test_polynomials {
         coefficients: Vec<BFieldElement>,
     ) {
         let polynomial = Polynomial::new(coefficients);
-        let n = polynomial.degree() as usize;
+        let n = polynomial.degree();
         let structured_multiple = polynomial.structured_multiple();
-        assert!(structured_multiple.degree() as usize <= 2 * n);
+        assert!(structured_multiple.degree() <= 3 * n + 1);
 
-        let x2n = Polynomial::new(
+        let x3np1 = Polynomial::new(
             [
-                vec![BFieldElement::new(0); 2 * n],
+                vec![BFieldElement::new(0); (3 * n + 1) as usize],
                 vec![BFieldElement::new(1); 1],
             ]
             .concat(),
         );
-        let remainder = structured_multiple.reduce_long_division(&x2n);
-        assert_eq!(remainder.degree() as usize, n - 1);
+        let remainder = structured_multiple.reduce_long_division(&x3np1);
+        assert!(2 * n >= remainder.degree());
         assert_eq!(
             0,
             (structured_multiple.clone() - remainder.clone())
                 .reverse()
-                .degree() as usize,
+                .degree(),
         );
         assert_eq!(
             BFieldElement::new(1),
@@ -3767,31 +3783,31 @@ mod test_polynomials {
                 .map(BFieldElement::new)
                 .collect_vec(),
         );
-        let n = polynomial.degree() as usize;
+        let n = polynomial.degree();
         let structured_multiple = polynomial.structured_multiple();
-        assert!(structured_multiple.degree() as usize <= 2 * n);
+        assert!(structured_multiple.degree() == 3 * n + 1);
 
-        let x2n = Polynomial::new(
+        let x3np1 = Polynomial::new(
             [
-                vec![BFieldElement::new(0); 2 * n],
+                vec![BFieldElement::new(0); (3 * n + 1) as usize],
                 vec![BFieldElement::new(1); 1],
             ]
             .concat(),
         );
-        let (_quotient, remainder) = structured_multiple.divide(&x2n);
-        assert_eq!(n - 1, remainder.degree() as usize);
+        let remainder = structured_multiple.reduce_long_division(&x3np1);
+        assert!(2 * n >= remainder.degree());
         assert_eq!(
+            0,
             (structured_multiple.clone() - remainder.clone())
                 .reverse()
-                .degree() as usize,
-            0
+                .degree(),
         );
         assert_eq!(
+            BFieldElement::new(1),
             *(structured_multiple.clone() - remainder)
                 .coefficients
                 .last()
                 .unwrap(),
-            BFieldElement::new(1)
         );
     }
 
@@ -3986,8 +4002,22 @@ mod test_polynomials {
         );
     }
 
+    #[proptest]
+    fn reduce_fast_and_reduce_long_division_agree(
+        numerator: Polynomial<BFieldElement>,
+        #[filter(!#modulus.is_zero())] modulus: Polynomial<BFieldElement>,
+    ) {
+        prop_assert_eq!(
+            numerator.fast_reduce(&modulus),
+            numerator.reduce_long_division(&modulus)
+        );
+    }
+
     #[test]
     fn reduce_and_fast_reduce_long_division_agree_on_fixed_input() {
+        // The bug exhibited by this minimal failing test case has since been
+        // fixed. The comments are kept as-is for historical accuracy and
+        // didactics, and do not reflect an on-going bug hunt anymore.
         let mut failures = vec![];
         for i in 1..100 {
             // Is this setup convoluted? Maybe. It's the only way I've managed to trigger
@@ -4013,14 +4043,30 @@ mod test_polynomials {
         assert_eq!(0, failures.len(), "failures at indices: {failures:?}");
     }
 
-    #[proptest]
-    fn fast_reduce_agrees_with_reduce_long_division(
-        #[filter(!#a.is_zero())] a: Polynomial<BFieldElement>,
-        #[filter(!#b.is_zero())] b: Polynomial<BFieldElement>,
-    ) {
-        let standard_remainder = a.reduce_long_division(&b);
-        let preprocessed_remainder = a.fast_reduce(&b);
-        prop_assert_eq!(standard_remainder, preprocessed_remainder);
+    #[test]
+    fn reduce_long_division_and_fast_reduce_agree_simple_fixed() {
+        let roots = (0..10).map(BFieldElement::new).collect_vec();
+        let numerator = Polynomial::zerofier(&roots).formal_derivative();
+        println!("numerator: {}", numerator);
+
+        let divisor_roots = &roots[..roots.len() / 5];
+        let denominator = Polynomial::zerofier(divisor_roots);
+        println!("modulus: {}", denominator);
+
+        let (quotient, remainder) = numerator.divide(&denominator);
+        assert_eq!(
+            numerator,
+            denominator.clone() * quotient + remainder.clone()
+        );
+
+        let long_div_remainder = numerator.reduce_long_division(&denominator);
+        println!("long div remainder: {}", long_div_remainder);
+        assert_eq!(remainder, long_div_remainder);
+
+        let preprocessed_remainder = numerator.fast_reduce(&denominator);
+        println!("fast remainder: {}", preprocessed_remainder);
+
+        assert_eq!(long_div_remainder, preprocessed_remainder);
     }
 
     #[proptest]
