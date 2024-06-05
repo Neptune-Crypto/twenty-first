@@ -55,6 +55,7 @@ commit_parsers = [
   { message = "^refactor",        group = "<!-- 50 --> ♻️ Refactor" },
   { message = "^build",           group = "<!-- 55 --> 🛠 Build" },
   { message = "^test",            group = "<!-- 60 --> ✅ Testing" },
+  { message = "^bench",           group = "<!-- 65 --> ⏱️ Benchmark" },
   { body = ".*security",          group = "<!-- 70 --> 🔒️ Security" },
   { message = "^revert",          group = "<!-- 80 --> ⏪️ Revert" },
   { message = "^style",           group = "<!-- 90 --> 🎨 Styling" },
