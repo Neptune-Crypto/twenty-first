@@ -132,8 +132,6 @@ pub trait AlgebraicHasher: Sponge {
 mod algebraic_hasher_tests {
     use std::ops::Mul;
 
-    use num_traits::One;
-    use num_traits::Zero;
     use rand::Rng;
     use rand_distr::Distribution;
     use rand_distr::Standard;
@@ -182,7 +180,7 @@ mod algebraic_hasher_tests {
 
         // XFieldElement
         let xfe_max = XFieldElement::new([bfe_max; EXTENSION_DEGREE]);
-        encode_prop(XFieldElement::zero(), xfe_max);
+        encode_prop(XFieldElement::ZERO, xfe_max);
 
         // Digest
         let digest_zero = Digest::new([BFieldElement::ZERO; DIGEST_LENGTH]);
@@ -223,14 +221,14 @@ mod algebraic_hasher_tests {
     fn sample_scalars_test() {
         let amounts = [0, 1, 2, 3, 4];
         let mut sponge = Tip5::randomly_seeded();
-        let mut product = XFieldElement::one();
+        let mut product = XFieldElement::ONE;
         for amount in amounts {
             let scalars = sponge.sample_scalars(amount);
             assert_eq!(amount, scalars.len());
             product *= scalars
                 .into_iter()
-                .fold(XFieldElement::one(), XFieldElement::mul);
+                .fold(XFieldElement::ONE, XFieldElement::mul);
         }
-        assert_ne!(product, XFieldElement::zero()); // false failure with prob ~2^{-192}
+        assert_ne!(product, XFieldElement::ZERO); // false failure with prob ~2^{-192}
     }
 }

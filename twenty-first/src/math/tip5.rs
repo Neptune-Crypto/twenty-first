@@ -616,8 +616,6 @@ impl Sponge for Tip5 {
 pub(crate) mod tip5_tests {
     use std::ops::Mul;
 
-    use num_traits::One;
-    use num_traits::Zero;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use rand::thread_rng;
@@ -990,15 +988,15 @@ pub(crate) mod tip5_tests {
     #[test]
     fn sample_scalars_test() {
         let mut sponge = Tip5::randomly_seeded();
-        let mut product = XFieldElement::one();
+        let mut product = XFieldElement::ONE;
         for amount in 0..=4 {
             let scalars = sponge.sample_scalars(amount);
             assert_eq!(amount, scalars.len());
             product *= scalars
                 .into_iter()
-                .fold(XFieldElement::one(), XFieldElement::mul);
+                .fold(XFieldElement::ONE, XFieldElement::mul);
         }
-        assert_ne!(product, XFieldElement::zero()); // false failure with prob ~2^{-192}
+        assert_ne!(product, XFieldElement::ZERO); // false failure with prob ~2^{-192}
     }
 
     #[test]

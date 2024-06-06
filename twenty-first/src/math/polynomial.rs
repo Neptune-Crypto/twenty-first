@@ -18,6 +18,7 @@ use itertools::EitherOrBoth;
 use itertools::Itertools;
 use num_bigint::BigInt;
 use num_traits::ConstOne;
+use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
 use rayon::prelude::*;
@@ -1880,8 +1881,8 @@ impl Polynomial<BFieldElement> {
         let order_u64 = u64::try_from(order).unwrap();
         let root = BFieldElement::primitive_root_of_unity(order_u64).unwrap();
 
-        dividend_coefficients.resize(order, XFieldElement::zero());
-        divisor_coefficients.resize(order, XFieldElement::zero());
+        dividend_coefficients.resize(order, XFieldElement::ZERO);
+        divisor_coefficients.resize(order, XFieldElement::ZERO);
 
         ntt(&mut dividend_coefficients, root, order.ilog2());
         ntt(&mut divisor_coefficients, root, order.ilog2());

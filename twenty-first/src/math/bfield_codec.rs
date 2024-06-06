@@ -758,7 +758,7 @@ mod tests {
         let encoded = polynomial.encode();
         polynomial
             .coefficients
-            .extend(vec![XFieldElement::zero(); num_leading_zeros]);
+            .extend(vec![XFieldElement::ZERO; num_leading_zeros]);
         let poly_w_leading_zeros_encoded = polynomial.encode();
         prop_assert_eq!(encoded, poly_w_leading_zeros_encoded);
     }
