@@ -1,4 +1,5 @@
-use num_traits::{One, Zero};
+use num_traits::One;
+use num_traits::Zero;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt::{Debug, Display};

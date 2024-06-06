@@ -16,6 +16,8 @@ use std::str::FromStr;
 use arbitrary::Arbitrary;
 use arbitrary::Unstructured;
 use get_size::GetSize;
+use num_traits::ConstOne;
+use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
 use phf::phf_map;
@@ -195,9 +197,6 @@ impl<'de> Deserialize<'de> for BFieldElement {
     }
 }
 
-pub const BFIELD_ZERO: BFieldElement = BFieldElement::new(0);
-pub const BFIELD_ONE: BFieldElement = BFieldElement::new(1);
-
 impl Sum for BFieldElement {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.reduce(|a, b| a + b)
@@ -281,7 +280,7 @@ impl BFieldElement {
     #[must_use]
     #[inline]
     pub const fn mod_pow(&self, exp: u64) -> Self {
-        let mut acc = BFieldElement::new(1);
+        let mut acc = BFieldElement::ONE;
         let bit_length = u64::BITS - exp.leading_zeros();
         let mut i = 0;
         while i < bit_length {
@@ -366,7 +365,7 @@ impl BFieldElement {
     }
 
     #[inline]
-    pub fn raw_u64(&self) -> u64 {
+    pub const fn raw_u64(&self) -> u64 {
         self.0
     }
 
@@ -539,25 +538,33 @@ impl FiniteField for BFieldElement {}
 impl Zero for BFieldElement {
     #[inline]
     fn zero() -> Self {
-        BFIELD_ZERO
+        Self::ZERO
     }
 
     #[inline]
     fn is_zero(&self) -> bool {
-        self == &BFIELD_ZERO
+        self == &Self::ZERO
     }
+}
+
+impl ConstZero for BFieldElement {
+    const ZERO: Self = Self::new(0);
 }
 
 impl One for BFieldElement {
     #[inline]
     fn one() -> Self {
-        BFIELD_ONE
+        Self::ONE
     }
 
     #[inline]
     fn is_one(&self) -> bool {
-        self == &BFIELD_ONE
+        self == &Self::ONE
     }
+}
+
+impl ConstOne for BFieldElement {
+    const ONE: Self = Self::new(1);
 }
 
 impl Add for BFieldElement {
@@ -717,13 +724,13 @@ mod b_prime_field_element_test {
 
     #[proptest]
     fn zero_is_neutral_element_for_addition(bfe: BFieldElement) {
-        let zero = BFieldElement::zero();
+        let zero = BFieldElement::ZERO;
         prop_assert_eq!(bfe + zero, bfe);
     }
 
     #[proptest]
     fn one_is_neutral_element_for_multiplication(bfe: BFieldElement) {
-        let one = BFieldElement::one();
+        let one = BFieldElement::ONE;
         prop_assert_eq!(bfe * one, bfe);
     }
 
@@ -809,6 +816,7 @@ mod b_prime_field_element_test {
     fn zero_is_zero() {
         let zero = BFieldElement::zero();
         assert!(zero.is_zero());
+        assert_eq!(zero, BFieldElement::ZERO);
     }
 
     #[proptest]
@@ -823,6 +831,7 @@ mod b_prime_field_element_test {
     fn one_is_one() {
         let one = BFieldElement::one();
         assert!(one.is_one());
+        assert_eq!(one, BFieldElement::ONE);
     }
 
     #[proptest]
@@ -835,8 +844,8 @@ mod b_prime_field_element_test {
 
     #[test]
     fn one_unequal_zero() {
-        let one = BFieldElement::one();
-        let zero = BFieldElement::zero();
+        let one = BFieldElement::ONE;
+        let zero = BFieldElement::ZERO;
         assert_ne!(one, zero);
     }
 
@@ -878,8 +887,8 @@ mod b_prime_field_element_test {
         let generator_pow_p = generator.mod_pow(largest_meaningful_power);
         let generator_pow_p_half = generator.mod_pow(largest_meaningful_power / 2);
 
-        assert_eq!(BFieldElement::one(), generator_pow_p);
-        assert_ne!(BFieldElement::one(), generator_pow_p_half);
+        assert_eq!(BFieldElement::ONE, generator_pow_p);
+        assert_ne!(BFieldElement::ONE, generator_pow_p_half);
     }
 
     #[proptest]
@@ -912,7 +921,7 @@ mod b_prime_field_element_test {
 
     #[test]
     fn decrementing_min_value_wraps_around() {
-        let mut bfe = BFieldElement::zero();
+        let mut bfe = BFieldElement::ZERO;
         bfe.decrement();
         assert_eq!(BFieldElement::MAX, bfe.value());
     }
@@ -928,7 +937,7 @@ mod b_prime_field_element_test {
         let bfes_inv = BFieldElement::batch_inversion(bfes.clone());
         prop_assert_eq!(bfes.len(), bfes_inv.len());
         for (bfe, bfe_inv) in izip!(bfes, bfes_inv) {
-            prop_assert_eq!(BFieldElement::one(), bfe * bfe_inv);
+            prop_assert_eq!(BFieldElement::ONE, bfe * bfe_inv);
         }
     }
 
@@ -1045,23 +1054,23 @@ mod b_prime_field_element_test {
 
     #[test]
     fn neg_test() {
-        assert_eq!(-BFieldElement::zero(), BFieldElement::zero());
+        assert_eq!(-BFieldElement::ZERO, BFieldElement::ZERO);
         assert_eq!(
-            (-BFieldElement::one()).canonical_representation(),
+            (-BFieldElement::ONE).canonical_representation(),
             BFieldElement::MAX
         );
         let max = BFieldElement::new(BFieldElement::MAX);
-        let max_plus_one = max + BFieldElement::one();
-        let max_plus_two = max_plus_one + BFieldElement::one();
-        assert_eq!(BFieldElement::zero(), -max_plus_one);
+        let max_plus_one = max + BFieldElement::ONE;
+        let max_plus_two = max_plus_one + BFieldElement::ONE;
+        assert_eq!(BFieldElement::ZERO, -max_plus_one);
         assert_eq!(max, -max_plus_two);
     }
 
     #[test]
     fn equality_and_hash_test() {
-        assert_eq!(BFieldElement::zero(), BFieldElement::zero());
-        assert_eq!(BFieldElement::one(), BFieldElement::one());
-        assert_ne!(BFieldElement::one(), BFieldElement::zero());
+        assert_eq!(BFieldElement::ZERO, BFieldElement::ZERO);
+        assert_eq!(BFieldElement::ONE, BFieldElement::ONE);
+        assert_ne!(BFieldElement::ONE, BFieldElement::ZERO);
         assert_eq!(BFieldElement::new(42), BFieldElement::new(42));
         assert_ne!(BFieldElement::new(42), BFieldElement::new(43));
 
@@ -1152,7 +1161,7 @@ mod b_prime_field_element_test {
     #[test]
     #[should_panic(expected = "Attempted to find the multiplicative inverse of zero.")]
     fn multiplicative_inverse_of_zero() {
-        let zero = BFieldElement::zero();
+        let zero = BFieldElement::ZERO;
         let _ = zero.inverse();
     }
 
@@ -1171,8 +1180,8 @@ mod b_prime_field_element_test {
 
     #[test]
     fn inverse_or_zero_bfe() {
-        let zero = BFieldElement::zero();
-        let one = BFieldElement::one();
+        let zero = BFieldElement::ZERO;
+        let one = BFieldElement::ONE;
         assert_eq!(zero, zero.inverse_or_zero());
 
         let mut rng = rand::thread_rng();
@@ -1204,7 +1213,7 @@ mod b_prime_field_element_test {
 
     #[test]
     fn equals() {
-        let a = BFieldElement::one();
+        let a = BFieldElement::ONE;
         let b = bfe!(BFieldElement::MAX) * bfe!(BFieldElement::MAX);
 
         // elements are equal

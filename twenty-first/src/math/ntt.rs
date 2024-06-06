@@ -1,6 +1,7 @@
 use std::ops::MulAssign;
 
-use num_traits::Zero;
+use num_traits::ConstOne;
+use num_traits::ConstZero;
 use rand_distr::num_traits::One;
 
 use super::b_field_element::BFieldElement;
@@ -77,7 +78,7 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
         let w_m = omega.mod_pow_u32(n / (2 * m));
         let mut k = 0;
         while k < n {
-            let mut w = BFieldElement::one();
+            let mut w = BFieldElement::ONE;
             for j in 0..m {
                 let u = x[(k + j) as usize];
                 let mut v = x[(k + j + m) as usize];
@@ -171,8 +172,8 @@ pub fn ntt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], omeg
         logn += 1;
     }
 
-    let mut powers_of_omega_bitreversed = vec![BFieldElement::zero(); n];
-    let mut omegai = BFieldElement::one();
+    let mut powers_of_omega_bitreversed = vec![BFieldElement::ZERO; n];
+    let mut omegai = BFieldElement::ONE;
     for i in 0..n / 2 {
         powers_of_omega_bitreversed[bitreverse_usize(i, logn - 1)] = omegai;
         omegai *= omega;
@@ -226,7 +227,7 @@ pub fn intt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], ome
         let w_m = omega_inverse.mod_pow_u32((n / (2 * m)).try_into().unwrap());
         let mut k = 0;
         while k < n {
-            let mut w = BFieldElement::one();
+            let mut w = BFieldElement::ONE;
             for j in 0..m {
                 let u = x[k + j];
                 let mut v = x[k + j + m];
@@ -265,7 +266,6 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
 #[cfg(test)]
 mod fast_ntt_attempt_tests {
     use itertools::Itertools;
-    use num_traits::One;
     use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -337,17 +337,17 @@ mod fast_ntt_attempt_tests {
     #[test]
     fn xfield_basic_test_of_chu_ntt() {
         let mut input_output = vec![
-            XFieldElement::new_const(BFieldElement::one()),
-            XFieldElement::new_const(BFieldElement::zero()),
-            XFieldElement::new_const(BFieldElement::zero()),
-            XFieldElement::new_const(BFieldElement::zero()),
+            XFieldElement::new_const(BFieldElement::ONE),
+            XFieldElement::new_const(BFieldElement::ZERO),
+            XFieldElement::new_const(BFieldElement::ZERO),
+            XFieldElement::new_const(BFieldElement::ZERO),
         ];
         let original_input = input_output.clone();
         let expected = vec![
-            XFieldElement::new_const(BFieldElement::one()),
-            XFieldElement::new_const(BFieldElement::one()),
-            XFieldElement::new_const(BFieldElement::one()),
-            XFieldElement::new_const(BFieldElement::one()),
+            XFieldElement::new_const(BFieldElement::ONE),
+            XFieldElement::new_const(BFieldElement::ONE),
+            XFieldElement::new_const(BFieldElement::ONE),
+            XFieldElement::new_const(BFieldElement::ONE),
         ];
         let omega = XFieldElement::primitive_root_of_unity(4).unwrap();
 
@@ -428,7 +428,7 @@ mod fast_ntt_attempt_tests {
     #[proptest]
     fn ntt_on_input_of_length_one(bfe: BFieldElement) {
         let mut test_vector = vec![bfe];
-        let root_of_unity = BFieldElement::one();
+        let root_of_unity = BFieldElement::ONE;
 
         ntt(&mut test_vector, root_of_unity, 0);
         assert_eq!(vec![bfe], test_vector);

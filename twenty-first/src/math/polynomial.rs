@@ -17,6 +17,7 @@ use arbitrary::Arbitrary;
 use itertools::EitherOrBoth;
 use itertools::Itertools;
 use num_bigint::BigInt;
+use num_traits::ConstOne;
 use num_traits::One;
 use num_traits::Zero;
 use rayon::prelude::*;
@@ -706,7 +707,7 @@ where
     ) -> Vec<Self> {
         debug_assert_eq!(
             primitive_root.mod_pow_u32(root_order as u32),
-            BFieldElement::one(),
+            BFieldElement::ONE,
             "Supplied element “primitive_root” must have supplied order.\
             Supplied element was: {primitive_root:?}\
             Supplied order was: {root_order:?}"
@@ -2393,6 +2394,7 @@ impl<FF: FiniteField> Neg for Polynomial<FF> {
 
 #[cfg(test)]
 mod test_polynomials {
+    use num_traits::ConstZero;
     use proptest::collection::size_range;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -2475,7 +2477,7 @@ mod test_polynomials {
 
     #[proptest]
     fn leading_coefficient_of_zero_polynomial_is_none(#[strategy(0usize..30)] num_zeros: usize) {
-        let coefficients = vec![BFieldElement::zero(); num_zeros];
+        let coefficients = vec![BFieldElement::ZERO; num_zeros];
         let polynomial = Polynomial { coefficients };
         prop_assert!(polynomial.leading_coefficient().is_none());
     }
@@ -2488,7 +2490,7 @@ mod test_polynomials {
     ) {
         let mut coefficients = polynomial.coefficients;
         coefficients.push(leading_coefficient);
-        coefficients.extend(vec![BFieldElement::zero(); num_leading_zeros]);
+        coefficients.extend(vec![BFieldElement::ZERO; num_leading_zeros]);
         let polynomial_with_leading_zeros = Polynomial { coefficients };
         prop_assert_eq!(
             leading_coefficient,
@@ -2509,7 +2511,7 @@ mod test_polynomials {
         #[strategy(0usize..30)] num_leading_zeros: usize,
     ) {
         let mut coefficients = polynomial.coefficients.clone();
-        coefficients.extend(vec![BFieldElement::zero(); num_leading_zeros]);
+        coefficients.extend(vec![BFieldElement::ZERO; num_leading_zeros]);
         let polynomial_with_leading_zeros = Polynomial { coefficients };
 
         prop_assert_eq!(polynomial, polynomial_with_leading_zeros);
@@ -2523,7 +2525,7 @@ mod test_polynomials {
     ) {
         let mut coefficients = polynomial.coefficients.clone();
         coefficients.push(leading_coefficient);
-        coefficients.extend(vec![BFieldElement::zero(); num_leading_zeros]);
+        coefficients.extend(vec![BFieldElement::ZERO; num_leading_zeros]);
         let mut polynomial_with_leading_zeros = Polynomial { coefficients };
         polynomial_with_leading_zeros.normalize();
 
@@ -2677,7 +2679,7 @@ mod test_polynomials {
     #[test]
     #[should_panic(expected = "Line must not be parallel to y-axis")]
     fn getting_point_on_invalid_line_fails() {
-        let one = BFieldElement::one();
+        let one = BFieldElement::ONE;
         let two = one + one;
         let three = two + one;
         Polynomial::<BFieldElement>::get_colinear_y((one, one), (one, three), two);
@@ -2757,7 +2759,7 @@ mod test_polynomials {
         #[strategy(0usize..30)] shift: usize,
     ) {
         let shifted_polynomial = polynomial.shift_coefficients(shift);
-        let mut expected_coefficients = vec![BFieldElement::zero(); shift];
+        let mut expected_coefficients = vec![BFieldElement::ZERO; shift];
         expected_coefficients.extend(polynomial.coefficients);
         prop_assert_eq!(expected_coefficients, shifted_polynomial.coefficients);
     }
@@ -3098,20 +3100,17 @@ mod test_polynomials {
     ) {
         let zerofier = Polynomial::zerofier(&domain);
         for point in domain {
-            prop_assert_eq!(BFieldElement::zero(), zerofier.evaluate(point));
+            prop_assert_eq!(BFieldElement::ZERO, zerofier.evaluate(point));
         }
         for point in out_of_domain_points {
-            prop_assert_ne!(BFieldElement::zero(), zerofier.evaluate(point));
+            prop_assert_ne!(BFieldElement::ZERO, zerofier.evaluate(point));
         }
     }
 
     #[proptest]
     fn zerofier_has_leading_coefficient_one(domain: Vec<BFieldElement>) {
         let zerofier = Polynomial::zerofier(&domain);
-        prop_assert_eq!(
-            BFieldElement::one(),
-            zerofier.leading_coefficient().unwrap()
-        );
+        prop_assert_eq!(BFieldElement::ONE, zerofier.leading_coefficient().unwrap());
     }
     #[proptest]
     fn par_zerofier_agrees_with_zerofier(domain: Vec<BFieldElement>) {
@@ -3670,7 +3669,7 @@ mod test_polynomials {
     ) {
         let g = f.formal_power_series_inverse_newton(precision);
         let mut coefficients = bfe_vec![0; precision + 1];
-        coefficients[precision] = BFieldElement::new(1);
+        coefficients[precision] = BFieldElement::ONE;
         let xn = Polynomial::new(coefficients);
         let (_quotient, remainder) = g.multiply(&f).divide(&xn);
         prop_assert!(remainder.is_one());
@@ -3690,8 +3689,8 @@ mod test_polynomials {
         let precision = 8;
 
         let g = f.formal_power_series_inverse_newton(precision);
-        let mut coefficients = vec![BFieldElement::new(0); precision + 1];
-        coefficients[precision] = BFieldElement::new(1);
+        let mut coefficients = vec![BFieldElement::ZERO; precision + 1];
+        coefficients[precision] = BFieldElement::ONE;
         let xn = Polynomial::new(coefficients);
         let (_quotient, remainder) = g.multiply(&f).divide(&xn);
         assert!(remainder.is_one());
@@ -3706,8 +3705,8 @@ mod test_polynomials {
         f: Polynomial<BFieldElement>,
     ) {
         let g = f.formal_power_series_inverse_minimal(precision);
-        let mut coefficients = vec![BFieldElement::new(0); precision + 1];
-        coefficients[precision] = BFieldElement::new(1);
+        let mut coefficients = vec![BFieldElement::ZERO; precision + 1];
+        coefficients[precision] = BFieldElement::ONE;
         let xn = Polynomial::new(coefficients);
         let (_quotient, remainder) = g.multiply(&f).divide(&xn);
 
@@ -3753,8 +3752,8 @@ mod test_polynomials {
 
         let x3np1 = Polynomial::new(
             [
-                vec![BFieldElement::new(0); (3 * n + 1) as usize],
-                vec![BFieldElement::new(1); 1],
+                vec![BFieldElement::ZERO; (3 * n + 1) as usize],
+                vec![BFieldElement::ONE; 1],
             ]
             .concat(),
         );
@@ -3767,7 +3766,7 @@ mod test_polynomials {
                 .degree(),
         );
         assert_eq!(
-            BFieldElement::new(1),
+            BFieldElement::ONE,
             *(structured_multiple.clone() - remainder)
                 .coefficients
                 .last()
@@ -3789,8 +3788,8 @@ mod test_polynomials {
 
         let x3np1 = Polynomial::new(
             [
-                vec![BFieldElement::new(0); (3 * n + 1) as usize],
-                vec![BFieldElement::new(1); 1],
+                vec![BFieldElement::ZERO; (3 * n + 1) as usize],
+                vec![BFieldElement::ONE; 1],
             ]
             .concat(),
         );
@@ -3803,7 +3802,7 @@ mod test_polynomials {
                 .degree(),
         );
         assert_eq!(
-            BFieldElement::new(1),
+            BFieldElement::ONE,
             *(structured_multiple.clone() - remainder)
                 .coefficients
                 .last()
@@ -3829,17 +3828,12 @@ mod test_polynomials {
         #[strategy(4usize..100)] n: usize,
         #[strategy(vec(arb(), 3..usize::min(30, #n)))] mut coefficients: Vec<BFieldElement>,
     ) {
-        *coefficients.last_mut().unwrap() = BFieldElement::new(1);
+        *coefficients.last_mut().unwrap() = BFieldElement::ONE;
         let polynomial = Polynomial::new(coefficients);
         let structured_multiple = polynomial.structured_multiple_of_degree(n);
 
-        let xn = Polynomial::new(
-            [
-                vec![BFieldElement::new(0); n],
-                vec![BFieldElement::new(1); 1],
-            ]
-            .concat(),
-        );
+        let xn =
+            Polynomial::new([vec![BFieldElement::ZERO; n], vec![BFieldElement::ONE; 1]].concat());
         let remainder = structured_multiple.reduce_long_division(&xn);
         assert_eq!(
             (structured_multiple.clone() - remainder.clone())
@@ -3848,11 +3842,11 @@ mod test_polynomials {
             0
         );
         assert_eq!(
+            BFieldElement::ONE,
             *(structured_multiple.clone() - remainder)
                 .coefficients
                 .last()
-                .unwrap(),
-            BFieldElement::new(1)
+                .unwrap()
         );
     }
 

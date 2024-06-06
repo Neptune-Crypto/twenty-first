@@ -11,6 +11,7 @@ use std::ops::SubAssign;
 
 use arbitrary::Arbitrary;
 use bfieldcodec_derive::BFieldCodec;
+use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
 use rand::Rng;
@@ -22,7 +23,6 @@ use serde::Serialize;
 use crate::bfe_vec;
 use crate::error::TryFromXFieldElementError;
 use crate::math::b_field_element::BFieldElement;
-use crate::math::b_field_element::BFIELD_ZERO;
 use crate::math::polynomial::Polynomial;
 use crate::math::traits::CyclicGroupGenerator;
 use crate::math::traits::FiniteField;
@@ -185,7 +185,7 @@ impl From<XFieldElement> for Digest {
     /// [`MerkleTree`](crate::util_types::merkle_tree::MerkleTree)s directly from `XFieldElement`s.
     fn from(xfe: XFieldElement) -> Self {
         let [c0, c1, c2] = xfe.coefficients;
-        Digest::new([c0, c1, c2, BFIELD_ZERO, BFIELD_ZERO])
+        Digest::new([c0, c1, c2, BFieldElement::ZERO, BFieldElement::ZERO])
     }
 }
 
@@ -194,7 +194,7 @@ impl TryFrom<Digest> for XFieldElement {
 
     fn try_from(digest: Digest) -> Result<Self, Self::Error> {
         let [c0, c1, c2, zero_0, zero_1] = digest.values();
-        if zero_0 != BFIELD_ZERO || zero_1 != BFIELD_ZERO {
+        if zero_0 != BFieldElement::ZERO || zero_1 != BFieldElement::ZERO {
             return Err(TryFromXFieldElementError::InvalidDigest);
         }
 
@@ -240,7 +240,7 @@ impl From<XFieldElement> for Polynomial<BFieldElement> {
 impl From<Polynomial<BFieldElement>> for XFieldElement {
     fn from(poly: Polynomial<BFieldElement>) -> Self {
         let (_, rem) = poly.naive_divide(&Self::shah_polynomial());
-        let mut xfe = [BFieldElement::zero(); EXTENSION_DEGREE];
+        let mut xfe = [BFieldElement::ZERO; EXTENSION_DEGREE];
 
         let Ok(rem_degree) = usize::try_from(rem.degree()) else {
             return Self::zero();
@@ -285,7 +285,7 @@ impl XFieldElement {
 
     #[inline]
     pub const fn new_const(element: BFieldElement) -> Self {
-        let zero = BFieldElement::new(0);
+        let zero = BFieldElement::ZERO;
         Self::new([element, zero, zero])
     }
 
@@ -595,6 +595,7 @@ impl ModPowU32 for XFieldElement {
 mod tests {
     use itertools::izip;
     use itertools::Itertools;
+    use num_traits::ConstOne;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
@@ -631,20 +632,20 @@ mod tests {
         assert!(zero.coefficients[2].is_zero());
         let two = XFieldElement::new([
             BFieldElement::new(2),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
+            BFieldElement::ZERO,
+            BFieldElement::ZERO,
         ]);
         assert!(!two.is_one());
         assert!(!zero.is_one());
         let one_as_constant_term_0 = XFieldElement::new([
             BFieldElement::new(1),
-            BFieldElement::one(),
-            BFieldElement::zero(),
+            BFieldElement::ONE,
+            BFieldElement::ZERO,
         ]);
         let one_as_constant_term_1 = XFieldElement::new([
             BFieldElement::new(1),
-            BFieldElement::zero(),
-            BFieldElement::one(),
+            BFieldElement::ZERO,
+            BFieldElement::ONE,
         ]);
         assert!(!one_as_constant_term_0.is_one());
         assert!(!one_as_constant_term_1.is_one());

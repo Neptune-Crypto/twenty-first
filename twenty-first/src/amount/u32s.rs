@@ -9,6 +9,7 @@ use std::ops::Sub;
 
 use get_size::GetSize;
 use num_bigint::BigUint;
+use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
 use rand::Rng;
@@ -136,7 +137,7 @@ impl<const N: usize> From<BigUint> for U32s<N> {
 
 impl<const N: usize> From<U32s<N>> for [BFieldElement; N] {
     fn from(value: U32s<N>) -> Self {
-        let mut ret = [BFieldElement::zero(); N];
+        let mut ret = [BFieldElement::ZERO; N];
         for (&value_elem, ret_elem) in value.values.iter().zip(ret.iter_mut()) {
             *ret_elem = value_elem.into();
         }

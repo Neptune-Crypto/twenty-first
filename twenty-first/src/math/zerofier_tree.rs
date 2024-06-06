@@ -96,6 +96,7 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<FF> {
 
 #[cfg(test)]
 mod test {
+    use num_traits::ConstZero;
     use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prop_assert_eq;
@@ -144,7 +145,7 @@ mod test {
     ) {
         let zerofier_tree = ZerofierTree::new_from_domain(&points);
         prop_assert_eq!(
-            BFieldElement::zero(),
+            BFieldElement::ZERO,
             zerofier_tree.zerofier().evaluate(points[index])
         );
     }

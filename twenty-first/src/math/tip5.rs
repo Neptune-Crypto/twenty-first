@@ -2,13 +2,12 @@ use arbitrary::Arbitrary;
 use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use itertools::Itertools;
-use num_traits::Zero;
+use num_traits::ConstOne;
+use num_traits::ConstZero;
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::math::b_field_element::BFieldElement;
-use crate::math::b_field_element::BFIELD_ONE;
-use crate::math::b_field_element::BFIELD_ZERO;
 pub use crate::math::digest::Digest;
 pub use crate::math::digest::DIGEST_LENGTH;
 use crate::math::mds::generated_function;
@@ -146,14 +145,14 @@ impl Tip5 {
     pub const fn new(domain: Domain) -> Self {
         use Domain::*;
 
-        let mut state = [BFIELD_ZERO; STATE_SIZE];
+        let mut state = [BFieldElement::ZERO; STATE_SIZE];
 
         match domain {
             VariableLength => (),
             FixedLength => {
                 let mut i = RATE;
                 while i < STATE_SIZE {
-                    state[i] = BFIELD_ONE;
+                    state[i] = BFieldElement::ONE;
                     i += 1;
                 }
             }
@@ -463,7 +462,7 @@ impl Tip5 {
     #[inline(always)]
     #[allow(dead_code)]
     fn mds_cyclomul(&mut self) {
-        let mut result = [BFieldElement::zero(); STATE_SIZE];
+        let mut result = [BFieldElement::ZERO; STATE_SIZE];
 
         let mut lo: [i64; STATE_SIZE] = [0; STATE_SIZE];
         let mut hi: [i64; STATE_SIZE] = [0; STATE_SIZE];
@@ -549,7 +548,7 @@ impl Tip5 {
     /// applying the permutation; that is, the initial state of the sponge as well as its state
     /// after each round.
     pub fn trace(&mut self) -> [[BFieldElement; STATE_SIZE]; 1 + NUM_ROUNDS] {
-        let mut trace = [[BFIELD_ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
+        let mut trace = [[BFieldElement::ZERO; STATE_SIZE]; 1 + NUM_ROUNDS];
 
         trace[0] = self.state;
         for i in 0..NUM_ROUNDS {
@@ -618,6 +617,7 @@ pub(crate) mod tip5_tests {
     use std::ops::Mul;
 
     use num_traits::One;
+    use num_traits::Zero;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use rand::thread_rng;
@@ -644,7 +644,7 @@ pub(crate) mod tip5_tests {
     #[test]
     fn get_size_test() {
         assert_eq!(
-            STATE_SIZE * BFieldElement::zero().get_size(),
+            STATE_SIZE * BFieldElement::ZERO.get_size(),
             Tip5::randomly_seeded().get_size()
         );
     }
@@ -792,7 +792,7 @@ pub(crate) mod tip5_tests {
 
     #[test]
     fn hash10_test_vectors() {
-        let mut preimage = [BFieldElement::zero(); RATE];
+        let mut preimage = [BFieldElement::ZERO; RATE];
         let mut digest: [BFieldElement; DIGEST_LENGTH];
         for i in 0..6 {
             digest = Tip5::hash_10(&preimage);
@@ -828,7 +828,7 @@ pub(crate) mod tip5_tests {
 
     #[test]
     fn hash_varlen_test_vectors() {
-        let mut digest_sum = [BFieldElement::zero(); DIGEST_LENGTH];
+        let mut digest_sum = [BFieldElement::ZERO; DIGEST_LENGTH];
         for i in 0..20 {
             let preimage = (0..i).map(BFieldElement::new).collect_vec();
             let digest = Tip5::hash_varlen(&preimage);
@@ -923,12 +923,12 @@ pub(crate) mod tip5_tests {
     #[test]
     fn test_mds_circulancy() {
         let mut sponge = Tip5::init();
-        sponge.state = [BFieldElement::zero(); STATE_SIZE];
-        sponge.state[0] = BFieldElement::one();
+        sponge.state = [BFieldElement::ZERO; STATE_SIZE];
+        sponge.state[0] = BFieldElement::ONE;
 
         sponge.mds_generated();
 
-        let mut mat_first_row = [BFieldElement::zero(); STATE_SIZE];
+        let mut mat_first_row = [BFieldElement::ZERO; STATE_SIZE];
         mat_first_row[0] = sponge.state[0];
         for (i, first_row_elem) in mat_first_row.iter_mut().enumerate().skip(1) {
             *first_row_elem = sponge.state[STATE_SIZE - i];
@@ -942,7 +942,7 @@ pub(crate) mod tip5_tests {
         let initial_state: [BFieldElement; STATE_SIZE] =
             random_elements(STATE_SIZE).try_into().unwrap();
 
-        let mut mv = [BFieldElement::zero(); STATE_SIZE];
+        let mut mv = [BFieldElement::ZERO; STATE_SIZE];
         for i in 0..STATE_SIZE {
             for j in 0..STATE_SIZE {
                 mv[i] += mat_first_row[(STATE_SIZE - i + j) % STATE_SIZE] * initial_state[j];
