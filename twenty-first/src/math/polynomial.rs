@@ -49,7 +49,7 @@ impl<FF: FiniteField> Zero for Polynomial<FF> {
 impl<FF: FiniteField> One for Polynomial<FF> {
     fn one() -> Self {
         Self {
-            coefficients: vec![FF::one()],
+            coefficients: vec![FF::ONE],
         }
     }
 
@@ -239,7 +239,7 @@ where
             root_res.unwrap_or_else(|| panic!("primitive root for order {order} should exist"));
 
         let mut coefficients = self.coefficients.to_vec();
-        coefficients.resize(order as usize, FF::zero());
+        coefficients.resize(order as usize, FF::ZERO);
         let log_2_of_n = coefficients.len().ilog2();
         ntt::<FF>(&mut coefficients, root, log_2_of_n);
 
@@ -267,8 +267,8 @@ where
             return self.fast_square();
         }
 
-        let zero = FF::zero();
-        let one = FF::one();
+        let zero = FF::ZERO;
+        let one = FF::ONE;
         let two = one + one;
         let mut squared_coefficients = vec![zero; squared_coefficient_len];
 
@@ -290,7 +290,7 @@ where
 
     #[must_use]
     pub fn fast_mod_pow(&self, pow: BigInt) -> Self {
-        let one = FF::one();
+        let one = FF::ONE;
 
         // Special case to handle 0^0 = 1
         if pow.is_zero() {
@@ -352,8 +352,8 @@ where
         let mut lhs_coefficients = self.coefficients.to_vec();
         let mut rhs_coefficients = other.coefficients.to_vec();
 
-        lhs_coefficients.resize(order, FF::zero());
-        rhs_coefficients.resize(order, FF::zero());
+        lhs_coefficients.resize(order, FF::ZERO);
+        rhs_coefficients.resize(order, FF::ZERO);
 
         ntt::<FF>(&mut lhs_coefficients, root, order.ilog2());
         ntt::<FF>(&mut rhs_coefficients, root, order.ilog2());
@@ -461,8 +461,8 @@ where
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
     pub fn smart_zerofier(roots: &[FF]) -> Self {
-        let mut zerofier = vec![FF::zero(); roots.len() + 1];
-        zerofier[0] = FF::one();
+        let mut zerofier = vec![FF::ZERO; roots.len() + 1];
+        zerofier[0] = FF::ONE;
         let mut num_coeffs = 1;
         for &root in roots {
             for k in (1..=num_coeffs).rev() {
@@ -570,7 +570,7 @@ where
         );
         debug_assert_eq!(domain.len(), values.len());
 
-        let zero = FF::zero();
+        let zero = FF::ZERO;
         let zerofier = Self::zerofier(domain).coefficients;
 
         // In each iteration of this loop, accumulate into the sum one polynomial that evaluates
@@ -841,7 +841,7 @@ where
     /// Evaluate the polynomial on a batch of points.
     pub fn batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         if self.is_zero() {
-            vec![FF::zero(); domain.len()]
+            vec![FF::ZERO; domain.len()]
         } else if self.degree()
             >= Self::REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO * (domain.len() as isize)
         {
@@ -862,7 +862,7 @@ where
     /// Parallel version of [`batch_evaluate`](Self::batch_evaluate).
     pub fn par_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         if domain.is_empty() || self.is_zero() {
-            return vec![FF::zero(); domain.len()];
+            return vec![FF::ZERO; domain.len()];
         }
         let num_threads = available_parallelism()
             .map(|non_zero_usize| non_zero_usize.get())
@@ -929,7 +929,7 @@ where
         );
 
         let mut coefficients = self.scale(offset).coefficients;
-        coefficients.resize(order, FF::zero());
+        coefficients.resize(order, FF::ZERO);
 
         let log_2_of_n = coefficients.len().ilog2();
         ntt::<FF>(&mut coefficients, generator, log_2_of_n);
@@ -1039,7 +1039,7 @@ where
         let log_full_domain_length = full_domain_length.ilog2();
 
         let mut self_ntt = self.coefficients.clone();
-        self_ntt.resize(full_domain_length, FF::zero());
+        self_ntt.resize(full_domain_length, FF::ZERO);
         ntt(&mut self_ntt, full_omega, log_full_domain_length);
 
         // while possible we calculate over a smaller domain
@@ -1966,7 +1966,7 @@ impl<FF: FiniteField> Polynomial<FF> {
     }
 
     pub fn evaluate(&self, x: FF) -> FF {
-        let mut acc = FF::zero();
+        let mut acc = FF::ZERO;
         for &c in self.coefficients.iter().rev() {
             acc = c + x * acc;
         }
@@ -1977,7 +1977,7 @@ impl<FF: FiniteField> Polynomial<FF> {
     /// The coefficient of the polynomial's term of highest power. `None` if (and only if) `self`
     /// [is zero](Self::is_zero).
     ///
-    /// Furthermore, is never `Some(FF::zero())`.
+    /// Furthermore, is never `Some(FF::ZERO)`.
     ///
     /// # Examples
     ///
@@ -2021,7 +2021,7 @@ impl<FF: FiniteField> Polynomial<FF> {
     pub fn naive_zerofier(domain: &[FF]) -> Self {
         domain
             .iter()
-            .map(|&r| Self::new(vec![-r, FF::one()]))
+            .map(|&r| Self::new(vec![-r, FF::ONE]))
             .reduce(|accumulator, linear_poly| accumulator * linear_poly)
             .unwrap_or_else(Self::one)
     }
@@ -2035,8 +2035,8 @@ impl<FF: FiniteField> Polynomial<FF> {
         }
 
         let squared_coefficient_len = self.degree() as usize * 2 + 1;
-        let zero = FF::zero();
-        let one = FF::one();
+        let zero = FF::ZERO;
+        let one = FF::ONE;
         let two = one + one;
         let mut squared_coefficients = vec![zero; squared_coefficient_len];
 
@@ -2088,7 +2088,7 @@ impl<FF: FiniteField> Polynomial<FF> {
             return Self::zero();
         };
 
-        let mut product = vec![FF::zero(); degree_lhs + degree_rhs + 1];
+        let mut product = vec![FF::ZERO; degree_lhs + degree_rhs + 1];
         for i in 0..=degree_lhs {
             for j in 0..=degree_rhs {
                 product[i + j] += self.coefficients[i] * other.coefficients[j];
@@ -2101,7 +2101,7 @@ impl<FF: FiniteField> Polynomial<FF> {
     /// Multiply a polynomial with itself `pow` times
     #[must_use]
     pub fn mod_pow(&self, pow: BigInt) -> Self {
-        let one = FF::one();
+        let one = FF::ONE;
 
         // Special case to handle 0^0 = 1
         if pow.is_zero() {
@@ -2127,13 +2127,13 @@ impl<FF: FiniteField> Polynomial<FF> {
     }
 
     pub fn shift_coefficients_mut(&mut self, power: usize) {
-        self.coefficients.splice(0..0, vec![FF::zero(); power]);
+        self.coefficients.splice(0..0, vec![FF::ZERO; power]);
     }
 
     /// Multiply a polynomial with x^power
     #[must_use]
     pub fn shift_coefficients(&self, power: usize) -> Self {
-        let zero = FF::zero();
+        let zero = FF::ZERO;
 
         let mut coefficients: Vec<FF> = self.coefficients.clone();
         coefficients.splice(0..0, vec![zero; power]);
@@ -2302,7 +2302,7 @@ impl<FF: FiniteField> Sub for Polynomial<FF> {
             .map(|a| match a {
                 EitherOrBoth::Both(l, r) => l - r,
                 EitherOrBoth::Left(l) => l,
-                EitherOrBoth::Right(r) => FF::zero() - r,
+                EitherOrBoth::Right(r) => FF::ZERO - r,
             })
             .collect();
 
@@ -2343,7 +2343,7 @@ impl<FF: FiniteField> Polynomial<FF> {
         }
 
         // normalize result to ensure the gcd, _i.e._, `x` has leading coefficient 1
-        let lc = x.leading_coefficient().unwrap_or_else(FF::one);
+        let lc = x.leading_coefficient().unwrap_or(FF::ONE);
         let normalize = |mut poly: Self| {
             poly.scalar_mul_mut(lc.inverse());
             poly
@@ -2388,7 +2388,7 @@ impl<FF: FiniteField> Neg for Polynomial<FF> {
     type Output = Self;
 
     fn neg(mut self) -> Self::Output {
-        self.scalar_mul_mut(-FF::one());
+        self.scalar_mul_mut(-FF::ONE);
         self
     }
 }
