@@ -1,9 +1,20 @@
-use num_traits::{One, Zero};
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::hash::Hash;
+use std::ops::Add;
+use std::ops::AddAssign;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::MulAssign;
+use std::ops::Neg;
+use std::ops::Sub;
+use std::ops::SubAssign;
+
+use num_traits::ConstOne;
+use num_traits::ConstZero;
+use num_traits::Zero;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 
 pub trait CyclicGroupGenerator
 where
@@ -53,8 +64,8 @@ pub trait FiniteField:
     + Serialize
     + DeserializeOwned
     + Hash
-    + Zero
-    + One
+    + ConstZero
+    + ConstOne
     + Add<Output = Self>
     + Mul<Output = Self>
     + Sub<Output = Self>

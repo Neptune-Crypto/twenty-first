@@ -4,6 +4,7 @@ use std::ops::Mul;
 use std::ops::Sub;
 
 use itertools::Itertools;
+use num_traits::ConstZero;
 use num_traits::Zero;
 use rayon::prelude::IntoParallelIterator;
 use rayon::prelude::ParallelIterator;
@@ -237,7 +238,7 @@ impl CyclotomicRingElement {
 
     pub fn sample_uniform(randomness: &[u8]) -> CyclotomicRingElement {
         debug_assert!(randomness.len() >= 9 * 64);
-        let mut coefficients = [BFieldElement::zero(); 64];
+        let mut coefficients = [BFieldElement::ZERO; 64];
         for i in 0..64 {
             let mut acc = 0u128;
             for j in 0..9 {
@@ -306,7 +307,7 @@ impl Mul for CyclotomicRingElement {
         let mut rhs_coeffs = rhs.coefficients;
         coset_ntt_noswap_64(&mut lhs_coeffs);
         coset_ntt_noswap_64(&mut rhs_coeffs);
-        let mut out_coeffs = [BFieldElement::zero(); 64];
+        let mut out_coeffs = [BFieldElement::ZERO; 64];
         for i in 0..64 {
             out_coeffs[i] = lhs_coeffs[i] * rhs_coeffs[i];
         }
@@ -320,17 +321,17 @@ impl Mul for CyclotomicRingElement {
 impl Zero for CyclotomicRingElement {
     fn zero() -> Self {
         CyclotomicRingElement {
-            coefficients: [BFieldElement::zero(); 64],
+            coefficients: [BFieldElement::ZERO; 64],
         }
     }
 
     fn is_zero(&self) -> bool {
-        self.coefficients == [BFieldElement::zero(); 64]
+        self.coefficients == [BFieldElement::ZERO; 64]
     }
 }
 
 pub fn embed_msg(msg: [u8; 32]) -> CyclotomicRingElement {
-    let mut embedding: [BFieldElement; 64] = [BFieldElement::zero(); 64];
+    let mut embedding: [BFieldElement; 64] = [BFieldElement::ZERO; 64];
     for i in 0..msg.len() {
         let mut integer = 0u64;
         for j in 0..4 {
@@ -815,7 +816,7 @@ pub mod kem {
 #[cfg(test)]
 mod lattice_test {
     use itertools::Itertools;
-    use num_traits::One;
+    use num_traits::ConstOne;
     use num_traits::Zero;
     use rand::random;
     use rand::thread_rng;
@@ -852,7 +853,7 @@ mod lattice_test {
         let a: [BFieldElement; 64] = random();
         let b: [BFieldElement; 64] = random();
 
-        let mut c_schoolbook = [BFieldElement::zero(); 64];
+        let mut c_schoolbook = [BFieldElement::ZERO; 64];
         for i in 0..64 {
             for j in 0..64 {
                 if i + j >= 64 {
@@ -965,7 +966,7 @@ mod lattice_test {
         assert!(zero_me.is_zero(), "zero must be zero");
         let not_zero = ModuleElement {
             elements: [CyclotomicRingElement {
-                coefficients: [BFieldElement::one(); 64],
+                coefficients: [BFieldElement::ONE; 64],
             }; 4],
         };
         assert!(!not_zero.is_zero(), "not-zero must be not be zero");

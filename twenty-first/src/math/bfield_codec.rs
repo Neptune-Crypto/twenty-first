@@ -9,8 +9,8 @@ use std::slice::Iter;
 // an explicit dependency on `bfieldcodec_derive` to their Cargo.toml.
 pub use bfieldcodec_derive::BFieldCodec;
 use itertools::Itertools;
-use num_traits::One;
-use num_traits::Zero;
+use num_traits::ConstOne;
+use num_traits::ConstZero;
 use thiserror::Error;
 
 use crate::bfe_vec;
@@ -310,8 +310,8 @@ impl<T: BFieldCodec> BFieldCodec for Option<T> {
 
     fn encode(&self) -> Vec<BFieldElement> {
         match self {
-            None => vec![BFieldElement::zero()],
-            Some(t) => [vec![BFieldElement::one()], t.encode()].concat(),
+            None => vec![BFieldElement::ZERO],
+            Some(t) => [vec![BFieldElement::ONE], t.encode()].concat(),
         }
     }
 
@@ -538,6 +538,8 @@ impl<T> BFieldCodec for PhantomData<T> {
 
 #[cfg(test)]
 mod tests {
+    use num_traits::ConstZero;
+    use num_traits::Zero;
     use proptest::collection::size_range;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -743,7 +745,7 @@ mod tests {
         let encoded = polynomial.encode();
         polynomial
             .coefficients
-            .extend(vec![BFieldElement::zero(); num_leading_zeros]);
+            .extend(vec![BFieldElement::ZERO; num_leading_zeros]);
         let poly_w_leading_zeros_encoded = polynomial.encode();
         prop_assert_eq!(encoded, poly_w_leading_zeros_encoded);
     }
@@ -756,7 +758,7 @@ mod tests {
         let encoded = polynomial.encode();
         polynomial
             .coefficients
-            .extend(vec![XFieldElement::zero(); num_leading_zeros]);
+            .extend(vec![XFieldElement::ZERO; num_leading_zeros]);
         let poly_w_leading_zeros_encoded = polynomial.encode();
         prop_assert_eq!(encoded, poly_w_leading_zeros_encoded);
     }
@@ -830,6 +832,7 @@ mod tests {
     #[cfg(test)]
     pub mod derive_tests {
         use arbitrary::Arbitrary;
+        use num_traits::Zero;
 
         use crate::math::digest::Digest;
         use crate::math::tip5::Tip5;

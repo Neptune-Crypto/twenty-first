@@ -11,6 +11,8 @@ use std::ops::SubAssign;
 
 use arbitrary::Arbitrary;
 use bfieldcodec_derive::BFieldCodec;
+use num_traits::ConstOne;
+use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
 use rand::Rng;
@@ -22,7 +24,6 @@ use serde::Serialize;
 use crate::bfe_vec;
 use crate::error::TryFromXFieldElementError;
 use crate::math::b_field_element::BFieldElement;
-use crate::math::b_field_element::BFIELD_ZERO;
 use crate::math::polynomial::Polynomial;
 use crate::math::traits::CyclicGroupGenerator;
 use crate::math::traits::FiniteField;
@@ -185,7 +186,7 @@ impl From<XFieldElement> for Digest {
     /// [`MerkleTree`](crate::util_types::merkle_tree::MerkleTree)s directly from `XFieldElement`s.
     fn from(xfe: XFieldElement) -> Self {
         let [c0, c1, c2] = xfe.coefficients;
-        Digest::new([c0, c1, c2, BFIELD_ZERO, BFIELD_ZERO])
+        Digest::new([c0, c1, c2, BFieldElement::ZERO, BFieldElement::ZERO])
     }
 }
 
@@ -194,7 +195,7 @@ impl TryFrom<Digest> for XFieldElement {
 
     fn try_from(digest: Digest) -> Result<Self, Self::Error> {
         let [c0, c1, c2, zero_0, zero_1] = digest.values();
-        if zero_0 != BFIELD_ZERO || zero_1 != BFIELD_ZERO {
+        if zero_0 != BFieldElement::ZERO || zero_1 != BFieldElement::ZERO {
             return Err(TryFromXFieldElementError::InvalidDigest);
         }
 
@@ -204,8 +205,7 @@ impl TryFrom<Digest> for XFieldElement {
 
 impl Sum for XFieldElement {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.reduce(|a, b| a + b)
-            .unwrap_or_else(XFieldElement::zero)
+        iter.reduce(|a, b| a + b).unwrap_or(XFieldElement::ZERO)
     }
 }
 
@@ -240,7 +240,7 @@ impl From<XFieldElement> for Polynomial<BFieldElement> {
 impl From<Polynomial<BFieldElement>> for XFieldElement {
     fn from(poly: Polynomial<BFieldElement>) -> Self {
         let (_, rem) = poly.naive_divide(&Self::shah_polynomial());
-        let mut xfe = [BFieldElement::zero(); EXTENSION_DEGREE];
+        let mut xfe = [BFieldElement::ZERO; EXTENSION_DEGREE];
 
         let Ok(rem_degree) = usize::try_from(rem.degree()) else {
             return Self::zero();
@@ -285,7 +285,7 @@ impl XFieldElement {
 
     #[inline]
     pub const fn new_const(element: BFieldElement) -> Self {
-        let zero = BFieldElement::new(0);
+        let zero = BFieldElement::ZERO;
         Self::new([element, zero, zero])
     }
 
@@ -367,26 +367,30 @@ impl Display for XFieldElement {
 
 impl Zero for XFieldElement {
     fn zero() -> Self {
-        let coefficients = [BFieldElement::zero(); EXTENSION_DEGREE];
-        Self { coefficients }
+        Self::ZERO
     }
 
     fn is_zero(&self) -> bool {
-        self.coefficients.iter().all(|c| c.is_zero())
+        self == &Self::ZERO
     }
+}
+
+impl ConstZero for XFieldElement {
+    const ZERO: Self = Self::new([BFieldElement::ZERO; EXTENSION_DEGREE]);
 }
 
 impl One for XFieldElement {
     fn one() -> Self {
-        let coefficients = [1, 0, 0].map(BFieldElement::new);
-        Self { coefficients }
+        Self::ONE
     }
 
     fn is_one(&self) -> bool {
-        self.coefficients[0].is_one()
-            && self.coefficients[1].is_zero()
-            && self.coefficients[2].is_zero()
+        self == &Self::ONE
     }
+}
+
+impl ConstOne for XFieldElement {
+    const ONE: Self = Self::new([BFieldElement::ONE, BFieldElement::ZERO, BFieldElement::ZERO]);
 }
 
 impl FiniteField for XFieldElement {}
@@ -595,6 +599,7 @@ impl ModPowU32 for XFieldElement {
 mod tests {
     use itertools::izip;
     use itertools::Itertools;
+    use num_traits::ConstOne;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
@@ -624,27 +629,29 @@ mod tests {
         assert!(one.coefficients[0].is_one());
         assert!(one.coefficients[1].is_zero());
         assert!(one.coefficients[2].is_zero());
+        assert_eq!(one, XFieldElement::ONE);
         let zero = XFieldElement::zero();
         assert!(zero.is_zero());
         assert!(zero.coefficients[0].is_zero());
         assert!(zero.coefficients[1].is_zero());
         assert!(zero.coefficients[2].is_zero());
+        assert_eq!(zero, XFieldElement::ZERO);
         let two = XFieldElement::new([
             BFieldElement::new(2),
-            BFieldElement::zero(),
-            BFieldElement::zero(),
+            BFieldElement::ZERO,
+            BFieldElement::ZERO,
         ]);
         assert!(!two.is_one());
         assert!(!zero.is_one());
         let one_as_constant_term_0 = XFieldElement::new([
             BFieldElement::new(1),
-            BFieldElement::one(),
-            BFieldElement::zero(),
+            BFieldElement::ONE,
+            BFieldElement::ZERO,
         ]);
         let one_as_constant_term_1 = XFieldElement::new([
             BFieldElement::new(1),
-            BFieldElement::zero(),
-            BFieldElement::one(),
+            BFieldElement::ZERO,
+            BFieldElement::ONE,
         ]);
         assert!(!one_as_constant_term_0.is_one());
         assert!(!one_as_constant_term_1.is_one());
@@ -672,7 +679,7 @@ mod tests {
         let max_const = XFieldElement::new([BFieldElement::MAX, 0, 0].map(BFieldElement::new));
         let max_x = XFieldElement::new([0, BFieldElement::MAX, 0].map(BFieldElement::new));
         let max_x_squared = XFieldElement::new([0, 0, BFieldElement::MAX].map(BFieldElement::new));
-        let mut val = XFieldElement::zero();
+        let mut val = XFieldElement::ZERO;
         val.increment(0);
         assert!(val.is_one());
         val.increment(0);
@@ -684,9 +691,9 @@ mod tests {
         val.decrement(0);
         assert_eq!(max_const, val);
         val.decrement(0);
-        assert_eq!(max_const - XFieldElement::one(), val);
+        assert_eq!(max_const - XFieldElement::ONE, val);
         val.decrement(0);
-        assert_eq!(max_const - XFieldElement::one() - XFieldElement::one(), val);
+        assert_eq!(max_const - XFieldElement::ONE - XFieldElement::ONE, val);
         val.increment(0);
         val.increment(0);
         val.increment(0);
@@ -1001,9 +1008,9 @@ mod tests {
         disturbance: XFieldElement,
     ) {
         let not_x = x - disturbance;
-        prop_assert_eq!(XFieldElement::one(), x * x.inverse());
-        prop_assert_eq!(XFieldElement::one(), not_x * not_x.inverse());
-        prop_assert_ne!(XFieldElement::one(), x * not_x.inverse());
+        prop_assert_eq!(XFieldElement::ONE, x * x.inverse());
+        prop_assert_eq!(XFieldElement::ONE, not_x * not_x.inverse());
+        prop_assert_ne!(XFieldElement::ONE, x * not_x.inverse());
     }
 
     #[proptest]
@@ -1012,7 +1019,7 @@ mod tests {
     ) {
         let inverses = XFieldElement::batch_inversion(xs.clone());
         for (x, inv) in xs.into_iter().zip(inverses) {
-            prop_assert_eq!(XFieldElement::one(), x * inv);
+            prop_assert_eq!(XFieldElement::ONE, x * inv);
         }
     }
 
@@ -1105,15 +1112,15 @@ mod tests {
 
     #[test]
     fn xfe_mod_pow_zero() {
-        assert!(XFieldElement::zero().mod_pow_u32(0).is_one());
-        assert!(XFieldElement::zero().mod_pow_u64(0).is_one());
-        assert!(XFieldElement::one().mod_pow_u32(0).is_one());
-        assert!(XFieldElement::one().mod_pow_u64(0).is_one());
+        assert!(XFieldElement::ZERO.mod_pow_u32(0).is_one());
+        assert!(XFieldElement::ZERO.mod_pow_u64(0).is_one());
+        assert!(XFieldElement::ONE.mod_pow_u32(0).is_one());
+        assert!(XFieldElement::ONE.mod_pow_u64(0).is_one());
     }
 
     #[proptest]
     fn xfe_mod_pow(base: XFieldElement, #[strategy(0_u32..200)] exponent: u32) {
-        let mut acc = XFieldElement::one();
+        let mut acc = XFieldElement::ONE;
         for i in 0..exponent {
             assert_eq!(acc, base.mod_pow_u32(i));
             acc *= base;
@@ -1160,21 +1167,21 @@ mod tests {
 
     #[test]
     fn inverse_or_zero_of_zero_is_zero() {
-        let zero = XFieldElement::zero();
+        let zero = XFieldElement::ZERO;
         assert_eq!(zero, zero.inverse_or_zero());
     }
 
     #[proptest]
     fn inverse_or_zero_of_non_zero_is_inverse(#[filter(!#xfe.is_zero())] xfe: XFieldElement) {
         let inv = xfe.inverse_or_zero();
-        prop_assert_ne!(XFieldElement::zero(), inv);
-        prop_assert_eq!(XFieldElement::one(), xfe * inv);
+        prop_assert_ne!(XFieldElement::ZERO, inv);
+        prop_assert_eq!(XFieldElement::ONE, xfe * inv);
     }
 
     #[test]
     #[should_panic(expected = "Cannot invert the zero element in the extension field.")]
     fn multiplicative_inverse_of_zero() {
-        let zero = XFieldElement::zero();
+        let zero = XFieldElement::ZERO;
         let _ = zero.inverse();
     }
 

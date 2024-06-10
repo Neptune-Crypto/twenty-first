@@ -6,6 +6,7 @@ use bfieldcodec_derive::BFieldCodec;
 use get_size::GetSize;
 use itertools::Itertools;
 use num_bigint::BigUint;
+use num_traits::ConstZero;
 use num_traits::Zero;
 use rand::Rng;
 use rand_distr::Distribution;
@@ -19,7 +20,6 @@ use crate::error::ParseBFieldElementError;
 use crate::error::TryFromDigestError;
 use crate::error::TryFromHexDigestError;
 use crate::math::b_field_element::BFieldElement;
-use crate::math::b_field_element::BFIELD_ZERO;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 pub const DIGEST_LENGTH: usize = 5;
@@ -74,7 +74,7 @@ impl Digest {
 
 impl Default for Digest {
     fn default() -> Self {
-        Self([BFIELD_ZERO; DIGEST_LENGTH])
+        Self([BFieldElement::ZERO; DIGEST_LENGTH])
     }
 }
 
@@ -193,7 +193,7 @@ impl TryFrom<BigUint> for Digest {
 
     fn try_from(value: BigUint) -> Result<Self, Self::Error> {
         let mut remaining = value;
-        let mut digest_innards = [BFIELD_ZERO; DIGEST_LENGTH];
+        let mut digest_innards = [BFieldElement::ZERO; DIGEST_LENGTH];
         let modulus: BigUint = BFieldElement::P.into();
         for digest_element in digest_innards.iter_mut() {
             let element = u64::try_from(remaining.clone() % modulus.clone()).unwrap();
@@ -230,7 +230,7 @@ impl Digest {
     /// way to hash a digest in the virtual machine.
     #[deprecated(since = "0.42.0", note = "use `AlgebraicHasher::hash_pair` instead")]
     pub fn hash<H: AlgebraicHasher>(self) -> Digest {
-        H::hash_pair(self, Digest::new([BFieldElement::zero(); DIGEST_LENGTH]))
+        H::hash_pair(self, Digest::new([BFieldElement::ZERO; DIGEST_LENGTH]))
     }
 
     /// Encode digest as hex
@@ -286,8 +286,9 @@ pub(crate) mod digest_tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use super::*;
     use crate::prelude::*;
+
+    use super::*;
 
     impl ProptestArbitrary for Digest {
         type Parameters = ();
@@ -527,7 +528,6 @@ pub(crate) mod digest_tests {
     }
 
     mod hex_test {
-
         use super::*;
 
         pub(super) fn hex_examples() -> Vec<(Digest, &'static str)> {

@@ -2,10 +2,10 @@ use std::fmt::Debug;
 use std::iter;
 
 use itertools::Itertools;
+use num_traits::ConstOne;
+use num_traits::ConstZero;
 
 use crate::math::b_field_element::BFieldElement;
-use crate::math::b_field_element::BFIELD_ONE;
-use crate::math::b_field_element::BFIELD_ZERO;
 use crate::math::bfield_codec::BFieldCodec;
 use crate::math::digest::Digest;
 use crate::math::digest::DIGEST_LENGTH;
@@ -47,7 +47,8 @@ pub trait Sponge: Clone + Debug + Default + Send + Sync {
     fn pad_and_absorb_all(&mut self, input: &[BFieldElement]) {
         // pad input with [1, 0, 0, …] – padding is at least one element
         let padded_length = (input.len() + 1).next_multiple_of(RATE);
-        let padding_iter = [BFIELD_ONE].iter().chain(iter::repeat(&BFIELD_ZERO));
+        let padding_iter =
+            iter::once(&BFieldElement::ONE).chain(iter::repeat(&BFieldElement::ZERO));
         let padded_input = input.iter().chain(padding_iter).take(padded_length);
 
         for chunk in padded_input.chunks(RATE).into_iter() {
@@ -131,8 +132,6 @@ pub trait AlgebraicHasher: Sponge {
 mod algebraic_hasher_tests {
     use std::ops::Mul;
 
-    use num_traits::One;
-    use num_traits::Zero;
     use rand::Rng;
     use rand_distr::Distribution;
     use rand_distr::Standard;
@@ -177,14 +176,14 @@ mod algebraic_hasher_tests {
 
         // BFieldElement
         let bfe_max = BFieldElement::new(BFieldElement::MAX);
-        encode_prop(BFIELD_ZERO, bfe_max);
+        encode_prop(BFieldElement::ZERO, bfe_max);
 
         // XFieldElement
         let xfe_max = XFieldElement::new([bfe_max; EXTENSION_DEGREE]);
-        encode_prop(XFieldElement::zero(), xfe_max);
+        encode_prop(XFieldElement::ZERO, xfe_max);
 
         // Digest
-        let digest_zero = Digest::new([BFIELD_ZERO; DIGEST_LENGTH]);
+        let digest_zero = Digest::new([BFieldElement::ZERO; DIGEST_LENGTH]);
         let digest_max = Digest::new([bfe_max; DIGEST_LENGTH]);
         encode_prop(digest_zero, digest_max);
 
@@ -222,14 +221,14 @@ mod algebraic_hasher_tests {
     fn sample_scalars_test() {
         let amounts = [0, 1, 2, 3, 4];
         let mut sponge = Tip5::randomly_seeded();
-        let mut product = XFieldElement::one();
+        let mut product = XFieldElement::ONE;
         for amount in amounts {
             let scalars = sponge.sample_scalars(amount);
             assert_eq!(amount, scalars.len());
             product *= scalars
                 .into_iter()
-                .fold(XFieldElement::one(), XFieldElement::mul);
+                .fold(XFieldElement::ONE, XFieldElement::mul);
         }
-        assert_ne!(product, XFieldElement::zero()); // false failure with prob ~2^{-192}
+        assert_ne!(product, XFieldElement::ZERO); // false failure with prob ~2^{-192}
     }
 }

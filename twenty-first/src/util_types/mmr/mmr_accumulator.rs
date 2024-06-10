@@ -427,7 +427,7 @@ mod accumulator_mmr_tests {
 
     use itertools::izip;
     use itertools::Itertools;
-    use num_traits::Zero;
+    use num_traits::ConstZero;
     use rand::distributions::Uniform;
     use rand::random;
     use rand::thread_rng;
@@ -809,7 +809,7 @@ mod accumulator_mmr_tests {
         type H = Tip5;
         type Mmr = MmrAccumulator<H>;
         let mut mmra: Mmr = MmrAccumulator::new(vec![]);
-        mmra.append(H::hash(&BFieldElement::zero()));
+        mmra.append(H::hash(&BFieldElement::ZERO));
 
         let json = serde_json::to_string(&mmra).unwrap();
         let s_back = serde_json::from_str::<Mmr>(&json).unwrap();
