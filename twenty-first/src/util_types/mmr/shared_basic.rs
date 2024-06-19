@@ -81,7 +81,7 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
     let mut peaks = old_peaks;
     peaks.push(new_leaf);
     let mut right_lineage_count = right_lineage_length_from_leaf_index(old_leaf_count);
-    let mut membership_proof = MmrMembershipProof::<H>::new(old_leaf_count, vec![]);
+    let mut membership_proof = MmrMembershipProof::<H>::new(vec![]);
     while right_lineage_count != 0 {
         let new_hash = peaks.pop().unwrap();
         let previous_peak = peaks.pop().unwrap();
@@ -98,12 +98,13 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
 /// than `old_peaks`
 pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
     old_peaks: &[Digest],
-    new_leaf: Digest,
     leaf_count: u64,
+    new_leaf: Digest,
+    leaf_index: u64,
     membership_proof: &MmrMembershipProof<H>,
 ) -> Vec<Digest> {
     let (mut acc_mt_index, peak_index) =
-        leaf_index_to_mt_index_and_peak_index(membership_proof.leaf_index, leaf_count);
+        leaf_index_to_mt_index_and_peak_index(leaf_index, leaf_count);
     let mut acc_hash: Digest = new_leaf.to_owned();
     let mut i = 0;
     while acc_mt_index != 1 {
