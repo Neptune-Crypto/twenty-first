@@ -3,6 +3,8 @@ use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 use super::{mmr_accumulator::MmrAccumulator, mmr_membership_proof::MmrMembershipProof};
 
+pub(crate) type LeafMutationData<H> = (Digest, u64, MmrMembershipProof<H>);
+
 pub trait Mmr<H: AlgebraicHasher> {
     /// Create a new MMR instanc from a list of hash digests. The supplied digests
     /// are the leaves of the MMR.
@@ -30,14 +32,20 @@ pub trait Mmr<H: AlgebraicHasher> {
     /// Mutate an existing leaf. It is the caller's responsibility that the
     /// membership proof is valid. If the membership proof is wrong, the MMR
     /// will end up in a broken state.
-    fn mutate_leaf(&mut self, old_membership_proof: &MmrMembershipProof<H>, new_leaf: Digest);
+    fn mutate_leaf(
+        &mut self,
+        old_membership_proof: &MmrMembershipProof<H>,
+        new_leaf: Digest,
+        leaf_index: u64,
+    );
 
     /// Batch mutate an MMR while updating a list of membership proofs. Returns the indices of the
     /// membership proofs that have changed as a result of this operation.
     fn batch_mutate_leaf_and_update_mps(
         &mut self,
         membership_proofs: &mut [&mut MmrMembershipProof<H>],
-        mutation_data: Vec<(MmrMembershipProof<H>, Digest)>,
+        membership_proof_leaf_indices: &[u64],
+        mutation_data: Vec<LeafMutationData<H>>,
     ) -> Vec<usize>;
 
     /// Returns true if a list of leaf mutations and a list of appends results in the expected
@@ -46,7 +54,7 @@ pub trait Mmr<H: AlgebraicHasher> {
         &self,
         new_peaks: &[Digest],
         appended_leafs: &[Digest],
-        leaf_mutations: &[(Digest, MmrMembershipProof<H>)],
+        leaf_mutations: &[LeafMutationData<H>],
     ) -> bool;
 
     /// Return an MMR accumulator containing only peaks and leaf count
