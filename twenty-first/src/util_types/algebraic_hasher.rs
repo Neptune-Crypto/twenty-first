@@ -8,7 +8,6 @@ use num_traits::ConstZero;
 use crate::math::b_field_element::BFieldElement;
 use crate::math::bfield_codec::BFieldCodec;
 use crate::math::digest::Digest;
-use crate::math::digest::DIGEST_LENGTH;
 use crate::math::x_field_element::XFieldElement;
 use crate::math::x_field_element::EXTENSION_DEGREE;
 
@@ -78,7 +77,7 @@ pub trait AlgebraicHasher: Sponge {
         sponge.pad_and_absorb_all(input);
         let produce: [BFieldElement; RATE] = sponge.squeeze();
 
-        Digest::new((&produce[..DIGEST_LENGTH]).try_into().unwrap())
+        Digest::new((&produce[..Digest::LEN]).try_into().unwrap())
     }
 
     /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
@@ -136,7 +135,7 @@ mod algebraic_hasher_tests {
     use rand_distr::Distribution;
     use rand_distr::Standard;
 
-    use crate::math::digest::DIGEST_LENGTH;
+    use crate::math::digest::Digest;
     use crate::math::tip5::Tip5;
     use crate::math::x_field_element::EXTENSION_DEGREE;
 
@@ -183,8 +182,8 @@ mod algebraic_hasher_tests {
         encode_prop(XFieldElement::ZERO, xfe_max);
 
         // Digest
-        let digest_zero = Digest::new([BFieldElement::ZERO; DIGEST_LENGTH]);
-        let digest_max = Digest::new([bfe_max; DIGEST_LENGTH]);
+        let digest_zero = Digest::new([BFieldElement::ZERO; Digest::LEN]);
+        let digest_max = Digest::new([bfe_max; Digest::LEN]);
         encode_prop(digest_zero, digest_max);
 
         // u128

@@ -4,7 +4,7 @@ use thiserror::Error;
 
 pub use crate::math::bfield_codec::BFieldCodecError;
 pub use crate::math::bfield_codec::PolynomialBFieldCodecError;
-use crate::prelude::tip5::DIGEST_LENGTH;
+use crate::prelude::tip5::Digest;
 use crate::prelude::x_field_element::EXTENSION_DEGREE;
 use crate::prelude::BFieldElement;
 pub use crate::util_types::merkle_tree::MerkleTreeError;
@@ -36,7 +36,7 @@ pub enum TryFromXFieldElementError {
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 #[non_exhaustive]
 pub enum TryFromDigestError {
-    #[error("expected {DIGEST_LENGTH} elements for digest, but got {0}")]
+    #[error("expected {} elements for digest, but got {0}", Digest::LEN)]
     InvalidLength(usize),
 
     #[error("invalid `BFieldElement`")]

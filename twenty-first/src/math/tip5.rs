@@ -9,7 +9,6 @@ use serde::Serialize;
 
 use crate::math::b_field_element::BFieldElement;
 pub use crate::math::digest::Digest;
-pub use crate::math::digest::DIGEST_LENGTH;
 use crate::math::mds::generated_function;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::algebraic_hasher::Domain;
@@ -562,7 +561,7 @@ impl Tip5 {
     /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
-    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; DIGEST_LENGTH] {
+    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; Digest::LEN] {
         let mut sponge = Self::new(Domain::FixedLength);
 
         // absorb once
@@ -571,19 +570,19 @@ impl Tip5 {
         sponge.permutation();
 
         // squeeze once
-        sponge.state[..DIGEST_LENGTH].try_into().unwrap()
+        sponge.state[..Digest::LEN].try_into().unwrap()
     }
 }
 
 impl AlgebraicHasher for Tip5 {
     fn hash_pair(left: Digest, right: Digest) -> Digest {
         let mut sponge = Self::new(Domain::FixedLength);
-        sponge.state[..DIGEST_LENGTH].copy_from_slice(&left.values());
-        sponge.state[DIGEST_LENGTH..2 * DIGEST_LENGTH].copy_from_slice(&right.values());
+        sponge.state[..Digest::LEN].copy_from_slice(&left.values());
+        sponge.state[Digest::LEN..2 * Digest::LEN].copy_from_slice(&right.values());
 
         sponge.permutation();
 
-        let digest_values = sponge.state[..DIGEST_LENGTH].try_into().unwrap();
+        let digest_values = sponge.state[..Digest::LEN].try_into().unwrap();
         Digest::new(digest_values)
     }
 }
@@ -791,7 +790,7 @@ pub(crate) mod tip5_tests {
     #[test]
     fn hash10_test_vectors() {
         let mut preimage = [BFieldElement::ZERO; RATE];
-        let mut digest: [BFieldElement; DIGEST_LENGTH];
+        let mut digest: [BFieldElement; Digest::LEN];
         for i in 0..6 {
             digest = Tip5::hash_10(&preimage);
             println!(
@@ -799,7 +798,7 @@ pub(crate) mod tip5_tests {
                 preimage.iter().map(|b| b.value()).collect_vec(),
                 digest.iter().map(|b| b.value()).collect_vec()
             );
-            preimage[i..DIGEST_LENGTH + i].copy_from_slice(&digest);
+            preimage[i..Digest::LEN + i].copy_from_slice(&digest);
         }
         digest = Tip5::hash_10(&preimage);
         println!(
@@ -826,7 +825,7 @@ pub(crate) mod tip5_tests {
 
     #[test]
     fn hash_varlen_test_vectors() {
-        let mut digest_sum = [BFieldElement::ZERO; DIGEST_LENGTH];
+        let mut digest_sum = [BFieldElement::ZERO; Digest::LEN];
         for i in 0..20 {
             let preimage = (0..i).map(BFieldElement::new).collect_vec();
             let digest = Tip5::hash_varlen(&preimage);
@@ -866,7 +865,7 @@ pub(crate) mod tip5_tests {
         sponge.pad_and_absorb_all(preimage);
         let squeeze_result = sponge.squeeze();
 
-        Digest::new((&squeeze_result[..DIGEST_LENGTH]).try_into().unwrap())
+        Digest::new((&squeeze_result[..Digest::LEN]).try_into().unwrap())
     }
 
     #[test]

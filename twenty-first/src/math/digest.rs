@@ -22,11 +22,16 @@ use crate::error::TryFromHexDigestError;
 use crate::math::b_field_element::BFieldElement;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
+#[deprecated(since = "0.42.0", note = "use `Digest::LEN` instead")]
 pub const DIGEST_LENGTH: usize = 5;
 
+/// The result of hashing a sequence of elements, for example using [Tip5].
+/// Sometimes called a “hash”.
+///
+/// [Tip5]: crate::prelude::tip5::Tip5
 // note: Serialize and Deserialize have custom implementations below
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, BFieldCodec, Arbitrary)]
-pub struct Digest(pub [BFieldElement; DIGEST_LENGTH]);
+pub struct Digest(pub [BFieldElement; Digest::LEN]);
 
 impl GetSize for Digest {
     fn get_stack_size() -> usize {
@@ -55,13 +60,17 @@ impl Ord for Digest {
 }
 
 impl Digest {
-    pub const BYTES: usize = DIGEST_LENGTH * BFieldElement::BYTES;
+    /// The number of [elements](BFieldElement) in a digest.
+    pub const LEN: usize = 5;
 
-    pub fn values(self) -> [BFieldElement; DIGEST_LENGTH] {
+    /// The number of bytes in a digest.
+    pub const BYTES: usize = Self::LEN * BFieldElement::BYTES;
+
+    pub fn values(self) -> [BFieldElement; Self::LEN] {
         self.0
     }
 
-    pub const fn new(digest: [BFieldElement; DIGEST_LENGTH]) -> Self {
+    pub const fn new(digest: [BFieldElement; Self::LEN]) -> Self {
         Self(digest)
     }
 
@@ -74,7 +83,7 @@ impl Digest {
 
 impl Default for Digest {
     fn default() -> Self {
-        Self([BFieldElement::ZERO; DIGEST_LENGTH])
+        Self([BFieldElement::ZERO; Self::LEN])
     }
 }
 
@@ -86,10 +95,10 @@ impl fmt::Display for Digest {
 
 impl Distribution<Digest> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Digest {
-        // FIXME: impl Fill for [BFieldElement] to rng.fill() a [BFieldElement; DIGEST_LENGTH].
+        // FIXME: impl Fill for [BFieldElement] to rng.fill() a [BFieldElement; Digest::LEN].
         let elements = rng
             .sample_iter(Standard)
-            .take(DIGEST_LENGTH)
+            .take(Digest::LEN)
             .collect_vec()
             .try_into()
             .unwrap();
@@ -193,7 +202,7 @@ impl TryFrom<BigUint> for Digest {
 
     fn try_from(value: BigUint) -> Result<Self, Self::Error> {
         let mut remaining = value;
-        let mut digest_innards = [BFieldElement::ZERO; DIGEST_LENGTH];
+        let mut digest_innards = [BFieldElement::ZERO; Self::LEN];
         let modulus: BigUint = BFieldElement::P.into();
         for digest_element in digest_innards.iter_mut() {
             let element = u64::try_from(remaining.clone() % modulus.clone()).unwrap();
@@ -214,7 +223,7 @@ impl From<Digest> for BigUint {
         let Digest(digest_innards) = digest;
         let mut ret = BigUint::zero();
         let modulus: BigUint = BFieldElement::P.into();
-        for i in (0..DIGEST_LENGTH).rev() {
+        for i in (0..Digest::LEN).rev() {
             ret *= modulus.clone();
             let digest_element: BigUint = digest_innards[i].value().into();
             ret += digest_element;
@@ -230,7 +239,7 @@ impl Digest {
     /// way to hash a digest in the virtual machine.
     #[deprecated(since = "0.42.0", note = "use `AlgebraicHasher::hash_pair` instead")]
     pub fn hash<H: AlgebraicHasher>(self) -> Digest {
-        H::hash_pair(self, Digest::new([BFieldElement::ZERO; DIGEST_LENGTH]))
+        H::hash_pair(self, Digest::new([BFieldElement::ZERO; Self::LEN]))
     }
 
     /// Encode digest as hex
@@ -270,7 +279,7 @@ impl<'de> Deserialize<'de> for Digest {
             let bytes = hex::decode(hex_string).map_err(serde::de::Error::custom)?;
             Ok(Self::try_from(&bytes as &[u8]).map_err(serde::de::Error::custom)?)
         } else {
-            Ok(Self::new(<[BFieldElement; DIGEST_LENGTH]>::deserialize(
+            Ok(Self::new(<[BFieldElement; Self::LEN]>::deserialize(
                 deserializer,
             )?))
         }
@@ -302,7 +311,7 @@ pub(crate) mod digest_tests {
     /// Test helper struct for corrupting digests. Primarily used for negative tests.
     #[derive(Debug, Clone, PartialEq, Eq, test_strategy::Arbitrary)]
     pub(crate) struct DigestCorruptor {
-        #[strategy(vec(0..DIGEST_LENGTH, 1..DIGEST_LENGTH))]
+        #[strategy(vec(0..Digest::LEN, 1..=Digest::LEN))]
         #[filter(#corrupt_indices.iter().all_unique())]
         corrupt_indices: Vec<usize>,
 
@@ -451,11 +460,11 @@ pub(crate) mod digest_tests {
 
     #[test]
     fn digest_ordering() {
-        let val0 = Digest::new([bfe!(0); DIGEST_LENGTH]);
+        let val0 = Digest::new(bfe_array![0; Digest::LEN]);
         let val1 = Digest::new(bfe_array![14, 0, 0, 0, 0]);
         assert!(val1 > val0);
 
-        let val2 = Digest::new([bfe!(14); DIGEST_LENGTH]);
+        let val2 = Digest::new(bfe_array![14; Digest::LEN]);
         assert!(val2 > val1);
         assert!(val2 > val0);
 
