@@ -416,7 +416,6 @@ mod mmr_test {
         bag_peaks::<H>(&roots)
     }
 
-    /// A block can contain an empty list of addition or removal records.
     #[test]
     fn computing_mmr_root_for_no_leaves_produces_some_digest() {
         root_from_arbitrary_number_of_digests::<Tip5>(&[]);
