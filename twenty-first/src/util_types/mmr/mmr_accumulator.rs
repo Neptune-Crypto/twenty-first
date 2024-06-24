@@ -54,22 +54,29 @@ impl<H: AlgebraicHasher> MmrAccumulator<H> {
 }
 
 impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
+    /// Calculate a commitment to the entire MMR.
     fn bag_peaks(&self) -> Digest {
         bag_peaks::<H>(&self.peaks)
     }
 
+    /// Return the Merkle tree roots of the Merkle trees that this MMR consists
+    /// of.
     fn get_peaks(&self) -> Vec<Digest> {
         self.peaks.clone()
     }
 
+    /// Returns true iff there are no leaves in the MMR.
     fn is_empty(&self) -> bool {
         self.leaf_count == 0
     }
 
+    /// Return the number of leaves in the MMR.
     fn count_leaves(&self) -> u64 {
         self.leaf_count
     }
 
+    /// Add a leaf to the MMR. Returns the membership proof of the newly added
+    /// leaf.
     fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof<H> {
         let (new_peaks, membership_proof) = shared_basic::calculate_new_peaks_from_append::<H>(
             self.leaf_count,
@@ -184,6 +191,10 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         running_peaks == new_peaks
     }
 
+    /// Mutate multiple leafs in the MMR. Takes a list of membership proofs
+    /// that will be updated accordingly. Meaning that the provided membership
+    /// proofs will be valid for the new MMR, provided they were valid before
+    /// the update was applied.
     /// Panics if `membership_proofs` and `membership_proof_leaf_indices` do not have
     /// the same length, or if a leaf index is out-of-bounds for the MMR.
     fn batch_mutate_leaf_and_update_mps(
