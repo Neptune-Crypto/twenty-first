@@ -77,7 +77,7 @@ where
         let node_index = self.digests.len();
         let leaf_index = shared_advanced::node_index_to_leaf_index(node_index).unwrap();
         self.append_raw(new_leaf);
-        self.prove_membership(leaf_index).0
+        self.prove_membership(leaf_index)
     }
 
     /// Mutate an existing leaf. It is the caller's responsibility that the
@@ -86,7 +86,7 @@ where
     fn mutate_leaf(&mut self, leaf_mutation: LeafMutation<H>) {
         // Sanity check
         let real_membership_proof: MmrMembershipProof<H> =
-            self.prove_membership(leaf_mutation.leaf_index).0;
+            self.prove_membership(leaf_mutation.leaf_index);
         assert_eq!(
             real_membership_proof.authentication_path,
             leaf_mutation.membership_proof.authentication_path,
@@ -125,7 +125,7 @@ where
             .zip_eq(membership_proof_leaf_indices)
             .enumerate()
         {
-            let new_mp = self.prove_membership(*mp_leaf_index).0;
+            let new_mp = self.prove_membership(*mp_leaf_index);
             if new_mp != **mp {
                 modified_mps.push(i);
             }
@@ -214,8 +214,8 @@ impl<H: AlgebraicHasher> MockMmr<H> {
         }
     }
 
-    /// Return (membership_proof, peaks)
-    pub fn prove_membership(&self, leaf_index: u64) -> (MmrMembershipProof<H>, Vec<Digest>) {
+    /// Return the MMR membership proof for a leaf with a given index.
+    pub fn prove_membership(&self, leaf_index: u64) -> MmrMembershipProof<H> {
         // A proof consists of an authentication path
         // and a list of peaks
         assert!(
@@ -258,11 +258,7 @@ impl<H: AlgebraicHasher> MockMmr<H> {
             index_height = next_index_info.1;
         }
 
-        let peaks: Vec<Digest> = self.get_peaks_with_heights().iter().map(|x| x.0).collect();
-
-        let membership_proof = MmrMembershipProof::new(authentication_path);
-
-        (membership_proof, peaks)
+        MmrMembershipProof::new(authentication_path)
     }
 
     /// Return a list of tuples (peaks, height)
@@ -513,10 +509,10 @@ mod mmr_test {
         // This error was fixed and this test fails without that fix.
         let leaf_hashes: Vec<Digest> = random_elements(3);
 
-        let archival_mmr = get_mock_ammr_from_digests(leaf_hashes.clone());
+        let archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
         let mp_leaf_index = 0;
-        let (membership_proof, peaks): (MmrMembershipProof<H>, Vec<Digest>) =
-            archival_mmr.prove_membership(mp_leaf_index);
+        let membership_proof = archival_mmr.prove_membership(mp_leaf_index);
+        let peaks = archival_mmr.get_peaks();
 
         // Verify that the accumulated hash in the verifier is compared against the **correct** hash,
         // not just **any** hash in the peaks list.
@@ -550,11 +546,10 @@ mod mmr_test {
         let mut archival_mmr = get_mock_ammr_from_digests(leaf_hashes.clone());
 
         let leaf_index: u64 = 2;
-        let (mp1, old_peaks): (MmrMembershipProof<H>, Vec<Digest>) =
-            archival_mmr.prove_membership(leaf_index);
+        let mp1: MmrMembershipProof<H> = archival_mmr.prove_membership(leaf_index);
+        let old_peaks = archival_mmr.get_peaks();
 
         // Verify single leaf
-
         let mp1_verifies = mp1.verify(
             leaf_index,
             leaf_hashes[leaf_index as usize],
@@ -567,7 +562,7 @@ mod mmr_test {
 
         let mut other_archival_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes.clone());
 
-        let (mp2, _acc_hash_2) = other_archival_mmr.prove_membership(leaf_index);
+        let mp2 = other_archival_mmr.prove_membership(leaf_index);
 
         // Mutate leaf + mutate leaf raw, assert that they're equivalent
 
@@ -651,7 +646,7 @@ mod mmr_test {
             let archival_end_state: MockMmr<H> = get_mock_ammr_from_digests(vec![new_leaf; size]);
             for i in 0..size {
                 let leaf_index = i as u64;
-                let (mp, _archival_peaks) = archival.prove_membership(leaf_index);
+                let mp = archival.prove_membership(leaf_index);
                 let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, &mp);
                 acc.mutate_leaf(leaf_mutation);
                 archival.mutate_leaf_raw(leaf_index, new_leaf);
@@ -676,8 +671,7 @@ mod mmr_test {
             let archival_end_state: MockMmr<H> = get_mock_ammr_from_digests(vec![new_leaf; size]);
             for i in 0..size {
                 let leaf_index = i as u64;
-                let (mp, peaks_before_update) = archival.prove_membership(leaf_index);
-                assert_eq!(archival.get_peaks(), peaks_before_update);
+                let mp = archival.prove_membership(leaf_index);
 
                 // Verify the update operation using the batch verifier
                 archival.mutate_leaf_raw(leaf_index, new_leaf);
@@ -738,7 +732,7 @@ mod mmr_test {
 
                 // Verify that membership proofs are the same as generating them from a MockMmr
                 let archival_membership_proof_direct =
-                    archival_iterative.prove_membership(leaf_index).0;
+                    archival_iterative.prove_membership(leaf_index);
                 assert_eq!(archival_membership_proof_direct, archival_membership_proof);
             }
 
@@ -787,8 +781,8 @@ mod mmr_test {
         {
             let leaf_index = 0;
             let leaf_count = 1;
-            let (membership_proof, peaks) = mmr.prove_membership(leaf_index);
-            assert!(membership_proof.verify(leaf_index, input_hash, &peaks, leaf_count));
+            let membership_proof = mmr.prove_membership(leaf_index);
+            assert!(membership_proof.verify(leaf_index, input_hash, &mmr.get_peaks(), leaf_count));
         }
 
         mmr.append(new_input_hash);
@@ -812,7 +806,7 @@ mod mmr_test {
         // membership proofs prior to all mutations. This is because the `verify_batch_update` method
         // updates the membership proofs internally to account for the mutations.
         for &leaf_index in &[0u64, 1] {
-            let mp = mmr.prove_membership(leaf_index).0;
+            let mp = mmr.prove_membership(leaf_index);
             let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, &mp);
             mmr.mutate_leaf(leaf_mutation);
             assert_eq!(
@@ -823,7 +817,7 @@ mod mmr_test {
         }
 
         let mps = (0..2)
-            .map(|i| mmr_after_append.prove_membership(i).0)
+            .map(|i| mmr_after_append.prove_membership(i))
             .collect_vec();
         let leaf_mutations = (0..2)
             .map(|i| LeafMutation::new(i, new_leaf, &mps[i as usize]))
@@ -852,7 +846,8 @@ mod mmr_test {
         {
             let leaf_index: u64 = 0;
             let input_digest = input_digests[leaf_index as usize];
-            let (membership_proof, peaks) = mmr.prove_membership(leaf_index);
+            let membership_proof = mmr.prove_membership(leaf_index);
+            let peaks = mmr.get_peaks();
 
             assert!(membership_proof.verify(leaf_index, input_digest, &peaks, num_leaves));
 
@@ -873,7 +868,7 @@ mod mmr_test {
 
         for leaf_index in 0..num_leaves {
             let new_leaf: Digest = H::hash(&BFieldElement::new(987223));
-            let (mp, _acc_hash) = mmr.prove_membership(leaf_index);
+            let mp = mmr.prove_membership(leaf_index);
             let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, &mp);
             mmr.mutate_leaf(leaf_mutation);
             assert_eq!(new_leaf, mmr.get_leaf(leaf_index));
@@ -922,11 +917,11 @@ mod mmr_test {
             // Get an authentication path for **all** values in MMR,
             // verify that it is valid
             for leaf_index in 0..leaf_count {
-                let (membership_proof, peaks) = mmr.prove_membership(leaf_index);
+                let membership_proof = mmr.prove_membership(leaf_index);
                 assert!(membership_proof.verify(
                     leaf_index,
                     input_hashes[leaf_index as usize],
-                    &peaks,
+                    &mmr.get_peaks(),
                     leaf_count
                 ));
             }
@@ -1042,7 +1037,8 @@ mod mmr_test {
             // Get an authentication path for **all** values in MMR,
             // verify that it is valid
             for leaf_index in 0..size {
-                let (membership_proof, peaks) = mmr.prove_membership(leaf_index);
+                let membership_proof = mmr.prove_membership(leaf_index);
+                let peaks = mmr.get_peaks();
                 assert!(membership_proof.verify(
                     leaf_index,
                     input_digests[leaf_index as usize],
@@ -1064,13 +1060,15 @@ mod mmr_test {
                 let old_leaf = input_digests[leaf_index as usize];
                 mmr.mutate_leaf_raw(leaf_index, new_leaf);
 
-                let (new_mp, new_peaks) = mmr.prove_membership(leaf_index);
+                let new_mp = mmr.prove_membership(leaf_index);
+                let new_peaks = mmr.get_peaks();
                 assert!(new_mp.verify(leaf_index, new_leaf, &new_peaks, size));
                 assert!(!new_mp.verify(leaf_index, old_leaf, &new_peaks, size));
 
                 // Return the element to its former value and run prove/verify for membership
                 mmr.mutate_leaf_raw(leaf_index, old_leaf);
-                let (old_mp, old_peaks) = mmr.prove_membership(leaf_index);
+                let old_mp = mmr.prove_membership(leaf_index);
+                let old_peaks = mmr.get_peaks();
                 assert!(!old_mp.verify(leaf_index, new_leaf, &old_peaks, size));
                 assert!(old_mp.verify(leaf_index, old_leaf, &old_peaks, size));
             }
