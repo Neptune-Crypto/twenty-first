@@ -55,13 +55,13 @@ pub trait Mmr<H: AlgebraicHasher> {
 
     /// Returns the peaks of the MMR, which are roots of the Merkle trees that constitute
     /// the MMR
-    fn get_peaks(&self) -> Vec<Digest>;
+    fn peaks(&self) -> Vec<Digest>;
 
     /// Returns `true` iff the MMR has no leaves
     fn is_empty(&self) -> bool;
 
     /// Returns the number of leaves in the MMR
-    fn count_leaves(&self) -> u64;
+    fn num_leaves(&self) -> u64;
 
     /// Append a hash digest to the MMR
     fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof<H>;
