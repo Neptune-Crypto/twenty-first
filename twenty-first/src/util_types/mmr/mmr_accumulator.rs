@@ -574,7 +574,7 @@ mod accumulator_mmr_tests {
             MmrAccumulator::new(leaf_hashes_start.clone());
         let archive_mmr_start: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_start);
         let leaf_index_3 = 3;
-        let membership_proof = archive_mmr_start.prove_membership(leaf_index_3).0;
+        let membership_proof = archive_mmr_start.prove_membership(leaf_index_3);
         let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
 
         {
@@ -639,8 +639,8 @@ mod accumulator_mmr_tests {
         let archive_mmr_start: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_start);
         let leaf_index_1 = 1;
         let leaf_index_3 = 3;
-        let membership_proof1 = archive_mmr_start.prove_membership(leaf_index_1).0;
-        let membership_proof3 = archive_mmr_start.prove_membership(leaf_index_3).0;
+        let membership_proof1 = archive_mmr_start.prove_membership(leaf_index_1);
+        let membership_proof3 = archive_mmr_start.prove_membership(leaf_index_3);
         let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
         let leaf_mutations = vec![
             LeafMutation::new(leaf_index_1, leaf20, &membership_proof1),
@@ -705,7 +705,7 @@ mod accumulator_mmr_tests {
             // Construct the mutation data
             let all_mps = mutated_leaf_indices
                 .iter()
-                .map(|i| ammr.prove_membership(*i).0)
+                .map(|i| ammr.prove_membership(*i))
                 .collect_vec();
             let mutation_data: Vec<LeafMutation<H>> = new_leafs
                 .into_iter()
@@ -718,7 +718,7 @@ mod accumulator_mmr_tests {
 
             let original_membership_proofs: Vec<MmrMembershipProof<H>> = membership_proof_indices
                 .iter()
-                .map(|i| ammr.prove_membership(*i).0)
+                .map(|i| ammr.prove_membership(*i))
                 .collect();
 
             // Do the update on both MMRs
@@ -788,7 +788,7 @@ mod accumulator_mmr_tests {
                 .collect();
 
             let bad_mmr: MockMmr<H> = get_mock_ammr_from_digests(bad_digests.clone());
-            let bad_membership_proof: MmrMembershipProof<H> = bad_mmr.prove_membership(0).0;
+            let bad_membership_proof: MmrMembershipProof<H> = bad_mmr.prove_membership(0);
             let bad_membership_proof_digest = bad_digests[0];
             let bad_leaf: Digest = local_hash(8765432165123u128);
             let mock_mmr_init: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes_start.clone());
@@ -836,7 +836,7 @@ mod accumulator_mmr_tests {
                     // Create the inputs to the method call
                     let all_mps = mutated_indices
                         .iter()
-                        .map(|i| mock_mmr_init.prove_membership(*i).0)
+                        .map(|i| mock_mmr_init.prove_membership(*i))
                         .collect_vec();
                     let mut leaf_mutations: Vec<LeafMutation<H>> = new_leaf_values
                         .clone()
