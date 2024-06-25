@@ -61,7 +61,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
 
     /// Return the Merkle tree roots of the Merkle trees that this MMR consists
     /// of.
-    fn get_peaks(&self) -> Vec<Digest> {
+    fn peaks(&self) -> Vec<Digest> {
         self.peaks.clone()
     }
 
@@ -71,7 +71,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
     }
 
     /// Return the number of leaves in the MMR.
-    fn count_leaves(&self) -> u64 {
+    fn num_leaves(&self) -> u64 {
         self.leaf_count
     }
 
@@ -279,10 +279,8 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
             }
 
             // Update the peak
-            let (_, peak_index) = shared_basic::leaf_index_to_mt_index_and_peak_index(
-                leaf_index,
-                self.count_leaves(),
-            );
+            let (_, peak_index) =
+                shared_basic::leaf_index_to_mt_index_and_peak_index(leaf_index, self.num_leaves());
             self.peaks[peak_index as usize] = acc_hash;
         }
 
@@ -504,8 +502,8 @@ mod accumulator_mmr_tests {
     impl<H: AlgebraicHasher> From<MockMmr<H>> for MmrAccumulator<H> {
         fn from(ammr: MockMmr<H>) -> Self {
             MmrAccumulator {
-                leaf_count: ammr.count_leaves(),
-                peaks: ammr.get_peaks(),
+                leaf_count: ammr.num_leaves(),
+                peaks: ammr.peaks(),
                 _hasher: PhantomData,
             }
         }
@@ -514,8 +512,8 @@ mod accumulator_mmr_tests {
     impl<H: AlgebraicHasher> From<&MockMmr<H>> for MmrAccumulator<H> {
         fn from(ammr: &MockMmr<H>) -> Self {
             MmrAccumulator {
-                leaf_count: ammr.count_leaves(),
-                peaks: ammr.get_peaks(),
+                leaf_count: ammr.num_leaves(),
+                peaks: ammr.peaks(),
                 _hasher: PhantomData,
             }
         }
@@ -529,12 +527,12 @@ mod accumulator_mmr_tests {
         let mock_mmr: MockMmr<H> = get_mock_ammr_from_digests(leaf_hashes);
         let accumulator_mmr = MmrAccumulator::from(mock_mmr.clone());
 
-        assert_eq!(mock_mmr.get_peaks(), accumulator_mmr.get_peaks());
+        assert_eq!(mock_mmr.peaks(), accumulator_mmr.peaks());
         assert_eq!(mock_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
         assert_eq!(mock_mmr.is_empty(), accumulator_mmr.is_empty());
         assert!(!mock_mmr.is_empty());
-        assert_eq!(mock_mmr.count_leaves(), accumulator_mmr.count_leaves());
-        assert_eq!(3, accumulator_mmr.count_leaves());
+        assert_eq!(mock_mmr.num_leaves(), accumulator_mmr.num_leaves());
+        assert_eq!(3, accumulator_mmr.num_leaves());
     }
 
     #[test]
@@ -551,7 +549,7 @@ mod accumulator_mmr_tests {
         let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
 
         let leaves_were_appended = accumulator_mmr_start.verify_batch_update(
-            &accumulator_mmr_end.get_peaks(),
+            &accumulator_mmr_end.peaks(),
             &[appended_leaf],
             vec![],
         );
@@ -581,7 +579,7 @@ mod accumulator_mmr_tests {
             let appended_leafs = [];
             let leaf_mutations = vec![LeafMutation::new(leaf_index_3, leaf3, &membership_proof)];
             assert!(accumulator_mmr_start.verify_batch_update(
-                &accumulator_mmr_end.get_peaks(),
+                &accumulator_mmr_end.peaks(),
                 &appended_leafs,
                 leaf_mutations,
             ));
@@ -594,7 +592,7 @@ mod accumulator_mmr_tests {
                 LeafMutation::new(leaf_index_3, leaf3, &membership_proof),
             ];
             assert!(!accumulator_mmr_start.verify_batch_update(
-                &accumulator_mmr_end.get_peaks(),
+                &accumulator_mmr_end.peaks(),
                 &appended_leafs,
                 leaf_mutations,
             ));
@@ -613,7 +611,7 @@ mod accumulator_mmr_tests {
         let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
 
         let leaves_were_appended = accumulator_mmr_start.verify_batch_update(
-            &accumulator_mmr_end.get_peaks(),
+            &accumulator_mmr_end.peaks(),
             &appended_leafs,
             vec![],
         );
@@ -647,7 +645,7 @@ mod accumulator_mmr_tests {
             LeafMutation::new(leaf_index_3, leaf21, &membership_proof3),
         ];
         assert!(accumulator_mmr_start.verify_batch_update(
-            &accumulator_mmr_end.get_peaks(),
+            &accumulator_mmr_end.peaks(),
             &[],
             leaf_mutations
         ));
@@ -737,7 +735,7 @@ mod accumulator_mmr_tests {
             assert_eq!(mutated_mps_mmra, mutated_mps_ammr);
 
             // Verify that both MMRs end up with same peaks
-            assert_eq!(mmra.get_peaks(), ammr.get_peaks());
+            assert_eq!(mmra.peaks(), ammr.peaks());
 
             // Verify that membership proofs from AMMR and MMRA are equal
             assert_eq!(membership_proof_count, mmra_mps.len());
@@ -752,13 +750,13 @@ mod accumulator_mmr_tests {
                 .all(|((mp, &leaf), leaf_index)| mp.verify(
                     *leaf_index,
                     leaf,
-                    &mmra.get_peaks(),
-                    mmra.count_leaves()
+                    &mmra.peaks(),
+                    mmra.num_leaves()
                 )));
 
             // Manually construct an MMRA from the new data and verify that peaks and leaf count matches
             assert!(
-                mutated_leaf_count == 0 || ammr_copy.get_peaks() != ammr.get_peaks(),
+                mutated_leaf_count == 0 || ammr_copy.peaks() != ammr.peaks(),
                 "If mutated leaf count is non-zero, at least on peaks must be different"
             );
             mutation_data.into_iter().for_each(
@@ -770,7 +768,7 @@ mod accumulator_mmr_tests {
                     ammr_copy.mutate_leaf_raw(leaf_index, new_leaf);
                 },
             );
-            assert_eq!(ammr_copy.get_peaks(), ammr.get_peaks(), "Mutation though batch mutation function must transform the MMR like a list of individual leaf mutations");
+            assert_eq!(ammr_copy.peaks(), ammr.peaks(), "Mutation though batch mutation function must transform the MMR like a list of individual leaf mutations");
         }
     }
 
@@ -826,8 +824,8 @@ mod accumulator_mmr_tests {
                     let mutated_mock_mmr: MockMmr<H> =
                         get_mock_ammr_from_digests(leaf_hashes_mutated.clone());
                     let mutated_accumulator_mmr = MmrAccumulator::<H>::new(leaf_hashes_mutated);
-                    let expected_new_peaks_from_archival = mutated_mock_mmr.get_peaks();
-                    let expected_new_peaks_from_accumulator = mutated_accumulator_mmr.get_peaks();
+                    let expected_new_peaks_from_archival = mutated_mock_mmr.peaks();
+                    let expected_new_peaks_from_accumulator = mutated_accumulator_mmr.peaks();
                     assert_eq!(
                         expected_new_peaks_from_archival,
                         expected_new_peaks_from_accumulator
@@ -901,7 +899,7 @@ mod accumulator_mmr_tests {
         let json = serde_json::to_string(&mmra).unwrap();
         let s_back = serde_json::from_str::<Mmr>(&json).unwrap();
         assert_eq!(mmra.bag_peaks(), s_back.bag_peaks());
-        assert_eq!(1, mmra.count_leaves());
+        assert_eq!(1, mmra.num_leaves());
     }
 
     #[test]
