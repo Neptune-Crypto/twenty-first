@@ -339,7 +339,10 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         modified
     }
 
-    /// Update a membership proof with a `leaf_mutation` proof.
+    /// Update a membership proof with a `leaf_mutation` data structure. In
+    /// other words: Given a valid MMR membership proof for an MMR, calculate
+    /// the updated MMR membership proof after one of the MMR's leafs have been
+    /// changed.
     pub fn update_from_leaf_mutation(
         &mut self,
         own_mp_leaf_index: u64,

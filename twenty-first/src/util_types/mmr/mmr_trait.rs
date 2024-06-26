@@ -3,12 +3,14 @@ use super::mmr_membership_proof::MmrMembershipProof;
 use crate::math::digest::Digest;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
-/// A definition of a mutation of a leaf in an MMR
+/// A wrapper for the data needed to change the value of a leaf in an MMR when
+/// only the MMR-accumulator is known, i.e., only the peaks and the leaf-count
+/// are known.
 #[derive(Debug, Clone)]
 pub struct LeafMutation<'a, H: AlgebraicHasher> {
     /// The leaf-index of the leaf being mutated. If the MMR is viewed as a
     /// commitment to a list, then this is simply the (0-indexed) list-index
-    ///  into that list.
+    /// into that list.
     pub leaf_index: u64,
 
     /// The new leaf value, after the mutation has been applied.
