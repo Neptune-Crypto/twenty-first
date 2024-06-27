@@ -46,7 +46,7 @@ impl<'a, H: AlgebraicHasher> LeafMutation<'a, H> {
 
 pub trait Mmr<H: AlgebraicHasher> {
     /// Create a new MMR instanc from a list of hash digests. The supplied digests
-    /// are the leaves of the MMR.
+    /// are the leafs of the MMR.
 
     // constructors cannot be part of the interface since the archival version requires a
     // database which we want the caller to create, and the accumulator does not need a
@@ -59,11 +59,11 @@ pub trait Mmr<H: AlgebraicHasher> {
     /// the MMR
     fn peaks(&self) -> Vec<Digest>;
 
-    /// Returns `true` iff the MMR has no leaves
+    /// Returns `true` iff the MMR has no leafs
     fn is_empty(&self) -> bool;
 
-    /// Returns the number of leaves in the MMR
-    fn num_leaves(&self) -> u64;
+    /// Returns the number of leafs in the MMR
+    fn num_leafs(&self) -> u64;
 
     /// Append a hash digest to the MMR
     fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof<H>;
