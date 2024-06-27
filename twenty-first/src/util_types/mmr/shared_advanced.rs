@@ -84,8 +84,8 @@ pub fn get_height_from_leaf_index(leaf_index: u64) -> u32 {
     (leaf_index + 1).ilog2()
 }
 
-/// The number of nodes in an MMR with `leaf_count` leaves.
-pub fn leaf_count_to_node_count(leaf_count: u64) -> u64 {
+/// The number of nodes in an MMR with `leaf_count` leafs.
+pub fn num_leafs_to_num_nodes(leaf_count: u64) -> u64 {
     let hamming_weight = leaf_count.count_ones() as u64;
     2 * leaf_count - hamming_weight
 }
@@ -181,7 +181,7 @@ pub fn get_peak_heights_and_peak_node_indices(leaf_count: u64) -> (Vec<u32>, Vec
     }
 
     let node_index_of_rightmost_leaf = leaf_index_to_node_index(leaf_count - 1);
-    let node_count = leaf_count_to_node_count(leaf_count);
+    let node_count = num_leafs_to_num_nodes(leaf_count);
     let (mut top_peak, mut top_height) = leftmost_ancestor(node_index_of_rightmost_leaf);
     if top_peak > node_count {
         top_peak = left_child(top_peak, top_height);
@@ -456,7 +456,7 @@ mod mmr_test {
             42, 46, 47, 49, 50, 53, 54, 56, 57, 63, 64,
         ];
         for (i, node_count) in node_counts.iter().enumerate() {
-            assert_eq!(*node_count, leaf_count_to_node_count(i as u64));
+            assert_eq!(*node_count, num_leafs_to_num_nodes(i as u64));
         }
     }
 

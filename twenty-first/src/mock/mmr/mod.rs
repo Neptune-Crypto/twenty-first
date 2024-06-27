@@ -95,8 +95,8 @@ mod shared_tests_tests {
 
         let (mmra, mps) =
             mmra_with_mps::<H>(32, vec![(12, digest_leaf_idx12), (14, digest_leaf_idx14)]);
-        assert!(mps[0].verify(12, digest_leaf_idx12, &mmra.peaks(), mmra.num_leaves()));
-        assert!(mps[1].verify(14, digest_leaf_idx14, &mmra.peaks(), mmra.num_leaves()));
+        assert!(mps[0].verify(12, digest_leaf_idx12, &mmra.peaks(), mmra.num_leafs()));
+        assert!(mps[1].verify(14, digest_leaf_idx14, &mmra.peaks(), mmra.num_leafs()));
     }
 
     #[test]

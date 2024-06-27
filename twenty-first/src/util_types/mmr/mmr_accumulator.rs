@@ -65,13 +65,13 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
         self.peaks.clone()
     }
 
-    /// Returns true iff there are no leaves in the MMR.
+    /// Returns true iff there are no leafs in the MMR.
     fn is_empty(&self) -> bool {
         self.leaf_count == 0
     }
 
-    /// Return the number of leaves in the MMR.
-    fn num_leaves(&self) -> u64 {
+    /// Return the number of leafs in the MMR.
+    fn num_leafs(&self) -> u64 {
         self.leaf_count
     }
 
@@ -280,7 +280,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
 
             // Update the peak
             let (_, peak_index) =
-                shared_basic::leaf_index_to_mt_index_and_peak_index(leaf_index, self.num_leaves());
+                shared_basic::leaf_index_to_mt_index_and_peak_index(leaf_index, self.num_leafs());
             self.peaks[peak_index as usize] = acc_hash;
         }
 
@@ -303,7 +303,7 @@ impl<H: AlgebraicHasher> Mmr<H> for MmrAccumulator<H> {
                 .zip(ap_indices.into_iter())
             {
                 // Any number of hashes can be updated in the authentication path, since
-                // we're modifying multiple leaves in the MMR
+                // we're modifying multiple leafs in the MMR
                 // Since this function returns the indices of the modified membership proofs,
                 // a check if the new digest is actually different from the previous value is
                 // needed.
@@ -389,7 +389,7 @@ pub mod util {
             .collect();
         let mut all_mps = vec![first_mp];
         let mut all_leaf_indices = vec![first_leaf_index];
-        let mut all_leaves = vec![first_specified_digest];
+        let mut all_leafs = vec![first_specified_digest];
 
         for (new_leaf_index, new_leaf) in specified_leafs.into_iter().skip(1) {
             let (new_leaf_mt_index, _new_leaf_peaks_index) =
@@ -418,7 +418,7 @@ pub mod util {
             );
             assert!(new_mp.verify(new_leaf_index, new_leaf, &new_peaks, leaf_count));
             for (j, mp) in all_mps.iter().enumerate() {
-                assert!(mp.verify(all_leaf_indices[j], all_leaves[j], &peaks, leaf_count));
+                assert!(mp.verify(all_leaf_indices[j], all_leafs[j], &peaks, leaf_count));
             }
 
             let leaf_mutations = vec![LeafMutation::new(new_leaf_index, new_leaf, &new_mp)];
@@ -439,7 +439,7 @@ pub mod util {
 
             for (j, (mp, mp_leaf_index)) in all_mps.iter().zip(all_leaf_indices.iter()).enumerate()
             {
-                assert!(mp.verify(*mp_leaf_index, all_leaves[j], &new_peaks, leaf_count));
+                assert!(mp.verify(*mp_leaf_index, all_leafs[j], &new_peaks, leaf_count));
             }
 
             // Update derivable node values
@@ -470,7 +470,7 @@ pub mod util {
 
             all_mps.push(new_mp);
             peaks = new_peaks;
-            all_leaves.push(new_leaf);
+            all_leafs.push(new_leaf);
             all_leaf_indices.push(new_leaf_index);
         }
 
@@ -502,7 +502,7 @@ mod accumulator_mmr_tests {
     impl<H: AlgebraicHasher> From<MockMmr<H>> for MmrAccumulator<H> {
         fn from(ammr: MockMmr<H>) -> Self {
             MmrAccumulator {
-                leaf_count: ammr.num_leaves(),
+                leaf_count: ammr.num_leafs(),
                 peaks: ammr.peaks(),
                 _hasher: PhantomData,
             }
@@ -512,7 +512,7 @@ mod accumulator_mmr_tests {
     impl<H: AlgebraicHasher> From<&MockMmr<H>> for MmrAccumulator<H> {
         fn from(ammr: &MockMmr<H>) -> Self {
             MmrAccumulator {
-                leaf_count: ammr.num_leaves(),
+                leaf_count: ammr.num_leafs(),
                 peaks: ammr.peaks(),
                 _hasher: PhantomData,
             }
@@ -531,8 +531,8 @@ mod accumulator_mmr_tests {
         assert_eq!(mock_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
         assert_eq!(mock_mmr.is_empty(), accumulator_mmr.is_empty());
         assert!(!mock_mmr.is_empty());
-        assert_eq!(mock_mmr.num_leaves(), accumulator_mmr.num_leaves());
-        assert_eq!(3, accumulator_mmr.num_leaves());
+        assert_eq!(mock_mmr.num_leafs(), accumulator_mmr.num_leafs());
+        assert_eq!(3, accumulator_mmr.num_leafs());
     }
 
     #[test]
@@ -548,12 +548,12 @@ mod accumulator_mmr_tests {
         let accumulator_mmr_start: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_start);
         let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
 
-        let leaves_were_appended = accumulator_mmr_start.verify_batch_update(
+        let leafs_were_appended = accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.peaks(),
             &[appended_leaf],
             vec![],
         );
-        assert!(leaves_were_appended);
+        assert!(leafs_were_appended);
     }
 
     #[test]
@@ -610,12 +610,12 @@ mod accumulator_mmr_tests {
         let accumulator_mmr_start: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_start);
         let accumulator_mmr_end: MmrAccumulator<H> = MmrAccumulator::new(leaf_hashes_end);
 
-        let leaves_were_appended = accumulator_mmr_start.verify_batch_update(
+        let leafs_were_appended = accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.peaks(),
             &appended_leafs,
             vec![],
         );
-        assert!(leaves_were_appended);
+        assert!(leafs_were_appended);
     }
 
     #[test]
@@ -667,7 +667,7 @@ mod accumulator_mmr_tests {
             let mutated_leaf_count = rng.gen_range(0..mmr_leaf_count);
             let all_indices: Vec<u64> = (0..mmr_leaf_count as u64).collect();
 
-            // Pick indices for leaves that are being mutated
+            // Pick indices for leafs that are being mutated
             let mut all_indices_mut0 = all_indices.clone();
             let mut mutated_leaf_indices: Vec<u64> = vec![];
             for _ in 0..mutated_leaf_count {
@@ -751,7 +751,7 @@ mod accumulator_mmr_tests {
                     *leaf_index,
                     leaf,
                     &mmra.peaks(),
-                    mmra.num_leaves()
+                    mmra.num_leafs()
                 )));
 
             // Manually construct an MMRA from the new data and verify that peaks and leaf count matches
@@ -899,7 +899,7 @@ mod accumulator_mmr_tests {
         let json = serde_json::to_string(&mmra).unwrap();
         let s_back = serde_json::from_str::<Mmr>(&json).unwrap();
         assert_eq!(mmra.bag_peaks(), s_back.bag_peaks());
-        assert_eq!(1, mmra.num_leaves());
+        assert_eq!(1, mmra.num_leafs());
     }
 
     #[test]

@@ -58,8 +58,8 @@ where
         self.digests.len() == 1
     }
 
-    /// Return the number of leaves in the tree
-    fn num_leaves(&self) -> u64 {
+    /// Return the number of leafs in the tree
+    fn num_leafs(&self) -> u64 {
         let peaks_and_heights: Vec<(_, u32)> = self.get_peaks_with_heights();
         let mut acc = 0;
         for (_, height) in peaks_and_heights {
@@ -107,7 +107,7 @@ where
                 .iter()
                 .map(|leaf_mutation| leaf_mutation.leaf_index)
                 .all_unique(),
-            "Duplicated leaves are not allowed in membership proof updater"
+            "Duplicated leafs are not allowed in membership proof updater"
         );
 
         for LeafMutation {
@@ -147,7 +147,7 @@ where
     }
 
     fn to_accumulator(&self) -> MmrAccumulator<H> {
-        MmrAccumulator::init(self.peaks(), self.num_leaves())
+        MmrAccumulator::init(self.peaks(), self.num_leafs())
     }
 }
 
@@ -219,8 +219,8 @@ impl<H: AlgebraicHasher> MockMmr<H> {
         // A proof consists of an authentication path
         // and a list of peaks
         assert!(
-            leaf_index < self.num_leaves(),
-            "Cannot prove membership of leaf outside of range. Got leaf_index {leaf_index}. Leaf count is {}", self.num_leaves()
+            leaf_index < self.num_leafs(),
+            "Cannot prove membership of leaf outside of range. Got leaf_index {leaf_index}. Leaf count is {}", self.num_leafs()
         );
 
         // Find out how long the authentication path is
@@ -401,11 +401,11 @@ mod mmr_test {
         let mut trees = vec![];
         let mut num_processed_digests = 0;
         for tree_height in get_peak_heights(digests.len() as u64) {
-            let num_leaves_in_tree = 1 << tree_height;
+            let num_leafs_in_tree = 1 << tree_height;
             let leaf_digests =
-                &digests[num_processed_digests..num_processed_digests + num_leaves_in_tree];
+                &digests[num_processed_digests..num_processed_digests + num_leafs_in_tree];
             let tree = MerkleTree::<H>::new::<CpuParallel>(leaf_digests).unwrap();
-            num_processed_digests += num_leaves_in_tree;
+            num_processed_digests += num_leafs_in_tree;
             trees.push(tree);
         }
         let roots = trees.iter().map(|t| t.root()).collect_vec();
@@ -413,15 +413,15 @@ mod mmr_test {
     }
 
     #[test]
-    fn computing_mmr_root_for_no_leaves_produces_some_digest() {
+    fn computing_mmr_root_for_no_leafs_produces_some_digest() {
         root_from_arbitrary_number_of_digests::<Tip5>(&[]);
     }
 
     #[proptest(cases = 30)]
-    fn mmr_root_of_arbitrary_number_of_leaves_is_merkle_root_when_number_of_leaves_is_a_power_of_two(
+    fn mmr_root_of_arbitrary_number_of_leafs_is_merkle_root_when_number_of_leafs_is_a_power_of_two(
         test_tree: MerkleTreeToTest,
     ) {
-        let root = root_from_arbitrary_number_of_digests::<Tip5>(test_tree.tree.leaves());
+        let root = root_from_arbitrary_number_of_digests::<Tip5>(test_tree.tree.leafs());
         assert_eq!(test_tree.tree.root(), root);
     }
 
@@ -432,8 +432,8 @@ mod mmr_test {
         let mut archival_mmr: MockMmr<H> = get_empty_mock_ammr();
         let mut accumulator_mmr: MmrAccumulator<H> = MmrAccumulator::<H>::new(vec![]);
 
-        assert_eq!(0, archival_mmr.num_leaves());
-        assert_eq!(0, accumulator_mmr.num_leaves());
+        assert_eq!(0, archival_mmr.num_leafs());
+        assert_eq!(0, accumulator_mmr.num_leafs());
         assert_eq!(archival_mmr.peaks(), accumulator_mmr.peaks());
         assert_eq!(Vec::<Digest>::new(), accumulator_mmr.peaks());
         assert_eq!(archival_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
@@ -488,7 +488,7 @@ mod mmr_test {
                 0,
                 new_leaf,
                 &archival_mmr.peaks(),
-                archival_mmr.num_leaves(),
+                archival_mmr.num_leafs(),
             ),
             "membership proof from arhival MMR must validate"
         );
@@ -522,13 +522,13 @@ mod mmr_test {
             mp_leaf_index,
             leaf_hashes[0],
             &accumulator_mmr.peaks(),
-            accumulator_mmr.num_leaves(),
+            accumulator_mmr.num_leafs(),
         ));
         assert!(!membership_proof.verify(
             2,
             leaf_hashes[0],
             &accumulator_mmr.peaks(),
-            accumulator_mmr.num_leaves(),
+            accumulator_mmr.num_leafs(),
         ));
     }
 
@@ -687,8 +687,8 @@ mod mmr_test {
                 acc.mutate_leaf(leaf_mutation);
                 let new_archival_peaks = archival.peaks();
                 assert_eq!(new_archival_peaks, acc.peaks());
-                assert_eq!(size as u64, archival.num_leaves());
-                assert_eq!(size as u64, acc.num_leaves());
+                assert_eq!(size as u64, archival.num_leafs());
+                assert_eq!(size as u64, acc.num_leafs());
             }
             assert_eq!(archival_end_state.peaks(), acc.peaks());
         }
@@ -720,7 +720,7 @@ mod mmr_test {
                     leaf_index,
                     leaf_hash,
                     &archival_iterative.peaks(),
-                    archival_iterative.num_leaves(),
+                    archival_iterative.num_leafs(),
                 ));
 
                 // Verify that membership proofs are the same as generating them from a MockMmr
@@ -732,10 +732,10 @@ mod mmr_test {
             // Verify that the MMRs built iteratively from `append` and in *one* batch are the same
             assert_eq!(accumulator_batch.peaks(), accumulator_iterative.peaks());
             assert_eq!(
-                accumulator_batch.num_leaves(),
-                accumulator_iterative.num_leaves()
+                accumulator_batch.num_leafs(),
+                accumulator_iterative.num_leafs()
             );
-            assert_eq!(size as u64, accumulator_iterative.num_leaves());
+            assert_eq!(size as u64, accumulator_iterative.num_leafs());
             assert_eq!(archival_iterative.peaks(), accumulator_iterative.peaks());
 
             // Run a batch-append verification on the entire mutation of the MMR and verify that it succeeds
@@ -758,7 +758,7 @@ mod mmr_test {
         let original_mmr: MockMmr<H> = get_mock_ammr_from_digests(vec![input_hash]);
         let mmr_after_append: MockMmr<H> =
             get_mock_ammr_from_digests(vec![input_hash, new_input_hash]);
-        assert_eq!(1, mmr.num_leaves());
+        assert_eq!(1, mmr.num_leafs());
         assert_eq!(1, mmr.count_nodes());
 
         let original_peaks_and_heights: Vec<(Digest, u32)> = mmr.get_peaks_with_heights();
@@ -773,7 +773,7 @@ mod mmr_test {
         }
 
         mmr.append(new_input_hash);
-        assert_eq!(2, mmr.num_leaves());
+        assert_eq!(2, mmr.num_leafs());
         assert_eq!(3, mmr.count_nodes());
 
         let new_peaks_and_heights = mmr.get_peaks_with_heights();
@@ -819,12 +819,12 @@ mod mmr_test {
     fn two_input_mmr_test() {
         type H = Tip5;
 
-        let num_leaves: u64 = 3;
-        let input_digests: Vec<Digest> = random_elements(num_leaves as usize);
+        let num_leafs: u64 = 3;
+        let input_digests: Vec<Digest> = random_elements(num_leafs as usize);
 
         let mut mmr: MockMmr<H> = get_mock_ammr_from_digests(input_digests.clone());
-        assert_eq!(num_leaves, mmr.num_leaves());
-        assert_eq!(1 + num_leaves, mmr.count_nodes());
+        assert_eq!(num_leafs, mmr.num_leafs());
+        assert_eq!(1 + num_leafs, mmr.count_nodes());
 
         let original_peaks_and_heights: Vec<(Digest, u32)> = mmr.get_peaks_with_heights();
         let expected_peaks = 2;
@@ -836,24 +836,24 @@ mod mmr_test {
             let membership_proof = mmr.prove_membership(leaf_index);
             let peaks = mmr.peaks();
 
-            assert!(membership_proof.verify(leaf_index, input_digest, &peaks, num_leaves));
+            assert!(membership_proof.verify(leaf_index, input_digest, &peaks, num_leafs));
 
             // Negative test for verify membership
             let leaf_index = leaf_index + 1;
 
-            assert!(!membership_proof.verify(leaf_index, input_digest, &peaks, num_leaves));
+            assert!(!membership_proof.verify(leaf_index, input_digest, &peaks, num_leafs));
         }
 
         let new_leaf_hash: Digest = H::hash(&BFieldElement::new(201));
         mmr.append(new_leaf_hash);
 
-        let expected_num_leaves = 1 + num_leaves;
-        assert_eq!(expected_num_leaves, mmr.num_leaves());
+        let expected_num_leafs = 1 + num_leafs;
+        assert_eq!(expected_num_leafs, mmr.num_leafs());
 
-        let expected_node_count = 3 + expected_num_leaves;
+        let expected_node_count = 3 + expected_num_leafs;
         assert_eq!(expected_node_count, mmr.count_nodes());
 
-        for leaf_index in 0..num_leaves {
+        for leaf_index in 0..num_leafs {
             let new_leaf: Digest = H::hash(&BFieldElement::new(987223));
             let mp = mmr.prove_membership(leaf_index);
             let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, &mp);
@@ -880,7 +880,7 @@ mod mmr_test {
             let input_hashes: Vec<Digest> = random_elements(leaf_count as usize);
             let mut mmr: MockMmr<H> = get_mock_ammr_from_digests(input_hashes.clone());
 
-            assert_eq!(leaf_count, mmr.num_leaves());
+            assert_eq!(leaf_count, mmr.num_leafs());
             assert_eq!(node_count, mmr.count_nodes());
 
             let original_peaks_and_heights = mmr.get_peaks_with_heights();
@@ -983,7 +983,7 @@ mod mmr_test {
 
         assert_eq!(mmr_big.peaks(), mmr_small.peaks());
         assert_eq!(mmr_big.bag_peaks(), mmr_small.bag_peaks());
-        assert_eq!(mmr_big.num_leaves(), mmr_small.num_leaves());
+        assert_eq!(mmr_big.num_leafs(), mmr_small.num_leafs());
         assert_eq!(mmr_big.count_nodes(), mmr_small.count_nodes());
     }
 
@@ -1005,7 +1005,7 @@ mod mmr_test {
             let input_digests: Vec<Digest> = random_elements(leaf_count);
             let mut mmr: MockMmr<H> = get_mock_ammr_from_digests(input_digests.clone());
             let mmr_original: MockMmr<H> = get_mock_ammr_from_digests(input_digests.clone());
-            assert_eq!(size, mmr.num_leaves());
+            assert_eq!(size, mmr.num_leafs());
             assert_eq!(node_count, mmr.count_nodes());
             let original_peaks_and_heights: Vec<(Digest, u32)> = mmr.get_peaks_with_heights();
             let peak_heights_1: Vec<u32> = original_peaks_and_heights.iter().map(|x| x.1).collect();
@@ -1037,7 +1037,7 @@ mod mmr_test {
 
                 // The below verify_modify tests should only fail if `wrong_leaf_index` is
                 // different than `leaf_index`.
-                let wrong_leaf_index = (leaf_index + 1) % mmr.num_leaves();
+                let wrong_leaf_index = (leaf_index + 1) % mmr.num_leafs();
                 assert!(
                     wrong_leaf_index == leaf_index
                         || !membership_proof.verify(wrong_leaf_index, new_leaf, &peaks, size)
