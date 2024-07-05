@@ -20,6 +20,7 @@ use crate::error::ParseBFieldElementError;
 use crate::error::TryFromDigestError;
 use crate::error::TryFromHexDigestError;
 use crate::math::b_field_element::BFieldElement;
+use crate::prelude::Tip5;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[deprecated(since = "0.42.0", note = "use `Digest::LEN` instead")]
@@ -27,8 +28,6 @@ pub const DIGEST_LENGTH: usize = 5;
 
 /// The result of hashing a sequence of elements, for example using [Tip5].
 /// Sometimes called a “hash”.
-///
-/// [Tip5]: crate::prelude::tip5::Tip5
 // note: Serialize and Deserialize have custom implementations below
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, BFieldCodec, Arbitrary)]
 pub struct Digest(pub [BFieldElement; Digest::LEN]);
@@ -66,7 +65,10 @@ impl Digest {
     /// The number of bytes in a digest.
     pub const BYTES: usize = Self::LEN * BFieldElement::BYTES;
 
-    pub fn values(self) -> [BFieldElement; Self::LEN] {
+    /// The all-zero digest.
+    pub(crate) const ALL_ZERO: Self = Self([BFieldElement::ZERO; Self::LEN]);
+
+    pub const fn values(self) -> [BFieldElement; Self::LEN] {
         self.0
     }
 
@@ -77,13 +79,14 @@ impl Digest {
     /// Returns a new digest but whose elements are reversed relative to self.
     /// This function is an involutive endomorphism.
     pub const fn reversed(self) -> Digest {
-        Digest([self.0[4], self.0[3], self.0[2], self.0[1], self.0[0]])
+        let Digest([d0, d1, d2, d3, d4]) = self;
+        Digest([d4, d3, d2, d1, d0])
     }
 }
 
 impl Default for Digest {
     fn default() -> Self {
-        Self([BFieldElement::ZERO; Self::LEN])
+        Self::ALL_ZERO
     }
 }
 
@@ -166,7 +169,7 @@ impl From<Digest> for [u8; Digest::BYTES] {
 impl TryFrom<[u8; Digest::BYTES]> for Digest {
     type Error = TryFromDigestError;
 
-    fn try_from(item: [u8; Digest::BYTES]) -> Result<Self, Self::Error> {
+    fn try_from(item: [u8; Self::BYTES]) -> Result<Self, Self::Error> {
         let chunk_into_bfe = |chunk: &[u8]| -> Result<BFieldElement, _> {
             let mut arr = [0u8; BFieldElement::BYTES];
             arr.copy_from_slice(chunk);
@@ -234,17 +237,26 @@ impl From<Digest> for BigUint {
 }
 
 impl Digest {
-    /// Simulates the VM as it hashes a digest. This method invokes hash_pair
-    /// with the right operand being the zero digest, agreeing with the standard
-    /// way to hash a digest in the virtual machine.
-    #[deprecated(since = "0.42.0", note = "use `AlgebraicHasher::hash_pair` instead")]
-    pub fn hash<H: AlgebraicHasher>(self) -> Digest {
-        H::hash_pair(self, Digest::new([BFieldElement::ZERO; Self::LEN]))
+    /// Hash this digest using [Tip5], producing a new digest.
+    ///
+    /// A digest can be used as a source of entropy. It can be beneficial or even
+    /// necessary to not reveal the entropy itself, but use it as the seed for
+    /// some deterministic computation. In such cases, hashing the digest using
+    /// this method is probably the right thing to do.
+    /// If the digest in question is used for its entropy only, there might not be a
+    /// known meaningful pre-image for that digest.
+    ///
+    /// This method invokes [`Tip5::hash_pair`] with the right operand being the
+    /// zero digest, agreeing with the standard way to hash a digest in the virtual
+    /// machine.
+    // todo: introduce a dedicated newtype for an entropy source
+    pub fn hash(self) -> Digest {
+        Tip5::hash_pair(self, Self::ALL_ZERO)
     }
 
     /// Encode digest as hex
     pub fn to_hex(self) -> String {
-        let bytes = <[u8; Digest::BYTES]>::from(self);
+        let bytes = <[u8; Self::BYTES]>::from(self);
         hex::encode(bytes)
     }
 

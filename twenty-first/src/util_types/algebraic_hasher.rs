@@ -182,9 +182,8 @@ mod algebraic_hasher_tests {
         encode_prop(XFieldElement::ZERO, xfe_max);
 
         // Digest
-        let digest_zero = Digest::new([BFieldElement::ZERO; Digest::LEN]);
         let digest_max = Digest::new([bfe_max; Digest::LEN]);
-        encode_prop(digest_zero, digest_max);
+        encode_prop(Digest::ALL_ZERO, digest_max);
 
         // u128
         encode_prop(0u128, u128::MAX);
