@@ -4239,7 +4239,7 @@ mod test_polynomials {
 
     #[proptest]
     fn interpolate_and_par_interpolate_agree(
-        #[filter(#points.len() > 0)] points: Vec<BFieldElement>,
+        #[filter(!#points.is_empty())] points: Vec<BFieldElement>,
         #[strategy(vec(arb(), #points.len()))] domain: Vec<BFieldElement>,
     ) {
         let expected_interpolant = Polynomial::interpolate(&domain, &points);
