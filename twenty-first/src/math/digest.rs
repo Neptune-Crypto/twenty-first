@@ -96,6 +96,20 @@ impl fmt::Display for Digest {
     }
 }
 
+impl fmt::LowerHex for Digest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let bytes = <[u8; Self::BYTES]>::from(*self);
+        write!(f, "{}", hex::encode(bytes))
+    }
+}
+
+impl fmt::UpperHex for Digest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let bytes = <[u8; Self::BYTES]>::from(*self);
+        write!(f, "{}", hex::encode_upper(bytes))
+    }
+}
+
 impl Distribution<Digest> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Digest {
         // FIXME: impl Fill for [BFieldElement] to rng.fill() a [BFieldElement; Digest::LEN].
@@ -254,13 +268,18 @@ impl Digest {
         Tip5::hash_pair(self, Self::ALL_ZERO)
     }
 
-    /// Encode digest as hex
+    /// Encode digest as hex.
+    ///
+    /// Since `Digest` also implements [`LowerHex`][lo] and [`UpperHex`][up], it is
+    /// possible to `{:x}`-format directly, _e.g._, `print!("{digest:x}")`.
+    ///
+    /// [lo]: fmt::LowerHex
+    /// [up]: fmt::UpperHex
     pub fn to_hex(self) -> String {
-        let bytes = <[u8; Self::BYTES]>::from(self);
-        hex::encode(bytes)
+        format!("{self:x}")
     }
 
-    /// Decode hex string to Digest
+    /// Decode hex string to [`Digest`]. Must not include leading “0x”.
     pub fn try_from_hex(data: impl AsRef<[u8]>) -> Result<Self, TryFromHexDigestError> {
         let slice = hex::decode(data)?;
         Ok(Self::try_from(&slice as &[u8])?)
@@ -288,8 +307,7 @@ impl<'de> Deserialize<'de> for Digest {
     {
         if deserializer.is_human_readable() {
             let hex_string = String::deserialize(deserializer)?;
-            let bytes = hex::decode(hex_string).map_err(serde::de::Error::custom)?;
-            Ok(Self::try_from(&bytes as &[u8]).map_err(serde::de::Error::custom)?)
+            Self::try_from_hex(hex_string).map_err(serde::de::Error::custom)
         } else {
             Ok(Self::new(<[BFieldElement; Self::LEN]>::deserialize(
                 deserializer,
@@ -589,9 +607,16 @@ pub(crate) mod digest_tests {
             let hex = digest.to_hex();
             let digest_again = Digest::try_from_hex(&hex).unwrap();
             let hex_again = digest_again.to_hex();
-
             prop_assert_eq!(digest, digest_again);
             prop_assert_eq!(hex, hex_again);
+
+            let lower_hex = format!("{digest:x}");
+            let digest_from_lower_hex = Digest::try_from_hex(lower_hex).unwrap();
+            prop_assert_eq!(digest, digest_from_lower_hex);
+
+            let upper_hex = format!("{digest:X}");
+            let digest_from_upper_hex = Digest::try_from_hex(upper_hex).unwrap();
+            prop_assert_eq!(digest, digest_from_upper_hex);
         }
 
         #[test]
