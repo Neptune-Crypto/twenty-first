@@ -152,6 +152,7 @@ pub fn bitreverse_order<FF>(array: &mut [FF]) {
 ///  - it is followed up by INTT (e.g. for fast multiplication)
 ///  - the powers_of_omega_bitreversed can be precomputed (which
 ///    is not the case here).
+///
 /// In that case, be sure to use the matching `intt_noswap` and
 /// don't forget to unscale by n, e.g. using `unscale`.
 pub fn ntt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], omega: BFieldElement) {

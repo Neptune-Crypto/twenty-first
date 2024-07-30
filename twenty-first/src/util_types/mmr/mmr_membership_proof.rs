@@ -527,6 +527,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
     ///  - membership_proofs -- own membership proofs, to be updated
     ///  - authentication_paths_and_leafs -- membership proofs of the mutated
     ///    leafs, and the new leaf values
+    ///
     /// Returns those indices into the slice of membership proofs that were updated.
     pub fn batch_update_from_batch_leaf_mutation(
         membership_proofs: &mut [&mut Self],

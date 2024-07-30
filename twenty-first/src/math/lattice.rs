@@ -476,11 +476,11 @@ impl<const N: usize> ModuleElement<N> {
     /// NTT domain.
     ///  - `N` counts the total number of elements in the matrix;
     ///  - `H` counts the number of rows of the left hand side (and of
-    ///  the output) matrix;
+    ///    the output) matrix;
     ///  - `W` counts the number of columns of the right hand side (and
-    ///  of the output) matrix;
+    ///    of the output) matrix;
     ///  - `INNER` counts the number of columns of the left hand side,
-    ///  as well as the number of rows of the right hand side.
+    ///    as well as the number of rows of the right hand side.
     pub fn multiply_hadamard<
         const LHS_H: usize,
         const LHS_N: usize,
@@ -518,11 +518,11 @@ impl<const N: usize> ModuleElement<N> {
     /// matrix multiplication in the NTT domain, use `fast_multiply`.
     ///  - `N` counts the total number of elements in the matrix;
     ///  - `H` counts the number of rows of the left hand side (and of
-    ///  the output) matrix;
+    ///    the output) matrix;
     ///  - `W` counts the number of columns of the right hand side (and
-    ///  of the output) matrix;
+    ///    of the output) matrix;
     ///  - `INNER` counts the number of columns of the left hand side,
-    ///  as well as the number of rows of the right hand side.
+    ///    as well as the number of rows of the right hand side.
     pub fn multiply<
         const LHS_H: usize,
         const LHS_N: usize,
@@ -559,11 +559,11 @@ impl<const N: usize> ModuleElement<N> {
     /// and converting back.
     ///  - `N` counts the total number of elements in the matrix;
     ///  - `H` counts the number of rows of the left hand side (and of
-    ///  the output) matrix;
+    ///    the output) matrix;
     ///  - `W` counts the number of columns of the right hand side (and
-    ///  of the output) matrix;
+    ///    of the output) matrix;
     ///  - `INNER` counts the number of columns of the left hand side,
-    ///  as well as the number of rows of the right hand side.
+    ///    as well as the number of rows of the right hand side.
     pub fn fast_multiply<
         const LHS_H: usize,
         const LHS_N: usize,
