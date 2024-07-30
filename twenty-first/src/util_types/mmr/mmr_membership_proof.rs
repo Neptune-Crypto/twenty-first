@@ -54,8 +54,14 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
             return false;
         }
 
+        // Return false if `peaks` list has wrong length
         let (mut mt_index, peak_index) =
             shared_basic::leaf_index_to_mt_index_and_peak_index(leaf_index, leaf_count);
+        let expected_peak_count = leaf_count.count_ones();
+        let received_peak_count: u32 = peaks.len().try_into().unwrap();
+        if expected_peak_count != received_peak_count {
+            return false;
+        }
 
         // Verify that authentication path has correct length. This is done to fail gracefully when
         // fed a too short authentication path.
@@ -80,11 +86,8 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
         }
 
         let expected_peak = peaks[peak_index as usize];
-        if expected_peak != acc_hash {
-            return false;
-        }
 
-        true
+        expected_peak == acc_hash
     }
 
     /// Return the node indices for the authentication path in this membership proof
@@ -636,6 +639,7 @@ impl<H: AlgebraicHasher> MmrMembershipProof<H> {
 #[cfg(test)]
 mod mmr_membership_proof_test {
     use itertools::Itertools;
+    use proptest_arbitrary_interop::arb;
     use rand::{random, thread_rng, Rng, RngCore};
     use test_strategy::proptest;
 
@@ -782,6 +786,35 @@ mod mmr_membership_proof_test {
             let bad_leaf_index = leaf_index + leaf_count as u64;
             assert!(!mp.verify(bad_leaf_index, leaf, &peaks, leaf_count as u64));
         }
+    }
+
+    #[test]
+    fn mmr_verify_does_not_crash_on_too_short_peaks_list_unit() {
+        let mmr_mp = MmrMembershipProof::<Tip5>::new(vec![Default::default()]);
+        assert!(!mmr_mp.verify(0, Default::default(), &[], 2));
+    }
+
+    #[proptest(cases = 10)]
+    fn mmr_verification_with_wrong_length_of_peak_list(
+        #[strategy(0..=1_000_000u64)] leaf_count: u64,
+        #[strategy(0..=#leaf_count)] leaf_index: u64,
+        #[strategy(arb())] leaf: Digest,
+    ) {
+        let (mmra, mps) = mmra_with_mps::<Tip5>(leaf_count, vec![(leaf_index, leaf)]);
+        let mp = mps[0].clone();
+
+        let peaks_list = mmra.peaks();
+        assert!(mp.verify(leaf_index, leaf, &peaks_list, leaf_count));
+
+        let one_too_few = if peaks_list.is_empty() {
+            return Ok(());
+        } else {
+            &peaks_list[..peaks_list.len() - 1]
+        };
+        assert!(!mp.verify(leaf_index, leaf, one_too_few, leaf_count));
+
+        let one_too_many = [peaks_list.clone(), vec![Digest::default()]].concat();
+        assert!(!mp.verify(leaf_index, leaf, &one_too_many, leaf_count));
     }
 
     #[test]
