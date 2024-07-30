@@ -1629,7 +1629,7 @@ mod mmr_membership_proof_test {
             &mock_membership_proof_leaf_indices,
             3,
             random(),
-            &vec![],
+            &[],
         );
     }
 
