@@ -918,11 +918,11 @@ mod accumulator_mmr_tests {
         // Checks that batch_mutate_leaf_and_update_mps panics when passed differing length lists
 
         // differing length lists
-        let mut mock_membership_proofs: Vec<MmrMembershipProof<Tip5>> = vec![];
+        let mut mock_membership_proofs: Vec<MmrMembershipProof> = vec![];
         let membership_proof_leaf_indices = vec![1, 2, 3];
 
         // This should trigger the panic due to the lengths mismatch
-        let mut mmra: MmrAccumulator<Tip5> = MmrAccumulator::new(vec![]);
+        let mut mmra: MmrAccumulator = MmrAccumulator::new(vec![]);
         mmra.batch_mutate_leaf_and_update_mps(
             mock_membership_proofs
                 .iter_mut()

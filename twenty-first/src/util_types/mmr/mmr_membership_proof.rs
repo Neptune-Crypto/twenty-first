@@ -1620,11 +1620,11 @@ mod mmr_membership_proof_test {
         // Checks that batch_update_from_append() panics when passed differing length lists
 
         // different length lists
-        let mut mock_membership_proofs: Vec<MmrMembershipProof<Tip5>> = vec![];
+        let mut mock_membership_proofs: Vec<MmrMembershipProof> = vec![];
         let mock_membership_proof_leaf_indices: Vec<u64> = vec![0, 1, 2];
 
         // This should panic due to mismatched lengths
-        MmrMembershipProof::<Tip5>::batch_update_from_append(
+        MmrMembershipProof::batch_update_from_append(
             &mut mock_membership_proofs.iter_mut().collect_vec(),
             &mock_membership_proof_leaf_indices,
             3,
@@ -1639,15 +1639,15 @@ mod mmr_membership_proof_test {
         // Checks that batch_update_from_leaf_mutation() panics when passed differing length lists
 
         // differing length lists
-        let mut mock_membership_proofs: Vec<MmrMembershipProof<Tip5>> = vec![];
+        let mut mock_membership_proofs: Vec<MmrMembershipProof> = vec![];
         let mock_membership_proof_leaf_indices: Vec<u64> = vec![0, 1, 2];
 
         // other mock input params
-        let membership_proof = MmrMembershipProof::<Tip5>::new(vec![random()]);
-        let mock_leaf_mutation = LeafMutation::new(0, random(), &membership_proof);
+        let membership_proof = MmrMembershipProof::new(vec![random()]);
+        let mock_leaf_mutation = LeafMutation::new(0, random(), membership_proof);
 
         // This should panic due to mismatched lengths
-        MmrMembershipProof::<Tip5>::batch_update_from_leaf_mutation(
+        MmrMembershipProof::batch_update_from_leaf_mutation(
             &mut mock_membership_proofs,
             &mock_membership_proof_leaf_indices,
             mock_leaf_mutation,
@@ -1660,16 +1660,16 @@ mod mmr_membership_proof_test {
         // Checks that batch_update_from_batch_leaf_mutation() panics when passed differing length lists
 
         // differing length lists
-        let mut mock_membership_proofs: Vec<MmrMembershipProof<Tip5>> = vec![];
+        let mut mock_membership_proofs: Vec<MmrMembershipProof> = vec![];
         let mock_membership_proof_leaf_indices: Vec<u64> = vec![0, 1, 2];
 
         // other mock input params
-        let membership_proof = MmrMembershipProof::<Tip5>::new(vec![random()]);
-        let mock_leaf_mutation = LeafMutation::new(0, random(), &membership_proof);
+        let membership_proof = MmrMembershipProof::new(vec![random()]);
+        let mock_leaf_mutation = LeafMutation::new(0, random(), membership_proof);
         let mock_leaf_mutations = vec![mock_leaf_mutation; 3];
 
         // This should panic due to mismatched lengths
-        MmrMembershipProof::<Tip5>::batch_update_from_batch_leaf_mutation(
+        MmrMembershipProof::batch_update_from_batch_leaf_mutation(
             &mut mock_membership_proofs.iter_mut().collect::<Vec<_>>(),
             &mock_membership_proof_leaf_indices,
             mock_leaf_mutations,
