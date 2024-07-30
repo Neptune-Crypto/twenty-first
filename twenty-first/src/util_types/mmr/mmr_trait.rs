@@ -1,13 +1,12 @@
 use super::mmr_accumulator::MmrAccumulator;
 use super::mmr_membership_proof::MmrMembershipProof;
 use crate::math::digest::Digest;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 /// A wrapper for the data needed to change the value of a leaf in an MMR when
 /// only the MMR-accumulator is known, i.e., only the peaks and the leaf-count
 /// are known.
 #[derive(Debug, Clone)]
-pub struct LeafMutation<'a, H: AlgebraicHasher> {
+pub struct LeafMutation<'a> {
     /// The leaf-index of the leaf being mutated. If the MMR is viewed as a
     /// commitment to a list, then this is simply the (0-indexed) list-index
     /// into that list.
@@ -20,14 +19,14 @@ pub struct LeafMutation<'a, H: AlgebraicHasher> {
     /// leaf has been mutated. An authentication path is a commitment to all
     /// other leafs in the Merkle tree than the one it is a membership proof
     /// for.
-    pub membership_proof: &'a MmrMembershipProof<H>,
+    pub membership_proof: &'a MmrMembershipProof,
 }
 
-impl<'a, H: AlgebraicHasher> LeafMutation<'a, H> {
+impl<'a> LeafMutation<'a> {
     pub fn new(
         leaf_index: u64,
         new_leaf: Digest,
-        membership_proof: &'a MmrMembershipProof<H>,
+        membership_proof: &'a MmrMembershipProof,
     ) -> Self {
         Self {
             leaf_index,
@@ -44,7 +43,7 @@ impl<'a, H: AlgebraicHasher> LeafMutation<'a, H> {
     }
 }
 
-pub trait Mmr<H: AlgebraicHasher> {
+pub trait Mmr {
     /// Create a new MMR instanc from a list of hash digests. The supplied digests
     /// are the leafs of the MMR.
 
@@ -66,20 +65,20 @@ pub trait Mmr<H: AlgebraicHasher> {
     fn num_leafs(&self) -> u64;
 
     /// Append a hash digest to the MMR
-    fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof<H>;
+    fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof;
 
     /// Mutate an existing leaf. It is the caller's responsibility that the
     /// membership proof is valid. If the membership proof is wrong, the MMR
     /// will end up in a broken state.
-    fn mutate_leaf(&mut self, leaf_mutation: LeafMutation<H>);
+    fn mutate_leaf(&mut self, leaf_mutation: LeafMutation);
 
     /// Batch mutate an MMR while updating a list of membership proofs. Returns the indices of the
     /// membership proofs that have changed as a result of this operation.
     fn batch_mutate_leaf_and_update_mps(
         &mut self,
-        membership_proofs: &mut [&mut MmrMembershipProof<H>],
+        membership_proofs: &mut [&mut MmrMembershipProof],
         membership_proof_leaf_indices: &[u64],
-        mutation_data: Vec<LeafMutation<H>>,
+        mutation_data: Vec<LeafMutation>,
     ) -> Vec<usize>;
 
     /// Returns true if a list of leaf mutations and a list of appends results in the expected
@@ -88,9 +87,9 @@ pub trait Mmr<H: AlgebraicHasher> {
         &self,
         new_peaks: &[Digest],
         appended_leafs: &[Digest],
-        leaf_mutations: Vec<LeafMutation<H>>,
+        leaf_mutations: Vec<LeafMutation>,
     ) -> bool;
 
     /// Return an MMR accumulator containing only peaks and leaf count
-    fn to_accumulator(&self) -> MmrAccumulator<H>;
+    fn to_accumulator(&self) -> MmrAccumulator;
 }

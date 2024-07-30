@@ -1080,14 +1080,14 @@ mod tests {
         test_case! { fn struct_with_nested_tuple_field for StructWithNestedTupleField: None }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
-        struct MsMembershipProof<H: AlgebraicHasher> {
+        struct MsMembershipProof {
             sender_randomness: Digest,
             receiver_preimage: Digest,
-            auth_path_aocl: MmrMembershipProof<H>,
+            auth_path_aocl: MmrMembershipProof,
         }
 
-        test_case! { fn ms_membership_proof for MsMembershipProof<Tip5>: None }
-        test_case! { fn mmr_accumulator for MmrAccumulator<Tip5>: None }
+        test_case! { fn ms_membership_proof for MsMembershipProof: None }
+        test_case! { fn mmr_accumulator for MmrAccumulator: None }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct UnsupportedFields {

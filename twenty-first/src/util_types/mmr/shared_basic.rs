@@ -1,5 +1,6 @@
 use super::mmr_membership_proof::MmrMembershipProof;
 use crate::math::digest::Digest;
+use crate::prelude::Tip5;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[inline]
@@ -73,20 +74,20 @@ pub fn right_lineage_length_from_leaf_index(leaf_index: u64) -> u32 {
 
 /// Return the new peaks of the MMR after adding `new_leaf` as well as the membership
 /// proof for the added leaf.
-pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
+pub fn calculate_new_peaks_from_append(
     old_leaf_count: u64,
     old_peaks: Vec<Digest>,
     new_leaf: Digest,
-) -> (Vec<Digest>, MmrMembershipProof<H>) {
+) -> (Vec<Digest>, MmrMembershipProof) {
     let mut peaks = old_peaks;
     peaks.push(new_leaf);
     let mut right_lineage_count = right_lineage_length_from_leaf_index(old_leaf_count);
-    let mut membership_proof = MmrMembershipProof::<H>::new(vec![]);
+    let mut membership_proof = MmrMembershipProof::new(vec![]);
     while right_lineage_count != 0 {
         let new_hash = peaks.pop().unwrap();
         let previous_peak = peaks.pop().unwrap();
         membership_proof.authentication_path.push(previous_peak);
-        peaks.push(H::hash_pair(previous_peak, new_hash));
+        peaks.push(Tip5::hash_pair(previous_peak, new_hash));
         right_lineage_count -= 1;
     }
 
@@ -96,12 +97,12 @@ pub fn calculate_new_peaks_from_append<H: AlgebraicHasher>(
 /// Calculate a new peak list given the mutation of a leaf
 /// The new peak list will only (max) have *one* element different
 /// than `old_peaks`
-pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
+pub fn calculate_new_peaks_from_leaf_mutation(
     old_peaks: &[Digest],
     leaf_count: u64,
     new_leaf: Digest,
     leaf_index: u64,
-    membership_proof: &MmrMembershipProof<H>,
+    membership_proof: &MmrMembershipProof,
 ) -> Vec<Digest> {
     let (mut acc_mt_index, peak_index) =
         leaf_index_to_mt_index_and_peak_index(leaf_index, leaf_count);
@@ -111,10 +112,10 @@ pub fn calculate_new_peaks_from_leaf_mutation<H: AlgebraicHasher>(
         let ap_element = membership_proof.authentication_path[i];
         if acc_mt_index % 2 == 1 {
             // Node with `acc_hash` is a right child
-            acc_hash = H::hash_pair(ap_element, acc_hash);
+            acc_hash = Tip5::hash_pair(ap_element, acc_hash);
         } else {
             // Node with `acc_hash` is a left child
-            acc_hash = H::hash_pair(acc_hash, ap_element);
+            acc_hash = Tip5::hash_pair(acc_hash, ap_element);
         }
 
         acc_mt_index /= 2;
