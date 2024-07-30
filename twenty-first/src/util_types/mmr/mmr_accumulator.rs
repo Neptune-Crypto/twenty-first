@@ -88,7 +88,7 @@ impl Mmr for MmrAccumulator {
             self.leaf_count,
             leaf_mutation.new_leaf,
             leaf_mutation.leaf_index,
-            leaf_mutation.membership_proof,
+            &leaf_mutation.membership_proof,
         )
     }
 
@@ -150,7 +150,7 @@ impl Mmr for MmrAccumulator {
             // TODO: Replace this with the new batch updater `batch_update_from_batch_leaf_mutation`
             // Update all remaining membership proofs with this leaf mutation
             let leaf_mutation =
-                LeafMutation::new(leaf_index_mutated_leaf, new_leaf_value, &membership_proof);
+                LeafMutation::new(leaf_index_mutated_leaf, new_leaf_value, membership_proof);
             MmrMembershipProof::batch_update_from_leaf_mutation(
                 &mut updated_membership_proofs,
                 &leaf_mutation_indices,
@@ -410,7 +410,7 @@ pub mod util {
                 assert!(mp.verify(all_leaf_indices[j], all_leafs[j], &peaks, leaf_count));
             }
 
-            let leaf_mutations = vec![LeafMutation::new(new_leaf_index, new_leaf, &new_mp)];
+            let leaf_mutations = vec![LeafMutation::new(new_leaf_index, new_leaf, new_mp.clone())];
             let mutated = MmrMembershipProof::batch_update_from_batch_leaf_mutation(
                 &mut all_mps.iter_mut().collect_vec(),
                 &all_leaf_indices,
@@ -557,7 +557,11 @@ mod accumulator_mmr_tests {
 
         {
             let appended_leafs = [];
-            let leaf_mutations = vec![LeafMutation::new(leaf_index_3, leaf3, &membership_proof)];
+            let leaf_mutations = vec![LeafMutation::new(
+                leaf_index_3,
+                leaf3,
+                membership_proof.clone(),
+            )];
             assert!(accumulator_mmr_start.verify_batch_update(
                 &accumulator_mmr_end.peaks(),
                 &appended_leafs,
@@ -568,8 +572,8 @@ mod accumulator_mmr_tests {
         {
             let appended_leafs = [];
             let leaf_mutations = vec![
-                LeafMutation::new(leaf_index_3, leaf3, &membership_proof),
-                LeafMutation::new(leaf_index_3, leaf3, &membership_proof),
+                LeafMutation::new(leaf_index_3, leaf3, membership_proof.clone()),
+                LeafMutation::new(leaf_index_3, leaf3, membership_proof),
             ];
             assert!(!accumulator_mmr_start.verify_batch_update(
                 &accumulator_mmr_end.peaks(),
@@ -616,8 +620,8 @@ mod accumulator_mmr_tests {
         let membership_proof3 = archive_mmr_start.prove_membership(leaf_index_3);
         let accumulator_mmr_end: MmrAccumulator = MmrAccumulator::new(leaf_hashes_end);
         let leaf_mutations = vec![
-            LeafMutation::new(leaf_index_1, leaf20, &membership_proof1),
-            LeafMutation::new(leaf_index_3, leaf21, &membership_proof3),
+            LeafMutation::new(leaf_index_1, leaf20, membership_proof1),
+            LeafMutation::new(leaf_index_3, leaf21, membership_proof3),
         ];
         assert!(accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.peaks(),
@@ -681,7 +685,7 @@ mod accumulator_mmr_tests {
                 .into_iter()
                 .zip(mutated_leaf_indices)
                 .zip(all_mps.iter())
-                .map(|((leaf, leaf_index), mp)| LeafMutation::new(leaf_index, leaf, mp))
+                .map(|((leaf, leaf_index), mp)| LeafMutation::new(leaf_index, leaf, mp.clone()))
                 .collect_vec();
 
             assert_eq!(mutated_leaf_count, mutation_data.len());
@@ -813,7 +817,9 @@ mod accumulator_mmr_tests {
                         .into_iter()
                         .zip(mutated_indices.iter())
                         .zip(all_mps.iter())
-                        .map(|((leaf, leaf_index), mp)| LeafMutation::new(*leaf_index, leaf, mp))
+                        .map(|((leaf, leaf_index), mp)| {
+                            LeafMutation::new(*leaf_index, leaf, mp.clone())
+                        })
                         .collect_vec();
                     assert!(accumulator_mmr.verify_batch_update(
                         &expected_new_peaks_from_accumulator,
@@ -846,7 +852,7 @@ mod accumulator_mmr_tests {
                             leaf_mutations.clone()
                         ));
                         leaf_mutations[mutated_indices[0] as usize % mutated_indices.len()]
-                            .membership_proof = &bad_membership_proof;
+                            .membership_proof = bad_membership_proof.clone();
                         assert!(!accumulator_mmr.verify_batch_update(
                             &expected_new_peaks_from_accumulator,
                             &appends,

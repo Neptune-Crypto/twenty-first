@@ -454,7 +454,7 @@ mod mmr_test {
             ));
 
             // Verify that failing MMR update for empty MMR fails gracefully
-            let leaf_mutations = vec![LeafMutation::new(0, new_leaf, &archival_membership_proof)];
+            let leaf_mutations = vec![LeafMutation::new(0, new_leaf, archival_membership_proof)];
             assert!(!archival_mmr.verify_batch_update(
                 &archival_mmr_appended.peaks(),
                 &[],
@@ -555,7 +555,7 @@ mod mmr_test {
         // Mutate leaf + mutate leaf raw, assert that they're equivalent
 
         let mutated_leaf = H::hash(&BFieldElement::new(10000));
-        let leaf_mutation = LeafMutation::new(leaf_index, mutated_leaf, &mp2);
+        let leaf_mutation = LeafMutation::new(leaf_index, mutated_leaf, mp2.clone());
         other_archival_mmr.mutate_leaf(leaf_mutation);
 
         let new_peaks_one = other_archival_mmr.peaks();
@@ -631,7 +631,7 @@ mod mmr_test {
             for i in 0..size {
                 let leaf_index = i as u64;
                 let mp = archival.prove_membership(leaf_index);
-                let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, &mp);
+                let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, mp);
                 acc.mutate_leaf(leaf_mutation);
                 archival.mutate_leaf_raw(leaf_index, new_leaf);
                 let new_archival_peaks = archival.peaks();
@@ -657,13 +657,13 @@ mod mmr_test {
 
                 // Verify the update operation using the batch verifier
                 archival.mutate_leaf_raw(leaf_index, new_leaf);
-                let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, &mp);
+                let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, mp.clone());
                 assert!(
                     acc.verify_batch_update(&archival.peaks(), &[], vec![leaf_mutation.clone()]),
                     "Valid batch update parameters must succeed"
                 );
 
-                let bad_leaf_mutation = LeafMutation::new(leaf_index, bad_leaf, &mp);
+                let bad_leaf_mutation = LeafMutation::new(leaf_index, bad_leaf, mp);
                 assert!(
                     !acc.verify_batch_update(&archival.peaks(), &[], vec![bad_leaf_mutation]),
                     "Inalid batch update parameters must fail"
@@ -777,7 +777,7 @@ mod mmr_test {
         // updates the membership proofs internally to account for the mutations.
         for &leaf_index in &[0u64, 1] {
             let mp = mmr.prove_membership(leaf_index);
-            let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, &mp);
+            let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, mp);
             mmr.mutate_leaf(leaf_mutation);
             assert_eq!(
                 new_leaf,
@@ -790,7 +790,7 @@ mod mmr_test {
             .map(|i| mmr_after_append.prove_membership(i))
             .collect_vec();
         let leaf_mutations = (0..2)
-            .map(|i| LeafMutation::new(i, new_leaf, &mps[i as usize]))
+            .map(|i| LeafMutation::new(i, new_leaf, mps[i as usize].clone()))
             .collect_vec();
         assert!(
             mmr_after_append.verify_batch_update(&mmr.peaks(), &[], leaf_mutations),
@@ -839,7 +839,7 @@ mod mmr_test {
         for leaf_index in 0..num_leafs {
             let new_leaf: Digest = H::hash(&BFieldElement::new(987223));
             let mp = mmr.prove_membership(leaf_index);
-            let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, &mp);
+            let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, mp);
             mmr.mutate_leaf(leaf_mutation);
             assert_eq!(new_leaf, mmr.get_leaf(leaf_index));
         }

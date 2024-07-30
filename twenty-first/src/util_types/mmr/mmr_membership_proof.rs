@@ -828,11 +828,13 @@ mod mmr_membership_proof_test {
         archival_mmr.mutate_leaf_raw(2, new_leaf2);
         archival_mmr.mutate_leaf_raw(3, new_leaf3);
         for (mp_leaf_index, mp) in membership_proofs.iter_mut().enumerate() {
-            let leaf_mutation = LeafMutation::new(2, new_leaf2, &mutation_membership_proof_old2);
+            let leaf_mutation =
+                LeafMutation::new(2, new_leaf2, mutation_membership_proof_old2.clone());
             mp.update_from_leaf_mutation(mp_leaf_index as u64, &leaf_mutation);
         }
         for (mp_leaf_index, mp) in membership_proofs.iter_mut().enumerate() {
-            let leaf_mutation = LeafMutation::new(3, new_leaf3, &mutation_membership_proof_old3);
+            let leaf_mutation =
+                LeafMutation::new(3, new_leaf3, mutation_membership_proof_old3.clone());
             mp.update_from_leaf_mutation(mp_leaf_index as u64, &leaf_mutation);
         }
 
@@ -870,7 +872,7 @@ mod mmr_membership_proof_test {
             .clone()
             .into_iter()
             .zip(mp_leaf_indices.clone())
-            .zip(membership_proofs_clone.iter())
+            .zip(membership_proofs_clone)
             .map(|((leaf, leaf_index), mp)| LeafMutation::new(leaf_index, leaf, mp))
             .collect();
         let changed_values = MmrMembershipProof::batch_update_from_batch_leaf_mutation(
@@ -936,7 +938,7 @@ mod mmr_membership_proof_test {
             // let the magic start
             let original_mps = own_membership_proofs.clone();
             let mutation_argument: Vec<LeafMutation> = authentication_paths
-                .iter()
+                .into_iter()
                 .zip(new_leafs.clone().into_iter())
                 .zip(mutated_leaf_leaf_indices.iter())
                 .map(|((mp, leaf), leaf_idx)| LeafMutation::new(*leaf_idx, leaf, mp))
@@ -987,18 +989,16 @@ mod mmr_membership_proof_test {
         // even though the mutations affect the membership proofs. The reason it is empty is that
         // the resulting membership proof digests are unchanged, since the leaf hashes mutations
         // are the identity operators. In other words: the leafs don't change.
-        type H = Tip5;
 
         let total_leaf_count = 8;
-        let (leaf_hashes, mut membership_proofs) =
-            make_populated_archival_mmr::<H>(total_leaf_count);
+        let (leaf_hashes, mut membership_proofs) = make_populated_archival_mmr(total_leaf_count);
         let own_leaf_indices = (0..total_leaf_count as u64).collect_vec();
 
         for leaf_index in own_leaf_indices.iter() {
             let leaf_mutation_membership_proof = membership_proofs[*leaf_index as usize].clone();
             let new_leaf = leaf_hashes[*leaf_index as usize];
             let leaf_mutation =
-                LeafMutation::new(*leaf_index, new_leaf, &leaf_mutation_membership_proof);
+                LeafMutation::new(*leaf_index, new_leaf, leaf_mutation_membership_proof);
             let ret = MmrMembershipProof::batch_update_from_leaf_mutation(
                 &mut membership_proofs,
                 &own_leaf_indices,
@@ -1013,7 +1013,7 @@ mod mmr_membership_proof_test {
         let membership_proofs_init_and_new_leafs: Vec<LeafMutation> = leaf_hashes
             .clone()
             .into_iter()
-            .zip(membership_proofs_clone.iter())
+            .zip(membership_proofs_clone)
             .zip(own_leaf_indices.iter())
             .map(|((leaf, mp), leaf_idx)| LeafMutation::new(*leaf_idx, leaf, mp))
             .collect();
@@ -1068,7 +1068,7 @@ mod mmr_membership_proof_test {
             let leaf_mutation_membership_proof = membership_proofs[i].clone();
             let new_leaf = new_leafs[i];
             let leaf_mutation =
-                LeafMutation::new(i as u64, new_leaf, &leaf_mutation_membership_proof);
+                LeafMutation::new(i as u64, new_leaf, leaf_mutation_membership_proof);
             MmrMembershipProof::batch_update_from_leaf_mutation(
                 &mut membership_proofs,
                 &own_mp_leaf_indices,
@@ -1120,7 +1120,7 @@ mod mmr_membership_proof_test {
         let leaf_mutation = LeafMutation::new(
             mutated_leaf_leaf_index,
             new_leaf,
-            &membership_proof_for_manipulated_leaf,
+            membership_proof_for_manipulated_leaf,
         );
         accumulator_mmr.mutate_leaf(leaf_mutation.clone());
         assert_eq!(an_archival_mmr.peaks(), accumulator_mmr.peaks());
@@ -1186,7 +1186,7 @@ mod mmr_membership_proof_test {
             let new_leaf_mutation = LeafMutation::new(
                 *leaf_index_mutated,
                 new_leaf,
-                &leaf_mutation_membership_proof,
+                leaf_mutation_membership_proof,
             );
             let modified = MmrMembershipProof::batch_update_from_leaf_mutation(
                 &mut mps,
@@ -1254,8 +1254,11 @@ mod mmr_membership_proof_test {
                     let mut membership_proof: MmrMembershipProof =
                         archival_mmr.prove_membership(leaf_index_j);
                     let original_membership_roof = membership_proof.clone();
-                    let leaf_mutation =
-                        LeafMutation::new(leaf_index_i, new_leaf, &leaf_mutation_membership_proof);
+                    let leaf_mutation = LeafMutation::new(
+                        leaf_index_i,
+                        new_leaf,
+                        leaf_mutation_membership_proof.clone(),
+                    );
                     let membership_proof_was_mutated =
                         membership_proof.update_from_leaf_mutation(leaf_index_j, &leaf_mutation);
                     let our_leaf = if leaf_index_i == leaf_index_j {

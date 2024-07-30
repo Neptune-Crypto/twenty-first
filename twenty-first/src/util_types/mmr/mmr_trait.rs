@@ -6,7 +6,7 @@ use crate::math::digest::Digest;
 /// only the MMR-accumulator is known, i.e., only the peaks and the leaf-count
 /// are known.
 #[derive(Debug, Clone)]
-pub struct LeafMutation<'a> {
+pub struct LeafMutation {
     /// The leaf-index of the leaf being mutated. If the MMR is viewed as a
     /// commitment to a list, then this is simply the (0-indexed) list-index
     /// into that list.
@@ -19,15 +19,11 @@ pub struct LeafMutation<'a> {
     /// leaf has been mutated. An authentication path is a commitment to all
     /// other leafs in the Merkle tree than the one it is a membership proof
     /// for.
-    pub membership_proof: &'a MmrMembershipProof,
+    pub membership_proof: MmrMembershipProof,
 }
 
-impl<'a> LeafMutation<'a> {
-    pub fn new(
-        leaf_index: u64,
-        new_leaf: Digest,
-        membership_proof: &'a MmrMembershipProof,
-    ) -> Self {
+impl LeafMutation {
+    pub fn new(leaf_index: u64, new_leaf: Digest, membership_proof: MmrMembershipProof) -> Self {
         Self {
             leaf_index,
             new_leaf,
