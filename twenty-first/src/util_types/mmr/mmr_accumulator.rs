@@ -915,7 +915,7 @@ mod accumulator_mmr_tests {
     #[test]
     #[should_panic(expected = "Lists must have same length. Got: 0 and 3")]
     fn test_diff_len_lists_batch_mutate_leaf_and_update_mps() {
-        // Checks that batrch_mutate_leaf_and_update_mps panics when passed differing length lists
+        // Checks that batch_mutate_leaf_and_update_mps panics when passed differing length lists
 
         // differing length lists
         let mut mock_membership_proofs: Vec<MmrMembershipProof<Tip5>> = vec![];
