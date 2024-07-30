@@ -1036,7 +1036,7 @@ mod mmr_membership_proof_test {
         assert!(ret_from_acc.is_empty());
     }
 
-    fn make_populated_archival_mmr<H: AlgebraicHasher>(
+    fn make_populated_archival_mmr(
         total_leaf_count: usize,
     ) -> (Vec<Digest>, Vec<MmrMembershipProof>) {
         let leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
