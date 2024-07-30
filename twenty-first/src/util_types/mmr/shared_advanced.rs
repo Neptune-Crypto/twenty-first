@@ -90,8 +90,8 @@ pub fn num_leafs_to_num_nodes(leaf_count: u64) -> u64 {
     2 * leaf_count - hamming_weight
 }
 
-/// Return the indices of the nodes added by an append, including the
-/// peak that this append gave rise to
+/// Return the indices of the nodes added by an append, including the (node index
+/// of the) peak that this append gave rise to.
 pub fn node_indices_added_by_append(old_leaf_count: u64) -> Vec<u64> {
     let mut node_index = leaf_index_to_node_index(old_leaf_count);
     let mut added_node_indices = vec![node_index];
@@ -173,8 +173,8 @@ pub fn get_peak_heights(leaf_count: u64) -> Vec<u8> {
     indices_of_set_bits
 }
 
-/// Given leaf count, return a vector representing the height of
-/// the peaks. Input is the number of leafs in the MMR
+/// Given the number of leafs in the MMR, return one vector representing the heights
+/// of the peaks, and another vector representing their MMR node indices.
 pub fn get_peak_heights_and_peak_node_indices(leaf_count: u64) -> (Vec<u32>, Vec<u64>) {
     if leaf_count == 0 {
         return (vec![], vec![]);
