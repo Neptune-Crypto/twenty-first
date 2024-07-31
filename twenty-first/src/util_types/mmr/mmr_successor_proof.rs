@@ -168,7 +168,6 @@ impl MmrSuccessorProof {
                 merkle_tree_index_of_last_leaf_under_this_peak >> current_height;
             let mut j = 0;
             while !new_peak_indices.contains(&current_index) {
-                current_index = parent(current_index);
                 let Some(&sibling) = self.paths[i].get(j) else {
                     println!("cannot get path[{i}] element {j}");
                     return false;
@@ -179,11 +178,21 @@ impl MmrSuccessorProof {
                 } else {
                     Tip5::hash_pair(sibling, current_node)
                 };
+                print!(
+                    "current node ({}) is left sibling? {} node is ({})",
+                    current_index, is_left_sibling, current_node
+                );
+                current_index = parent(current_index);
+                println!(" with index {current_index}");
                 current_merkle_tree_index >>= 1;
                 current_height += 1;
                 j += 1;
             }
-            if new_mmra
+            println!(
+                "ended with node {current_index} which is in [{}]",
+                new_peak_indices.iter().join(", ")
+            );
+            if !new_mmra
                 .peaks()
                 .into_iter()
                 .zip(new_peak_heights.iter().zip(new_peak_indices.iter()))
@@ -191,7 +200,9 @@ impl MmrSuccessorProof {
                     p == current_node && *h == current_height && *idx == current_index
                 })
             {
-                println!("cannot find calculated root in new peaks list");
+                println!("cannot find calculated root in new peaks list.");
+                println!("calculated node: ({})", current_node);
+                println!("peaks: [{}]", new_mmra.peaks().into_iter().join("/"));
                 return false;
             }
         }
