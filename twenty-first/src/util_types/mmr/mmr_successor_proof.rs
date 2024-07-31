@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use bfieldcodec_derive::BFieldCodec;
 use itertools::Itertools;
 
@@ -33,7 +31,7 @@ impl MmrSuccessorProof {
             get_peak_heights_and_peak_node_indices(mmra.num_leafs() + new_leafs.len() as u64);
         let num_old_peaks = heights_of_old_peaks.len();
 
-        let mut needed_indices = vec![VecDeque::new(); num_old_peaks];
+        let mut needed_indices = vec![vec![]; num_old_peaks];
         for (i, (index, height)) in indices_of_old_peaks
             .iter()
             .copied()
@@ -48,16 +46,29 @@ impl MmrSuccessorProof {
                 if parent(sibling) != parent_index {
                     sibling = left_sibling(current_index, current_height);
                 };
-                needed_indices[i].push_back(sibling);
+                let list_index = needed_indices[i].len();
+                needed_indices[i].push(Some((list_index, sibling)));
                 current_height += 1;
                 current_index = parent_index;
             }
         }
 
+        println!("needed indices:");
+        for (i, ni) in needed_indices.iter().enumerate() {
+            println!(
+                "{i} => [{}] ({})",
+                ni.iter().map(|s| s.unwrap().1).join(", "),
+                ni.len()
+            );
+        }
+
         let mut current_peaks = mmra.peaks();
         let mut current_peak_indices = indices_of_old_peaks.clone();
         let mut current_leaf_count = mmra.num_leafs();
-        let mut paths = vec![vec![]; num_old_peaks];
+        let mut paths = needed_indices
+            .iter()
+            .map(|ni| vec![Digest::default(); ni.len()])
+            .collect_vec();
 
         for &new_leaf in new_leafs {
             let new_node_indices = node_indices_added_by_append(current_leaf_count);
@@ -79,37 +90,26 @@ impl MmrSuccessorProof {
                 })
                 .collect_vec();
 
-            for (index, node) in new_node_indices.into_iter().zip(new_nodes) {
+            for (index, node) in new_node_indices.into_iter().zip(new_nodes).chain(
+                current_peak_indices
+                    .into_iter()
+                    .zip(current_peaks.iter().copied()),
+            ) {
                 for (i, (path, path_indices)) in
                     paths.iter_mut().zip(needed_indices.iter_mut()).enumerate()
                 {
-                    if Some(&index) == path_indices.front() {
-                        print!(
-                            "found path {i} element in new nodes! path length was {}",
-                            path_indices.len()
+                    if let Some(wrapped_pair) = path_indices
+                        .iter_mut()
+                        .filter(|maybe| maybe.is_some())
+                        .find(|definitely| definitely.unwrap().1 == index)
+                    {
+                        println!(
+                            "found path {i} element {} (#{})!",
+                            wrapped_pair.unwrap().0,
+                            index,
                         );
-                        path.push(node);
-                        path_indices.pop_front();
-                        println!(" and is now {}", path_indices.len());
-                    }
-                }
-            }
-
-            for (index, node) in current_peak_indices
-                .into_iter()
-                .zip(current_peaks.iter().copied())
-            {
-                for (i, (path, path_indices)) in
-                    paths.iter_mut().zip(needed_indices.iter_mut()).enumerate()
-                {
-                    if Some(&index) == path_indices.front() {
-                        print!(
-                            "found path {i} element in current peaks! path length was {}",
-                            path_indices.len()
-                        );
-                        path.push(node);
-                        path_indices.pop_front();
-                        println!(" and is now {}", path_indices.len());
+                        path[wrapped_pair.unwrap().0] = node;
+                        *wrapped_pair = None;
                     }
                 }
             }
@@ -119,13 +119,20 @@ impl MmrSuccessorProof {
             current_leaf_count += 1;
         }
 
-        if needed_indices.iter().any(|ni| !ni.is_empty()) {
+        if needed_indices
+            .iter()
+            .any(|ni| !ni.iter().filter(|s| s.is_some()).count() == 0)
+        {
             for (i, ni) in needed_indices.into_iter().enumerate() {
                 if !ni.is_empty() {
                     println!(
                         "error! path {i} has {} needed indices left: [{}]",
                         ni.len(),
-                        ni.iter().join(", ")
+                        ni.iter()
+                            .filter(|s| s.is_some())
+                            .flatten()
+                            .map(|(_, j)| j)
+                            .join(", ")
                     );
                 }
             }
@@ -146,6 +153,11 @@ impl MmrSuccessorProof {
         if old_peak_heights.len() != self.paths.len() {
             println!("number of old peaks does not match with number of paths");
             return false;
+        }
+
+        println!("old peaks:");
+        for (index, peak) in old_peak_indices.iter().zip(old_mmra.peaks()) {
+            println!("{index} => ({})", peak);
         }
 
         let (new_peak_heights, new_peak_indices) =
@@ -276,26 +288,39 @@ mod test {
                 .try_into()
                 .unwrap(),
         );
-        let num_new_leafs = rng.gen_range(0..(1 << 10));
-        let old_num_leafs = rng.gen_range(0u64..(u64::MAX >> 1));
+        let num_new_leafs = rng.gen_range(0..(1 << 15));
+        let old_num_leafs = rng.gen_range(0u64..(u64::MAX >> 55));
         let old_peaks = (0..old_num_leafs.count_ones())
             .map(|_| rng.gen::<Digest>())
             .collect_vec();
-        println!("num old peaks: {}", old_peaks.len());
+
+        println!(
+            "num old peaks: {} with num leafs {}",
+            old_peaks.len(),
+            old_num_leafs
+        );
+
         let old_mmr = MmrAccumulator::init(old_peaks, old_num_leafs);
         let mut new_mmr = old_mmr.clone();
 
+        println!("num new leafs: {}", num_new_leafs);
         let new_leafs = (0..num_new_leafs)
             .map(|_| rng.gen::<Digest>())
             .collect_vec();
+
+        println!("\nappending leafs ...");
+
+        for &leaf in new_leafs.iter() {
+            new_mmr.append(leaf);
+        }
+
+        println!("\ngenerating success proof ...");
+
         let mmr_successor_proof = MmrSuccessorProof::new_from_batch_append(&old_mmr, &new_leafs);
         println!(
             "paths lengths: [{}]",
             mmr_successor_proof.paths.iter().map(|p| p.len()).join(", ")
         );
-        for leaf in new_leafs {
-            new_mmr.append(leaf);
-        }
 
         assert!(mmr_successor_proof.verify(&old_mmr, &new_mmr));
     }
