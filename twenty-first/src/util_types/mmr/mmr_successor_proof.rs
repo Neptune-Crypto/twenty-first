@@ -53,15 +53,6 @@ impl MmrSuccessorProof {
             }
         }
 
-        println!("needed indices:");
-        for (i, ni) in needed_indices.iter().enumerate() {
-            println!(
-                "{i} => [{}] ({})",
-                ni.iter().map(|s| s.unwrap().1).join(", "),
-                ni.len()
-            );
-        }
-
         let mut current_peaks = mmra.peaks();
         let mut current_peak_indices = indices_of_old_peaks.clone();
         let mut current_leaf_count = mmra.num_leafs();
@@ -78,6 +69,7 @@ impl MmrSuccessorProof {
                 current_peaks.clone(),
                 new_leaf,
             );
+
             let (_new_heights, new_peak_indices) =
                 get_peak_heights_and_peak_node_indices(current_leaf_count + 1);
             let new_nodes = membership_proof
@@ -95,19 +87,12 @@ impl MmrSuccessorProof {
                     .into_iter()
                     .zip(current_peaks.iter().copied()),
             ) {
-                for (i, (path, path_indices)) in
-                    paths.iter_mut().zip(needed_indices.iter_mut()).enumerate()
-                {
+                for (path, path_indices) in paths.iter_mut().zip(needed_indices.iter_mut()) {
                     if let Some(wrapped_pair) = path_indices
                         .iter_mut()
                         .filter(|maybe| maybe.is_some())
                         .find(|definitely| definitely.unwrap().1 == index)
                     {
-                        println!(
-                            "found path {i} element {} (#{})!",
-                            wrapped_pair.unwrap().0,
-                            index,
-                        );
                         path[wrapped_pair.unwrap().0] = node;
                         *wrapped_pair = None;
                     }
@@ -117,26 +102,6 @@ impl MmrSuccessorProof {
             current_peaks = new_peaks;
             current_peak_indices = new_peak_indices;
             current_leaf_count += 1;
-        }
-
-        if needed_indices
-            .iter()
-            .any(|ni| !ni.iter().filter(|s| s.is_some()).count() == 0)
-        {
-            for (i, ni) in needed_indices.into_iter().enumerate() {
-                if !ni.is_empty() {
-                    println!(
-                        "error! path {i} has {} needed indices left: [{}]",
-                        ni.len(),
-                        ni.iter()
-                            .filter(|s| s.is_some())
-                            .flatten()
-                            .map(|(_, j)| j)
-                            .join(", ")
-                    );
-                }
-            }
-            panic!("could not find all necessary nodes");
         }
 
         Self { paths }
@@ -151,13 +116,7 @@ impl MmrSuccessorProof {
         let (old_peak_heights, old_peak_indices) =
             get_peak_heights_and_peak_node_indices(old_mmra.num_leafs());
         if old_peak_heights.len() != self.paths.len() {
-            println!("number of old peaks does not match with number of paths");
             return false;
-        }
-
-        println!("old peaks:");
-        for (index, peak) in old_peak_indices.iter().zip(old_mmra.peaks()) {
-            println!("{index} => ({})", peak);
         }
 
         let (new_peak_heights, new_peak_indices) =
@@ -181,7 +140,6 @@ impl MmrSuccessorProof {
             let mut j = 0;
             while !new_peak_indices.contains(&current_index) {
                 let Some(&sibling) = self.paths[i].get(j) else {
-                    println!("cannot get path[{i}] element {j}");
                     return false;
                 };
                 let is_left_sibling = current_merkle_tree_index & 1 == 0;
@@ -190,20 +148,11 @@ impl MmrSuccessorProof {
                 } else {
                     Tip5::hash_pair(sibling, current_node)
                 };
-                print!(
-                    "current node ({}) is left sibling? {} node is ({})",
-                    current_index, is_left_sibling, current_node
-                );
                 current_index = parent(current_index);
-                println!(" with index {current_index}");
                 current_merkle_tree_index >>= 1;
                 current_height += 1;
                 j += 1;
             }
-            println!(
-                "ended with node {current_index} which is in [{}]",
-                new_peak_indices.iter().join(", ")
-            );
             if !new_mmra
                 .peaks()
                 .into_iter()
@@ -212,9 +161,6 @@ impl MmrSuccessorProof {
                     p == current_node && *h == current_height && *idx == current_index
                 })
             {
-                println!("cannot find calculated root in new peaks list.");
-                println!("calculated node: ({})", current_node);
-                println!("peaks: [{}]", new_mmra.peaks().into_iter().join("/"));
                 return false;
             }
         }
@@ -294,33 +240,18 @@ mod test {
             .map(|_| rng.gen::<Digest>())
             .collect_vec();
 
-        println!(
-            "num old peaks: {} with num leafs {}",
-            old_peaks.len(),
-            old_num_leafs
-        );
-
         let old_mmr = MmrAccumulator::init(old_peaks, old_num_leafs);
         let mut new_mmr = old_mmr.clone();
 
-        println!("num new leafs: {}", num_new_leafs);
         let new_leafs = (0..num_new_leafs)
             .map(|_| rng.gen::<Digest>())
             .collect_vec();
-
-        println!("\nappending leafs ...");
 
         for &leaf in new_leafs.iter() {
             new_mmr.append(leaf);
         }
 
-        println!("\ngenerating success proof ...");
-
         let mmr_successor_proof = MmrSuccessorProof::new_from_batch_append(&old_mmr, &new_leafs);
-        println!(
-            "paths lengths: [{}]",
-            mmr_successor_proof.paths.iter().map(|p| p.len()).join(", ")
-        );
 
         assert!(mmr_successor_proof.verify(&old_mmr, &new_mmr));
     }
