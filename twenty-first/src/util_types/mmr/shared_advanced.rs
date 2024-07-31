@@ -75,13 +75,11 @@ pub fn left_sibling(node_index: u64, height: u32) -> u64 {
     node_index - (1 << (height + 1)) + 1
 }
 
+/// Get the node index of the right sibling, given the left sibling's node index
+/// and the height of the layer on which it lives.
 #[inline]
 pub fn right_sibling(node_index: u64, height: u32) -> u64 {
     node_index + (1 << (height + 1)) - 1
-}
-
-pub fn get_height_from_leaf_index(leaf_index: u64) -> u32 {
-    (leaf_index + 1).ilog2()
 }
 
 /// The number of nodes in an MMR with `leaf_count` leafs.
@@ -237,19 +235,6 @@ mod mmr_test {
     use rand::RngCore;
 
     use super::*;
-
-    #[test]
-    fn get_height_from_leaf_index_test() {
-        assert_eq!(0, get_height_from_leaf_index(0));
-        assert_eq!(1, get_height_from_leaf_index(1));
-        assert_eq!(1, get_height_from_leaf_index(2));
-        assert_eq!(2, get_height_from_leaf_index(3));
-        assert_eq!(2, get_height_from_leaf_index(4));
-        assert_eq!(2, get_height_from_leaf_index(5));
-        assert_eq!(2, get_height_from_leaf_index(6));
-        assert_eq!(3, get_height_from_leaf_index(7));
-        assert_eq!(3, get_height_from_leaf_index(8));
-    }
 
     #[test]
     fn leaf_index_to_node_index_test() {
