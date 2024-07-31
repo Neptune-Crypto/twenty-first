@@ -63,7 +63,9 @@ pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u64, leaf_count: u64) -
 }
 
 #[inline]
-/// Return the number of parents that need to be added when a new leaf is inserted
+/// Return the number of parents that need to be added when a new leaf is inserted.
+///
+/// Expects the `leaf_index` to be at most 63 bits; may crash otherwise.
 pub fn right_lineage_length_from_leaf_index(leaf_index: u64) -> u32 {
     // Identify the last (least significant) nonzero bit
     let pow2 = (leaf_index + 1) & !leaf_index;
@@ -130,6 +132,8 @@ pub fn calculate_new_peaks_from_leaf_mutation(
 
 #[cfg(test)]
 mod mmr_test {
+    use test_strategy::proptest;
+
     use super::*;
 
     #[test]
@@ -303,5 +307,12 @@ mod mmr_test {
             .1 == 2
         );
         assert!(leaf_index_to_mt_index_and_peak_index((1 << 31) + (1 << 30), (1 << 32) - 1).1 == 2);
+    }
+
+    #[proptest]
+    fn right_lineage_length_from_leaf_index_does_not_crash(
+        #[strategy(0u64..=(u64::MAX >> 1))] leaf_index: u64,
+    ) {
+        right_lineage_length_from_leaf_index(leaf_index);
     }
 }
