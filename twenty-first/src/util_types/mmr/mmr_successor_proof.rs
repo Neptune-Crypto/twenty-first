@@ -80,15 +80,17 @@ impl MmrSuccessorProof {
                 .collect_vec();
 
             for (index, node) in new_node_indices.into_iter().zip(new_nodes) {
-                for (path, path_indices) in paths.iter_mut().zip(needed_indices.iter_mut()) {
+                for (i, (path, path_indices)) in
+                    paths.iter_mut().zip(needed_indices.iter_mut()).enumerate()
+                {
                     if Some(&index) == path_indices.front() {
                         print!(
-                            "found path element in new nodes! path indices was [{}]",
-                            path_indices.iter().join(", ")
+                            "found path {i} element in new nodes! path length was {}",
+                            path_indices.len()
                         );
                         path.push(node);
                         path_indices.pop_front();
-                        println!(" is now [{}]", path_indices.iter().join(", "));
+                        println!(" and is now {}", path_indices.len());
                     }
                 }
             }
@@ -97,15 +99,17 @@ impl MmrSuccessorProof {
                 .into_iter()
                 .zip(current_peaks.iter().copied())
             {
-                for (path, path_indices) in paths.iter_mut().zip(needed_indices.iter_mut()) {
+                for (i, (path, path_indices)) in
+                    paths.iter_mut().zip(needed_indices.iter_mut()).enumerate()
+                {
                     if Some(&index) == path_indices.front() {
                         print!(
-                            "found path element in current peaks! path indices was [{}]",
-                            path_indices.iter().join(", ")
+                            "found path {i} element in current peaks! path length was {}",
+                            path_indices.len()
                         );
                         path.push(node);
                         path_indices.pop_front();
-                        println!(" is now [{}]", path_indices.iter().join(", "));
+                        println!(" and is now {}", path_indices.len());
                     }
                 }
             }
@@ -113,6 +117,19 @@ impl MmrSuccessorProof {
             current_peaks = new_peaks;
             current_peak_indices = new_peak_indices;
             current_leaf_count += 1;
+        }
+
+        if needed_indices.iter().any(|ni| !ni.is_empty()) {
+            for (i, ni) in needed_indices.into_iter().enumerate() {
+                if !ni.is_empty() {
+                    println!(
+                        "error! path {i} has {} needed indices left: [{}]",
+                        ni.len(),
+                        ni.iter().join(", ")
+                    );
+                }
+            }
+            panic!("could not find all necessary nodes");
         }
 
         Self { paths }
@@ -170,10 +187,9 @@ impl MmrSuccessorProof {
                 .peaks()
                 .into_iter()
                 .zip(new_peak_heights.iter().zip(new_peak_indices.iter()))
-                .find(|&(p, (h, i))| {
-                    p == current_node && *h == current_height && *i == current_index
+                .any(|(p, (h, idx))| {
+                    p == current_node && *h == current_height && *idx == current_index
                 })
-                .is_none()
             {
                 println!("cannot find calculated root in new peaks list");
                 return false;
