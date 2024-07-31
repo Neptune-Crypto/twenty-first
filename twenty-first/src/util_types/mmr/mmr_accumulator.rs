@@ -19,7 +19,7 @@ use super::mmr_trait::LeafMutation;
 use super::mmr_trait::Mmr;
 use super::shared_basic;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize, BFieldCodec)]
 pub struct MmrAccumulator {
     leaf_count: u64,
     peaks: Vec<Digest>,
@@ -467,6 +467,22 @@ pub mod util {
     }
 }
 
+impl<'a> Arbitrary<'a> for MmrAccumulator {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        let mut buffer = [0u8; 8];
+        u.fill_buffer(&mut buffer)?;
+        let num_leafs = u64::from_be_bytes(buffer) >> 1; // num_leafs can be at most 63 bits
+
+        let mut peaks = vec![];
+        for _ in 0..(num_leafs.count_ones()) {
+            let peak = Digest::arbitrary(u)?;
+            peaks.push(peak);
+        }
+
+        Ok(MmrAccumulator::init(peaks, num_leafs))
+    }
+}
+
 #[cfg(test)]
 mod accumulator_mmr_tests {
     use std::cmp;
@@ -474,11 +490,14 @@ mod accumulator_mmr_tests {
     use itertools::izip;
     use itertools::Itertools;
     use num_traits::ConstZero;
+    use proptest::prop_assert_eq;
+    use proptest_arbitrary_interop::arb;
     use rand::distributions::Uniform;
     use rand::random;
     use rand::thread_rng;
     use rand::Rng;
     use rand::RngCore;
+    use test_strategy::proptest;
 
     use crate::math::b_field_element::BFieldElement;
     use crate::math::other::random_elements;
@@ -937,5 +956,12 @@ mod accumulator_mmr_tests {
             &membership_proof_leaf_indices,
             vec![],
         );
+    }
+
+    #[proptest]
+    fn arbitrary_mmra_has_consistent_num_leafs_and_peaks(
+        #[strategy(arb::<MmrAccumulator>())] mmra: MmrAccumulator,
+    ) {
+        prop_assert_eq!(mmra.peaks().len(), mmra.num_leafs().count_ones() as usize);
     }
 }
