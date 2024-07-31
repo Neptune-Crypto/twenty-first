@@ -132,6 +132,10 @@ pub fn calculate_new_peaks_from_leaf_mutation(
 
 #[cfg(test)]
 mod mmr_test {
+    use proptest::collection::vec;
+    use proptest_arbitrary_interop::arb;
+    use rand::thread_rng;
+    use rand::Rng;
     use test_strategy::proptest;
 
     use super::*;
@@ -314,5 +318,22 @@ mod mmr_test {
         #[strategy(0u64..=(u64::MAX >> 1))] leaf_index: u64,
     ) {
         right_lineage_length_from_leaf_index(leaf_index);
+    }
+
+    #[proptest]
+    fn calculate_new_peaks_from_append_does_not_crash(
+        #[strategy(0u64..(u64::MAX>>1))] old_leaf_count: u64,
+        #[strategy(vec(arb::<Digest>(), #old_leaf_count.count_zeros() as usize))] old_peaks: Vec<
+            Digest,
+        >,
+        #[strategy(arb::<Digest>())] new_leaf: Digest,
+    ) {
+        calculate_new_peaks_from_append(old_leaf_count, old_peaks, new_leaf);
+    }
+
+    #[test]
+    fn calculate_new_peaks_from_append_to_empty_mmra_does_not_crash() {
+        let mut rng = thread_rng();
+        calculate_new_peaks_from_append(0, vec![], rng.gen::<Digest>());
     }
 }
