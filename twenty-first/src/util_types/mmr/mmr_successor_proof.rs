@@ -251,9 +251,7 @@ mod test {
         // swap two peaks in old mmr
         if old_mmr.peaks().len() >= 2 {
             let mut old_peaks_swapped = old_mmr.peaks();
-            let temp = old_peaks_swapped[0];
-            old_peaks_swapped[0] = old_peaks_swapped[1];
-            old_peaks_swapped[1] = temp;
+            old_peaks_swapped.swap(0, 1);
             let old_mmr_swapped = MmrAccumulator::init(old_peaks_swapped, old_mmr.num_leafs());
             prop_assert!(!mmr_successor_proof.verify(&old_mmr_swapped, &new_mmr));
         }
@@ -261,20 +259,18 @@ mod test {
         // swap two peaks in new mmr
         if new_mmr.peaks().len() >= 2 {
             let mut new_peaks_swapped = new_mmr.peaks();
-            let temp = new_peaks_swapped[0];
-            new_peaks_swapped[0] = new_peaks_swapped[1];
-            new_peaks_swapped[1] = temp;
+            new_peaks_swapped.swap(0, 1);
             let new_mmr_swapped = MmrAccumulator::init(new_peaks_swapped, new_mmr.num_leafs());
             prop_assert!(!mmr_successor_proof.verify(&old_mmr, &new_mmr_swapped));
         }
 
         // change one path element
-        if mmr_successor_proof.paths.len() != 0 {
+        if !mmr_successor_proof.paths.is_empty() {
             let mut fake_mmr_successor_proof_3 = mmr_successor_proof.clone();
             let path_index = modify_path_element % fake_mmr_successor_proof_3.paths.len();
             modify_path_element =
                 (modify_path_element - path_index) / fake_mmr_successor_proof_3.paths.len();
-            if fake_mmr_successor_proof_3.paths[path_index].len() != 0 {
+            if !fake_mmr_successor_proof_3.paths[path_index].is_empty() {
                 let node_index_along_path =
                     modify_path_element % fake_mmr_successor_proof_3.paths[path_index].len();
                 modify_path_element = (modify_path_element - node_index_along_path)
