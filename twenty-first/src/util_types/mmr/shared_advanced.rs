@@ -156,7 +156,7 @@ pub fn get_authentication_path_node_indices(
 /// assert_eq!(get_peak_heights(0b1010), vec![3, 1]);
 /// assert_eq!(get_peak_heights(0b1011), vec![3, 1, 0]);
 /// ```
-pub fn get_peak_heights(leaf_count: u64) -> Vec<u8> {
+pub fn get_peak_heights(leaf_count: u64) -> Vec<u32> {
     // In an MMR, the peak heights directly correspond the leaf count's bit decomposition. That is,
     // the indices of the bits that are set in the binary representation of the leaf count are the
     // peaks' heights.
@@ -169,7 +169,7 @@ pub fn get_peak_heights(leaf_count: u64) -> Vec<u8> {
         let bit_mask = 1 << bit_index;
         let is_set_bit_in_leaf_count = bit_mask & leaf_count != 0;
         if is_set_bit_in_leaf_count {
-            indices_of_set_bits.push(bit_index as u8);
+            indices_of_set_bits.push(bit_index);
         }
     }
 
@@ -480,13 +480,7 @@ mod mmr_test {
                 get_peak_heights_and_peak_node_indices(leaf_count)
             );
 
-            assert_eq!(
-                expected_heights
-                    .iter()
-                    .map(|x| *x as u8)
-                    .collect::<Vec<_>>(),
-                get_peak_heights(leaf_count)
-            );
+            assert_eq!(expected_heights, get_peak_heights(leaf_count));
         }
     }
 

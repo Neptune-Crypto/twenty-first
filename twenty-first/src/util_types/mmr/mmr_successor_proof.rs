@@ -8,7 +8,9 @@ use crate::{
 
 use super::{
     mmr_accumulator::MmrAccumulator,
-    shared_advanced::{get_peak_heights_and_peak_node_indices, parent, right_sibling},
+    shared_advanced::{
+        get_peak_heights, get_peak_heights_and_peak_node_indices, parent, right_sibling,
+    },
     shared_basic::{calculate_new_peaks_from_append, leaf_index_to_mt_index_and_peak_index},
 };
 
@@ -113,20 +115,18 @@ impl MmrSuccessorProof {
             return true;
         }
 
-        let (old_peak_heights, old_peak_indices) =
-            get_peak_heights_and_peak_node_indices(old_mmra.num_leafs());
+        let old_peak_heights = get_peak_heights(old_mmra.num_leafs());
         if old_peak_heights.len() != self.paths.len() {
             return false;
         }
 
-        let (new_peak_heights, new_peak_indices) =
-            get_peak_heights_and_peak_node_indices(new_mmra.num_leafs());
+        let new_peak_heights = get_peak_heights(new_mmra.num_leafs());
 
         let mut running_leaf_count = 0;
-        for (i, (old_peak, (old_height, old_index))) in old_mmra
+        for (starting_peak_idx, (old_peak, old_height)) in old_mmra
             .peaks()
             .into_iter()
-            .zip(old_peak_heights.into_iter().zip(old_peak_indices))
+            .zip(old_peak_heights.into_iter())
             .enumerate()
         {
             running_leaf_count += 1 << old_height;
@@ -134,35 +134,32 @@ impl MmrSuccessorProof {
                 return false;
             }
 
-            let mut current_index = old_index;
             let mut current_height = old_height;
             let mut current_node = old_peak;
             let (merkle_tree_index_of_last_leaf_under_this_peak, _) =
                 leaf_index_to_mt_index_and_peak_index(running_leaf_count - 1, new_mmra.num_leafs());
             let mut current_merkle_tree_index =
                 merkle_tree_index_of_last_leaf_under_this_peak >> current_height;
-            let mut j = 0;
-            while !new_peak_indices.contains(&current_index) {
-                let Some(&sibling) = self.paths[i].get(j) else {
-                    return false;
-                };
+
+            for &sibling in self.paths[starting_peak_idx].iter() {
                 let is_left_sibling = current_merkle_tree_index & 1 == 0;
                 current_node = if is_left_sibling {
                     Tip5::hash_pair(current_node, sibling)
                 } else {
                     Tip5::hash_pair(sibling, current_node)
                 };
-                current_index = parent(current_index);
                 current_merkle_tree_index >>= 1;
                 current_height += 1;
-                j += 1;
             }
             if !new_mmra
                 .peaks()
                 .into_iter()
-                .zip(new_peak_heights.iter().zip(new_peak_indices.iter()))
-                .any(|(p, (h, idx))| {
-                    p == current_node && *h == current_height && *idx == current_index
+                .zip(new_peak_heights.iter())
+                .enumerate()
+                .any(|(landing_peak_idx, (p, h))| {
+                    p == current_node
+                        && *h == current_height
+                        && landing_peak_idx <= starting_peak_idx
                 })
             {
                 return false;
