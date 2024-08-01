@@ -130,6 +130,10 @@ impl MmrSuccessorProof {
             .enumerate()
         {
             running_leaf_count += 1 << old_height;
+            if running_leaf_count > new_mmra.num_leafs() {
+                return false;
+            }
+
             let mut current_index = old_index;
             let mut current_height = old_height;
             let mut current_node = old_peak;
@@ -213,7 +217,7 @@ mod test {
     }
 
     #[proptest]
-    fn verification_succeeds_property(
+    fn verification_succeeds_positive_property(
         #[strategy(arb::<MmrAccumulator>())] old_mmr: MmrAccumulator,
         #[strategy(vec(arb::<Digest>(), 0usize..(1<<10)))] new_leafs: Vec<Digest>,
     ) {
@@ -224,6 +228,59 @@ mod test {
         }
 
         prop_assert!(mmr_successor_proof.verify(&old_mmr, &new_mmr));
+    }
+
+    fn rotr(i: u64) -> u64 {
+        (i >> 1) | ((i & 1) << 63)
+    }
+
+    #[proptest]
+    fn verification_fails_negative_properties(
+        #[filter(#old_mmr.num_leafs() != rotr(#old_mmr.num_leafs()))]
+        #[strategy(arb::<MmrAccumulator>())]
+        old_mmr: MmrAccumulator,
+        #[strategy(vec(arb::<Digest>(), 0usize..(1<<10)))] new_leafs: Vec<Digest>,
+        #[strategy(arb::<usize>())] mut modify_path_element: usize,
+    ) {
+        let mut new_mmr = old_mmr.clone();
+        let mmr_successor_proof = MmrSuccessorProof::new_from_batch_append(&old_mmr, &new_leafs);
+        for leaf in new_leafs.iter() {
+            new_mmr.append(*leaf);
+        }
+
+        // old MMR has wrong num leafs
+        if rotr(old_mmr.num_leafs()) != old_mmr.num_leafs()
+            && rotr(old_mmr.num_leafs()) < (u64::MAX >> 1)
+        {
+            let fake_old_mmr = MmrAccumulator::init(old_mmr.peaks(), rotr(old_mmr.num_leafs()));
+            prop_assert!(!mmr_successor_proof.verify(&fake_old_mmr, &new_mmr));
+        }
+
+        // new MMR has wrong num leafs
+        if rotr(new_mmr.num_leafs()) != new_mmr.num_leafs()
+            && rotr(new_mmr.num_leafs()) < (u64::MAX >> 1)
+        {
+            let fake_new_mmr = MmrAccumulator::init(new_mmr.peaks(), rotr(new_mmr.num_leafs()));
+            prop_assert!(!mmr_successor_proof.verify(&old_mmr, &fake_new_mmr));
+        }
+
+        // change one path element
+        if mmr_successor_proof.paths.len() != 0 {
+            let mut fake_mmr_successor_proof_3 = mmr_successor_proof.clone();
+            let path_index = modify_path_element % fake_mmr_successor_proof_3.paths.len();
+            modify_path_element =
+                (modify_path_element - path_index) / fake_mmr_successor_proof_3.paths.len();
+            if fake_mmr_successor_proof_3.paths[path_index].len() != 0 {
+                let node_index_along_path =
+                    modify_path_element % fake_mmr_successor_proof_3.paths[path_index].len();
+                modify_path_element = (modify_path_element - node_index_along_path)
+                    / fake_mmr_successor_proof_3.paths[path_index].len();
+                let value_index = modify_path_element % Digest::LEN;
+                fake_mmr_successor_proof_3.paths[path_index][node_index_along_path].0[value_index]
+                    .increment();
+                prop_assert!(!fake_mmr_successor_proof_3.verify(&old_mmr, &new_mmr));
+            }
+        }
     }
 
     #[test]
