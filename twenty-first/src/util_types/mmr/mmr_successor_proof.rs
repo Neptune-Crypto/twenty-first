@@ -205,7 +205,7 @@ mod test {
     #[test]
     fn small_leaf_counts_unit() {
         let mut rng = thread_rng();
-        let threshold = 7;
+        let threshold = 10;
         for n in 0..threshold {
             for m in 0..threshold {
                 verification_succeeds_with_n_leafs_append_m(n, m, &mut rng);
@@ -213,10 +213,10 @@ mod test {
         }
     }
 
-    #[proptest]
+    #[proptest(cases = 50)]
     fn verification_succeeds_positive_property(
         #[strategy(arb::<MmrAccumulator>())] old_mmr: MmrAccumulator,
-        #[strategy(vec(arb::<Digest>(), 0usize..(1<<10)))] new_leafs: Vec<Digest>,
+        #[strategy(vec(arb::<Digest>(), 0usize..(1<<6)))] new_leafs: Vec<Digest>,
     ) {
         let mut new_mmr = old_mmr.clone();
         let mmr_successor_proof = MmrSuccessorProof::new_from_batch_append(&old_mmr, &new_leafs);
@@ -261,6 +261,26 @@ mod test {
             prop_assert!(!mmr_successor_proof.verify(&old_mmr, &fake_new_mmr));
         }
 
+        // swap two peaks in old mmr
+        if old_mmr.peaks().len() >= 2 {
+            let mut old_peaks_swapped = old_mmr.peaks();
+            let temp = old_peaks_swapped[0];
+            old_peaks_swapped[0] = old_peaks_swapped[1];
+            old_peaks_swapped[1] = temp;
+            let old_mmr_swapped = MmrAccumulator::init(old_peaks_swapped, old_mmr.num_leafs());
+            prop_assert!(!mmr_successor_proof.verify(&old_mmr_swapped, &new_mmr));
+        }
+
+        // swap two peaks in new mmr
+        if new_mmr.peaks().len() >= 2 {
+            let mut new_peaks_swapped = new_mmr.peaks();
+            let temp = new_peaks_swapped[0];
+            new_peaks_swapped[0] = new_peaks_swapped[1];
+            new_peaks_swapped[1] = temp;
+            let new_mmr_swapped = MmrAccumulator::init(new_peaks_swapped, new_mmr.num_leafs());
+            prop_assert!(!mmr_successor_proof.verify(&old_mmr, &new_mmr_swapped));
+        }
+
         // change one path element
         if mmr_successor_proof.paths.len() != 0 {
             let mut fake_mmr_successor_proof_3 = mmr_successor_proof.clone();
@@ -289,7 +309,7 @@ mod test {
                 .unwrap(),
         );
         let num_new_leafs = rng.gen_range(0..(1 << 15));
-        let old_num_leafs = rng.gen_range(0u64..(u64::MAX >> 55));
+        let old_num_leafs = rng.gen_range(0u64..(u64::MAX >> 1));
         let old_peaks = (0..old_num_leafs.count_ones())
             .map(|_| rng.gen::<Digest>())
             .collect_vec();

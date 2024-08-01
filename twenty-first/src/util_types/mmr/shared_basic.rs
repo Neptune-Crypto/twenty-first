@@ -13,7 +13,8 @@ pub fn right_child(node_index: u64) -> u64 {
     node_index - 1
 }
 
-/// Return Merkle tree index and peak index
+/// Return Merkle tree index and peak index.
+///
 /// Crashes if leaf index is out of bounds.
 #[inline]
 pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u64, leaf_count: u64) -> (u64, u32) {
