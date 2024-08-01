@@ -116,28 +116,28 @@ impl MmrSuccessorProof {
             return false;
         }
 
-        let new_peak_heights = get_peak_heights(new_mmra.num_leafs());
+        if old_mmra.num_leafs() > new_mmra.num_leafs() {
+            return false;
+        }
 
         let mut running_leaf_count = 0;
-        for (starting_peak_idx, (old_peak, old_height)) in old_mmra
+        for (old_peak_idx, (old_peak, old_height)) in old_mmra
             .peaks()
             .into_iter()
             .zip(old_peak_heights.into_iter())
             .enumerate()
         {
             running_leaf_count += 1 << old_height;
-            if running_leaf_count > new_mmra.num_leafs() {
-                return false;
-            }
-
-            let mut current_height = old_height;
             let mut current_node = old_peak;
-            let (merkle_tree_index_of_last_leaf_under_this_peak, _) =
+
+            let (merkle_tree_index_of_last_leaf_under_this_peak, new_peak_index) =
                 leaf_index_to_mt_index_and_peak_index(running_leaf_count - 1, new_mmra.num_leafs());
             let mut current_merkle_tree_index =
-                merkle_tree_index_of_last_leaf_under_this_peak >> current_height;
+                merkle_tree_index_of_last_leaf_under_this_peak >> old_height;
 
-            for &sibling in self.paths[starting_peak_idx].iter() {
+            // TODO: This loop could also be stopped on
+            // `current_merkle_tree_index == 1`, would that be better?
+            for &sibling in self.paths[old_peak_idx].iter() {
                 let is_left_sibling = current_merkle_tree_index & 1 == 0;
                 current_node = if is_left_sibling {
                     Tip5::hash_pair(current_node, sibling)
@@ -145,22 +145,13 @@ impl MmrSuccessorProof {
                     Tip5::hash_pair(sibling, current_node)
                 };
                 current_merkle_tree_index >>= 1;
-                current_height += 1;
             }
-            if !new_mmra
-                .peaks()
-                .into_iter()
-                .zip(new_peak_heights.iter())
-                .enumerate()
-                .any(|(landing_peak_idx, (p, h))| {
-                    p == current_node
-                        && *h == current_height
-                        && landing_peak_idx <= starting_peak_idx
-                })
-            {
+
+            if new_mmra.peaks()[new_peak_index as usize] != current_node {
                 return false;
             }
         }
+
         true
     }
 }
@@ -201,7 +192,7 @@ mod test {
     #[test]
     fn small_leaf_counts_unit() {
         let mut rng = thread_rng();
-        let threshold = 10;
+        let threshold = 18;
         for n in 0..threshold {
             for m in 0..threshold {
                 verification_succeeds_with_n_leafs_append_m(n, m, &mut rng);
@@ -227,7 +218,7 @@ mod test {
         (i >> 1) | ((i & 1) << 63)
     }
 
-    #[proptest]
+    #[proptest(cases = 50)]
     fn verification_fails_negative_properties(
         #[filter(#old_mmr.num_leafs() != rotr(#old_mmr.num_leafs()))]
         #[strategy(arb::<MmrAccumulator>())]
@@ -294,6 +285,18 @@ mod test {
                 prop_assert!(!fake_mmr_successor_proof_3.verify(&old_mmr, &new_mmr));
             }
         }
+
+        // Missing path
+        if !mmr_successor_proof.paths.is_empty() {
+            let mut fake_mmr_successor_proof_4 = mmr_successor_proof.clone();
+            fake_mmr_successor_proof_4.paths.pop();
+            prop_assert!(!fake_mmr_successor_proof_4.verify(&old_mmr, &new_mmr));
+        }
+
+        // One path too many
+        let mut fake_mmr_successor_proof_5 = mmr_successor_proof.clone();
+        fake_mmr_successor_proof_5.paths.push(vec![]);
+        prop_assert!(!fake_mmr_successor_proof_5.verify(&old_mmr, &new_mmr));
     }
 
     #[test]
