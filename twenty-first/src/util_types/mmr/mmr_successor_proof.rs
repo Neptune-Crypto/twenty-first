@@ -111,10 +111,6 @@ impl MmrSuccessorProof {
 
     /// Verify that `old_mmra` is a predecessor of `new_mmra`.
     pub fn verify(&self, old_mmra: &MmrAccumulator, new_mmra: &MmrAccumulator) -> bool {
-        if old_mmra.num_leafs() == 0 {
-            return true;
-        }
-
         let old_peak_heights = get_peak_heights(old_mmra.num_leafs());
         if old_peak_heights.len() != self.paths.len() {
             return false;
