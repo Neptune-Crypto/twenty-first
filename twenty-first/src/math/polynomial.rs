@@ -691,7 +691,7 @@ where
         let interpolate_half = |offset, domain_half, values_half| {
             let offset_inverse = FF::batch_inversion(offset);
             let targets = hadamard_mul(values_half, offset_inverse);
-            Self::interpolate(domain_half, &targets)
+            Self::par_interpolate(domain_half, &targets)
         };
         let (left_interpolant, right_interpolant) = rayon::join(
             || interpolate_half(left_offset, left_domain_half, left_values_half),
