@@ -51,10 +51,4 @@ If you do not have the privilege to create git tags or run `cargo publish`, subm
 
 ## Building
 
-This crate depends on the [rs-leveldb](https://crates.io/crates/rs-leveldb) crate which wraps the C++ implementation of leveldb. As such, `snappy` and `leveldb` must be installed. Eg, on Ubuntu:
-
-```
-sudo apt-get install libleveldb-dev libsnappy-dev
-```
-
-For more detailed buildings instructions, see the description in `HACKING.md`.
+For detailed buildings instructions, see the description in `HACKING.md`.
