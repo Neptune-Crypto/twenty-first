@@ -11,15 +11,10 @@ criterion_main!(benches);
 criterion_group!(
     name = benches;
     config = Criterion::default().sample_size(10);
-    targets = evaluation<{ 1 << 18 }, { 1 << 6 }>,
-              evaluation<{ 1 << 18 }, { 1 << 7 }>,
-              evaluation<{ 1 << 18 }, { 1 << 8 }>,
+    targets = evaluation<{ 1 << 16 }, { 1 << 6 }>,
+              evaluation<{ 1 << 16 }, { 1 << 8 }>,
               evaluation<{ 1 << 19 }, { 1 << 6 }>,
-              evaluation<{ 1 << 19 }, { 1 << 7 }>,
               evaluation<{ 1 << 19 }, { 1 << 8 }>,
-              evaluation<{ 1 << 20 }, { 1 << 6 }>,
-              evaluation<{ 1 << 20 }, { 1 << 7 }>,
-              evaluation<{ 1 << 20 }, { 1 << 8 }>,
 );
 
 fn evaluation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {

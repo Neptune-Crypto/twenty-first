@@ -10,10 +10,10 @@ use twenty_first::prelude::*;
 criterion_main!(benches);
 criterion_group!(
     name = benches;
-    config = Criterion::default().sample_size(50);
-    targets = interpolation<{ 1 << 8 }>,
-              interpolation<{ 1 << 9 }>,
-              interpolation<{ 1 << 10 }>,
+    config = Criterion::default().sample_size(10);
+    targets = interpolation<{ 1 << 11 }>,
+              interpolation<{ 1 << 12 }>,
+              interpolation<{ 1 << 14 }>,
 );
 
 fn interpolation<const SIZE: usize>(c: &mut Criterion) {
@@ -24,15 +24,25 @@ fn interpolation<const SIZE: usize>(c: &mut Criterion) {
     let xs: Vec<BFieldElement> = random_elements(SIZE);
     let ys: Vec<BFieldElement> = random_elements(SIZE);
 
-    let id = BenchmarkId::new("Lagrange", log2_of_size);
-    let lagrange = || Polynomial::lagrange_interpolate(&xs, &ys);
-    group.bench_function(id, |b| b.iter(lagrange));
+    if log2_of_size < 14 {
+        let id = BenchmarkId::new("Lagrange", log2_of_size);
+        let lagrange = || Polynomial::lagrange_interpolate(&xs, &ys);
+        group.bench_function(id, |b| b.iter(lagrange));
 
-    let id = BenchmarkId::new("Fast", log2_of_size);
-    group.bench_function(id, |b| b.iter(|| Polynomial::fast_interpolate(&xs, &ys)));
+        let id = BenchmarkId::new("Fast sequential", log2_of_size);
+        group.bench_function(id, |b| b.iter(|| Polynomial::fast_interpolate(&xs, &ys)));
+    }
 
-    let id = BenchmarkId::new("Dispatcher", log2_of_size);
+    let id = BenchmarkId::new("Fast parallel", log2_of_size);
+    group.bench_function(id, |b| {
+        b.iter(|| Polynomial::par_fast_interpolate(&xs, &ys))
+    });
+
+    let id = BenchmarkId::new("Dispatcher sequential", log2_of_size);
     group.bench_function(id, |b| b.iter(|| Polynomial::interpolate(&xs, &ys)));
+
+    let id = BenchmarkId::new("Dispatcher parallel", log2_of_size);
+    group.bench_function(id, |b| b.iter(|| Polynomial::par_interpolate(&xs, &ys)));
 
     group.finish();
 }
