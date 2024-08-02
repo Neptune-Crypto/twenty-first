@@ -3,6 +3,153 @@
 At every release, a dedicated benchmark suite is run to ensure that the performance of the library
 is not regressing. The results are recorded here.
 
+## 0.42.0-alpha.7 – 2024-08-02
+
+Evaluation of degree-65535 polynomial in 64 Points/Iterative/16
+                        time:   [12.029 ms 12.033 ms 12.037 ms]
+                        change: [-2.9787% -1.6367% -0.6054%] (p = 0.01 < 0.05)
+
+Evaluation of degree-65535 polynomial in 64 Points/Divide-and-Conquer/16
+                        time:   [9.1122 ms 9.1148 ms 9.1202 ms]
+                        change: [-1.4568% -0.1815% +0.7635%] (p = 0.81 > 0.05)
+
+Evaluation of degree-65535 polynomial in 64 Points/Entrypoint/16
+                        time:   [2.8813 ms 2.8858 ms 2.8898 ms]
+                        change: [+1.9188% +2.0393% +2.1452%] (p = 0.00 < 0.05)
+
+Evaluation of degree-65535 polynomial in 256 Points/Iterative/16
+                        time:   [48.136 ms 48.180 ms 48.231 ms]
+                        change: [-5.8425% -3.5099% -1.4431%] (p = 0.01 < 0.05)
+
+Evaluation of degree-65535 polynomial in 256 Points/Divide-and-Conquer/16
+                        time:   [36.856 ms 36.877 ms 36.894 ms]
+                        change: [+1.7994% +2.0644% +2.2998%] (p = 0.00 < 0.05)
+
+Evaluation of degree-65535 polynomial in 256 Points/Entrypoint/16
+                        time:   [5.4282 ms 5.4305 ms 5.4336 ms]
+                        change: [+0.3471% +0.4229% +0.5012%] (p = 0.00 < 0.05)
+
+Evaluation of degree-524287 polynomial in 64 Points/Iterative/19
+                        time:   [96.223 ms 96.244 ms 96.266 ms]
+                        change: [-0.2668% -0.1859% -0.1136%] (p = 0.00 < 0.05)
+
+Evaluation of degree-524287 polynomial in 64 Points/Divide-and-Conquer/19
+                        time:   [72.846 ms 72.961 ms 73.042 ms]
+                        change: [+2.0823% +2.1924% +2.3094%] (p = 0.00 < 0.05)
+
+Evaluation of degree-524287 polynomial in 64 Points/Entrypoint/19
+                        time:   [24.076 ms 25.246 ms 25.832 ms]
+                        change: [+4.1914% +8.2024% +12.302%] (p = 0.00 < 0.05)
+
+Evaluation of degree-524287 polynomial in 256 Points/Iterative/19
+                        time:   [399.76 ms 412.94 ms 425.73 ms]
+                        change: [+3.5595% +7.1601% +10.435%] (p = 0.00 < 0.05)
+
+Evaluation of degree-524287 polynomial in 256 Points/Divide-and-Conquer/19
+                        time:   [292.03 ms 293.01 ms 294.13 ms]
+                        change: [+2.1771% +2.5349% +2.9162%] (p = 0.00 < 0.05)
+
+Evaluation of degree-524287 polynomial in 256 Points/Entrypoint/19
+                        time:   [37.190 ms 38.220 ms 38.919 ms]
+                        change: [+1.0489% +2.4578% +4.3297%] (p = 0.00 < 0.05)
+
+Various Interpolations in 2^10 Points/Lagrange/10
+                        time:   [5.3441 ms 5.4135 ms 5.5191 ms]
+                        thrpt:  [185.54 Kelem/s 189.16 Kelem/s 191.61 Kelem/s]
+
+Various Interpolations in 2^10 Points/Fast sequential/10
+                        time:   [7.7223 ms 7.7264 ms 7.7360 ms]
+                        thrpt:  [132.37 Kelem/s 132.53 Kelem/s 132.60 Kelem/s]
+
+Various Interpolations in 2^10 Points/Dispatcher sequential/10
+                        time:   [5.2805 ms 5.2843 ms 5.2887 ms]
+                        thrpt:  [193.62 Kelem/s 193.78 Kelem/s 193.92 Kelem/s]
+
+Various Interpolations in 2^10 Points/Fast parallel/10
+                        time:   [2.9051 ms 2.9193 ms 2.9349 ms]
+                        thrpt:  [348.91 Kelem/s 350.77 Kelem/s 352.48 Kelem/s]
+
+Various Interpolations in 2^10 Points/Dispatcher parallel/10
+                        time:   [2.9103 ms 2.9176 ms 2.9265 ms]
+                        thrpt:  [349.90 Kelem/s 350.97 Kelem/s 351.85 Kelem/s]
+
+Various Interpolations in 2^15 Points/Fast parallel/15
+                        time:   [117.94 ms 118.61 ms 119.61 ms]
+                        thrpt:  [273.95 Kelem/s 276.27 Kelem/s 277.84 Kelem/s]
+
+Various Interpolations in 2^15 Points/Dispatcher parallel/15
+                        time:   [117.05 ms 118.43 ms 119.81 ms]
+                        thrpt:  [273.50 Kelem/s 276.68 Kelem/s 279.94 Kelem/s]
+
+Multiplication of Polynomials of Degree 2^7 (Product Degree: 2^8)/Naïve/8
+                        time:   [22.725 µs 22.735 µs 22.746 µs]
+                        change: [-2.4991% -2.4203% -2.3440%] (p = 0.00 < 0.05)
+
+Multiplication of Polynomials of Degree 2^7 (Product Degree: 2^8)/Fast/8
+                        time:   [25.026 µs 25.048 µs 25.074 µs]
+                        change: [-1.6298% -1.2273% -0.8575%] (p = 0.00 < 0.05)
+
+Multiplication of Polynomials of Degree 2^7 (Product Degree: 2^8)/Faster of the two/8
+                        time:   [25.018 µs 25.038 µs 25.061 µs]
+                        change: [-0.8143% -0.6218% -0.4528%] (p = 0.00 < 0.05)
+
+Multiplication of Polynomials of Degree 2^8 (Product Degree: 2^9)/Naïve/9
+                        time:   [98.177 µs 98.256 µs 98.349 µs]
+                        change: [+9.0155% +9.2747% +9.5621%] (p = 0.00 < 0.05)
+
+Multiplication of Polynomials of Degree 2^8 (Product Degree: 2^9)/Fast/9
+                        time:   [54.329 µs 54.365 µs 54.414 µs]
+                        change: [-0.4537% -0.1639% +0.0839%] (p = 0.25 > 0.05)
+
+Multiplication of Polynomials of Degree 2^8 (Product Degree: 2^9)/Faster of the two/9
+                        time:   [54.290 µs 54.320 µs 54.360 µs]
+                        change: [-0.3229% -0.1698% +0.0024%] (p = 0.04 < 0.05)
+
+Multiplication of Polynomials of Degree 2^9 (Product Degree: 2^10)/Naïve/10
+                        time:   [370.77 µs 371.34 µs 372.03 µs]
+                        change: [+0.8527% +1.1724% +1.5184%] (p = 0.00 < 0.05)
+
+Multiplication of Polynomials of Degree 2^9 (Product Degree: 2^10)/Fast/10
+                        time:   [122.64 µs 124.32 µs 126.14 µs]
+                        change: [+1.7454% +2.8649% +4.0096%] (p = 0.00 < 0.05)
+
+Multiplication of Polynomials of Degree 2^9 (Product Degree: 2^10)/Faster of the two/10
+                        time:   [133.33 µs 134.45 µs 135.39 µs]
+                        change: [+7.6508% +8.7307% +9.7862%] (p = 0.00 < 0.05)
+
+polynomial coset of degree 2^10/coset-evaluate bfe-pol/1024
+                        time:   [21.259 µs 21.689 µs 22.092 µs]
+                        thrpt:  [46.351 Melem/s 47.213 Melem/s 48.168 Melem/s]
+
+polynomial coset of degree 2^10/coset-evaluate xfe-pol/1024
+                        time:   [40.084 µs 40.502 µs 40.906 µs]
+                        thrpt:  [25.033 Melem/s 25.282 Melem/s 25.546 Melem/s]
+
+polynomial coset of degree 2^10/coset-interpolate bfe-pol/1024
+                        time:   [24.164 µs 24.369 µs 24.602 µs]
+                        thrpt:  [41.623 Melem/s 42.020 Melem/s 42.377 Melem/s]
+
+polynomial coset of degree 2^10/coset-interpolate xfe-pol/1024
+                        time:   [48.749 µs 49.337 µs 50.177 µs]
+                        thrpt:  [20.408 Melem/s 20.755 Melem/s 21.005 Melem/s]
+
+polynomial coset of degree 2^17/coset-evaluate bfe-pol/131072
+                        time:   [4.4026 ms 4.4655 ms 4.5735 ms]
+                        thrpt:  [28.659 Melem/s 29.352 Melem/s 29.772 Melem/s]
+
+polynomial coset of degree 2^17/coset-evaluate xfe-pol/131072
+                        time:   [8.6050 ms 8.6826 ms 8.8606 ms]
+                        thrpt:  [14.793 Melem/s 15.096 Melem/s 15.232 Melem/s]
+
+polynomial coset of degree 2^17/coset-interpolate bfe-pol/131072
+                        time:   [5.1599 ms 5.2848 ms 5.3734 ms]
+                        thrpt:  [24.393 Melem/s 24.801 Melem/s 25.402 Melem/s]
+
+polynomial coset of degree 2^17/coset-interpolate xfe-pol/131072
+                        time:   [13.213 ms 13.487 ms 13.784 ms]
+                        thrpt:  [9.5089 Melem/s 9.7181 Melem/s 9.9197 Melem/s]
+
+
 ## 0.42.0-alpha.2 – 2024-04-26
 
 Various Evaluations in 2^10 Points/Parallel/10
