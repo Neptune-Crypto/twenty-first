@@ -6,6 +6,9 @@ use super::shared_basic::*;
 /// or equal to `node_index`.
 #[inline]
 pub fn leftmost_ancestor(node_index: u64) -> (u64, u32) {
+    if node_index.leading_zeros() == 0 {
+        return (u64::MAX, 63);
+    }
     let h = u64::BITS - node_index.leading_zeros() - 1;
     let ret = (1 << (h + 1)) - 1;
 
@@ -41,18 +44,20 @@ pub fn right_lineage_length_and_own_height(node_index: u64) -> (u32, u32) {
 
 pub fn right_lineage_length_from_node_index(node_index: u64) -> u32 {
     let bit_width = u64::BITS - node_index.leading_zeros();
-    let npo2 = 1 << bit_width;
+    let npo2 = 1u128 << bit_width;
 
-    let dist = npo2 - node_index;
+    let dist = (npo2 - (node_index as u128)) as u64;
 
     if (bit_width as u64) < dist {
-        right_lineage_length_from_node_index(node_index - (npo2 >> 1) + 1)
+        right_lineage_length_from_node_index(node_index - (1 << (bit_width - 1)) + 1)
     } else {
         (dist - 1) as u32
     }
 }
 
-/// Convert from leaf index to node index
+/// Convert from leaf index to node index.
+///
+/// Crashes if `leaf_index` exceeds 63 bits.
 pub fn leaf_index_to_node_index(leaf_index: u64) -> u64 {
     let hamming_weight = leaf_index.count_ones() as u64;
     2 * leaf_index - hamming_weight + 1
@@ -70,28 +75,28 @@ pub fn parent(node_index: u64) -> u64 {
     }
 }
 
+/// Get the node index of the left sibling, given the right sibling's node index
+/// and the height of the layer on which it lives.
 #[inline]
 pub fn left_sibling(node_index: u64, height: u32) -> u64 {
     node_index - (1 << (height + 1)) + 1
 }
 
+/// Get the node index of the right sibling, given the left sibling's node index
+/// and the height of the layer on which it lives.
 #[inline]
 pub fn right_sibling(node_index: u64, height: u32) -> u64 {
     node_index + (1 << (height + 1)) - 1
 }
 
-pub fn get_height_from_leaf_index(leaf_index: u64) -> u32 {
-    (leaf_index + 1).ilog2()
-}
-
 /// The number of nodes in an MMR with `leaf_count` leafs.
-pub fn num_leafs_to_num_nodes(leaf_count: u64) -> u64 {
-    let hamming_weight = leaf_count.count_ones() as u64;
-    2 * leaf_count - hamming_weight
+pub fn num_leafs_to_num_nodes(num_leafs: u64) -> u64 {
+    let hamming_weight = num_leafs.count_ones() as u64;
+    2 * num_leafs - hamming_weight
 }
 
-/// Return the indices of the nodes added by an append, including the
-/// peak that this append gave rise to
+/// Return the indices of the nodes added by an append, including the (node index
+/// of the) peak that this append gave rise to and (that of) the new leaf.
 pub fn node_indices_added_by_append(old_leaf_count: u64) -> Vec<u64> {
     let mut node_index = leaf_index_to_node_index(old_leaf_count);
     let mut added_node_indices = vec![node_index];
@@ -151,7 +156,7 @@ pub fn get_authentication_path_node_indices(
 /// assert_eq!(get_peak_heights(0b1010), vec![3, 1]);
 /// assert_eq!(get_peak_heights(0b1011), vec![3, 1, 0]);
 /// ```
-pub fn get_peak_heights(leaf_count: u64) -> Vec<u8> {
+pub fn get_peak_heights(leaf_count: u64) -> Vec<u32> {
     // In an MMR, the peak heights directly correspond the leaf count's bit decomposition. That is,
     // the indices of the bits that are set in the binary representation of the leaf count are the
     // peaks' heights.
@@ -164,7 +169,7 @@ pub fn get_peak_heights(leaf_count: u64) -> Vec<u8> {
         let bit_mask = 1 << bit_index;
         let is_set_bit_in_leaf_count = bit_mask & leaf_count != 0;
         if is_set_bit_in_leaf_count {
-            indices_of_set_bits.push(bit_index as u8);
+            indices_of_set_bits.push(bit_index);
         }
     }
 
@@ -173,8 +178,8 @@ pub fn get_peak_heights(leaf_count: u64) -> Vec<u8> {
     indices_of_set_bits
 }
 
-/// Given leaf count, return a vector representing the height of
-/// the peaks. Input is the number of leafs in the MMR
+/// Given the number of leafs in the MMR, return one vector representing the heights
+/// of the peaks, and another vector representing their MMR node indices.
 pub fn get_peak_heights_and_peak_node_indices(leaf_count: u64) -> (Vec<u32>, Vec<u64>) {
     if leaf_count == 0 {
         return (vec![], vec![]);
@@ -234,22 +239,12 @@ pub fn node_index_to_leaf_index(node_index: u64) -> Option<u64> {
 
 #[cfg(test)]
 mod mmr_test {
+    use proptest::prop_assert_eq;
+    use proptest_arbitrary_interop::arb;
     use rand::RngCore;
+    use test_strategy::proptest;
 
     use super::*;
-
-    #[test]
-    fn get_height_from_leaf_index_test() {
-        assert_eq!(0, get_height_from_leaf_index(0));
-        assert_eq!(1, get_height_from_leaf_index(1));
-        assert_eq!(1, get_height_from_leaf_index(2));
-        assert_eq!(2, get_height_from_leaf_index(3));
-        assert_eq!(2, get_height_from_leaf_index(4));
-        assert_eq!(2, get_height_from_leaf_index(5));
-        assert_eq!(2, get_height_from_leaf_index(6));
-        assert_eq!(3, get_height_from_leaf_index(7));
-        assert_eq!(3, get_height_from_leaf_index(8));
-    }
 
     #[test]
     fn leaf_index_to_node_index_test() {
@@ -380,17 +375,11 @@ mod mmr_test {
         assert_eq!((0, 62), right_lineage_length_and_own_height(u64::MAX / 2)); // 0b111...11 => 0
     }
 
-    #[test]
-    fn right_lineage_length_pbt() {
-        let mut rng = rand::thread_rng();
-        for _ in 0..10000 {
-            let rand_leaf_index = rng.next_u64() / 4;
-            println!("{rand_leaf_index}");
-            let rll = right_lineage_length_from_leaf_index(rand_leaf_index);
-            let rac =
-                right_lineage_length_and_own_height(leaf_index_to_node_index(rand_leaf_index)).0;
-            assert_eq!(rac, rll);
-        }
+    #[proptest]
+    fn right_lineage_length_property(#[strategy(0u64..(1<<63))] leaf_index: u64) {
+        let rll = right_lineage_length_from_leaf_index(leaf_index);
+        let rac = right_lineage_length_and_own_height(leaf_index_to_node_index(leaf_index)).0;
+        prop_assert_eq!(rac, rll);
     }
 
     #[test]
@@ -491,13 +480,7 @@ mod mmr_test {
                 get_peak_heights_and_peak_node_indices(leaf_count)
             );
 
-            assert_eq!(
-                expected_heights
-                    .iter()
-                    .map(|x| *x as u8)
-                    .collect::<Vec<_>>(),
-                get_peak_heights(leaf_count)
-            );
+            assert_eq!(expected_heights, get_peak_heights(leaf_count));
         }
     }
 
@@ -521,5 +504,24 @@ mod mmr_test {
                 get_authentication_path_node_indices(start, end, node_count)
             );
         }
+    }
+
+    #[proptest]
+    fn right_lineage_length_from_node_index_does_not_crash(
+        #[strategy(arb::<u64>())] node_index: u64,
+    ) {
+        right_lineage_length_from_node_index(node_index);
+    }
+
+    #[proptest]
+    fn leftmost_ancestor_does_not_crash(#[strategy(arb::<u64>())] node_index: u64) {
+        leftmost_ancestor(node_index);
+    }
+
+    #[proptest]
+    fn right_lineage_length_and_own_height_does_not_crash(
+        #[strategy(arb::<u64>())] node_index: u64,
+    ) {
+        right_lineage_length_and_own_height(node_index);
     }
 }

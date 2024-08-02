@@ -1027,7 +1027,7 @@ mod mmr_membership_proof_test {
         assert!(ret.is_empty());
 
         // Let's test the exact same for the MMR accumulator scheme
-        let mut mmra: MmrAccumulator = MmrAccumulator::new(leaf_hashes);
+        let mut mmra: MmrAccumulator = MmrAccumulator::new_from_leafs(leaf_hashes);
         let ret_from_acc = mmra.batch_mutate_leaf_and_update_mps(
             &mut membership_proofs.iter_mut().collect::<Vec<_>>(),
             &own_leaf_indices,
@@ -1101,7 +1101,7 @@ mod mmr_membership_proof_test {
 
         let leaf_hashes: Vec<Digest> = random_elements(8);
         let new_leaf: Digest = H::hash(&133337u64);
-        let mut accumulator_mmr = MmrAccumulator::new(leaf_hashes.clone());
+        let mut accumulator_mmr = MmrAccumulator::new_from_leafs(leaf_hashes.clone());
 
         assert_eq!(8, accumulator_mmr.num_leafs());
         let mut an_archival_mmr: MockMmr = get_mock_ammr_from_digests(leaf_hashes.clone());
