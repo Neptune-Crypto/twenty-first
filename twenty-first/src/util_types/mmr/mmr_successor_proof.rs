@@ -117,10 +117,14 @@ impl MmrSuccessorProof {
             return false;
         }
 
+        let num_new_peaks: u32 = new_mmra.peaks().len().try_into().unwrap();
+        if new_mmra.num_leafs().count_ones() != num_new_peaks {
+            return false;
+        }
+
         let old_peak_heights = get_peak_heights(old_mmra.num_leafs());
         let mut ap_index = 0;
         let mut running_leaf_count = 0;
-        let mut verdict = true;
         for (old_peak, old_height) in old_mmra
             .peaks()
             .into_iter()
@@ -150,11 +154,13 @@ impl MmrSuccessorProof {
                 ap_index += 1;
             }
 
-            verdict = verdict && (new_mmra.peaks()[new_peak_index as usize] == current_node);
+            if new_mmra.peaks()[new_peak_index as usize] != current_node {
+                return false;
+            }
         }
 
         // Ensure all digests were read
-        verdict && ap_index == self.paths.len()
+        ap_index == self.paths.len()
     }
 }
 
@@ -284,10 +290,23 @@ mod test {
             prop_assert!(!fake_mmr_successor_proof_4.verify(&old_mmr, &new_mmr));
         }
 
-        // One element
+        // One element too many
         let mut fake_mmr_successor_proof_5 = mmr_successor_proof.clone();
         fake_mmr_successor_proof_5.paths.push(Digest::default());
         prop_assert!(!fake_mmr_successor_proof_5.verify(&old_mmr, &new_mmr));
+
+        // Missing peak
+        let fake_new_mmr = MmrAccumulator::init(
+            new_mmr
+                .peaks()
+                .into_iter()
+                .rev()
+                .skip(1)
+                .rev()
+                .collect_vec(),
+            new_mmr.num_leafs(),
+        );
+        prop_assert!(!mmr_successor_proof.verify(&old_mmr, &fake_new_mmr));
     }
 
     #[test]
