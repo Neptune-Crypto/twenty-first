@@ -8,9 +8,7 @@ use crate::{
 
 use super::{
     mmr_accumulator::MmrAccumulator,
-    shared_advanced::{
-        get_peak_heights, get_peak_heights_and_peak_node_indices, parent, right_sibling,
-    },
+    shared_advanced::{get_peak_heights_and_peak_node_indices, parent, right_sibling},
     shared_basic::{calculate_new_peaks_from_append, leaf_index_to_mt_index_and_peak_index},
 };
 
@@ -122,22 +120,21 @@ impl MmrSuccessorProof {
             return false;
         }
 
-        let old_peak_heights = get_peak_heights(old_mmra.num_leafs());
         let mut ap_index = 0;
         let mut running_leaf_count = 0;
-        for (old_peak, old_height) in old_mmra
-            .peaks()
-            .into_iter()
-            .zip(old_peak_heights.into_iter())
-        {
-            running_leaf_count += 1 << old_height;
-            let mut current_node = old_peak;
+        let strip_top_bit = |num: u64| (num.ilog2(), num - (1 << num.ilog2()));
+        let mut num_leafs_remaining = old_mmra.num_leafs();
+        for old_peak in old_mmra.peaks().into_iter() {
+            let (old_height, nlr) = strip_top_bit(num_leafs_remaining);
+            num_leafs_remaining = nlr;
 
-            let (merkle_tree_index_of_last_leaf_under_this_peak, new_peak_index) =
-                leaf_index_to_mt_index_and_peak_index(running_leaf_count - 1, new_mmra.num_leafs());
+            let (merkle_tree_index_of_first_leaf_under_this_peak, new_peak_index) =
+                leaf_index_to_mt_index_and_peak_index(running_leaf_count, new_mmra.num_leafs());
             let mut current_merkle_tree_index =
-                merkle_tree_index_of_last_leaf_under_this_peak >> old_height;
+                merkle_tree_index_of_first_leaf_under_this_peak >> old_height;
+            running_leaf_count += 1 << old_height;
 
+            let mut current_node = old_peak;
             while current_merkle_tree_index != 1 {
                 let sibling = self
                     .paths
