@@ -169,7 +169,7 @@ where
     /// [Lagrange interpolation](Self::lagrange_interpolate) below this threshold.
     ///
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
-    const FAST_INTERPOLATE_CUTOFF_THRESHOLD_PARALLEL: usize = 1 << 12;
+    const FAST_INTERPOLATE_CUTOFF_THRESHOLD_PARALLEL: usize = 1 << 8;
 
     /// Regulates the recursion depth at which
     /// [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
@@ -683,8 +683,8 @@ where
         );
 
         let (left_offset, right_offset) = rayon::join(
-            || right_zerofier.batch_evaluate(left_domain_half),
-            || left_zerofier.batch_evaluate(right_domain_half),
+            || right_zerofier.par_batch_evaluate(left_domain_half),
+            || left_zerofier.par_batch_evaluate(right_domain_half),
         );
 
         let hadamard_mul = |x: &[_], y: Vec<_>| x.iter().zip(y).map(|(&n, d)| n * d).collect_vec();
