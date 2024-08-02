@@ -11,7 +11,8 @@ criterion_main!(benches);
 criterion_group!(
     name = benches;
     config = Criterion::default().sample_size(10);
-    targets = evaluation<{ 1 << 16 }, { 1 << 6 }>,
+    targets = evaluation<{ 1 << 14 }, { 1 << 14 }>,
+              evaluation<{ 1 << 16 }, { 1 << 6 }>,
               evaluation<{ 1 << 16 }, { 1 << 8 }>,
               evaluation<{ 1 << 19 }, { 1 << 6 }>,
               evaluation<{ 1 << 19 }, { 1 << 8 }>,
@@ -40,6 +41,9 @@ fn evaluation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {
 
     let id = BenchmarkId::new("Entrypoint", log2_of_size);
     group.bench_function(id, |b| b.iter(|| poly.batch_evaluate(&eval_points)));
+
+    let id = BenchmarkId::new("Par batch-evaluate", log2_of_size);
+    group.bench_function(id, |b| b.iter(|| poly.par_batch_evaluate(&eval_points)));
 
     group.finish();
 }
