@@ -8,9 +8,7 @@ use crate::{
 
 use super::{
     mmr_accumulator::MmrAccumulator,
-    shared_advanced::{
-        get_peak_heights, get_peak_heights_and_peak_node_indices, parent, right_sibling,
-    },
+    shared_advanced::{get_peak_heights_and_peak_node_indices, parent, right_sibling},
     shared_basic::{calculate_new_peaks_from_append, leaf_index_to_mt_index_and_peak_index},
 };
 
@@ -20,7 +18,7 @@ use super::{
 /// old peaks to the new peaks.
 #[derive(Debug, Clone, BFieldCodec)]
 pub struct MmrSuccessorProof {
-    pub paths: Vec<Vec<Digest>>,
+    pub paths: Vec<Digest>,
 }
 
 impl MmrSuccessorProof {
@@ -106,38 +104,43 @@ impl MmrSuccessorProof {
             current_leaf_count += 1;
         }
 
-        Self { paths }
+        Self {
+            paths: paths.concat(),
+        }
     }
 
     /// Verify that `old_mmra` is a predecessor of `new_mmra`.
     pub fn verify(&self, old_mmra: &MmrAccumulator, new_mmra: &MmrAccumulator) -> bool {
-        let old_peak_heights = get_peak_heights(old_mmra.num_leafs());
-        if old_peak_heights.len() != self.paths.len() {
-            return false;
-        }
-
         if old_mmra.num_leafs() > new_mmra.num_leafs() {
             return false;
         }
 
+        let num_new_peaks: u32 = new_mmra.peaks().len().try_into().unwrap();
+        if new_mmra.num_leafs().count_ones() != num_new_peaks {
+            return false;
+        }
+
+        let mut ap_index = 0;
         let mut running_leaf_count = 0;
-        for (old_peak_idx, (old_peak, old_height)) in old_mmra
-            .peaks()
-            .into_iter()
-            .zip(old_peak_heights.into_iter())
-            .enumerate()
-        {
-            running_leaf_count += 1 << old_height;
-            let mut current_node = old_peak;
+        let strip_top_bit = |num: u64| (num.ilog2(), num - (1 << num.ilog2()));
+        let mut num_leafs_remaining = old_mmra.num_leafs();
+        for old_peak in old_mmra.peaks().into_iter() {
+            let (old_height, nlr) = strip_top_bit(num_leafs_remaining);
+            num_leafs_remaining = nlr;
 
-            let (merkle_tree_index_of_last_leaf_under_this_peak, new_peak_index) =
-                leaf_index_to_mt_index_and_peak_index(running_leaf_count - 1, new_mmra.num_leafs());
+            let (merkle_tree_index_of_first_leaf_under_this_peak, new_peak_index) =
+                leaf_index_to_mt_index_and_peak_index(running_leaf_count, new_mmra.num_leafs());
             let mut current_merkle_tree_index =
-                merkle_tree_index_of_last_leaf_under_this_peak >> old_height;
+                merkle_tree_index_of_first_leaf_under_this_peak >> old_height;
+            running_leaf_count += 1 << old_height;
 
-            // TODO: This loop could also be stopped on
-            // `current_merkle_tree_index == 1`, would that be better?
-            for &sibling in self.paths[old_peak_idx].iter() {
+            let mut current_node = old_peak;
+            while current_merkle_tree_index != 1 {
+                let sibling = self
+                    .paths
+                    .get(ap_index)
+                    .copied()
+                    .unwrap_or(Digest::default());
                 let is_left_sibling = current_merkle_tree_index & 1 == 0;
                 current_node = if is_left_sibling {
                     Tip5::hash_pair(current_node, sibling)
@@ -145,6 +148,7 @@ impl MmrSuccessorProof {
                     Tip5::hash_pair(sibling, current_node)
                 };
                 current_merkle_tree_index >>= 1;
+                ap_index += 1;
             }
 
             if new_mmra.peaks()[new_peak_index as usize] != current_node {
@@ -152,7 +156,8 @@ impl MmrSuccessorProof {
             }
         }
 
-        true
+        // Ensure all digests were read
+        ap_index == self.paths.len()
     }
 }
 
@@ -270,29 +275,35 @@ mod test {
             let path_index = modify_path_element % fake_mmr_successor_proof_3.paths.len();
             modify_path_element =
                 (modify_path_element - path_index) / fake_mmr_successor_proof_3.paths.len();
-            if !fake_mmr_successor_proof_3.paths[path_index].is_empty() {
-                let node_index_along_path =
-                    modify_path_element % fake_mmr_successor_proof_3.paths[path_index].len();
-                modify_path_element = (modify_path_element - node_index_along_path)
-                    / fake_mmr_successor_proof_3.paths[path_index].len();
-                let value_index = modify_path_element % Digest::LEN;
-                fake_mmr_successor_proof_3.paths[path_index][node_index_along_path].0[value_index]
-                    .increment();
-                prop_assert!(!fake_mmr_successor_proof_3.verify(&old_mmr, &new_mmr));
-            }
+            let value_index = modify_path_element % Digest::LEN;
+            fake_mmr_successor_proof_3.paths[path_index].0[value_index].increment();
+            prop_assert!(!fake_mmr_successor_proof_3.verify(&old_mmr, &new_mmr));
         }
 
-        // Missing path
+        // Missing path element
         if !mmr_successor_proof.paths.is_empty() {
             let mut fake_mmr_successor_proof_4 = mmr_successor_proof.clone();
             fake_mmr_successor_proof_4.paths.pop();
             prop_assert!(!fake_mmr_successor_proof_4.verify(&old_mmr, &new_mmr));
         }
 
-        // One path too many
+        // One element too many
         let mut fake_mmr_successor_proof_5 = mmr_successor_proof.clone();
-        fake_mmr_successor_proof_5.paths.push(vec![]);
+        fake_mmr_successor_proof_5.paths.push(Digest::default());
         prop_assert!(!fake_mmr_successor_proof_5.verify(&old_mmr, &new_mmr));
+
+        // Missing peak
+        let fake_new_mmr = MmrAccumulator::init(
+            new_mmr
+                .peaks()
+                .into_iter()
+                .rev()
+                .skip(1)
+                .rev()
+                .collect_vec(),
+            new_mmr.num_leafs(),
+        );
+        prop_assert!(!mmr_successor_proof.verify(&old_mmr, &fake_new_mmr));
     }
 
     #[test]
