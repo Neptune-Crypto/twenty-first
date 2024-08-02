@@ -163,7 +163,13 @@ where
     /// [Lagrange interpolation](Self::lagrange_interpolate) below this threshold.
     ///
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
-    const FAST_INTERPOLATE_CUTOFF_THRESHOLD: usize = 1 << 8;
+    const FAST_INTERPOLATE_CUTOFF_THRESHOLD_SEQUENTIAL: usize = 1 << 12;
+
+    /// [Parallel Fast interpolation](Self::par_fast_interpolate) is slower than
+    /// [Lagrange interpolation](Self::lagrange_interpolate) below this threshold.
+    ///
+    /// Extracted from `cargo bench --bench interpolation` on mjolnir.
+    const FAST_INTERPOLATE_CUTOFF_THRESHOLD_PARALLEL: usize = 1 << 12;
 
     /// Regulates the recursion depth at which
     /// [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
@@ -511,7 +517,7 @@ where
             "The domain and values lists have to be of equal length."
         );
 
-        if domain.len() <= Self::FAST_INTERPOLATE_CUTOFF_THRESHOLD {
+        if domain.len() <= Self::FAST_INTERPOLATE_CUTOFF_THRESHOLD_SEQUENTIAL {
             Self::lagrange_interpolate(domain, values)
         } else {
             Self::fast_interpolate(domain, values)
@@ -536,7 +542,7 @@ where
 
         // Reuse sequential threshold. We don't know how speed up this task with
         // parallelism below this threshold.
-        if domain.len() <= Self::FAST_INTERPOLATE_CUTOFF_THRESHOLD {
+        if domain.len() <= Self::FAST_INTERPOLATE_CUTOFF_THRESHOLD_PARALLEL {
             Self::lagrange_interpolate(domain, values)
         } else {
             Self::par_fast_interpolate(domain, values)
