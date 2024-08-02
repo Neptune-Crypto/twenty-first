@@ -11,9 +11,8 @@ criterion_main!(benches);
 criterion_group!(
     name = benches;
     config = Criterion::default().sample_size(10);
-    targets = interpolation<{ 1 << 11 }>,
-              interpolation<{ 1 << 12 }>,
-              interpolation<{ 1 << 14 }>,
+    targets = interpolation<{ 1 << 10 }>,
+              interpolation<{ 1 << 15 }>,
 );
 
 fn interpolation<const SIZE: usize>(c: &mut Criterion) {
@@ -31,15 +30,15 @@ fn interpolation<const SIZE: usize>(c: &mut Criterion) {
 
         let id = BenchmarkId::new("Fast sequential", log2_of_size);
         group.bench_function(id, |b| b.iter(|| Polynomial::fast_interpolate(&xs, &ys)));
+
+        let id = BenchmarkId::new("Dispatcher sequential", log2_of_size);
+        group.bench_function(id, |b| b.iter(|| Polynomial::interpolate(&xs, &ys)));
     }
 
     let id = BenchmarkId::new("Fast parallel", log2_of_size);
     group.bench_function(id, |b| {
         b.iter(|| Polynomial::par_fast_interpolate(&xs, &ys))
     });
-
-    let id = BenchmarkId::new("Dispatcher sequential", log2_of_size);
-    group.bench_function(id, |b| b.iter(|| Polynomial::interpolate(&xs, &ys)));
 
     let id = BenchmarkId::new("Dispatcher parallel", log2_of_size);
     group.bench_function(id, |b| b.iter(|| Polynomial::par_interpolate(&xs, &ys)));

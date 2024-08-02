@@ -32,11 +32,6 @@ fn evaluation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) {
         b.iter(|| poly.iterative_batch_evaluate(&eval_points))
     });
 
-    let id = BenchmarkId::new("Zerofier Tree", log2_of_size);
-    group.bench_function(id, |b| {
-        b.iter(|| ZerofierTree::new_from_domain(&eval_points))
-    });
-
     let id = BenchmarkId::new("Divide-and-Conquer", log2_of_size);
     let zerofier_tree = ZerofierTree::new_from_domain(&eval_points);
     group.bench_function(id, |b| {
