@@ -129,7 +129,7 @@ where
     /// tree.
     // This function is not defined as a method (taking self as argument) since it's
     // needed by the verifier, who does not have access to the Merkle tree.
-    pub(super) fn authentication_structure_node_indices(
+    fn authentication_structure_node_indices(
         num_leafs: usize,
         leaf_indices: &[usize],
     ) -> Result<impl ExactSizeIterator<Item = usize>> {
