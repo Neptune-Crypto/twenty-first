@@ -1068,10 +1068,8 @@ mod accumulator_mmr_tests {
         revealed_leaf_indices.sort_unstable();
         revealed_leaf_indices.dedup();
         revealed_leaf_indices.reverse();
-        println!("revealed_leaf_indices: {revealed_leaf_indices:?}");
 
         let num_leafs = 1 << tree_height;
-        println!("num_leafs: {num_leafs}");
 
         let leafs: Vec<Digest> = random_elements(num_leafs);
         let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&leafs).unwrap();
@@ -1086,7 +1084,6 @@ mod accumulator_mmr_tests {
             nd_auth_struct_indices = vec![1];
         }
 
-        println!("nd_auth_struct_indices: {nd_auth_struct_indices:?}");
         let auth_struct = nd_auth_struct_indices
             .iter()
             .map(|node_index| tree.node(*node_index).unwrap())
@@ -1101,7 +1098,6 @@ mod accumulator_mmr_tests {
             .collect_vec();
         let mut i = 0;
 
-        println!("nd_sibling_indices before loop: {nd_sibling_indices:?}");
         if !nd_sibling_indices.is_empty() {
             // TODO: I think we can use `PartialMerkleTree` to calculate all
             // indices, and maybe also to get all the digests of `nd_siblings`.
@@ -1123,7 +1119,6 @@ mod accumulator_mmr_tests {
                 i += 1;
             }
         }
-        println!("nd_sibling_indices after loop: {nd_sibling_indices:?}");
 
         let nd_siblings = nd_sibling_indices
             .iter()
