@@ -129,7 +129,7 @@ where
     /// tree.
     // This function is not defined as a method (taking self as argument) since it's
     // needed by the verifier, who does not have access to the Merkle tree.
-    fn authentication_structure_node_indices(
+    pub(super) fn authentication_structure_node_indices(
         num_leafs: usize,
         leaf_indices: &[usize],
     ) -> Result<impl ExactSizeIterator<Item = usize>> {
@@ -592,23 +592,14 @@ pub enum MerkleTreeError {
 #[cfg(test)]
 pub mod merkle_tree_test {
     use itertools::Itertools;
-    use num_traits::One;
-    use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::bfe;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::digest::digest_tests::DigestCorruptor;
-    use crate::math::other::random_elements;
     use crate::math::tip5::Tip5;
-    use crate::prelude::BFieldCodec;
-    use crate::prelude::Inverse;
-    use crate::prelude::Sponge;
-    use crate::prelude::XFieldElement;
-    use crate::xfe;
 
     use super::*;
 
@@ -1041,167 +1032,5 @@ pub mod merkle_tree_test {
         let expected_paths = vec![expected_path_0, expected_path_1];
 
         assert_eq!(expected_paths, auth_paths);
-    }
-
-    fn root_from_authentication_struct(
-        auth_struct: Vec<Digest>,
-        auth_struct_indices: Vec<u64>,
-        leafs: Vec<Digest>,
-        leafs_node_indices: Vec<u64>,
-        nd_siblings: Vec<(Digest, Digest)>,
-        nd_indices: Vec<(u64, u64)>,
-    ) -> Digest {
-        fn digest_to_xfe(digest: Digest, challenge: XFieldElement) -> XFieldElement {
-            let leaf_xfe_lo = XFieldElement::new([digest.0[0], digest.0[1], digest.0[2]]);
-            let leaf_xfe_hi =
-                challenge * XFieldElement::new([digest.0[3], digest.0[4], BFieldElement::one()]);
-
-            leaf_xfe_lo + leaf_xfe_hi
-        }
-
-        assert_eq!(leafs.len(), leafs_node_indices.len());
-        assert_eq!(auth_struct.len(), auth_struct_indices.len());
-        let (alpha, gamma, delta) = {
-            let mut sponge = Tip5::init();
-            sponge.pad_and_absorb_all(&leafs.encode());
-            sponge.pad_and_absorb_all(&auth_struct.encode());
-            let challenges = sponge.sample_scalars(3);
-            (challenges[0], challenges[1], challenges[2])
-        };
-
-        let leafs_as_xfes = leafs.iter().map(|l| digest_to_xfe(*l, alpha)).collect_vec();
-        let auth_str_as_xfes = auth_struct
-            .iter()
-            .map(|l| digest_to_xfe(*l, alpha))
-            .collect_vec();
-
-        let mut p = XFieldElement::one();
-        for i in 0..leafs.len() {
-            let leaf_index_hi = bfe!(leafs_node_indices[i] >> 32);
-            let leaf_index_lo = bfe!(leafs_node_indices[i] & u32::MAX as u64);
-            let leaf_index_xfe =
-                XFieldElement::new([leaf_index_hi, leaf_index_lo, BFieldElement::zero()]);
-            let fact = leafs_as_xfes[i] - gamma + delta * leaf_index_xfe;
-            p *= fact;
-        }
-        for i in 0..auth_struct.len() {
-            let leaf_index_hi = bfe!(auth_struct_indices[i] >> 32);
-            let leaf_index_lo = bfe!(auth_struct_indices[i] & u32::MAX as u64);
-            let leaf_index_xfe =
-                XFieldElement::new([leaf_index_hi, leaf_index_lo, BFieldElement::zero()]);
-            let fact = auth_str_as_xfes[i] - gamma + delta * leaf_index_xfe;
-            p *= fact;
-        }
-
-        let mut t = Digest::default();
-        let mut t_xfe = XFieldElement::zero();
-        let mut parent_index_xfe = XFieldElement::one();
-        for ((l, r), (left_index, right_index)) in nd_siblings.iter().zip_eq(nd_indices) {
-            t = Tip5::hash_pair(*l, *r);
-
-            let l_xfe = digest_to_xfe(*l, alpha);
-            let r_xfe = digest_to_xfe(*r, alpha);
-            t_xfe = digest_to_xfe(t, alpha);
-            let left_index_hi = bfe!(left_index >> 32);
-            let left_index_lo = bfe!(left_index & u32::MAX as u64);
-            let right_index_hi = bfe!(right_index >> 32);
-            let right_index_lo = bfe!(right_index & u32::MAX as u64);
-            assert_eq!(left_index_hi, right_index_hi);
-            assert_eq!(left_index_lo + BFieldElement::one(), right_index_lo);
-
-            let left_index_xfe =
-                XFieldElement::new([left_index_hi, left_index_lo, BFieldElement::zero()]);
-            let right_index_xfe =
-                XFieldElement::new([right_index_hi, right_index_lo, BFieldElement::zero()]);
-            parent_index_xfe = left_index_xfe / xfe!(2);
-
-            let fact1 = l_xfe - gamma + delta * left_index_xfe;
-            let fact2 = r_xfe - gamma + delta * right_index_xfe;
-            let fact_parent = t_xfe - gamma + delta * parent_index_xfe;
-
-            p *= fact1.inverse() * fact2.inverse() * fact_parent;
-        }
-
-        let x_as_xfe = XFieldElement::new([
-            BFieldElement::zero(),
-            BFieldElement::one(),
-            BFieldElement::zero(),
-        ]);
-        assert_eq!(t_xfe - gamma + delta * x_as_xfe, p);
-        assert_eq!(parent_index_xfe, x_as_xfe);
-
-        t
-    }
-
-    #[test]
-    fn root_from_authentication_struct_unit_2_leafs() {
-        let leafs: Vec<Digest> = random_elements(2);
-        let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&leafs).unwrap();
-
-        let leafs_node_indices = vec![2u64, 3];
-        let revealed_leafs = leafs_node_indices
-            .iter()
-            .map(|i| tree.node(*i as usize).unwrap())
-            .collect_vec();
-        let auth_struct_indices = vec![];
-        let auth_struct = auth_struct_indices
-            .iter()
-            .map(|i| tree.node(*i as usize).unwrap())
-            .collect_vec();
-        let nd_sibling_indices = vec![(2u64, 3u64)];
-        let nd_siblings = nd_sibling_indices
-            .iter()
-            .map(|(left_idx, right_idx)| {
-                (
-                    tree.node(*left_idx as usize).unwrap(),
-                    tree.node(*right_idx as usize).unwrap(),
-                )
-            })
-            .collect_vec();
-        let calculated_root = root_from_authentication_struct(
-            auth_struct,
-            auth_struct_indices,
-            revealed_leafs,
-            leafs_node_indices,
-            nd_siblings,
-            nd_sibling_indices,
-        );
-        assert_eq!(tree.root(), calculated_root);
-    }
-
-    #[test]
-    fn root_from_authentication_struct_unit_4_leafs() {
-        let leafs: Vec<Digest> = random_elements(4);
-        let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&leafs).unwrap();
-
-        let leafs_node_indices = vec![4u64, 5];
-        let revealed_leafs = leafs_node_indices
-            .iter()
-            .map(|i| tree.node(*i as usize).unwrap())
-            .collect_vec();
-        let auth_struct_indices = vec![3u64];
-        let auth_struct = auth_struct_indices
-            .iter()
-            .map(|i| tree.node(*i as usize).unwrap())
-            .collect_vec();
-        let nd_sibling_indices = vec![(4u64, 5u64), (2, 3)];
-        let nd_siblings = nd_sibling_indices
-            .iter()
-            .map(|(left_idx, right_idx)| {
-                (
-                    tree.node(*left_idx as usize).unwrap(),
-                    tree.node(*right_idx as usize).unwrap(),
-                )
-            })
-            .collect_vec();
-        let calculated_root = root_from_authentication_struct(
-            auth_struct,
-            auth_struct_indices,
-            revealed_leafs,
-            leafs_node_indices,
-            nd_siblings,
-            nd_sibling_indices,
-        );
-        assert_eq!(tree.root(), calculated_root);
     }
 }
