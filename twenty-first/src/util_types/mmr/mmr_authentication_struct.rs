@@ -156,6 +156,50 @@ impl MerkleAuthenticationStructAuthenticityWitness {
         tree: &MerkleTree<Tip5>,
         mut revealed_leaf_indices: Vec<u64>,
     ) -> (Self, Vec<Digest>, Vec<(u64, Digest)>) {
+        fn sibling_indices(
+            revealed_leaf_indices: &[u64],
+            nd_auth_struct_indices: &[u64],
+            num_leafs: u64,
+        ) -> Vec<(u64, u64)> {
+            let mut nd_sibling_indices = revealed_leaf_indices
+                .iter()
+                .map(|li| *li ^ num_leafs)
+                .chain(nd_auth_struct_indices.iter().copied())
+                .filter(|idx| *idx != 1)
+                .map(|idx| (idx & (u64::MAX - 1), idx | 1u64))
+                .unique()
+                .collect_vec();
+
+            if !nd_sibling_indices.is_empty() {
+                // TODO: I think we can use `PartialMerkleTree` to calculate all
+                // indices, and maybe also to get all the digests of `nd_siblings`.
+                let mut i = 0;
+                loop {
+                    let elm = nd_sibling_indices[i];
+                    let parent = elm.0 >> 1;
+                    if parent == 1 {
+                        break;
+                    }
+                    let uncle = parent ^ 1;
+
+                    let new_pair = if parent & 1 == 0 {
+                        (parent, uncle)
+                    } else {
+                        (uncle, parent)
+                    };
+                    if !nd_sibling_indices.contains(&new_pair) {
+                        nd_sibling_indices.push(new_pair);
+                    }
+
+                    nd_sibling_indices.sort_by_key(|(left_idx, _right_idx)| *left_idx);
+                    nd_sibling_indices.reverse();
+
+                    i += 1;
+                }
+            }
+
+            nd_sibling_indices
+        }
         revealed_leaf_indices.sort_unstable();
         revealed_leaf_indices.dedup();
         revealed_leaf_indices.reverse();
@@ -168,43 +212,8 @@ impl MerkleAuthenticationStructAuthenticityWitness {
             nd_auth_struct_indices = vec![ROOT_MT_INDEX];
         }
 
-        let mut nd_sibling_indices = revealed_leaf_indices
-            .iter()
-            .map(|li| *li ^ num_leafs)
-            .chain(nd_auth_struct_indices.iter().copied())
-            .filter(|idx| *idx != 1)
-            .map(|idx| (idx & (u64::MAX - 1), idx | 1u64))
-            .unique()
-            .collect_vec();
-
-        if !nd_sibling_indices.is_empty() {
-            // TODO: I think we can use `PartialMerkleTree` to calculate all
-            // indices, and maybe also to get all the digests of `nd_siblings`.
-            let mut i = 0;
-            loop {
-                let elm = nd_sibling_indices[i];
-                let parent = elm.0 >> 1;
-                if parent == 1 {
-                    break;
-                }
-                let uncle = parent ^ 1;
-
-                let new_pair = if parent & 1 == 0 {
-                    (parent, uncle)
-                } else {
-                    (uncle, parent)
-                };
-                if !nd_sibling_indices.contains(&new_pair) {
-                    nd_sibling_indices.push(new_pair);
-                }
-
-                nd_sibling_indices.sort_by_key(|(left_idx, _right_idx)| *left_idx);
-                nd_sibling_indices.reverse();
-
-                i += 1;
-            }
-        }
-
+        let nd_sibling_indices =
+            sibling_indices(&revealed_leaf_indices, &nd_auth_struct_indices, num_leafs);
         let nd_siblings = nd_sibling_indices
             .iter()
             .map(|&(l, r)| {
