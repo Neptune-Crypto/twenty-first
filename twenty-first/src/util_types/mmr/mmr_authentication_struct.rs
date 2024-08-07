@@ -9,20 +9,21 @@ use crate::prelude::BFieldCodec;
 use crate::prelude::BFieldElement;
 use crate::prelude::Digest;
 use crate::prelude::Inverse;
+use crate::prelude::MerkleTree;
 use crate::prelude::Sponge;
 use crate::prelude::Tip5;
 use crate::prelude::XFieldElement;
 
 const ROOT_MT_INDEX: u64 = 1;
 
-pub struct MmrAuthenticationStruct {
+pub struct MerkleAuthenticationStructAuthenticityWitness {
     // All indices are Merkle tree node indices
     nd_auth_struct_indices: Vec<u64>,
     nd_sibling_indices: Vec<(u64, u64)>,
     nd_siblings: Vec<(Digest, Digest)>,
 }
 
-impl MmrAuthenticationStruct {
+impl MerkleAuthenticationStructAuthenticityWitness {
     /// Return the Merkle tree node indices of the digests required to prove
     /// membership for the specified leaf indices
     fn authentication_structure_mt_indices(
@@ -148,64 +149,38 @@ impl MmrAuthenticationStruct {
 
         t
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use crate::math::other::random_elements;
-    use crate::prelude::CpuParallel;
-    use crate::prelude::MerkleTree;
-    use proptest::collection::vec;
-    use proptest::prop_assert_eq;
-    use std::cmp::max;
-    use std::cmp::min;
-    use test_strategy::proptest;
-
-    use super::*;
-
-    #[proptest(cases = 20)]
-    fn root_from_authentication_struct_prop_test(
-        #[strategy(0..12u64)] tree_height: u64,
-        #[strategy(0usize..100)] _num_revealed_leafs: usize,
-        #[strategy(vec(0u64..1<<#tree_height, #_num_revealed_leafs))]
+    /// Return the authentication structure witness, authentication structure,
+    /// and the (leaf-index, leaf-digest) pairs.
+    pub fn new_from_merkle_tree(
+        tree: &MerkleTree<Tip5>,
         mut revealed_leaf_indices: Vec<u64>,
-    ) {
+    ) -> (Self, Vec<Digest>, Vec<(u64, Digest)>) {
         revealed_leaf_indices.sort_unstable();
         revealed_leaf_indices.dedup();
         revealed_leaf_indices.reverse();
-
-        let num_leafs = 1u64 << tree_height;
-
-        let leafs: Vec<Digest> = random_elements(num_leafs.try_into().unwrap());
-        let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&leafs).unwrap();
+        let num_leafs: u64 = tree.num_leafs() as u64;
 
         let mut nd_auth_struct_indices =
-            MmrAuthenticationStruct::authentication_structure_mt_indices(
-                num_leafs,
-                &revealed_leaf_indices,
-            )
-            .collect_vec();
+            Self::authentication_structure_mt_indices(num_leafs, &revealed_leaf_indices)
+                .collect_vec();
         if revealed_leaf_indices.is_empty() {
-            nd_auth_struct_indices = vec![1];
+            nd_auth_struct_indices = vec![ROOT_MT_INDEX];
         }
 
-        let auth_struct = nd_auth_struct_indices
-            .iter()
-            .map(|node_index| tree.node(*node_index as usize).unwrap())
-            .collect_vec();
         let mut nd_sibling_indices = revealed_leaf_indices
             .iter()
             .map(|li| *li ^ num_leafs)
             .chain(nd_auth_struct_indices.iter().copied())
             .filter(|idx| *idx != 1)
-            .map(|idx| (min(idx, idx ^ 1), max(idx, idx ^ 1)))
+            .map(|idx| (idx & (u64::MAX - 1), idx | 1u64))
             .unique()
             .collect_vec();
-        let mut i = 0;
 
         if !nd_sibling_indices.is_empty() {
             // TODO: I think we can use `PartialMerkleTree` to calculate all
             // indices, and maybe also to get all the digests of `nd_siblings`.
+            let mut i = 0;
             loop {
                 let elm = nd_sibling_indices[i];
                 let parent = elm.0 >> 1;
@@ -213,7 +188,12 @@ mod tests {
                     break;
                 }
                 let uncle = parent ^ 1;
-                let new_pair = (min(parent, uncle), max(parent, uncle));
+
+                let new_pair = if parent & 1 == 0 {
+                    (parent, uncle)
+                } else {
+                    (uncle, parent)
+                };
                 if !nd_sibling_indices.contains(&new_pair) {
                     nd_sibling_indices.push(new_pair);
                 }
@@ -244,11 +224,49 @@ mod tests {
             .zip_eq(revealed_leafs)
             .collect_vec();
 
-        let mmr_auth_struct = MmrAuthenticationStruct {
+        let auth_struct = nd_auth_struct_indices
+            .iter()
+            .map(|node_index| tree.node(*node_index as usize).unwrap())
+            .collect_vec();
+
+        let auth_struct_witness = Self {
             nd_auth_struct_indices,
             nd_sibling_indices,
             nd_siblings,
         };
+
+        (auth_struct_witness, auth_struct, indexed_leafs)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::math::other::random_elements;
+    use crate::prelude::CpuParallel;
+    use crate::prelude::MerkleTree;
+    use proptest::collection::vec;
+    use proptest::prop_assert_eq;
+    use test_strategy::proptest;
+
+    use super::*;
+
+    #[proptest(cases = 20)]
+    fn root_from_authentication_struct_prop_test(
+        #[strategy(0..12u64)] tree_height: u64,
+        #[strategy(0usize..100)] _num_revealed_leafs: usize,
+        #[strategy(vec(0u64..1<<#tree_height, #_num_revealed_leafs))] revealed_leaf_indices: Vec<
+            u64,
+        >,
+    ) {
+        let num_leafs = 1u64 << tree_height;
+        let leafs: Vec<Digest> = random_elements(num_leafs.try_into().unwrap());
+        let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&leafs).unwrap();
+
+        let (mmr_auth_struct, auth_struct, indexed_leafs) =
+            MerkleAuthenticationStructAuthenticityWitness::new_from_merkle_tree(
+                &tree,
+                revealed_leaf_indices,
+            );
 
         let tree_height: u32 = tree_height.try_into().unwrap();
         let computed_root = mmr_auth_struct.root_from_authentication_struct(
@@ -258,11 +276,9 @@ mod tests {
         );
         let expected_root = tree.root();
         prop_assert_eq!(expected_root, computed_root);
-
-        prop_assert_eq!(true, true)
     }
 
-    fn prop(
+    fn prop_from_merkle_tree(
         tree_height: usize,
         leaf_indices: Vec<u64>,
         nd_auth_struct_indices: Vec<u64>,
@@ -293,7 +309,7 @@ mod tests {
             })
             .collect_vec();
 
-        let mmr_auth_struct = MmrAuthenticationStruct {
+        let mmr_auth_struct = MerkleAuthenticationStructAuthenticityWitness {
             nd_auth_struct_indices,
             nd_sibling_indices,
             nd_siblings,
@@ -313,7 +329,7 @@ mod tests {
         let leaf_indices = vec![];
         let nd_auth_struct_indices = vec![1];
         let nd_sibling_indices = vec![];
-        prop(
+        prop_from_merkle_tree(
             tree_height,
             leaf_indices,
             nd_auth_struct_indices,
@@ -327,7 +343,7 @@ mod tests {
         let leaf_indices = vec![0];
         let nd_auth_struct_indices = vec![];
         let nd_sibling_indices = vec![];
-        prop(
+        prop_from_merkle_tree(
             tree_height,
             leaf_indices,
             nd_auth_struct_indices,
@@ -341,7 +357,7 @@ mod tests {
         let leaf_indices = vec![0u64];
         let nd_auth_struct_indices = vec![3];
         let nd_sibling_indices = vec![(2u64, 3u64)];
-        prop(
+        prop_from_merkle_tree(
             tree_height,
             leaf_indices,
             nd_auth_struct_indices,
@@ -355,7 +371,7 @@ mod tests {
         let leaf_indices = vec![0u64, 1];
         let nd_auth_struct_indices = vec![];
         let nd_sibling_indices = vec![(2u64, 3u64)];
-        prop(
+        prop_from_merkle_tree(
             tree_height,
             leaf_indices,
             nd_auth_struct_indices,
@@ -369,7 +385,7 @@ mod tests {
         let leaf_indices = vec![];
         let auth_struct_indices = vec![1];
         let nd_sibling_indices = vec![];
-        prop(
+        prop_from_merkle_tree(
             tree_height,
             leaf_indices,
             auth_struct_indices,
@@ -383,7 +399,7 @@ mod tests {
         let leaf_indices = vec![0u64, 1];
         let auth_struct_indices = vec![3];
         let nd_sibling_indices = vec![(4u64, 5u64), (2, 3)];
-        prop(
+        prop_from_merkle_tree(
             tree_height,
             leaf_indices,
             auth_struct_indices,
@@ -416,7 +432,7 @@ mod tests {
         ]
         .concat();
 
-        prop(
+        prop_from_merkle_tree(
             tree_height,
             leaf_indices,
             auth_struct_indices,
