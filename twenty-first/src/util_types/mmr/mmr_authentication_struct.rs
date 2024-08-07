@@ -156,11 +156,13 @@ impl MerkleAuthenticationStructAuthenticityWitness {
         tree: &MerkleTree<Tip5>,
         mut revealed_leaf_indices: Vec<u64>,
     ) -> (Self, Vec<Digest>, Vec<(u64, Digest)>) {
-        fn sibling_indices(
+        fn nd_sibling_indices(
             revealed_leaf_indices: &[u64],
             nd_auth_struct_indices: &[u64],
             num_leafs: u64,
         ) -> Vec<(u64, u64)> {
+            // TODO: For a better way finding all nd-sibling indices, see the
+            // code for [`PartialMerkleTree`] in the `merkle_tree` module.
             let mut nd_sibling_indices = revealed_leaf_indices
                 .iter()
                 .map(|li| *li ^ num_leafs)
@@ -171,8 +173,6 @@ impl MerkleAuthenticationStructAuthenticityWitness {
                 .collect_vec();
 
             if !nd_sibling_indices.is_empty() {
-                // TODO: I think we can use `PartialMerkleTree` to calculate all
-                // indices, and maybe also to get all the digests of `nd_siblings`.
                 let mut i = 0;
                 loop {
                     let elm = nd_sibling_indices[i];
@@ -213,7 +213,7 @@ impl MerkleAuthenticationStructAuthenticityWitness {
         }
 
         let nd_sibling_indices =
-            sibling_indices(&revealed_leaf_indices, &nd_auth_struct_indices, num_leafs);
+            nd_sibling_indices(&revealed_leaf_indices, &nd_auth_struct_indices, num_leafs);
         let nd_siblings = nd_sibling_indices
             .iter()
             .map(|&(l, r)| {
