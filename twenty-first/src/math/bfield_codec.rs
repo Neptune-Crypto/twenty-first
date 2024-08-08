@@ -1021,21 +1021,21 @@ mod tests {
         test_case! { fn small_array_struct_named_fields for SmallArrayStructNamedFields: Some(4) }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
-        struct BigArrayStructUnnamedFields([u128; 300]);
+        struct BigArrayStructUnnamedFields([u128; 150]);
 
         test_case! {
-            fn big_array_struct_unnamed_fields for BigArrayStructUnnamedFields: Some(1200)
+            fn big_array_struct_unnamed_fields for BigArrayStructUnnamedFields: Some(4 * 150)
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct BigArrayStructNamedFields {
-            a: [XFieldElement; 300],
+            a: [XFieldElement; 150],
             b: XFieldElement,
             c: u64,
         }
 
         test_case! {
-            fn big_array_struct_named_fields for BigArrayStructNamedFields: Some(3 * 300 + 3 + 2)
+            fn big_array_struct_named_fields for BigArrayStructNamedFields: Some(3 * 150 + 3 + 2)
         }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]

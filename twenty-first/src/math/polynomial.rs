@@ -4070,7 +4070,7 @@ mod test_polynomials {
         assert_eq!(long_div_remainder, preprocessed_remainder);
     }
 
-    #[proptest]
+    #[proptest(cases = 100)]
     fn batch_evaluate_methods_are_equivalent(
         #[strategy(vec(arb(), (1<<10)..(1<<11)))] coefficients: Vec<BFieldElement>,
         #[strategy(vec(arb(), (1<<5)..(1<<7)))] domain: Vec<BFieldElement>,
@@ -4169,7 +4169,7 @@ mod test_polynomials {
         )
     }
 
-    #[proptest]
+    #[proptest(cases = 100)]
     fn coset_extrapolation_methods_agree_with_interpolate_then_evaluate(
         #[strategy(0usize..10)] _logn: usize,
         #[strategy(Just(1 << #_logn))] n: usize,

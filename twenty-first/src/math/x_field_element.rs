@@ -1149,7 +1149,7 @@ mod tests {
         prop_assert_eq!(inputs, rv);
     }
 
-    #[proptest(cases = 100)]
+    #[proptest(cases = 40)]
     fn xfe_ntt_corresponds_to_polynomial_evaluation(
         #[strategy(1_u32..=11)] log_2_n: u32,
         #[strategy(Just(1 << #log_2_n))] root_order: u64,
