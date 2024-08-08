@@ -23,11 +23,24 @@ use super::mmr_accumulator::MmrAccumulator;
 
 const ROOT_MT_INDEX: u64 = 1;
 
+/// A witness to facilitate the proving of the authenticity of a Merkle
+/// authentication struct.
+#[derive(Debug, Clone)]
 pub struct MerkleAuthenticationStructAuthenticityWitness {
     // All indices are Merkle tree node indices
-    nd_auth_struct_indices: Vec<u64>,
-    nd_sibling_indices: Vec<(u64, u64)>,
-    nd_siblings: Vec<(Digest, Digest)>,
+    pub nd_auth_struct_indices: Vec<u64>,
+    pub nd_sibling_indices: Vec<(u64, u64)>,
+    pub nd_siblings: Vec<(Digest, Digest)>,
+}
+
+/// An authentication structure that can be used to prove membership of a list
+/// of leaves in a Merkle tree, along with the indexed leaves in question, and
+/// the witness necessary to prove membership in a ZK program.
+#[derive(Debug, Clone)]
+pub struct AuthenticatedMerkleAuthStruct {
+    pub auth_struct: Vec<Digest>,
+    pub indexed_leafs: Vec<(u64, Digest)>,
+    pub witness: MerkleAuthenticationStructAuthenticityWitness,
 }
 
 impl MerkleAuthenticationStructAuthenticityWitness {
@@ -190,95 +203,112 @@ impl MerkleAuthenticationStructAuthenticityWitness {
     pub fn new_from_mmr_membership_proofs(
         mmra: &MmrAccumulator,
         indexed_mmr_mps: Vec<(u64, Digest, MmrMembershipProof)>,
-    ) -> (Self, Vec<Digest>, Vec<(u64, Digest)>) {
-        // TODO: Consider rewriting this to return a list of authenticated
-        // authentication structs, one for each peak in question.
-
-        // Verify that MMR leaf indices belong to the same peak
-        let num_mmr_leafs = mmra.num_leafs();
-        let mt_and_peak_indices = indexed_mmr_mps
-            .iter()
-            .map(|(mmr_leaf_index, _leaf, _mmr_mp)| {
-                leaf_index_to_mt_index_and_peak_index(*mmr_leaf_index, num_mmr_leafs)
-            })
-            .collect_vec();
-
-        assert!(
-            mt_and_peak_indices
-                .iter()
-                .map(|(_mt_index, peak_index)| peak_index)
-                .unique()
-                .count()
-                < 2
-        );
-        assert!(!mt_and_peak_indices.is_empty(), "");
-
-        let peak_index = mt_and_peak_indices[0].1;
-        let mt_indices = mt_and_peak_indices
-            .into_iter()
-            .map(|(mt_index, _peak_index)| mt_index)
-            .collect_vec();
-
-        let peak_index: usize = peak_index.try_into().unwrap();
-        let height_of_local_mt = get_peak_heights(num_mmr_leafs)[peak_index];
-        let num_leafs_in_local_mt = 1 << height_of_local_mt;
-        let local_mt_leaf_indices = mt_indices
-            .iter()
-            .map(|mt_index| mt_index - num_leafs_in_local_mt)
-            .collect_vec();
-
-        let (nd_auth_struct_indices, nd_sibling_indices) =
-            Self::auth_struct_and_nd_indices(num_leafs_in_local_mt, &local_mt_leaf_indices);
-
-        // Collect all node digests that can be calculated
-        let peak = mmra.peaks()[peak_index];
-        let mut node_digests: HashMap<u64, Digest> = HashMap::default();
-        node_digests.insert(ROOT_MT_INDEX, peak);
-        for ((_mmr_leaf_index, mut node, mmr_mp), mut mt_index) in indexed_mmr_mps
-            .clone()
-            .into_iter()
-            .zip_eq(mt_indices.clone())
-        {
-            for ap_elem in mmr_mp.authentication_path.iter() {
-                node_digests.insert(mt_index, node);
-                node_digests.insert(mt_index ^ 1, *ap_elem);
-                node = if mt_index & 1 == 0 {
-                    Tip5::hash_pair(node, *ap_elem)
-                } else {
-                    Tip5::hash_pair(*ap_elem, node)
-                };
-
-                mt_index /= 2;
-            }
-
-            // Sanity check that MMR-MPs are valid
-            assert_eq!(peak, node, "Derived peak must match provided peak");
+    ) -> HashMap<u32, AuthenticatedMerkleAuthStruct> {
+        #[derive(Clone, Debug)]
+        struct IndexedAuthenticatedMmrLeaf {
+            merkle_tree_node_index: u64,
+            merkle_tree_leaf_index: u64,
+            leaf_digest: Digest,
+            membership_proof: MmrMembershipProof,
         }
 
-        let nd_siblings = nd_sibling_indices
-            .iter()
-            .map(|(left_idx, right_idx)| (node_digests[left_idx], node_digests[right_idx]))
-            .collect_vec();
-        let auth_struct = nd_auth_struct_indices
-            .iter()
-            .map(|idx| node_digests[idx])
-            .collect_vec();
-        let indexed_leafs = local_mt_leaf_indices
-            .into_iter()
-            .zip_eq(
-                indexed_mmr_mps
-                    .into_iter()
-                    .map(|(_mmr_leaf_index, leaf, _mmr_mp)| leaf),
-            )
-            .collect_vec();
+        // Split indexed MMR-mps into a hashmap with one entry for each
+        // referenced peak in the MMR.
+        let num_mmr_leafs = mmra.num_leafs();
+        let mut peak_index_to_indexed_mmr_mp: HashMap<u32, Vec<IndexedAuthenticatedMmrLeaf>> =
+            HashMap::default();
+        let peak_heights = get_peak_heights(num_mmr_leafs);
+        for (mmr_leaf_index, leaf, mmr_mp) in indexed_mmr_mps {
+            let (mt_index, peak_index) =
+                leaf_index_to_mt_index_and_peak_index(mmr_leaf_index, num_mmr_leafs);
+            let peak_index_as_usize: usize = peak_index.try_into().unwrap();
+            let num_leafs_local_mt = 1 << peak_heights[peak_index_as_usize];
+            let mt_leaf_index = mt_index - num_leafs_local_mt;
+            peak_index_to_indexed_mmr_mp
+                .entry(peak_index)
+                .or_default()
+                .push(IndexedAuthenticatedMmrLeaf {
+                    merkle_tree_node_index: mt_index,
+                    merkle_tree_leaf_index: mt_leaf_index,
+                    leaf_digest: leaf,
+                    membership_proof: mmr_mp,
+                });
+        }
 
-        let auth_struct_witness = Self {
-            nd_auth_struct_indices,
-            nd_sibling_indices,
-            nd_siblings,
-        };
+        // Loop over all peaks and collect an authentication witness struct
+        // for each peak.
+        let mut peak_index_to_authenticated_auth_struct = HashMap::default();
+        for (peak_index, indexed_mmr_mp_structs) in peak_index_to_indexed_mmr_mp {
+            let peak_index_as_usize: usize = peak_index.try_into().unwrap();
+            let num_leafs_in_local_mt = 1 << peak_heights[peak_index_as_usize];
+            let local_mt_leaf_indices = indexed_mmr_mp_structs
+                .iter()
+                .map(|x| x.merkle_tree_leaf_index)
+                .collect_vec();
 
-        (auth_struct_witness, auth_struct, indexed_leafs)
+            let (nd_auth_struct_indices, nd_sibling_indices) =
+                Self::auth_struct_and_nd_indices(num_leafs_in_local_mt, &local_mt_leaf_indices);
+            let peak = mmra.peaks()[peak_index_as_usize];
+
+            let mut node_digests: HashMap<u64, Digest> = HashMap::default();
+            node_digests.insert(ROOT_MT_INDEX, peak);
+
+            // Loop over all indexed leafs for this peak
+            for indexed_mmr_mp in indexed_mmr_mp_structs.iter() {
+                let mut mt_node_index = indexed_mmr_mp.merkle_tree_node_index;
+                let mut node = indexed_mmr_mp.leaf_digest;
+
+                // Loop over all authentication path elements for this indexed leaf
+                for ap_elem in indexed_mmr_mp.membership_proof.authentication_path.iter() {
+                    node_digests.insert(mt_node_index, node);
+                    node_digests.insert(mt_node_index ^ 1, *ap_elem);
+                    node = if mt_node_index & 1 == 0 {
+                        Tip5::hash_pair(node, *ap_elem)
+                    } else {
+                        Tip5::hash_pair(*ap_elem, node)
+                    };
+
+                    mt_node_index /= 2;
+                }
+
+                // Sanity check that MMR-MPs are valid
+                assert_eq!(peak, node, "Derived peak must match provided peak");
+            }
+            let nd_siblings = nd_sibling_indices
+                .iter()
+                .map(|(left_idx, right_idx)| (node_digests[left_idx], node_digests[right_idx]))
+                .collect_vec();
+            let auth_struct = nd_auth_struct_indices
+                .iter()
+                .map(|idx| node_digests[idx])
+                .collect_vec();
+            let indexed_leafs = indexed_mmr_mp_structs
+                .into_iter()
+                .map(|indexed_mmr_mp| {
+                    (
+                        indexed_mmr_mp.merkle_tree_leaf_index,
+                        indexed_mmr_mp.leaf_digest,
+                    )
+                })
+                .collect_vec();
+
+            let witness = Self {
+                nd_auth_struct_indices,
+                nd_sibling_indices,
+                nd_siblings,
+            };
+
+            peak_index_to_authenticated_auth_struct.insert(
+                peak_index,
+                AuthenticatedMerkleAuthStruct {
+                    auth_struct,
+                    indexed_leafs,
+                    witness,
+                },
+            );
+        }
+
+        peak_index_to_authenticated_auth_struct
     }
 
     /// Return the authentication structure witness, authentication structure,
@@ -286,7 +316,7 @@ impl MerkleAuthenticationStructAuthenticityWitness {
     pub fn new_from_merkle_tree(
         tree: &MerkleTree<Tip5>,
         mut revealed_leaf_indices: Vec<u64>,
-    ) -> (Self, Vec<Digest>, Vec<(u64, Digest)>) {
+    ) -> AuthenticatedMerkleAuthStruct {
         revealed_leaf_indices.sort_unstable();
         revealed_leaf_indices.dedup();
         revealed_leaf_indices.reverse();
@@ -322,13 +352,17 @@ impl MerkleAuthenticationStructAuthenticityWitness {
             .map(|node_index| tree.node(*node_index as usize).unwrap())
             .collect_vec();
 
-        let auth_struct_witness = Self {
+        let witness = Self {
             nd_auth_struct_indices,
             nd_sibling_indices,
             nd_siblings,
         };
 
-        (auth_struct_witness, auth_struct, indexed_leafs)
+        AuthenticatedMerkleAuthStruct {
+            auth_struct,
+            indexed_leafs,
+            witness,
+        }
     }
 }
 
@@ -345,6 +379,48 @@ mod tests {
 
     use super::*;
 
+    #[proptest(cases = 20)]
+    fn root_from_authentication_struct_mmr_prop_test(
+        #[strategy(0..u64::MAX / 2)] mmr_leaf_count: u64,
+        #[strategy(0usize..20)] _num_revealed_leafs: usize,
+        #[strategy(vec(0u64..#mmr_leaf_count, #_num_revealed_leafs))]
+        mmr_revealed_leaf_indices: Vec<u64>,
+    ) {
+        let indexed_leafs_input: Vec<(u64, Digest)> = mmr_revealed_leaf_indices
+            .iter()
+            .map(|idx| (*idx, random()))
+            .collect_vec();
+        let (mmra, mmr_mps) = mmra_with_mps(mmr_leaf_count, indexed_leafs_input.clone());
+        let indexed_mmr_mps = mmr_mps
+            .into_iter()
+            .zip_eq(indexed_leafs_input)
+            .map(|(mmr_mp, (idx, leaf))| (idx, leaf, mmr_mp))
+            .collect_vec();
+
+        let authenticated_auth_structs =
+            MerkleAuthenticationStructAuthenticityWitness::new_from_mmr_membership_proofs(
+                &mmra,
+                indexed_mmr_mps,
+            );
+
+        let peak_heights = get_peak_heights(mmr_leaf_count);
+        for (peak_index, authentication_auth_struct) in authenticated_auth_structs {
+            let AuthenticatedMerkleAuthStruct {
+                auth_struct,
+                indexed_leafs,
+                witness,
+            } = &authentication_auth_struct;
+            let tree_height: u32 = peak_heights[peak_index as usize];
+            let computed_root = witness.root_from_authentication_struct(
+                tree_height,
+                auth_struct.to_owned(),
+                indexed_leafs.to_owned(),
+            );
+
+            prop_assert_eq!(mmra.peaks()[peak_index as usize], computed_root);
+        }
+    }
+
     #[test]
     fn auth_struct_from_mmr_mps_test_height_5_9_indices() {
         let local_tree_height = 5;
@@ -360,17 +436,26 @@ mod tests {
             .map(|(mmr_mp, (idx, leaf))| (idx, leaf, mmr_mp))
             .collect_vec();
 
-        let (mmr_auth_struct, auth_struct, indexed_leafs) =
+        let authenticity_witnesses =
             MerkleAuthenticationStructAuthenticityWitness::new_from_mmr_membership_proofs(
                 &mmra,
                 indexed_mmr_mps,
             );
-
-        let tree_height: u32 = local_tree_height.try_into().unwrap();
-        let computed_root = mmr_auth_struct.root_from_authentication_struct(
-            tree_height,
+        assert!(
+            authenticity_witnesses.len().is_one(),
+            "All indices belong to first peak"
+        );
+        let AuthenticatedMerkleAuthStruct {
             auth_struct,
             indexed_leafs,
+            witness,
+        } = &authenticity_witnesses[&0];
+
+        let tree_height: u32 = local_tree_height.try_into().unwrap();
+        let computed_root = witness.root_from_authentication_struct(
+            tree_height,
+            auth_struct.to_owned(),
+            indexed_leafs.to_owned(),
         );
 
         let peak_index = 0;
@@ -393,17 +478,26 @@ mod tests {
             .map(|(mmr_mp, (idx, leaf))| (idx, leaf, mmr_mp))
             .collect_vec();
 
-        let (mmr_auth_struct, auth_struct, indexed_leafs) =
+        let authenticity_witnesses =
             MerkleAuthenticationStructAuthenticityWitness::new_from_mmr_membership_proofs(
                 &mmra,
                 indexed_mmr_mps,
             );
-
-        let tree_height: u32 = local_tree_height.try_into().unwrap();
-        let computed_root = mmr_auth_struct.root_from_authentication_struct(
-            tree_height,
+        assert!(
+            authenticity_witnesses.len().is_one(),
+            "All indices belong to first peak"
+        );
+        let AuthenticatedMerkleAuthStruct {
             auth_struct,
             indexed_leafs,
+            witness,
+        } = &authenticity_witnesses[&0];
+
+        let tree_height: u32 = local_tree_height.try_into().unwrap();
+        let computed_root = witness.root_from_authentication_struct(
+            tree_height,
+            auth_struct.to_owned(),
+            indexed_leafs.to_owned(),
         );
 
         let peak_index = 0;
@@ -423,18 +517,20 @@ mod tests {
         let leafs: Vec<Digest> = random_elements(num_leafs.try_into().unwrap());
         let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&leafs).unwrap();
 
-        let (mmr_auth_struct, auth_struct, indexed_leafs) =
+        let authenticated_auth_struct =
             MerkleAuthenticationStructAuthenticityWitness::new_from_merkle_tree(
                 &tree,
                 revealed_leaf_indices,
             );
-
-        let tree_height: u32 = tree_height.try_into().unwrap();
-        let computed_root = mmr_auth_struct.root_from_authentication_struct(
-            tree_height,
+        let AuthenticatedMerkleAuthStruct {
             auth_struct,
             indexed_leafs,
-        );
+            witness,
+        } = authenticated_auth_struct;
+
+        let tree_height: u32 = tree_height.try_into().unwrap();
+        let computed_root =
+            witness.root_from_authentication_struct(tree_height, auth_struct, indexed_leafs);
         let expected_root = tree.root();
         prop_assert_eq!(expected_root, computed_root);
     }
