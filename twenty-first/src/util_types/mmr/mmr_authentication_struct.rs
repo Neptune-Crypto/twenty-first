@@ -162,6 +162,9 @@ impl MerkleAuthenticationStructAuthenticityWitness {
     /// from a list of MMR membership proofs. All MMR membership proofs must
     /// belong under the same peak, i.e., be part of the same Merkle tree in
     /// the list of Merkle trees that the MMR contains.
+    ///
+    /// Panics if the input list of MMR-membership proofs is empty, or if they
+    /// do not all belong under the same peak.
     pub fn new_from_mmr_membership_proofs(
         mmra: &MmrAccumulator,
         indexed_mmr_mps: Vec<(u64, Digest, MmrMembershipProof)>,
@@ -177,7 +180,6 @@ impl MerkleAuthenticationStructAuthenticityWitness {
                 leaf_index_to_mt_index_and_peak_index(*mmr_leaf_index, num_mmr_leafs)
             })
             .collect_vec();
-        println!("mt_and_peak_indices\n{mt_and_peak_indices:?}");
 
         assert!(
             mt_and_peak_indices
@@ -187,9 +189,8 @@ impl MerkleAuthenticationStructAuthenticityWitness {
                 .count()
                 < 2
         );
+        assert!(!mt_and_peak_indices.is_empty(), "");
 
-        // TODO: Also handle the trivial case where indexed_mmr_mps is the
-        // empty list.
         let peak_index = mt_and_peak_indices[0].1;
         let mt_indices = mt_and_peak_indices
             .into_iter()
@@ -204,14 +205,11 @@ impl MerkleAuthenticationStructAuthenticityWitness {
             .map(|mt_index| mt_index - num_leafs_in_local_mt)
             .collect_vec();
 
-        let mut nd_auth_struct_indices = Self::authentication_structure_mt_indices(
+        let nd_auth_struct_indices = Self::authentication_structure_mt_indices(
             num_leafs_in_local_mt,
             &local_mt_leaf_indices,
         )
         .collect_vec();
-        if mt_indices.is_empty() {
-            nd_auth_struct_indices = vec![ROOT_MT_INDEX];
-        }
 
         let mut nd_left_indices = mt_indices
             .iter()
@@ -220,7 +218,10 @@ impl MerkleAuthenticationStructAuthenticityWitness {
             .map(|idx| idx & (!1))
             .unique()
             .collect_vec();
-        if !nd_left_indices.is_empty() {
+
+        // Fill nd-indices with all non-root indices for node values that can be
+        // derived from those from the auth-struct and the leafs.
+        {
             let mut i = 0;
             loop {
                 let parent = nd_left_indices[i] >> 1;
@@ -265,10 +266,11 @@ impl MerkleAuthenticationStructAuthenticityWitness {
 
                 mt_index /= 2;
             }
+
+            // Sanity check that MMR-MPs are valid
+            assert_eq!(peak, node, "Derived peak must match provided peak");
         }
 
-        println!("nd_sibling_indices: {nd_sibling_indices:?}");
-        println!("node_digests keys: {:?}", node_digests.keys());
         let nd_siblings = nd_sibling_indices
             .iter()
             .map(|(left_idx, right_idx)| (node_digests[left_idx], node_digests[right_idx]))
