@@ -60,7 +60,8 @@ run:
 test: export RUST_BACKTRACE = 1
 test:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
-	cargo test
+	cargo nextest r
+	cargo test --doc
 
 bench:
 	$(info RUSTFLAGS is $(RUSTFLAGS))
