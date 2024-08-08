@@ -419,6 +419,22 @@ mod tests {
     }
 
     #[test]
+    fn auth_struct_on_empty_mmr() {
+        let empty_mmra = MmrAccumulator::init(vec![], 0);
+        let authenticated_auth_structs =
+            AuthStructIntegrityProof::new_from_mmr_membership_proofs(&empty_mmra, vec![]);
+        assert!(authenticated_auth_structs.is_empty());
+    }
+
+    #[test]
+    fn auth_struct_non_empty_mmr_empty_leaf_list() {
+        let mmra_10_leafs = MmrAccumulator::new_from_leafs(vec![Digest::default(); 10]);
+        let authenticated_auth_structs =
+            AuthStructIntegrityProof::new_from_mmr_membership_proofs(&mmra_10_leafs, vec![]);
+        assert!(authenticated_auth_structs.is_empty());
+    }
+
+    #[test]
     fn auth_struct_from_mmr_mps_test_height_5_9_indices() {
         let local_tree_height = 5;
         let mmr_leaf_indices = [0, 1, 2, 16, 17, 18, 27, 29, 31];
