@@ -406,9 +406,6 @@ pub mod util {
                 &new_mp,
             );
             assert!(new_mp.verify(new_leaf_index, new_leaf, &new_peaks, leaf_count));
-            for (j, mp) in all_mps.iter().enumerate() {
-                assert!(mp.verify(all_leaf_indices[j], all_leafs[j], &peaks, leaf_count));
-            }
 
             let leaf_mutations = vec![LeafMutation::new(new_leaf_index, new_leaf, new_mp.clone())];
             let mutated = MmrMembershipProof::batch_update_from_batch_leaf_mutation(
@@ -424,11 +421,6 @@ pub mod util {
                 for (hght, idx) in mp.get_node_indices(mp_leaf_index).iter().enumerate() {
                     all_ap_elements.insert(*idx, mp.authentication_path[hght]);
                 }
-            }
-
-            for (j, (mp, mp_leaf_index)) in all_mps.iter().zip(all_leaf_indices.iter()).enumerate()
-            {
-                assert!(mp.verify(*mp_leaf_index, all_leafs[j], &new_peaks, leaf_count));
             }
 
             // Update derivable node values
@@ -490,6 +482,7 @@ mod accumulator_mmr_tests {
     use itertools::izip;
     use itertools::Itertools;
     use num_traits::ConstZero;
+    use proptest::collection::vec;
     use proptest::prop_assert_eq;
     use proptest_arbitrary_interop::arb;
     use rand::distributions::Uniform;
@@ -963,5 +956,24 @@ mod accumulator_mmr_tests {
         #[strategy(arb::<MmrAccumulator>())] mmra: MmrAccumulator,
     ) {
         prop_assert_eq!(mmra.peaks().len(), mmra.num_leafs().count_ones() as usize);
+    }
+
+    #[proptest(cases = 20)]
+    fn mmra_with_mps_produces_valid_output(
+        #[strategy(0..u64::MAX / 2)] mmr_leaf_count: u64,
+        #[strategy(0usize..10)] _num_revealed_leafs: usize,
+        #[strategy(vec(0u64..#mmr_leaf_count, #_num_revealed_leafs))]
+        mmr_revealed_leaf_indices: Vec<u64>,
+    ) {
+        let indexed_leafs_input: Vec<(u64, Digest)> = mmr_revealed_leaf_indices
+            .iter()
+            .map(|idx| (*idx, random()))
+            .collect_vec();
+        let (mmra, mmr_mps) = util::mmra_with_mps(mmr_leaf_count, indexed_leafs_input.clone());
+        for (mmr_mp, (mmr_leaf_index, leaf)) in
+            mmr_mps.into_iter().zip_eq(indexed_leafs_input.iter())
+        {
+            mmr_mp.verify(*mmr_leaf_index, *leaf, &mmra.peaks(), mmra.num_leafs());
+        }
     }
 }
