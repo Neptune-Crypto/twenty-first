@@ -26,7 +26,7 @@ const ROOT_MT_INDEX: u64 = 1;
 /// A witness to facilitate the proving of the authenticity of a Merkle
 /// authentication struct.
 #[derive(Debug, Clone)]
-pub struct MerkleAuthenticationStructAuthenticityWitness {
+pub struct AuthStructIntegrityProof {
     // All indices are Merkle tree node indices
     pub nd_auth_struct_indices: Vec<u64>,
     pub nd_sibling_indices: Vec<(u64, u64)>,
@@ -40,10 +40,10 @@ pub struct MerkleAuthenticationStructAuthenticityWitness {
 pub struct AuthenticatedMerkleAuthStruct {
     pub auth_struct: Vec<Digest>,
     pub indexed_leafs: Vec<(u64, Digest)>,
-    pub witness: MerkleAuthenticationStructAuthenticityWitness,
+    pub witness: AuthStructIntegrityProof,
 }
 
-impl MerkleAuthenticationStructAuthenticityWitness {
+impl AuthStructIntegrityProof {
     /// Return the Merkle tree node indices of the digests required to prove
     /// membership for the specified leaf indices, as well as the node indices
     /// that can be derived from the leaf indices and their authentication
@@ -398,10 +398,7 @@ mod tests {
             .collect_vec();
 
         let authenticated_auth_structs =
-            MerkleAuthenticationStructAuthenticityWitness::new_from_mmr_membership_proofs(
-                &mmra,
-                indexed_mmr_mps,
-            );
+            AuthStructIntegrityProof::new_from_mmr_membership_proofs(&mmra, indexed_mmr_mps);
 
         let peak_heights = get_peak_heights(mmr_leaf_count);
         for (peak_index, authentication_auth_struct) in authenticated_auth_structs {
@@ -437,10 +434,7 @@ mod tests {
             .collect_vec();
 
         let authenticity_witnesses =
-            MerkleAuthenticationStructAuthenticityWitness::new_from_mmr_membership_proofs(
-                &mmra,
-                indexed_mmr_mps,
-            );
+            AuthStructIntegrityProof::new_from_mmr_membership_proofs(&mmra, indexed_mmr_mps);
         assert!(
             authenticity_witnesses.len().is_one(),
             "All indices belong to first peak"
@@ -479,10 +473,7 @@ mod tests {
             .collect_vec();
 
         let authenticity_witnesses =
-            MerkleAuthenticationStructAuthenticityWitness::new_from_mmr_membership_proofs(
-                &mmra,
-                indexed_mmr_mps,
-            );
+            AuthStructIntegrityProof::new_from_mmr_membership_proofs(&mmra, indexed_mmr_mps);
         assert!(
             authenticity_witnesses.len().is_one(),
             "All indices belong to first peak"
@@ -518,10 +509,7 @@ mod tests {
         let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&leafs).unwrap();
 
         let authenticated_auth_struct =
-            MerkleAuthenticationStructAuthenticityWitness::new_from_merkle_tree(
-                &tree,
-                revealed_leaf_indices,
-            );
+            AuthStructIntegrityProof::new_from_merkle_tree(&tree, revealed_leaf_indices);
         let AuthenticatedMerkleAuthStruct {
             auth_struct,
             indexed_leafs,
@@ -566,7 +554,7 @@ mod tests {
             })
             .collect_vec();
 
-        let mmr_auth_struct = MerkleAuthenticationStructAuthenticityWitness {
+        let mmr_auth_struct = AuthStructIntegrityProof {
             nd_auth_struct_indices,
             nd_sibling_indices,
             nd_siblings,
