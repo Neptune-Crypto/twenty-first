@@ -32,11 +32,13 @@ pub struct MerkleAuthenticationStructAuthenticityWitness {
 
 impl MerkleAuthenticationStructAuthenticityWitness {
     /// Return the Merkle tree node indices of the digests required to prove
-    /// membership for the specified leaf indices
-    fn authentication_structure_mt_indices(
+    /// membership for the specified leaf indices, as well as the node indices
+    /// that can be derived from the leaf indices and their authentication
+    /// path.
+    fn auth_struct_and_nd_indices(
         num_leafs: u64,
         leaf_indices: &[u64],
-    ) -> impl ExactSizeIterator<Item = u64> {
+    ) -> (Vec<u64>, Vec<(u64, u64)>) {
         // The set of indices of nodes that need to be included in the authentications
         // structure. In principle, every node of every authentication path is needed.
         // The root is never needed. Hence, it is not considered below.
@@ -61,7 +63,27 @@ impl MerkleAuthenticationStructAuthenticityWitness {
         }
 
         let set_difference = node_is_needed.difference(&node_can_be_computed).copied();
-        set_difference.sorted_unstable().rev()
+        let set_union = node_is_needed
+            .union(&node_can_be_computed)
+            .sorted_unstable()
+            .rev();
+
+        let mut set_union = set_union.peekable();
+
+        let mut set_union_as_ordered_pairs = Vec::new();
+        while set_union.peek().is_some() {
+            let right_index = *set_union.next().unwrap();
+
+            // Crashes on odd-length of input list, which is what we want, as
+            // this acts as a sanity check.
+            let left_index = *set_union.next().unwrap();
+            set_union_as_ordered_pairs.push((left_index, right_index));
+        }
+
+        (
+            set_difference.sorted_unstable().rev().collect(),
+            set_union_as_ordered_pairs,
+        )
     }
 
     pub fn root_from_authentication_struct(
@@ -205,46 +227,8 @@ impl MerkleAuthenticationStructAuthenticityWitness {
             .map(|mt_index| mt_index - num_leafs_in_local_mt)
             .collect_vec();
 
-        let nd_auth_struct_indices = Self::authentication_structure_mt_indices(
-            num_leafs_in_local_mt,
-            &local_mt_leaf_indices,
-        )
-        .collect_vec();
-
-        let mut nd_left_indices = mt_indices
-            .iter()
-            .chain(nd_auth_struct_indices.iter())
-            .filter(|idx| **idx != 1)
-            .map(|idx| idx & (!1))
-            .unique()
-            .collect_vec();
-
-        // Fill nd-indices with all non-root indices for node values that can be
-        // derived from those from the auth-struct and the leafs.
-        {
-            let mut i = 0;
-            loop {
-                let parent = nd_left_indices[i] >> 1;
-                if parent == 1 {
-                    break;
-                }
-
-                let new_left_node = parent & (!1);
-                if !nd_left_indices.contains(&new_left_node) {
-                    nd_left_indices.push(new_left_node);
-                }
-
-                nd_left_indices.sort_unstable();
-                nd_left_indices.reverse();
-
-                i += 1;
-            }
-        }
-
-        let nd_sibling_indices = nd_left_indices
-            .into_iter()
-            .map(|idx| (idx, idx + 1))
-            .collect_vec();
+        let (nd_auth_struct_indices, nd_sibling_indices) =
+            Self::auth_struct_and_nd_indices(num_leafs_in_local_mt, &local_mt_leaf_indices);
 
         // Collect all node digests that can be calculated
         let peak = mmra.peaks()[peak_index];
@@ -303,65 +287,17 @@ impl MerkleAuthenticationStructAuthenticityWitness {
         tree: &MerkleTree<Tip5>,
         mut revealed_leaf_indices: Vec<u64>,
     ) -> (Self, Vec<Digest>, Vec<(u64, Digest)>) {
-        fn nd_sibling_indices(
-            revealed_leaf_indices: &[u64],
-            nd_auth_struct_indices: &[u64],
-            num_leafs: u64,
-        ) -> Vec<(u64, u64)> {
-            // TODO: For a better way finding all nd-sibling indices, see the
-            // code for [`PartialMerkleTree`] in the `merkle_tree` module.
-            let mut nd_sibling_indices = revealed_leaf_indices
-                .iter()
-                .map(|li| *li ^ num_leafs)
-                .chain(nd_auth_struct_indices.iter().copied())
-                .filter(|idx| *idx != 1)
-                .map(|idx| (idx & (u64::MAX - 1), idx | 1u64))
-                .unique()
-                .collect_vec();
-
-            if !nd_sibling_indices.is_empty() {
-                let mut i = 0;
-                loop {
-                    let elm = nd_sibling_indices[i];
-                    let parent = elm.0 >> 1;
-                    if parent == 1 {
-                        break;
-                    }
-                    let uncle = parent ^ 1;
-
-                    let new_pair = if parent & 1 == 0 {
-                        (parent, uncle)
-                    } else {
-                        (uncle, parent)
-                    };
-                    if !nd_sibling_indices.contains(&new_pair) {
-                        nd_sibling_indices.push(new_pair);
-                    }
-
-                    nd_sibling_indices.sort_by_key(|(left_idx, _right_idx)| *left_idx);
-                    nd_sibling_indices.reverse();
-
-                    i += 1;
-                }
-            }
-
-            nd_sibling_indices
-        }
-
         revealed_leaf_indices.sort_unstable();
         revealed_leaf_indices.dedup();
         revealed_leaf_indices.reverse();
         let num_leafs: u64 = tree.num_leafs() as u64;
 
-        let mut nd_auth_struct_indices =
-            Self::authentication_structure_mt_indices(num_leafs, &revealed_leaf_indices)
-                .collect_vec();
+        let (mut nd_auth_struct_indices, nd_sibling_indices) =
+            Self::auth_struct_and_nd_indices(num_leafs, &revealed_leaf_indices);
         if revealed_leaf_indices.is_empty() {
             nd_auth_struct_indices = vec![ROOT_MT_INDEX];
         }
 
-        let nd_sibling_indices =
-            nd_sibling_indices(&revealed_leaf_indices, &nd_auth_struct_indices, num_leafs);
         let nd_siblings = nd_sibling_indices
             .iter()
             .map(|&(l, r)| {
