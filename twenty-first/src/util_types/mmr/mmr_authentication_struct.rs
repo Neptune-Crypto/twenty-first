@@ -434,6 +434,27 @@ mod tests {
         assert!(authenticated_auth_structs.is_empty());
     }
 
+    #[should_panic]
+    #[test]
+    fn panics_on_missing_nd_digests() {
+        let tree_height = 3u32;
+        let num_leafs = 1u64 << tree_height;
+        let leafs: Vec<Digest> = random_elements(num_leafs.try_into().unwrap());
+        let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&leafs).unwrap();
+
+        let authenticated_auth_struct =
+            AuthStructIntegrityProof::new_from_merkle_tree(&tree, vec![0]);
+        let AuthenticatedMerkleAuthStruct {
+            auth_struct,
+            indexed_leafs,
+            mut witness,
+        } = authenticated_auth_struct;
+        witness.nd_sibling_indices.clear();
+        witness.nd_siblings.clear();
+
+        witness.root_from_authentication_struct(tree_height, auth_struct, indexed_leafs);
+    }
+
     #[test]
     fn auth_struct_from_mmr_mps_test_height_5_9_indices() {
         let local_tree_height = 5;
