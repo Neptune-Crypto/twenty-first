@@ -125,7 +125,7 @@ impl AuthStructIntegrityProof {
         );
 
         // Get challenges
-        let (alpha, gamma, delta) = {
+        let (alpha, beta, gamma) = {
             let mut sponge = Tip5::init();
             sponge.pad_and_absorb_all(&indexed_leafs.encode());
             sponge.pad_and_absorb_all(&auth_struct.encode());
@@ -136,22 +136,25 @@ impl AuthStructIntegrityProof {
         // Accumulate `p` from public data
         let mut p = XFieldElement::one();
         for i in (0..indexed_leafs.len()).rev() {
-            let leaf_index_as_bfe = node_index_to_bfe((1 << tree_height) ^ indexed_leafs[i].0);
+            let node_index_as_bfe = node_index_to_bfe((1 << tree_height) ^ indexed_leafs[i].0);
             let leaf_as_xfe = digest_to_xfe(indexed_leafs[i].1, alpha);
-            let fact = leaf_as_xfe - gamma + delta * leaf_index_as_bfe;
+            let fact = leaf_as_xfe - beta + gamma * node_index_as_bfe;
             p *= fact;
         }
 
         let mut prev = 0;
         for i in (0..auth_struct.len()).rev() {
             let auth_struct_index = self.nd_auth_struct_indices[i];
+
+            // `auth_struct` must be sorted high-to-low by node-index. But since
+            // we're traversing in reverse order, the inequality is flipped.
             assert!(auth_struct_index > prev);
             prev = auth_struct_index;
 
             let auth_struct_index_as_bfe = node_index_to_bfe(auth_struct_index);
 
             let auth_str_elem_as_xfe = digest_to_xfe(auth_struct[i], alpha);
-            let fact = auth_str_elem_as_xfe - gamma + delta * auth_struct_index_as_bfe;
+            let fact = auth_str_elem_as_xfe - beta + gamma * auth_struct_index_as_bfe;
             p *= fact;
         }
 
@@ -179,14 +182,15 @@ impl AuthStructIntegrityProof {
             let right_index_bfe = node_index_to_bfe(right_index);
             parent_index_bfe = left_index_bfe / bfe!(2);
 
-            let fact1 = l_xfe - gamma + delta * left_index_bfe;
-            let fact2 = r_xfe - gamma + delta * right_index_bfe;
-            let fact_parent = t_xfe - gamma + delta * parent_index_bfe;
+            let fact1 = l_xfe - beta + gamma * left_index_bfe;
+            let fact2 = r_xfe - beta + gamma * right_index_bfe;
+            let fact_parent = t_xfe - beta + gamma * parent_index_bfe;
 
             p *= fact1.inverse() * fact2.inverse() * fact_parent;
         }
 
-        assert_eq!(t_xfe - gamma + delta, p);
+        assert_eq!(t_xfe - beta + gamma, p);
+
         assert!(parent_index_bfe.is_one());
 
         t
