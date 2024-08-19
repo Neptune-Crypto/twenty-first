@@ -24,14 +24,14 @@ pub fn get_mock_ammr_from_digests(digests: Vec<Digest>) -> MockMmr {
 #[cfg(test)]
 mod shared_tests_tests {
     use hashbrown::HashSet;
-    use rand::{random, Rng};
+    use itertools::Itertools;
+    use rand::random;
+    use rand::Rng;
 
+    use super::*;
     use crate::math::other::random_elements;
     use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
     use crate::util_types::mmr::mmr_trait::Mmr;
-    use itertools::Itertools;
-
-    use super::*;
 
     #[should_panic]
     #[test]

@@ -3,14 +3,13 @@ use itertools::Itertools;
 use crate::math::digest::Digest;
 use crate::prelude::Tip5;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::mmr::mmr_trait::LeafMutation;
-use crate::util_types::shared::bag_peaks;
-
 use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
 use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
+use crate::util_types::mmr::mmr_trait::LeafMutation;
 use crate::util_types::mmr::mmr_trait::Mmr;
 use crate::util_types::mmr::shared_advanced;
 use crate::util_types::mmr::shared_basic;
+use crate::util_types::shared::bag_peaks;
 
 /// MockMmr is available for feature `mock` and for unit tests.
 ///
@@ -367,22 +366,19 @@ impl<T: Clone> MyVec<T> {
 #[cfg(test)]
 mod mmr_test {
     use itertools::*;
-
     use rand::random;
     use test_strategy::proptest;
 
+    use super::*;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::other::*;
     use crate::math::tip5::Tip5;
-
     use crate::mock::mmr::*;
     use crate::util_types::merkle_tree::merkle_tree_test::MerkleTreeToTest;
     use crate::util_types::merkle_tree::*;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
     use crate::util_types::mmr::shared_advanced::get_peak_heights;
     use crate::util_types::mmr::shared_advanced::get_peak_heights_and_peak_node_indices;
-
-    use super::*;
 
     impl MockMmr {
         /// Return the number of nodes in all the trees in the MMR

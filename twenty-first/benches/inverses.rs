@@ -1,4 +1,7 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::criterion_group;
+use criterion::criterion_main;
+use criterion::BenchmarkId;
+use criterion::Criterion;
 use itertools::Itertools;
 use twenty_first::math::b_field_element::BFieldElement;
 use twenty_first::math::other::random_elements;

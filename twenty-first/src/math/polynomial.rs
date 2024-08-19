@@ -23,6 +23,8 @@ use num_traits::One;
 use num_traits::Zero;
 use rayon::prelude::*;
 
+use super::traits::PrimitiveRootOfUnity;
+use super::zerofier_tree::ZerofierTree;
 use crate::math::ntt::intt;
 use crate::math::ntt::ntt;
 use crate::math::traits::FiniteField;
@@ -30,9 +32,6 @@ use crate::math::traits::ModPowU32;
 use crate::prelude::BFieldElement;
 use crate::prelude::Inverse;
 use crate::prelude::XFieldElement;
-
-use super::traits::PrimitiveRootOfUnity;
-use super::zerofier_tree::ZerofierTree;
 
 impl<FF: FiniteField> Zero for Polynomial<FF> {
     fn zero() -> Self {
@@ -2408,9 +2407,8 @@ mod test_polynomials {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::prelude::*;
-
     use super::*;
+    use crate::prelude::*;
 
     impl proptest::arbitrary::Arbitrary for Polynomial<BFieldElement> {
         type Parameters = ();

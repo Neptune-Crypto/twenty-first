@@ -639,13 +639,12 @@ pub mod kem {
     use sha3::Sha3_256;
     use sha3::Shake256;
 
-    use crate::math::b_field_element::BFieldElement;
-
     use super::embed_msg;
     use super::extract_msg;
     use super::CyclotomicRingElement;
     use super::ModuleElement;
     use super::CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES;
+    use crate::math::b_field_element::BFieldElement;
 
     #[derive(PartialEq, Eq, Copy, Clone, Debug, Serialize, Deserialize)]
     pub struct SecretKey {
@@ -824,14 +823,13 @@ mod lattice_test {
     use sha3::Digest as Sha3Digest;
     use sha3::Sha3_256;
 
+    use super::kem::shake256;
+    use super::kem::SecretKey;
+    use super::kem::CIPHERTEXT_SIZE_IN_BFES;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::lattice::kem::Ciphertext;
     use crate::math::lattice::kem::PublicKey;
     use crate::math::lattice::*;
-
-    use super::kem::shake256;
-    use super::kem::SecretKey;
-    use super::kem::CIPHERTEXT_SIZE_IN_BFES;
 
     #[test]
     fn test_kats() {

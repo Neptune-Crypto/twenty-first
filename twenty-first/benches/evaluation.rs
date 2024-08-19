@@ -2,7 +2,6 @@ use criterion::criterion_group;
 use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
-
 use twenty_first::math::other::random_elements;
 use twenty_first::math::zerofier_tree::ZerofierTree;
 use twenty_first::prelude::*;

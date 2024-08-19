@@ -1,17 +1,23 @@
+use std::collections::hash_map::RandomState;
+use std::collections::hash_set::Intersection;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::fmt::Debug;
+use std::iter::FromIterator;
+
 use arbitrary::Arbitrary;
 use get_size::GetSize;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
-use std::collections::hash_map::RandomState;
-use std::collections::hash_set::Intersection;
-use std::collections::{HashMap, HashSet};
-use std::{fmt::Debug, iter::FromIterator};
+use serde::Deserialize;
+use serde::Serialize;
 
 use super::mmr_trait::LeafMutation;
-use super::{shared_advanced, shared_basic};
+use super::shared_advanced;
+use super::shared_basic;
 use crate::math::bfield_codec::BFieldCodec;
 use crate::math::digest::Digest;
-use crate::prelude::{AlgebraicHasher, Tip5};
+use crate::prelude::AlgebraicHasher;
+use crate::prelude::Tip5;
 
 #[derive(Debug, Clone, Serialize, Deserialize, GetSize, BFieldCodec, Arbitrary)]
 pub struct MmrMembershipProof {
@@ -634,19 +640,22 @@ impl MmrMembershipProof {
 mod mmr_membership_proof_test {
     use itertools::Itertools;
     use proptest_arbitrary_interop::arb;
-    use rand::{random, thread_rng, Rng, RngCore};
+    use rand::random;
+    use rand::thread_rng;
+    use rand::Rng;
+    use rand::RngCore;
     use test_strategy::proptest;
 
+    use super::*;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::digest::Digest;
     use crate::math::other::random_elements;
     use crate::math::tip5::Tip5;
-    use crate::mock::mmr::{get_mock_ammr_from_digests, MockMmr};
+    use crate::mock::mmr::get_mock_ammr_from_digests;
+    use crate::mock::mmr::MockMmr;
     use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
     use crate::util_types::mmr::mmr_trait::Mmr;
-
-    use super::*;
 
     #[test]
     fn equality_and_hash_test() {

@@ -390,9 +390,8 @@ mod u32s_tests {
     use rand::Rng;
     use rand::RngCore;
 
-    use crate::math::other::random_elements;
-
     use super::*;
+    use crate::math::other::random_elements;
 
     #[test]
     fn get_size_test() {

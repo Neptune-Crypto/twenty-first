@@ -4,7 +4,6 @@ use criterion::criterion_group;
 use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
-
 use twenty_first::math::digest::Digest;
 use twenty_first::math::other::random_elements;
 use twenty_first::util_types::merkle_tree::CpuParallel;

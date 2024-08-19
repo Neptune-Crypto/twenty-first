@@ -273,13 +273,12 @@ mod fast_ntt_attempt_tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
+    use super::*;
     use crate::math::other::random_elements;
     use crate::math::traits::PrimitiveRootOfUnity;
     use crate::math::x_field_element::EXTENSION_DEGREE;
     use crate::prelude::*;
     use crate::xfe;
-
-    use super::*;
 
     #[test]
     fn chu_ntt_b_field_prop_test() {

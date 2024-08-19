@@ -1,7 +1,10 @@
+use criterion::criterion_group;
+use criterion::criterion_main;
 use criterion::measurement::WallTime;
-use criterion::{
-    criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
-};
+use criterion::BenchmarkGroup;
+use criterion::BenchmarkId;
+use criterion::Criterion;
+use criterion::Throughput;
 use twenty_first::math::b_field_element::BFieldElement;
 use twenty_first::math::ntt::ntt;
 use twenty_first::math::other::random_elements;

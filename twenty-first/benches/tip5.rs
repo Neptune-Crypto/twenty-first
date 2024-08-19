@@ -4,7 +4,6 @@ use criterion::BenchmarkId;
 use criterion::Criterion;
 use rand::random;
 use rayon::prelude::*;
-
 use twenty_first::math::other::random_elements;
 use twenty_first::prelude::*;
 

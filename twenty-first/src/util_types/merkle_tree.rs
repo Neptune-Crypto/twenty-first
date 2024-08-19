@@ -606,11 +606,10 @@ pub mod merkle_tree_test {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
+    use super::*;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::digest::digest_tests::DigestCorruptor;
     use crate::math::tip5::Tip5;
-
-    use super::*;
 
     impl MerkleTree {
         fn test_tree_of_height(tree_height: usize) -> Self {

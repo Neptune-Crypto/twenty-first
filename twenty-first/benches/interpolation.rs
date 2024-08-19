@@ -3,7 +3,6 @@ use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
 use criterion::Throughput;
-
 use twenty_first::math::other::random_elements;
 use twenty_first::prelude::*;
 

@@ -21,6 +21,7 @@ use rand_distr::Standard;
 use serde::Deserialize;
 use serde::Serialize;
 
+use super::digest::Digest;
 use crate::bfe_vec;
 use crate::error::TryFromXFieldElementError;
 use crate::math::b_field_element::BFieldElement;
@@ -31,8 +32,6 @@ use crate::math::traits::Inverse;
 use crate::math::traits::ModPowU32;
 use crate::math::traits::ModPowU64;
 use crate::math::traits::PrimitiveRootOfUnity;
-
-use super::digest::Digest;
 
 pub const EXTENSION_DEGREE: usize = 3;
 

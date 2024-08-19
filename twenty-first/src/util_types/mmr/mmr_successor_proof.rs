@@ -1,16 +1,18 @@
 use bfieldcodec_derive::BFieldCodec;
 use itertools::Itertools;
 
-use crate::{
-    prelude::{AlgebraicHasher, Digest, Mmr, Tip5},
-    util_types::mmr::shared_advanced::{left_sibling, node_indices_added_by_append},
-};
-
-use super::{
-    mmr_accumulator::MmrAccumulator,
-    shared_advanced::{get_peak_heights_and_peak_node_indices, parent, right_sibling},
-    shared_basic::{calculate_new_peaks_from_append, leaf_index_to_mt_index_and_peak_index},
-};
+use super::mmr_accumulator::MmrAccumulator;
+use super::shared_advanced::get_peak_heights_and_peak_node_indices;
+use super::shared_advanced::parent;
+use super::shared_advanced::right_sibling;
+use super::shared_basic::calculate_new_peaks_from_append;
+use super::shared_basic::leaf_index_to_mt_index_and_peak_index;
+use crate::prelude::AlgebraicHasher;
+use crate::prelude::Digest;
+use crate::prelude::Mmr;
+use crate::prelude::Tip5;
+use crate::util_types::mmr::shared_advanced::left_sibling;
+use crate::util_types::mmr::shared_advanced::node_indices_added_by_append;
 
 /// An MmrSuccessorProof asserts that one MMR Accumulator is the descendant of
 /// another, *i.e.*, that the second can be obtained by appending a set of leafs

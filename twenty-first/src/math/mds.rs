@@ -498,7 +498,8 @@ pub fn generated_function(input: &[u64]) -> [u64; 16] {
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
-    use rand::{thread_rng, RngCore};
+    use rand::thread_rng;
+    use rand::RngCore;
 
     use super::*;
 

@@ -29,15 +29,14 @@ use serde::Deserializer;
 use serde::Serialize;
 use serde::Serializer;
 
+use super::traits::Inverse;
+use super::traits::PrimitiveRootOfUnity;
+use super::x_field_element::XFieldElement;
 use crate::error::ParseBFieldElementError;
 use crate::math::traits::CyclicGroupGenerator;
 use crate::math::traits::FiniteField;
 use crate::math::traits::ModPowU32;
 use crate::math::traits::ModPowU64;
-
-use super::traits::Inverse;
-use super::traits::PrimitiveRootOfUnity;
-use super::x_field_element::XFieldElement;
 
 const PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
     0u64 => 1,

@@ -135,11 +135,10 @@ mod algebraic_hasher_tests {
     use rand_distr::Distribution;
     use rand_distr::Standard;
 
+    use super::*;
     use crate::math::digest::Digest;
     use crate::math::tip5::Tip5;
     use crate::math::x_field_element::EXTENSION_DEGREE;
-
-    use super::*;
 
     fn encode_prop<T>(smallest: T, largest: T)
     where

@@ -13,11 +13,10 @@ use num_traits::ConstOne;
 use num_traits::ConstZero;
 use thiserror::Error;
 
-use crate::bfe_vec;
-
 use super::b_field_element::BFieldElement;
 use super::polynomial::Polynomial;
 use super::traits::FiniteField;
+use crate::bfe_vec;
 
 /// This trait provides functions for encoding to and decoding from a Vec of [BFieldElement]s.
 /// This encoding does not record the size of objects nor their type information; this is
@@ -547,9 +546,8 @@ mod tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use crate::prelude::*;
-
     use super::*;
+    use crate::prelude::*;
 
     #[derive(Debug, PartialEq, Eq, test_strategy::Arbitrary)]
     struct BFieldCodecPropertyTestData<T>
@@ -834,14 +832,13 @@ mod tests {
         use arbitrary::Arbitrary;
         use num_traits::Zero;
 
+        use super::*;
         use crate::math::digest::Digest;
         use crate::math::tip5::Tip5;
         use crate::math::x_field_element::XFieldElement;
         use crate::util_types::algebraic_hasher::AlgebraicHasher;
         use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
         use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
-
-        use super::*;
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct UnitStruct;

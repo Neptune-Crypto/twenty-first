@@ -7,17 +7,16 @@ use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
 
+use super::mmr_membership_proof::MmrMembershipProof;
+use super::mmr_trait::LeafMutation;
+use super::mmr_trait::Mmr;
+use super::shared_basic;
 use crate::math::bfield_codec::BFieldCodec;
 use crate::math::digest::Digest;
 use crate::prelude::Tip5;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::mmr::shared_advanced;
 use crate::util_types::shared::bag_peaks;
-
-use super::mmr_membership_proof::MmrMembershipProof;
-use super::mmr_trait::LeafMutation;
-use super::mmr_trait::Mmr;
-use super::shared_basic;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize, BFieldCodec)]
 pub struct MmrAccumulator {
@@ -318,11 +317,10 @@ impl Mmr for MmrAccumulator {
 pub mod util {
     use itertools::Itertools;
 
+    use super::*;
     use crate::math::other::random_elements;
     use crate::util_types::mmr::shared_advanced::right_lineage_length_from_node_index;
     use crate::util_types::mmr::shared_basic::leaf_index_to_mt_index_and_peak_index;
-
-    use super::*;
 
     /// Get an MMR accumulator with a requested number of leafs, and requested leaf digests at specified indices
     /// Also returns the MMR membership proofs for the specified leafs.
@@ -492,13 +490,12 @@ mod accumulator_mmr_tests {
     use rand::RngCore;
     use test_strategy::proptest;
 
+    use super::*;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::other::random_elements;
     use crate::math::tip5::Tip5;
     use crate::mock::mmr::get_mock_ammr_from_digests;
     use crate::mock::mmr::MockMmr;
-
-    use super::*;
 
     impl From<MockMmr> for MmrAccumulator {
         fn from(ammr: MockMmr) -> Self {

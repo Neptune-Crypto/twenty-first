@@ -1,7 +1,6 @@
 use criterion::*;
 use rand::rngs::StdRng;
 use rand::*;
-
 use twenty_first::math::digest::Digest;
 use twenty_first::math::tip5::Tip5;
 use twenty_first::util_types::algebraic_hasher::AlgebraicHasher;

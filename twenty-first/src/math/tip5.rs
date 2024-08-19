@@ -624,10 +624,9 @@ pub(crate) mod tip5_tests {
     use rayon::prelude::ParallelIterator;
     use test_strategy::proptest;
 
+    use super::*;
     use crate::math::other::random_elements;
     use crate::math::x_field_element::XFieldElement;
-
-    use super::*;
 
     impl Tip5 {
         pub(crate) fn randomly_seeded() -> Self {
