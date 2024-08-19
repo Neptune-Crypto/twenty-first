@@ -399,7 +399,7 @@ mod mmr_test {
             let num_leafs_in_tree = 1 << tree_height;
             let leaf_digests =
                 &digests[num_processed_digests..num_processed_digests + num_leafs_in_tree];
-            let tree = MerkleTree::<Tip5>::new::<CpuParallel>(leaf_digests).unwrap();
+            let tree = MerkleTree::new::<CpuParallel>(leaf_digests).unwrap();
             num_processed_digests += num_leafs_in_tree;
             trees.push(tree);
         }

@@ -52,8 +52,8 @@ pub(crate) mod tests {
         implements_usual_auto_traits::<Tip5>();
         implements_usual_auto_traits::<XFieldElement>();
         implements_usual_auto_traits::<CpuParallel>();
-        implements_usual_auto_traits::<MerkleTree<Tip5>>();
-        implements_usual_auto_traits::<MerkleTreeInclusionProof<Tip5>>();
+        implements_usual_auto_traits::<MerkleTree>();
+        implements_usual_auto_traits::<MerkleTreeInclusionProof>();
         implements_usual_auto_traits::<MmrMembershipProof>();
     }
 

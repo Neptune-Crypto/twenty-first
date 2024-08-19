@@ -1,7 +1,6 @@
 use std::collections::hash_map::Entry::*;
 use std::collections::*;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::result;
 
 use arbitrary::*;
@@ -11,8 +10,8 @@ use rayon::prelude::*;
 use thiserror::Error;
 
 use crate::math::digest::Digest;
+use crate::prelude::Tip5;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
 
 const DEFAULT_PARALLELIZATION_CUTOFF: usize = 256;
 lazy_static! {
@@ -47,14 +46,54 @@ type Result<T> = result::Result<T, MerkleTreeError>;
 /// used to efficiently prove the inclusion of items in a set. Set inclusion can
 /// be verified through an [inclusion proof](MerkleTreeInclusionProof).
 ///
+/// The used hash function is [`Tip5`].
+///
 /// [merkle_tree]: https://en.wikipedia.org/wiki/Merkle_tree
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MerkleTree<H>
-where
-    H: AlgebraicHasher,
-{
+pub struct MerkleTree {
     nodes: Vec<Digest>,
-    _hasher: PhantomData<H>,
+}
+
+/// A trait for creating a [`MerkleTree`] from a list of [`Digest`]s.
+///
+/// This trait defines the method required to construct a `MerkleTree` given an
+/// array of `Digest` values. Implementations of this trait can define different
+/// strategies for building the tree, for example parallel or sequential
+/// construction, using the CPU or a GPU, et cetera.
+///
+/// It might be more intuitive to use [`MerkleTree::new`] over directly calling
+/// implementors of this trait. For example:
+///
+/// ```
+/// # use twenty_first::error::MerkleTreeError;
+/// # use twenty_first::prelude::*;
+///
+/// # fn wrapper_fn() -> Result<(), MerkleTreeError> {
+/// let leafs = [bfe_vec![42, 43, 44], bfe_vec![1337, 1338]];
+/// let leaf_digests = leafs.map(|leaf| Tip5::hash_varlen(&leaf));
+///
+/// let tree = MerkleTree::new::<CpuParallel>(&leaf_digests)?;
+///
+/// // also works:
+/// let tree = CpuParallel::from_digests(&leaf_digests)?;
+/// # Ok(())
+/// # }
+/// # wrapper_fn().unwrap();
+/// ```
+///
+/// # Implementing
+///
+/// Implementing this trait requires intimate knowledge of the internal
+/// representation of a [`MerkleTree`], in particular, the indexing of its
+/// nodes. For a starting point, see [`MerkleTree::authentication_structure`].
+///
+/// ## Errors
+///
+/// Implementations of this trait should return an error if:
+/// - The number of digests is zero.
+/// - The number of digests is not a power of two.
+pub trait MerkleTreeMaker {
+    fn from_digests(digests: &[Digest]) -> Result<MerkleTree>;
 }
 
 /// A full inclusion proof for the leafs at the supplied indices, including the
@@ -62,10 +101,7 @@ where
 /// which is not necessarily (and generally cannot be) known in its entirety by
 /// the verifier.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct MerkleTreeInclusionProof<H>
-where
-    H: AlgebraicHasher,
-{
+pub struct MerkleTreeInclusionProof {
     /// The stated height of the Merkle tree this proof is relative to.
     pub tree_height: usize,
 
@@ -83,8 +119,6 @@ where
     ///
     /// [auth_structure]: MerkleTree::authentication_structure
     pub authentication_structure: Vec<Digest>,
-
-    pub _hasher: PhantomData<H>,
 }
 
 /// Helper struct for verifying inclusion of items in a Merkle tree.
@@ -106,21 +140,14 @@ where
 ///
 /// [auth_structure]: MerkleTree::authentication_structure
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct PartialMerkleTree<H>
-where
-    H: AlgebraicHasher,
-{
+pub(crate) struct PartialMerkleTree {
     tree_height: usize,
     leaf_indices: Vec<usize>,
     nodes: HashMap<usize, Digest>,
-    _hasher: PhantomData<H>,
 }
 
-impl<H> MerkleTree<H>
-where
-    H: AlgebraicHasher,
-{
-    pub fn new<Maker: MerkleTreeMaker<H>>(leafs: &[Digest]) -> Result<Self> {
+impl MerkleTree {
+    pub fn new<Maker: MerkleTreeMaker>(leafs: &[Digest]) -> Result<Self> {
         Maker::from_digests(leafs)
     }
 
@@ -258,21 +285,17 @@ where
     pub fn inclusion_proof_for_leaf_indices(
         &self,
         indices: &[usize],
-    ) -> Result<MerkleTreeInclusionProof<H>> {
+    ) -> Result<MerkleTreeInclusionProof> {
         let proof = MerkleTreeInclusionProof {
             tree_height: self.height(),
             indexed_leafs: self.indexed_leafs(indices)?,
             authentication_structure: self.authentication_structure(indices)?,
-            _hasher: PhantomData,
         };
         Ok(proof)
     }
 }
 
-impl<'a, H> Arbitrary<'a> for MerkleTree<H>
-where
-    H: AlgebraicHasher,
-{
+impl<'a> Arbitrary<'a> for MerkleTree {
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
         let height = u.int_in_range(0..=13)?;
         let num_leafs = 1 << height;
@@ -284,10 +307,7 @@ where
     }
 }
 
-impl<H> MerkleTreeInclusionProof<H>
-where
-    H: AlgebraicHasher,
-{
+impl MerkleTreeInclusionProof {
     fn leaf_indices(&self) -> impl Iterator<Item = &usize> {
         self.indexed_leafs.iter().map(|(index, _)| index)
     }
@@ -343,10 +363,7 @@ where
     }
 }
 
-impl<H> PartialMerkleTree<H>
-where
-    H: AlgebraicHasher,
-{
+impl PartialMerkleTree {
     pub fn root(&self) -> Result<Digest> {
         self.nodes
             .get(&ROOT_INDEX)
@@ -402,7 +419,7 @@ where
 
     fn insert_digest_for_index(&mut self, parent_index: usize) -> Result<()> {
         let (left_child, right_child) = self.children_of_node(parent_index)?;
-        let parent_digest = H::hash_pair(left_child, right_child);
+        let parent_digest = Tip5::hash_pair(left_child, right_child);
 
         match self.nodes.insert(parent_index, parent_digest) {
             Some(_) => Err(MerkleTreeError::SpuriousNodeIndex(parent_index)),
@@ -453,19 +470,15 @@ where
     }
 }
 
-impl<H> TryFrom<MerkleTreeInclusionProof<H>> for PartialMerkleTree<H>
-where
-    H: AlgebraicHasher,
-{
+impl TryFrom<MerkleTreeInclusionProof> for PartialMerkleTree {
     type Error = MerkleTreeError;
 
-    fn try_from(proof: MerkleTreeInclusionProof<H>) -> Result<Self> {
+    fn try_from(proof: MerkleTreeInclusionProof) -> Result<Self> {
         let leaf_indices = proof.leaf_indices().copied().collect();
         let mut partial_tree = PartialMerkleTree {
             tree_height: proof.tree_height,
             leaf_indices,
             nodes: HashMap::new(),
-            _hasher: PhantomData,
         };
 
         let num_leafs = partial_tree.num_leafs()?;
@@ -473,7 +486,7 @@ where
             return Err(MerkleTreeError::LeafIndexInvalid { num_leafs });
         }
 
-        let node_indices = MerkleTree::<H>::authentication_structure_node_indices(
+        let node_indices = MerkleTree::authentication_structure_node_indices(
             num_leafs,
             &partial_tree.leaf_indices,
         )?;
@@ -500,10 +513,10 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
 pub struct CpuParallel;
 
-impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
+impl MerkleTreeMaker for CpuParallel {
     /// Takes an array of digests and builds a MerkleTree over them. The digests are
     /// copied as the leafs of the tree.
     ///
@@ -511,7 +524,7 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
     ///
     /// - If the number of digests is 0.
     /// - If the number of digests is not a power of two.
-    fn from_digests(digests: &[Digest]) -> Result<MerkleTree<H>> {
+    fn from_digests(digests: &[Digest]) -> Result<MerkleTree> {
         if digests.is_empty() {
             return Err(MerkleTreeError::TooFewLeafs);
         }
@@ -537,7 +550,7 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
                     let j = node_count_on_this_level + i;
                     let left_child = nodes[j * 2];
                     let right_child = nodes[j * 2 + 1];
-                    H::hash_pair(left_child, right_child)
+                    Tip5::hash_pair(left_child, right_child)
                 })
                 .collect_into_vec(&mut local_digests);
             nodes[node_count_on_this_level..(node_count_on_this_level + node_count_on_this_level)]
@@ -548,14 +561,10 @@ impl<H: AlgebraicHasher> MerkleTreeMaker<H> for CpuParallel {
 
         // Sequential digest calculations
         for i in (ROOT_INDEX..(digests.len() - count_acc)).rev() {
-            nodes[i] = H::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
+            nodes[i] = Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
         }
 
-        let tree = MerkleTree {
-            nodes,
-            _hasher: PhantomData,
-        };
-        Ok(tree)
+        Ok(MerkleTree { nodes })
     }
 }
 
@@ -603,7 +612,7 @@ pub mod merkle_tree_test {
 
     use super::*;
 
-    impl MerkleTree<Tip5> {
+    impl MerkleTree {
         fn test_tree_of_height(tree_height: usize) -> Self {
             let num_leafs = 1 << tree_height;
             let leafs = (0..num_leafs).map(BFieldElement::new);
@@ -614,7 +623,7 @@ pub mod merkle_tree_test {
         }
     }
 
-    impl PartialMerkleTree<Tip5> {
+    impl PartialMerkleTree {
         fn dummy_nodes_for_indices(node_indices: &[usize]) -> HashMap<usize, Digest> {
             node_indices
                 .iter()
@@ -628,7 +637,7 @@ pub mod merkle_tree_test {
     #[derive(Debug, Clone, test_strategy::Arbitrary)]
     pub(crate) struct MerkleTreeToTest {
         #[strategy(arb())]
-        pub tree: MerkleTree<Tip5>,
+        pub tree: MerkleTree,
 
         #[strategy(vec(0..#tree.num_leafs(), 0..#tree.num_leafs()))]
         pub selected_indices: Vec<usize>,
@@ -639,7 +648,7 @@ pub mod merkle_tree_test {
             !self.selected_indices.is_empty()
         }
 
-        fn proof(&self) -> MerkleTreeInclusionProof<Tip5> {
+        fn proof(&self) -> MerkleTreeInclusionProof {
             // test helper – unwrap is fine
             self.tree
                 .inclusion_proof_for_leaf_indices(&self.selected_indices)
@@ -649,7 +658,7 @@ pub mod merkle_tree_test {
 
     #[test]
     fn building_merkle_tree_from_empty_list_of_digests_fails_with_expected_error() {
-        let maybe_tree = MerkleTree::<Tip5>::new::<CpuParallel>(&[]);
+        let maybe_tree = MerkleTree::new::<CpuParallel>(&[]);
         let err = maybe_tree.unwrap_err();
         assert_eq!(MerkleTreeError::TooFewLeafs, err);
     }
@@ -657,14 +666,14 @@ pub mod merkle_tree_test {
     #[test]
     fn merkle_tree_with_one_leaf_has_expected_height_and_number_of_leafs() {
         let digest = Digest::default();
-        let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&[digest]).unwrap();
+        let tree = MerkleTree::new::<CpuParallel>(&[digest]).unwrap();
         assert_eq!(1, tree.num_leafs());
         assert_eq!(0, tree.height());
     }
 
     #[proptest]
     fn building_merkle_tree_from_one_digest_makes_that_digest_the_root(digest: Digest) {
-        let tree = MerkleTree::<Tip5>::new::<CpuParallel>(&[digest]).unwrap();
+        let tree = MerkleTree::new::<CpuParallel>(&[digest]).unwrap();
         assert_eq!(digest, tree.root());
     }
 
@@ -676,21 +685,21 @@ pub mod merkle_tree_test {
     ) {
         let digest = Digest::default();
         let digests = vec![digest; num_leafs];
-        let maybe_tree = MerkleTree::<Tip5>::new::<CpuParallel>(&digests);
+        let maybe_tree = MerkleTree::new::<CpuParallel>(&digests);
         let err = maybe_tree.unwrap_err();
         assert_eq!(MerkleTreeError::IncorrectNumberOfLeafs, err);
     }
 
     #[proptest(cases = 100)]
     fn accessing_number_of_leafs_and_height_never_panics(
-        #[strategy(arb())] merkle_tree: MerkleTree<Tip5>,
+        #[strategy(arb())] merkle_tree: MerkleTree,
     ) {
         let _ = merkle_tree.num_leafs();
         let _ = merkle_tree.height();
     }
 
     #[proptest(cases = 50)]
-    fn trivial_proof_can_be_verified(#[strategy(arb())] merkle_tree: MerkleTree<Tip5>) {
+    fn trivial_proof_can_be_verified(#[strategy(arb())] merkle_tree: MerkleTree) {
         let proof = merkle_tree.inclusion_proof_for_leaf_indices(&[]).unwrap();
         prop_assert!(proof.authentication_structure.is_empty());
         let verdict = proof.verify(merkle_tree.root());
@@ -834,7 +843,7 @@ pub mod merkle_tree_test {
 
     #[proptest(cases = 20)]
     fn honestly_generated_proof_with_all_leafs_revealed_can_be_verified(
-        #[strategy(arb())] tree: MerkleTree<Tip5>,
+        #[strategy(arb())] tree: MerkleTree,
     ) {
         let leaf_indices = (0..tree.num_leafs()).collect_vec();
         let proof = tree
@@ -846,7 +855,7 @@ pub mod merkle_tree_test {
 
     #[proptest(cases = 30)]
     fn requesting_inclusion_proof_for_nonexistent_leaf_fails_with_expected_error(
-        #[strategy(arb())] tree: MerkleTree<Tip5>,
+        #[strategy(arb())] tree: MerkleTree,
         #[filter(#leaf_indices.iter().any(|&i| i > #tree.num_leafs()))] leaf_indices: Vec<usize>,
     ) {
         let maybe_proof = tree.inclusion_proof_for_leaf_indices(&leaf_indices);
@@ -866,7 +875,7 @@ pub mod merkle_tree_test {
         //
         // 0   1  2   3 <- leaf indices
 
-        let tree = MerkleTree::<Tip5>::test_tree_of_height(2);
+        let tree = MerkleTree::test_tree_of_height(2);
         let auth_path_with_nodes = |indices: [usize; 2]| indices.map(|i| tree.nodes[i]).to_vec();
         let auth_path_for_leaf = |index| tree.authentication_structure(&[index]).unwrap();
 
@@ -889,7 +898,7 @@ pub mod merkle_tree_test {
         //
         //  0   1  2   3  4   5  6   7  <- leaf indices
 
-        let tree = MerkleTree::<Tip5>::test_tree_of_height(3);
+        let tree = MerkleTree::test_tree_of_height(3);
         let auth_path_with_nodes = |indices: [usize; 3]| indices.map(|i| tree.nodes[i]).to_vec();
         let auth_path_for_leaf = |index| tree.authentication_structure(&[index]).unwrap();
 
@@ -908,11 +917,10 @@ pub mod merkle_tree_test {
         let tree = test_tree.tree;
         for (leaf_index, &leaf) in tree.leafs().iter().enumerate() {
             let authentication_path = tree.authentication_structure(&[leaf_index]).unwrap();
-            let proof = MerkleTreeInclusionProof::<Tip5> {
+            let proof = MerkleTreeInclusionProof {
                 tree_height: tree.height(),
                 indexed_leafs: [(leaf_index, leaf)].into(),
                 authentication_structure: authentication_path,
-                _hasher: PhantomData,
             };
             let verdict = proof.verify(tree.root());
             prop_assert!(verdict);
@@ -921,7 +929,7 @@ pub mod merkle_tree_test {
 
     #[test]
     fn partial_merkle_tree_built_from_authentication_structure_contains_expected_nodes() {
-        let merkle_tree = MerkleTree::<Tip5>::test_tree_of_height(3);
+        let merkle_tree = MerkleTree::test_tree_of_height(3);
         let proof = merkle_tree
             .inclusion_proof_for_leaf_indices(&[0, 2])
             .unwrap();
@@ -957,11 +965,10 @@ pub mod merkle_tree_test {
         //  0      2   <-- opened_leaf_indices
 
         let node_indices = [3, 8, 9, 10, 11];
-        let mut partial_tree = PartialMerkleTree::<Tip5> {
+        let mut partial_tree = PartialMerkleTree {
             tree_height: 3,
             leaf_indices: vec![0, 2],
-            nodes: PartialMerkleTree::<Tip5>::dummy_nodes_for_indices(&node_indices),
-            _hasher: PhantomData,
+            nodes: PartialMerkleTree::dummy_nodes_for_indices(&node_indices),
         };
         partial_tree.fill().unwrap();
     }
@@ -980,11 +987,10 @@ pub mod merkle_tree_test {
         //  0      2   <-- opened_leaf_indices
 
         let node_indices = [8, 9, 10, 11];
-        let mut partial_tree = PartialMerkleTree::<Tip5> {
+        let mut partial_tree = PartialMerkleTree {
             tree_height: 3,
             leaf_indices: vec![0, 2],
-            nodes: PartialMerkleTree::<Tip5>::dummy_nodes_for_indices(&node_indices),
-            _hasher: PhantomData,
+            nodes: PartialMerkleTree::dummy_nodes_for_indices(&node_indices),
         };
 
         let err = partial_tree.fill().unwrap_err();
@@ -1005,11 +1011,10 @@ pub mod merkle_tree_test {
         //  0      2   <-- opened_leaf_indices
 
         let node_indices = [2, 3, 8, 9, 10, 11];
-        let mut partial_tree = PartialMerkleTree::<Tip5> {
+        let mut partial_tree = PartialMerkleTree {
             tree_height: 3,
             leaf_indices: vec![0, 2],
-            nodes: PartialMerkleTree::<Tip5>::dummy_nodes_for_indices(&node_indices),
-            _hasher: PhantomData,
+            nodes: PartialMerkleTree::dummy_nodes_for_indices(&node_indices),
         };
 
         let err = partial_tree.fill().unwrap_err();
@@ -1019,7 +1024,7 @@ pub mod merkle_tree_test {
     #[test]
     fn converting_authentication_structure_to_authentication_paths_results_in_expected_paths() {
         const TREE_HEIGHT: usize = 3;
-        let merkle_tree = MerkleTree::<Tip5>::test_tree_of_height(TREE_HEIGHT);
+        let merkle_tree = MerkleTree::test_tree_of_height(TREE_HEIGHT);
         let proof = merkle_tree
             .inclusion_proof_for_leaf_indices(&[0, 2])
             .unwrap();

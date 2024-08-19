@@ -76,7 +76,7 @@ fn auth_structure_len(c: &mut Criterion<AuthStructureEncodingLength>) {
     let num_leafs = 1 << tree_height;
     let leafs = (0..num_leafs).map(|_| rng.next_u64()).collect_vec();
     let leaf_digests = leafs.iter().map(Tip5::hash).collect_vec();
-    let mt = MerkleTree::<Tip5>::new::<CpuParallel>(&leaf_digests).unwrap();
+    let mt = MerkleTree::new::<CpuParallel>(&leaf_digests).unwrap();
 
     let num_opened_indices = 40;
     let mut group = c.benchmark_group("merkle_tree_auth_structure_size");

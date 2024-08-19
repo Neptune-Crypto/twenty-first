@@ -69,9 +69,9 @@ impl MerkleTreeSampler {
             .collect()
     }
 
-    fn tree(&mut self) -> MerkleTree<Tip5> {
+    fn tree(&mut self) -> MerkleTree {
         let leaf_digests = self.leaf_digests();
-        MerkleTree::<Tip5>::new::<CpuParallel>(&leaf_digests).unwrap()
+        MerkleTree::new::<CpuParallel>(&leaf_digests).unwrap()
     }
 
     fn indices_to_open(&mut self) -> Vec<usize> {
@@ -80,7 +80,7 @@ impl MerkleTreeSampler {
             .collect()
     }
 
-    fn proof(&mut self, tree: &MerkleTree<Tip5>) -> MerkleTreeInclusionProof<Tip5> {
+    fn proof(&mut self, tree: &MerkleTree) -> MerkleTreeInclusionProof {
         let leaf_indices = self.indices_to_open();
         tree.inclusion_proof_for_leaf_indices(&leaf_indices)
             .unwrap()

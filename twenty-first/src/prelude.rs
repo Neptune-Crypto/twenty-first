@@ -18,7 +18,7 @@ pub use crate::util_types::algebraic_hasher::Sponge;
 pub use crate::util_types::merkle_tree::CpuParallel;
 pub use crate::util_types::merkle_tree::MerkleTree;
 pub use crate::util_types::merkle_tree::MerkleTreeInclusionProof;
-pub use crate::util_types::merkle_tree_maker::MerkleTreeMaker;
+pub use crate::util_types::merkle_tree::MerkleTreeMaker;
 pub use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
 pub use crate::util_types::mmr::mmr_trait::Mmr;
 pub use crate::xfe;
