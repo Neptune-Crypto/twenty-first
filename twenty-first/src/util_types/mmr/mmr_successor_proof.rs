@@ -26,6 +26,10 @@ pub struct MmrSuccessorProof {
 impl MmrSuccessorProof {
     /// Compute a new `MmrSuccessorProof` given the starting MMR accumulator and
     /// a list of digests to be appended.
+    ///
+    /// # Panics
+    ///
+    ///  - if the number of leafs in the MMRA is greater than or equal to 2^63
     pub fn new_from_batch_append(mmra: &MmrAccumulator, new_leafs: &[Digest]) -> Self {
         let (heights_of_old_peaks, indices_of_old_peaks) =
             get_peak_heights_and_peak_node_indices(mmra.num_leafs());
