@@ -1,3 +1,4 @@
+use arbitrary::Arbitrary;
 use bfieldcodec_derive::BFieldCodec;
 use itertools::Itertools;
 
@@ -18,7 +19,7 @@ use crate::util_types::mmr::shared_advanced::node_indices_added_by_append;
 /// another, *i.e.*, that the second can be obtained by appending a set of leafs
 /// to the first. It consists of a set of authentication paths connecting the
 /// old peaks to the new peaks.
-#[derive(Debug, Clone, BFieldCodec)]
+#[derive(Debug, Clone, BFieldCodec, Arbitrary)]
 pub struct MmrSuccessorProof {
     pub paths: Vec<Digest>,
 }
