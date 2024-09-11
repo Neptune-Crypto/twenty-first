@@ -430,6 +430,33 @@ impl From<i32> for BFieldElement {
     }
 }
 
+impl From<usize> for BFieldElement {
+    fn from(value: usize) -> Self {
+        // targets with wider target pointers don't exist at the time of writing
+        #[cfg(any(
+            target_pointer_width = "16",
+            target_pointer_width = "32",
+            target_pointer_width = "64",
+        ))]
+        Self::new(value as u64)
+    }
+}
+
+impl From<isize> for BFieldElement {
+    fn from(value: isize) -> Self {
+        // targets with wider target pointers don't exist at the time of writing
+        #[cfg(any(
+            target_pointer_width = "16",
+            target_pointer_width = "32",
+            target_pointer_width = "64",
+        ))]
+        match value {
+            v if v >= 0 => Self::new(v as u64),
+            v => Self::new(-v as u64),
+        }
+    }
+}
+
 impl From<BFieldElement> for u64 {
     fn from(elem: BFieldElement) -> Self {
         elem.canonical_representation()
@@ -1301,6 +1328,8 @@ mod b_prime_field_element_test {
         let _ = bfe!(-1);
         let _ = bfe!(b);
         let _ = bfe!(b.0);
+        let _ = bfe!(42_usize);
+        let _ = bfe!(-2_isize);
 
         let c: Vec<BFieldElement> = bfe_vec![1, 2, 3];
         let d: [BFieldElement; 3] = bfe_array![1, 2, 3];
