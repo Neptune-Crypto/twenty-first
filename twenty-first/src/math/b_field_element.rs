@@ -452,7 +452,7 @@ impl From<isize> for BFieldElement {
         ))]
         match value {
             v if v >= 0 => Self::new(v as u64),
-            v => Self::new(-v as u64),
+            v => -Self::new(-v as u64),
         }
     }
 }
@@ -1314,6 +1314,15 @@ mod b_prime_field_element_test {
 
     #[proptest]
     fn conversion_from_i32_to_bfe_is_correct(value: i32) {
+        let bfe = BFieldElement::from(value);
+        match value {
+            v if v >= 0 => prop_assert_eq!(u64::try_from(v).unwrap(), bfe.value()),
+            v => prop_assert_eq!(u64::try_from(-v).unwrap(), BFieldElement::P - bfe.value()),
+        }
+    }
+
+    #[proptest]
+    fn conversion_from_isize_to_bfe_is_correct(value: isize) {
         let bfe = BFieldElement::from(value);
         match value {
             v if v >= 0 => prop_assert_eq!(u64::try_from(v).unwrap(), bfe.value()),
