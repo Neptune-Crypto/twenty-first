@@ -6,9 +6,9 @@ license = "GPL-2.0"
 description = "Derive macro for BFieldCodec."
 
 [dependencies]
-syn = { version = "^2", features = ["full", "derive"] }
-quote = "1.0"
-proc-macro2 = "1.0"
+syn = { version = "^2.0.79", features = ["full", "derive"] }
+quote = "^1.0.37"
+proc-macro2 = "^1.0.86"
 
 [lib]
 proc-macro = true
