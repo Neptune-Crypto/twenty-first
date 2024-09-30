@@ -34,7 +34,7 @@ features = ["user-hooks"]
 [dependencies]
 arbitrary = { version = "1", features = ["derive"] }
 bfieldcodec_derive = "0.7"
-blake3 = "1.5.3"
+blake3 = "1.5.4"
 get-size = { version = "^0.1.4", features = ["derive"] }
 hashbrown = "0.14"
 hex = "0.4.3"
