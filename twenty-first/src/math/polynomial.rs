@@ -1955,7 +1955,7 @@ impl<FF: FiniteField> Polynomial<FF> {
     }
 
     pub fn normalize(&mut self) {
-        while !self.coefficients.is_empty() && self.coefficients.last().unwrap().is_zero() {
+        while self.coefficients.last().is_some_and(Zero::is_zero) {
             self.coefficients.pop();
         }
     }
@@ -2381,7 +2381,57 @@ impl<FF: FiniteField> Polynomial<FF> {
     }
 }
 
-impl<FF: FiniteField> Mul for Polynomial<FF> {
+// It is impossible to
+// `impl<FF: FiniteField> Mul<Polynomial<FF>> for FF`
+// because of Rust's orphan rules [E0210]. Citing RFC 2451:
+//
+// > Rust’s orphan rule always permits an impl if either the trait or the type
+// > being implemented are local to the current crate. Therefore, we can’t allow
+// > `impl<T> ForeignTrait<LocalTypeCrateA> for T`, because it might conflict
+// > with another crate writing `impl<T> ForeignTrait<T> for LocalTypeCrateB`,
+// > which we will always permit.
+
+impl<FF, FF2> Mul<Polynomial<FF>> for BFieldElement
+where
+    FF: FiniteField + Mul<BFieldElement, Output = FF2>,
+    FF2: FiniteField,
+{
+    type Output = Polynomial<FF2>;
+
+    fn mul(self, other: Polynomial<FF>) -> Self::Output {
+        other.scalar_mul(self)
+    }
+}
+
+impl<FF, FF2> Mul<Polynomial<FF>> for XFieldElement
+where
+    FF: FiniteField + Mul<XFieldElement, Output = FF2>,
+    FF2: FiniteField,
+{
+    type Output = Polynomial<FF2>;
+
+    fn mul(self, other: Polynomial<FF>) -> Self::Output {
+        other.scalar_mul(self)
+    }
+}
+
+impl<S, FF, FF2> Mul<S> for Polynomial<FF>
+where
+    S: FiniteField,
+    FF: FiniteField + Mul<S, Output = FF2>,
+    FF2: FiniteField,
+{
+    type Output = Polynomial<FF2>;
+
+    fn mul(self, other: S) -> Self::Output {
+        self.scalar_mul(other)
+    }
+}
+
+impl<FF> Mul for Polynomial<FF>
+where
+    FF: FiniteField,
+{
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -2587,6 +2637,22 @@ mod test_polynomials {
         let new_polynomial = polynomial.scalar_mul(scalar);
         polynomial.scalar_mul_mut(scalar);
         prop_assert_eq!(polynomial, new_polynomial);
+    }
+
+    #[proptest]
+    fn polynomial_multiplication_with_scalar_is_equivalent_for_all_mul_traits(
+        polynomial: Polynomial<BFieldElement>,
+        scalar: BFieldElement,
+    ) {
+        let bfe_rhs = polynomial.clone() * scalar;
+        let xfe_rhs = polynomial.clone() * scalar.lift();
+        let bfe_lhs = scalar * polynomial.clone();
+        let xfe_lhs = scalar.lift() * polynomial;
+
+        prop_assert_eq!(bfe_lhs.clone(), bfe_rhs);
+        prop_assert_eq!(xfe_lhs.clone(), xfe_rhs);
+
+        prop_assert_eq!(bfe_lhs * XFieldElement::ONE, xfe_lhs);
     }
 
     #[test]
