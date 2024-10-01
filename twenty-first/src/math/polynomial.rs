@@ -2381,6 +2381,59 @@ impl<FF: FiniteField> Polynomial<FF> {
     }
 }
 
+/// Use the barycentric Lagrange evaluation formula to evaluate a polynomial in
+/// “value form”, also known as a codeword. This is generally more efficient
+/// than first [interpolating](Polynomial::interpolate), then
+/// [evaluating](Polynomial::evaluate).
+///
+/// [Credit] for (re)discovering this formula goes to Al-Kindi.
+///
+/// # Panics
+///
+/// Panics if the codeword is some length that is
+/// - not a power of 2, or
+/// - greater than (1 << 32).
+///
+/// [Credit]: https://github.com/0xPolygonMiden/miden-vm/issues/568
+//
+// The trait bounds of the form `A: Mul<B, Output = C>` allow using both
+// base & extension field elements for both `A` and `B`, giving the greatest
+// generality in using the function.
+//
+// It is possible to remove one of the generics by returning type
+// `<<Coeff as Mul<Ind>>::Output as Mul<Ind>>::Output`
+// (and changing a few trait bounds) but who would want to read that?
+pub fn barycentric_evaluate<Ind, Coeff, Eval>(
+    codeword: &[Coeff],
+    indeterminate: Ind,
+) -> <Eval as Mul<Ind>>::Output
+where
+    Ind: FiniteField + Mul<BFieldElement, Output = Ind> + Sub<BFieldElement, Output = Ind>,
+    Coeff: FiniteField + Mul<Ind, Output = Eval>,
+    Eval: FiniteField + Mul<Ind>,
+{
+    let root_order = codeword.len().try_into().unwrap();
+    let generator = BFieldElement::primitive_root_of_unity(root_order).unwrap();
+    let domain_iter = (0..root_order).scan(BFieldElement::ONE, |acc, _| {
+        let to_yield = Some(*acc);
+        *acc *= generator;
+        to_yield
+    });
+
+    let domain_shift = domain_iter.clone().map(|d| indeterminate - d).collect();
+    let domain_shift_inverses = Ind::batch_inversion(domain_shift);
+    let domain_over_domain_shift = domain_iter
+        .zip(domain_shift_inverses)
+        .map(|(d, inv)| inv * d);
+    let denominator = domain_over_domain_shift.clone().fold(Ind::ZERO, Ind::add);
+    let numerator = domain_over_domain_shift
+        .zip(codeword)
+        .map(|(dsi, &abscis)| abscis * dsi)
+        .fold(Eval::ZERO, Eval::add);
+
+    numerator * denominator.inverse()
+}
+
 // It is impossible to
 // `impl<FF: FiniteField> Mul<Polynomial<FF>> for FF`
 // because of Rust's orphan rules [E0210]. Citing RFC 2451:
@@ -4326,5 +4379,41 @@ mod test_polynomials {
             polynomial.batch_evaluate(&points),
             polynomial.par_batch_evaluate(&points)
         );
+    }
+
+    #[proptest(cases = 20)]
+    fn polynomial_evaluation_and_barycentric_evaluation_are_equivalent(
+        #[strategy(1_usize..8)] _log_num_coefficients: usize,
+        #[strategy(1_usize..6)] log_expansion_factor: usize,
+        #[strategy(vec(arb(), 1 << #_log_num_coefficients))] coefficients: Vec<XFieldElement>,
+        #[strategy(arb())] indeterminate: XFieldElement,
+    ) {
+        let domain_len = coefficients.len() * (1 << log_expansion_factor);
+        let domain_gen = BFieldElement::primitive_root_of_unity(domain_len.try_into()?).unwrap();
+        let domain = (0..domain_len)
+            .scan(XFieldElement::ONE, |acc, _| {
+                let current = *acc;
+                *acc *= domain_gen;
+                Some(current)
+            })
+            .collect_vec();
+
+        let polynomial = Polynomial::from(&coefficients);
+        let codeword = polynomial.batch_evaluate(&domain);
+        prop_assert_eq!(
+            polynomial.evaluate(indeterminate),
+            barycentric_evaluate(&codeword, indeterminate)
+        );
+    }
+
+    #[test]
+    fn barycentric_evaluation_works_with_many_types() {
+        let bfe_codeword = bfe_array![1];
+        let _ = barycentric_evaluate(&bfe_codeword, bfe!(0));
+        let _ = barycentric_evaluate(&bfe_codeword, xfe!(0));
+
+        let xfe_codeword = xfe_array![[1; 3]];
+        let _ = barycentric_evaluate(&xfe_codeword, bfe!(0));
+        let _ = barycentric_evaluate(&xfe_codeword, xfe!(0));
     }
 }
