@@ -397,39 +397,6 @@ impl FromStr for BFieldElement {
     }
 }
 
-impl From<u8> for BFieldElement {
-    fn from(value: u8) -> Self {
-        Self::new(value.into())
-    }
-}
-
-impl From<u16> for BFieldElement {
-    fn from(value: u16) -> Self {
-        Self::new(value.into())
-    }
-}
-
-impl From<u32> for BFieldElement {
-    fn from(value: u32) -> Self {
-        Self::new(value.into())
-    }
-}
-
-impl From<u64> for BFieldElement {
-    fn from(value: u64) -> Self {
-        Self::new(value)
-    }
-}
-
-impl From<i32> for BFieldElement {
-    fn from(value: i32) -> Self {
-        match value {
-            v if v >= 0 => Self::new(v as u64),
-            v => -Self::new(-v as u64),
-        }
-    }
-}
-
 impl From<usize> for BFieldElement {
     fn from(value: usize) -> Self {
         // targets with wider target pointers don't exist at the time of writing
@@ -442,38 +409,143 @@ impl From<usize> for BFieldElement {
     }
 }
 
+impl From<u128> for BFieldElement {
+    fn from(value: u128) -> Self {
+        fn mod_reduce(x: u128) -> u64 {
+            const LOWER_MASK: u64 = 0xFFFF_FFFF;
+
+            let x_lo = x as u64;
+            let x_hi = (x >> 64) as u64;
+            let x_hi_lo = (x_hi as u32) as u64;
+            let x_hi_hi = x_hi >> 32;
+
+            // x_lo - x_hi_hi; potential underflow because `x_hi_hi` may be greater than `x_lo`
+            let (tmp0, is_underflow) = x_lo.overflowing_sub(x_hi_hi);
+            let tmp1 = tmp0.wrapping_sub(LOWER_MASK * (is_underflow as u64));
+
+            // guaranteed not to underflow
+            let tmp2 = (x_hi_lo << 32) - x_hi_lo;
+
+            // adding tmp values gives final result;
+            // potential overflow because each of the `tmp`s may be up to 64 bits
+            let (result, is_overflow) = tmp1.overflowing_add(tmp2);
+            result.wrapping_add(LOWER_MASK * (is_overflow as u64))
+        }
+
+        Self::new(mod_reduce(value))
+    }
+}
+
+macro_rules! impl_from_for_small_unsigned_int {
+    ($($t:ident),+ $(,)?) => {$(
+        impl From<$t> for BFieldElement {
+            fn from(value: $t) -> Self {
+                Self::new(u64::from(value))
+            }
+        }
+    )+};
+}
+
+impl_from_for_small_unsigned_int!(u8, u16, u32, u64);
+
 impl From<isize> for BFieldElement {
     fn from(value: isize) -> Self {
         // targets with wider target pointers don't exist at the time of writing
-        #[cfg(any(
-            target_pointer_width = "16",
-            target_pointer_width = "32",
-            target_pointer_width = "64",
-        ))]
-        match value {
-            v if v >= 0 => Self::new(v as u64),
-            v => -Self::new(-v as u64),
+        #[cfg(target_pointer_width = "16")]
+        {
+            (value as i16).into()
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            (value as i32).into()
+        }
+        #[cfg(target_pointer_width = "64")]
+        {
+            (value as i64).into()
         }
     }
 }
 
-impl From<BFieldElement> for u64 {
+impl From<i128> for BFieldElement {
+    fn from(value: i128) -> Self {
+        match value {
+            0.. => value as u128,
+            _ => (value as u128) - BFieldElement::R2 as u128,
+        }
+        .into()
+    }
+}
+
+macro_rules! impl_from_for_small_signed_int {
+    ($($t:ident),+ $(,)?) => {$(
+        impl From<$t> for BFieldElement {
+            fn from(value: $t) -> Self {
+                i128::from(value).into()
+            }
+        }
+    )+};
+}
+
+impl_from_for_small_signed_int!(i8, i16, i32, i64);
+
+macro_rules! impl_try_into_for_int {
+    ($($t:ident),+ $(,)?) => {$(
+        impl TryFrom<BFieldElement> for $t {
+            type Error = TryFromIntError;
+
+            fn try_from(value: BFieldElement) -> Result<Self, Self::Error> {
+                $t::try_from(value.canonical_representation())
+            }
+        }
+
+        impl TryFrom<&BFieldElement> for $t {
+            type Error = TryFromIntError;
+
+            fn try_from(value: &BFieldElement) -> Result<Self, Self::Error> {
+                $t::try_from(value.canonical_representation())
+            }
+        }
+    )+};
+}
+
+impl_try_into_for_int!(u8, i8, u16, i16, u32, i32, usize, isize);
+
+macro_rules! impl_into_for_int {
+    ($($t:ident),+ $(,)?) => {$(
+        impl From<BFieldElement> for $t {
+            fn from(elem: BFieldElement) -> Self {
+                Self::from(elem.canonical_representation())
+            }
+        }
+
+        impl From<&BFieldElement> for $t {
+            fn from(elem: &BFieldElement) -> Self {
+                Self::from(elem.canonical_representation())
+            }
+        }
+    )+};
+}
+
+impl_into_for_int!(u64, u128, i128);
+
+impl From<BFieldElement> for i64 {
     fn from(elem: BFieldElement) -> Self {
-        elem.canonical_representation()
+        bfe_to_i64(&elem)
     }
 }
 
-impl From<&BFieldElement> for u64 {
+impl From<&BFieldElement> for i64 {
     fn from(elem: &BFieldElement) -> Self {
-        elem.canonical_representation()
+        bfe_to_i64(elem)
     }
 }
 
-impl TryFrom<BFieldElement> for u32 {
-    type Error = TryFromIntError;
-
-    fn try_from(value: BFieldElement) -> Result<Self, Self::Error> {
-        u32::try_from(value.canonical_representation())
+const fn bfe_to_i64(bfe: &BFieldElement) -> i64 {
+    let v = bfe.canonical_representation();
+    if v <= i64::MAX as u64 {
+        v as i64
+    } else {
+        (v as i128 - BFieldElement::P as i128) as i64
     }
 }
 
@@ -1313,21 +1385,103 @@ mod b_prime_field_element_test {
     }
 
     #[proptest]
-    fn conversion_from_i32_to_bfe_is_correct(value: i32) {
-        let bfe = BFieldElement::from(value);
-        match value {
-            v if v >= 0 => prop_assert_eq!(u64::try_from(v).unwrap(), bfe.value()),
-            v => prop_assert_eq!(u64::try_from(-v).unwrap(), BFieldElement::P - bfe.value()),
+    fn conversion_from_i32_to_bfe_is_correct(v: i32) {
+        let bfe = BFieldElement::from(v);
+        match v {
+            0.. => prop_assert_eq!(u64::try_from(v)?, bfe.value()),
+            _ => prop_assert_eq!(u64::try_from(-v)?, BFieldElement::P - bfe.value()),
         }
     }
 
     #[proptest]
-    fn conversion_from_isize_to_bfe_is_correct(value: isize) {
-        let bfe = BFieldElement::from(value);
-        match value {
-            v if v >= 0 => prop_assert_eq!(u64::try_from(v).unwrap(), bfe.value()),
-            v => prop_assert_eq!(u64::try_from(-v).unwrap(), BFieldElement::P - bfe.value()),
+    fn conversion_from_isize_to_bfe_is_correct(v: isize) {
+        let bfe = BFieldElement::from(v);
+        match v {
+            0.. => prop_assert_eq!(u64::try_from(v)?, bfe.value()),
+            _ => prop_assert_eq!(u64::try_from(-v)?, BFieldElement::P - bfe.value()),
         }
+    }
+
+    #[test]
+    fn bfield_element_can_be_converted_to_and_from_many_types() {
+        let _ = BFieldElement::from(0_u8);
+        let _ = BFieldElement::from(0_u16);
+        let _ = BFieldElement::from(0_u32);
+        let _ = BFieldElement::from(0_u64);
+        let _ = BFieldElement::from(0_u128);
+        let _ = BFieldElement::from(0_usize);
+
+        let max = bfe!(BFieldElement::MAX);
+        assert_eq!(max, BFieldElement::from(-1_i8));
+        assert_eq!(max, BFieldElement::from(-1_i16));
+        assert_eq!(max, BFieldElement::from(-1_i32));
+        assert_eq!(max, BFieldElement::from(-1_i64));
+        assert_eq!(max, BFieldElement::from(-1_i128));
+        assert_eq!(max, BFieldElement::from(-1_isize));
+
+        assert!(u8::try_from(BFieldElement::ZERO).is_ok());
+        assert!(i8::try_from(BFieldElement::ZERO).is_ok());
+        assert!(u16::try_from(BFieldElement::ZERO).is_ok());
+        assert!(i16::try_from(BFieldElement::ZERO).is_ok());
+        assert!(u32::try_from(BFieldElement::ZERO).is_ok());
+        assert!(i32::try_from(BFieldElement::ZERO).is_ok());
+        assert!(usize::try_from(BFieldElement::ZERO).is_ok());
+        assert!(isize::try_from(BFieldElement::ZERO).is_ok());
+
+        let _ = u64::from(max);
+        let _ = i64::from(max);
+        let _ = u128::from(max);
+        let _ = i128::from(max);
+    }
+
+    #[test]
+    fn bfield_conversion_works_for_types_min_and_max() {
+        let _ = BFieldElement::from(u8::MIN);
+        let _ = BFieldElement::from(u8::MAX);
+        let _ = BFieldElement::from(u16::MIN);
+        let _ = BFieldElement::from(u16::MAX);
+        let _ = BFieldElement::from(u32::MIN);
+        let _ = BFieldElement::from(u32::MAX);
+        let _ = BFieldElement::from(u64::MIN);
+        let _ = BFieldElement::from(u64::MAX);
+        let _ = BFieldElement::from(u128::MIN);
+        let _ = BFieldElement::from(u128::MAX);
+        let _ = BFieldElement::from(usize::MIN);
+        let _ = BFieldElement::from(usize::MAX);
+        let _ = BFieldElement::from(i8::MIN);
+        let _ = BFieldElement::from(i8::MAX);
+        let _ = BFieldElement::from(i16::MIN);
+        let _ = BFieldElement::from(i16::MAX);
+        let _ = BFieldElement::from(i32::MIN);
+        let _ = BFieldElement::from(i32::MAX);
+        let _ = BFieldElement::from(i64::MIN);
+        let _ = BFieldElement::from(i64::MAX);
+        let _ = BFieldElement::from(i128::MIN);
+        let _ = BFieldElement::from(i128::MAX);
+        let _ = BFieldElement::from(isize::MIN);
+        let _ = BFieldElement::from(isize::MAX);
+    }
+
+    #[proptest]
+    fn naive_and_actual_conversion_from_u128_agree(v: u128) {
+        fn naive_conversion(x: u128) -> BFieldElement {
+            let p = BFieldElement::P as u128;
+            let value = (x % p) as u64;
+            BFieldElement::new(value)
+        }
+
+        prop_assert_eq!(naive_conversion(v), BFieldElement::from(v));
+    }
+
+    #[proptest]
+    fn naive_and_actual_conversion_from_i128_agree(v: i128) {
+        fn naive_conversion(x: i128) -> BFieldElement {
+            let p = BFieldElement::P as i128;
+            let value = x.rem_euclid(p) as u64;
+            BFieldElement::new(value)
+        }
+
+        prop_assert_eq!(naive_conversion(v), BFieldElement::from(v));
     }
 
     #[test]
