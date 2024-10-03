@@ -16,7 +16,6 @@ use serde::Deserializer;
 use serde::Serialize;
 use serde::Serializer;
 
-use crate::error::ParseBFieldElementError;
 use crate::error::TryFromDigestError;
 use crate::error::TryFromHexDigestError;
 use crate::math::b_field_element::BFieldElement;
@@ -127,17 +126,10 @@ impl FromStr for Digest {
     type Err = TryFromDigestError;
 
     fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let maybe_parsed_u64s: Result<Vec<_>, _> =
-            string.split(',').map(str::parse::<u64>).collect();
-        let parsed_u64s = maybe_parsed_u64s.map_err(ParseBFieldElementError::ParseU64Error)?;
-
-        // checks if each u64 is canonical before instantiating into BFE.
-        let bfe_try_from = |v: u64| -> Result<BFieldElement, _> {
-            let bfe = BFieldElement::is_canonical(v).then(|| BFieldElement::new(v));
-            bfe.ok_or(TryFromDigestError::NotCanonical(v))
-        };
-        let bfes: Vec<_> = parsed_u64s.into_iter().map(bfe_try_from).try_collect()?;
-
+        let bfes: Vec<_> = string
+            .split(',')
+            .map(str::parse::<BFieldElement>)
+            .try_collect()?;
         let invalid_len_err = Self::Err::InvalidLength(bfes.len());
         let digest_innards = bfes.try_into().map_err(|_| invalid_len_err)?;
 
@@ -170,10 +162,9 @@ impl From<Digest> for Vec<BFieldElement> {
 }
 
 impl From<Digest> for [u8; Digest::BYTES] {
-    fn from(item: Digest) -> Self {
-        let u64s = item.0.iter().map(|x| x.value());
-        u64s.map(|x| x.to_le_bytes())
-            .collect::<Vec<_>>()
+    fn from(Digest(innards): Digest) -> Self {
+        innards
+            .map(<[u8; BFieldElement::BYTES]>::from)
             .concat()
             .try_into()
             .unwrap()
@@ -184,20 +175,9 @@ impl TryFrom<[u8; Digest::BYTES]> for Digest {
     type Error = TryFromDigestError;
 
     fn try_from(item: [u8; Self::BYTES]) -> Result<Self, Self::Error> {
-        let chunk_into_bfe = |chunk: &[u8]| -> Result<BFieldElement, _> {
-            let mut arr = [0u8; BFieldElement::BYTES];
-            arr.copy_from_slice(chunk);
-            let int = u64::from_le_bytes(arr);
-
-            // return bfe, or error if not canonical
-            BFieldElement::is_canonical(int)
-                .then(|| BFieldElement::new(int))
-                .ok_or(TryFromDigestError::NotCanonical(int))
-        };
-
         let digest_innards: Vec<_> = item
             .chunks_exact(BFieldElement::BYTES)
-            .map(chunk_into_bfe)
+            .map(BFieldElement::try_from)
             .try_collect()?;
 
         Ok(Self(digest_innards.try_into().unwrap()))
@@ -325,8 +305,10 @@ pub(crate) mod digest_tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
-    use super::*;
+    use crate::error::ParseBFieldElementError;
     use crate::prelude::*;
+
+    use super::*;
 
     impl ProptestArbitrary for Digest {
         type Parameters = ();
@@ -530,8 +512,10 @@ pub(crate) mod digest_tests {
     fn try_from_bytes_not_canonical() -> Result<(), TryFromDigestError> {
         let bytes: [u8; Digest::BYTES] = [255; Digest::BYTES];
 
-        assert!(Digest::try_from(bytes)
-            .is_err_and(|e| matches!(e, TryFromDigestError::NotCanonical(_))));
+        assert!(Digest::try_from(bytes).is_err_and(|e| matches!(
+            e,
+            TryFromDigestError::InvalidBFieldElement(ParseBFieldElementError::NotCanonical(_))
+        )));
 
         Ok(())
     }
@@ -541,9 +525,10 @@ pub(crate) mod digest_tests {
     fn from_str_not_canonical() -> Result<(), TryFromDigestError> {
         let str = format!("0,0,0,0,{}", u64::MAX);
 
-        assert!(
-            Digest::from_str(&str).is_err_and(|e| matches!(e, TryFromDigestError::NotCanonical(_)))
-        );
+        assert!(Digest::from_str(&str).is_err_and(|e| matches!(
+            e,
+            TryFromDigestError::InvalidBFieldElement(ParseBFieldElementError::NotCanonical(_))
+        )));
 
         Ok(())
     }
@@ -669,7 +654,9 @@ pub(crate) mod digest_tests {
             )
             .is_err_and(|e| matches!(
                 e,
-                TryFromHexDigestError::Digest(TryFromDigestError::NotCanonical(_))
+                TryFromHexDigestError::Digest(TryFromDigestError::InvalidBFieldElement(
+                    ParseBFieldElementError::NotCanonical(_)
+                ))
             )));
         }
     }

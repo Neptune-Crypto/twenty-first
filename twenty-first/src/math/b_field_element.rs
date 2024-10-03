@@ -207,18 +207,26 @@ impl BFieldElement {
     pub const BYTES: usize = 8;
 
     /// The base field's prime, _i.e._, 2^64 - 2^32 + 1.
-    pub const P: u64 = 0xffff_ffff_0000_0001u64;
+    pub const P: u64 = 0xffff_ffff_0000_0001;
     pub const MAX: u64 = Self::P - 1;
 
     /// 2^128 mod P; this is used for conversion of elements into Montgomery representation.
-    const R2: u64 = 0xFFFFFFFE00000001;
+    const R2: u64 = 0xffff_fffe_0000_0001;
 
     /// -2^-1
-    pub const MINUS_TWO_INVERSE: Self = Self::new(9223372034707292160);
+    pub const MINUS_TWO_INVERSE: Self = Self::new(0x7fff_ffff_8000_0000);
 
     #[inline]
     pub const fn new(value: u64) -> Self {
         Self(Self::montyred((value as u128) * (Self::R2 as u128)))
+    }
+
+    /// Construct a new base field element iff the given value is
+    /// [canonical][Self::is_canonical], an error otherwise.
+    fn try_new(v: u64) -> Result<Self, ParseBFieldElementError> {
+        Self::is_canonical(v)
+            .then(|| Self::new(v))
+            .ok_or(ParseBFieldElementError::NotCanonical(v))
     }
 
     #[inline]
@@ -294,6 +302,10 @@ impl BFieldElement {
     }
 
     /// Convert a `BFieldElement` from a byte slice in native endianness.
+    #[deprecated(
+        since = "0.42.0",
+        note = "endianness must not be platform specific; use `<&[u8]>::try_from()` instead"
+    )]
     pub fn from_ne_bytes(bytes: &[u8]) -> BFieldElement {
         let mut bytes_copied: [u8; 8] = [0; 8];
         bytes_copied.copy_from_slice(bytes);
@@ -393,7 +405,7 @@ impl FromStr for BFieldElement {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parsed = s.parse().map_err(Self::Err::ParseU64Error)?;
-        Ok(BFieldElement::new(parsed))
+        Self::try_new(parsed)
     }
 }
 
@@ -559,10 +571,21 @@ impl From<BFieldElement> for [u8; BFieldElement::BYTES] {
     }
 }
 
-impl From<[u8; BFieldElement::BYTES]> for BFieldElement {
-    fn from(array: [u8; BFieldElement::BYTES]) -> Self {
-        let n = u64::from_le_bytes(array);
-        BFieldElement::new(n)
+impl TryFrom<[u8; BFieldElement::BYTES]> for BFieldElement {
+    type Error = ParseBFieldElementError;
+
+    fn try_from(array: [u8; BFieldElement::BYTES]) -> Result<Self, Self::Error> {
+        Self::try_new(u64::from_le_bytes(array))
+    }
+}
+
+impl TryFrom<&[u8]> for BFieldElement {
+    type Error = ParseBFieldElementError;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        <[u8; BFieldElement::BYTES]>::try_from(bytes)
+            .map_err(|_| Self::Error::InvalidNumBytes(bytes.len()))?
+            .try_into()
     }
 }
 
@@ -821,6 +844,22 @@ mod b_prime_field_element_test {
     }
 
     #[proptest]
+    fn parsing_string_representing_canonical_u64_gives_correct_bfield_element(
+        #[strategy(0..=BFieldElement::MAX)] v: u64,
+    ) {
+        let bfe = BFieldElement::from_str(&v.to_string()).unwrap();
+        prop_assert_eq!(v, bfe.value());
+    }
+
+    #[proptest]
+    fn parsing_string_representing_too_big_u64_as_bfield_element_gives_error(
+        #[strategy(BFieldElement::P..)] v: u64,
+    ) {
+        let err = BFieldElement::from_str(&v.to_string()).err().unwrap();
+        prop_assert_eq!(ParseBFieldElementError::NotCanonical(v), err);
+    }
+
+    #[proptest]
     fn zero_is_neutral_element_for_addition(bfe: BFieldElement) {
         let zero = BFieldElement::ZERO;
         prop_assert_eq!(bfe + zero, bfe);
@@ -961,16 +1000,14 @@ mod b_prime_field_element_test {
     #[proptest]
     fn byte_array_conversion(bfe: BFieldElement) {
         let array: [u8; 8] = bfe.into();
-        let bfe_recalculated: BFieldElement = array.into();
+        let bfe_recalculated: BFieldElement = array.try_into()?;
         prop_assert_eq!(bfe, bfe_recalculated);
     }
 
     #[proptest]
-    fn byte_array_outside_range_is_brought_into_range(#[strategy(BFieldElement::P..)] value: u64) {
+    fn byte_array_outside_range_is_not_accepted(#[strategy(BFieldElement::P..)] value: u64) {
         let byte_array = value.to_le_bytes();
-        let bfe: BFieldElement = byte_array.into();
-        let expected_value = value - BFieldElement::P;
-        assert_eq!(expected_value, bfe.value());
+        prop_assert!(BFieldElement::try_from(byte_array).is_err());
     }
 
     #[proptest]

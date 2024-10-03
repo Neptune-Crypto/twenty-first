@@ -459,15 +459,10 @@ pub mod util {
 
 impl<'a> Arbitrary<'a> for MmrAccumulator {
     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        let mut buffer = [0u8; 8];
-        u.fill_buffer(&mut buffer)?;
-        let num_leafs = u64::from_be_bytes(buffer) >> 1; // num_leafs can be at most 63 bits
-
-        let mut peaks = vec![];
-        for _ in 0..(num_leafs.count_ones()) {
-            let peak = Digest::arbitrary(u)?;
-            peaks.push(peak);
-        }
+        let num_leafs = u.arbitrary::<u64>()? >> 1; // num_leafs can be at most 63 bits
+        let peaks = (0..num_leafs.count_ones())
+            .map(|_| Digest::arbitrary(u))
+            .try_collect()?;
 
         Ok(MmrAccumulator::init(peaks, num_leafs))
     }

@@ -14,6 +14,15 @@ pub use crate::util_types::merkle_tree::MerkleTreeError;
 pub enum ParseBFieldElementError {
     #[error("invalid `u64`")]
     ParseU64Error(#[source] <u64 as FromStr>::Err),
+
+    #[error("non-canonical {0} >= {} == `BFieldElement::P`", BFieldElement::P)]
+    NotCanonical(u64),
+
+    #[error(
+        "incorrect number of bytes: {0} != {} == `BFieldElement::BYTES`",
+        BFieldElement::BYTES
+    )]
+    InvalidNumBytes(usize),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Error)]
@@ -41,9 +50,6 @@ pub enum TryFromDigestError {
 
     #[error("invalid `BFieldElement`")]
     InvalidBFieldElement(#[from] ParseBFieldElementError),
-
-    #[error("non-canonical {0} >= {} == `BFieldElement::P`", BFieldElement::P)]
-    NotCanonical(u64),
 
     #[error("overflow converting to Digest")]
     Overflow,
