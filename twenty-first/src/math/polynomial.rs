@@ -293,35 +293,37 @@ where
         }
     }
 
+    /// Multiply `self` with itself `pow` times.
+    ///
+    /// Similar to [`Self::pow`], but faster and slightly less general.
     #[must_use]
-    pub fn fast_mod_pow(&self, pow: BigInt) -> Self {
-        let one = FF::ONE;
-
-        // Special case to handle 0^0 = 1
-        if pow.is_zero() {
-            return Self::from_constant(one);
-        }
+    pub fn fast_pow(&self, pow: u32) -> Self {
+        // special case: 0^0 = 1
+        let Some(bit_length) = pow.checked_ilog2() else {
+            return Self::one();
+        };
 
         if self.is_zero() {
             return Self::zero();
         }
 
-        if pow.is_one() {
-            return self.clone();
-        }
-
-        let mut acc = Polynomial::from_constant(one);
-        let bit_length: u64 = pow.bits();
-        for i in 0..bit_length {
+        // square-and-multiply
+        let mut acc = Self::one();
+        for i in 0..=bit_length {
             acc = acc.square();
-            let set: bool =
-                !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
-            if set {
-                acc = self.to_owned() * acc;
+            let bit_is_set = (pow >> (bit_length - i) & 1) == 1;
+            if bit_is_set {
+                acc = self.multiply(&acc);
             }
         }
 
         acc
+    }
+
+    #[must_use]
+    #[deprecated(since = "0.42.0", note = "renaming; use `fast_pow` instead")]
+    pub fn fast_mod_pow(&self, pow: BigInt) -> Self {
+        self.fast_pow(pow.try_into().unwrap())
     }
 
     /// Multiply `self` by `other`.
@@ -2110,32 +2112,37 @@ impl<FF: FiniteField> Polynomial<FF> {
         Self::new(product)
     }
 
-    /// Multiply a polynomial with itself `pow` times
+    /// Multiply `self` with itself `pow` times.
+    ///
+    /// Similar to [`Self::fast_pow`], but slower and slightly more general.
     #[must_use]
-    pub fn mod_pow(&self, pow: BigInt) -> Self {
-        let one = FF::ONE;
-
-        // Special case to handle 0^0 = 1
-        if pow.is_zero() {
-            return Self::from_constant(one);
-        }
+    pub fn pow(&self, pow: u32) -> Self {
+        // special case: 0^0 = 1
+        let Some(bit_length) = pow.checked_ilog2() else {
+            return Self::one();
+        };
 
         if self.is_zero() {
             return Self::zero();
         }
 
-        let mut acc = Polynomial::from_constant(one);
-        let bit_length: u64 = pow.bits();
-        for i in 0..bit_length {
+        // square-and-multiply
+        let mut acc = Self::one();
+        for i in 0..=bit_length {
             acc = acc.slow_square();
-            let set: bool =
-                !(pow.clone() & Into::<BigInt>::into(1u128 << (bit_length - 1 - i))).is_zero();
-            if set {
+            let bit_is_set = (pow >> (bit_length - i) & 1) == 1;
+            if bit_is_set {
                 acc = acc * self.clone();
             }
         }
 
         acc
+    }
+
+    #[must_use]
+    #[deprecated(since = "0.42.0", note = "renaming; use `pow` instead")]
+    pub fn mod_pow(&self, pow: BigInt) -> Self {
+        self.pow(pow.try_into().unwrap())
     }
 
     pub fn shift_coefficients_mut(&mut self, power: usize) {
@@ -2669,7 +2676,7 @@ mod test_polynomials {
         #[strategy(0_usize..50)] m: usize,
     ) {
         let to_the_n_times_m = Polynomial::<BFieldElement>::x_to_the(n * m);
-        let to_the_n_then_to_the_m = Polynomial::x_to_the(n).mod_pow(m.into());
+        let to_the_n_then_to_the_m = Polynomial::x_to_the(n).pow(m as u32);
         prop_assert_eq!(to_the_n_times_m, to_the_n_then_to_the_m);
     }
 
@@ -2874,7 +2881,7 @@ mod test_polynomials {
         #[strategy(0usize..30)] shift: usize,
     ) {
         let shifted_one = Polynomial::one().shift_coefficients(shift);
-        let x_to_the_shift = Polynomial::<BFieldElement>::from([0, 1]).mod_pow(shift.into());
+        let x_to_the_shift = Polynomial::<BFieldElement>::from([0, 1]).pow(shift as u32);
         prop_assert_eq!(shifted_one, x_to_the_shift);
     }
 
@@ -2919,24 +2926,24 @@ mod test_polynomials {
 
     #[proptest]
     fn any_polynomial_to_the_power_of_zero_is_one(poly: Polynomial<BFieldElement>) {
-        let poly_to_the_zero = poly.mod_pow(0.into());
+        let poly_to_the_zero = poly.pow(0);
         prop_assert_eq!(Polynomial::one(), poly_to_the_zero);
     }
 
     #[proptest]
     fn any_polynomial_to_the_power_one_is_itself(poly: Polynomial<BFieldElement>) {
-        let poly_to_the_one = poly.mod_pow(1.into());
+        let poly_to_the_one = poly.pow(1);
         prop_assert_eq!(poly, poly_to_the_one);
     }
 
     #[proptest]
-    fn polynomial_one_to_any_power_is_one(#[strategy(0u64..30)] exponent: u64) {
-        let one_to_the_exponent = Polynomial::<BFieldElement>::one().mod_pow(exponent.into());
+    fn polynomial_one_to_any_power_is_one(#[strategy(0u32..30)] exponent: u32) {
+        let one_to_the_exponent = Polynomial::<BFieldElement>::one().pow(exponent);
         prop_assert_eq!(Polynomial::one(), one_to_the_exponent);
     }
 
     #[test]
-    fn mod_pow_test() {
+    fn pow_test() {
         let polynomial = |cs: &[u64]| Polynomial::<BFieldElement>::from(cs);
 
         let pol = polynomial(&[0, 14, 0, 4, 0, 8, 0, 3]);
@@ -2946,21 +2953,18 @@ mod test_polynomials {
             27,
         ]);
 
-        assert_eq!(pol_squared, pol.mod_pow(2.into()));
-        assert_eq!(pol_cubed, pol.mod_pow(3.into()));
+        assert_eq!(pol_squared, pol.pow(2));
+        assert_eq!(pol_cubed, pol.pow(3));
 
         let parabola = polynomial(&[5, 41, 19]);
         let parabola_squared = polynomial(&[25, 410, 1871, 1558, 361]);
-        assert_eq!(parabola_squared, parabola.mod_pow(2.into()));
+        assert_eq!(parabola_squared, parabola.pow(2));
     }
 
     #[proptest]
-    fn mod_pow_arbitrary_test(
-        poly: Polynomial<BFieldElement>,
-        #[strategy(0u32..15)] exponent: u32,
-    ) {
-        let actual = poly.mod_pow(exponent.into());
-        let fast_actual = poly.fast_mod_pow(exponent.into());
+    fn pow_arbitrary_test(poly: Polynomial<BFieldElement>, #[strategy(0u32..15)] exponent: u32) {
+        let actual = poly.pow(exponent);
+        let fast_actual = poly.fast_pow(exponent);
         let mut expected = Polynomial::one();
         for _ in 0..exponent {
             expected = expected.clone() * poly.clone();
