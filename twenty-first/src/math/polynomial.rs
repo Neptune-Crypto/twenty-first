@@ -1954,6 +1954,13 @@ impl<FF: FiniteField> Polynomial<FF> {
         Self { coefficients }
     }
 
+    /// `x^n`
+    pub fn x_to_the(n: usize) -> Self {
+        let mut coefficients = vec![FF::ZERO; n + 1];
+        coefficients[n] = FF::ONE;
+        Self::new(coefficients)
+    }
+
     pub fn normalize(&mut self) {
         while self.coefficients.last().is_some_and(Zero::is_zero) {
             self.coefficients.pop();
@@ -2642,6 +2649,28 @@ mod test_polynomials {
         let num_coefficients = polynomial_with_leading_zeros.coefficients.len();
 
         prop_assert_eq!(expected_num_coefficients, num_coefficients);
+    }
+
+    #[test]
+    fn x_to_the_0_is_constant_1() {
+        assert!(Polynomial::<BFieldElement>::x_to_the(0).is_one());
+        assert!(Polynomial::<XFieldElement>::x_to_the(0).is_one());
+    }
+
+    #[test]
+    fn x_to_the_1_is_x() {
+        assert!(Polynomial::<BFieldElement>::x_to_the(1).is_x());
+        assert!(Polynomial::<XFieldElement>::x_to_the(1).is_x());
+    }
+
+    #[proptest]
+    fn x_to_the_n_to_the_m_is_homomorphic(
+        #[strategy(0_usize..50)] n: usize,
+        #[strategy(0_usize..50)] m: usize,
+    ) {
+        let to_the_n_times_m = Polynomial::<BFieldElement>::x_to_the(n * m);
+        let to_the_n_then_to_the_m = Polynomial::x_to_the(n).mod_pow(m.into());
+        prop_assert_eq!(to_the_n_times_m, to_the_n_then_to_the_m);
     }
 
     #[test]
