@@ -1979,13 +1979,30 @@ impl<FF: FiniteField> Polynomial<FF> {
         self.degree() == 1 && self.coefficients[0].is_zero() && self.coefficients[1].is_one()
     }
 
-    pub fn evaluate(&self, x: FF) -> FF {
-        let mut acc = FF::ZERO;
+    /// Evaluate `self` in an indeterminate.
+    ///
+    /// For a specialized version, with fewer type annotations needed, see
+    /// [`Self::evaluate_in_same_field`].
+    pub fn evaluate<Ind, Eval>(&self, x: Ind) -> Eval
+    where
+        Ind: Clone,
+        Eval: Mul<Ind, Output = Eval> + Add<FF, Output = Eval> + Zero,
+    {
+        let mut acc = Eval::zero();
         for &c in self.coefficients.iter().rev() {
-            acc = c + x * acc;
+            acc = acc * x.clone() + c;
         }
 
         acc
+    }
+    /// Evaluate `self` in an indeterminate.
+    ///
+    /// For a generalized version, with more type annotations needed, see
+    /// [`Self::evaluate`].
+    // todo: try to remove this once specialization is stabilized; see
+    //  https://rust-lang.github.io/rfcs/1210-impl-specialization.html
+    pub fn evaluate_in_same_field(&self, x: FF) -> FF {
+        self.evaluate::<FF, FF>(x)
     }
 
     /// The coefficient of the polynomial's term of highest power. `None` if (and only if) `self`
@@ -2713,8 +2730,8 @@ mod test_polynomials {
     ) {
         let scaled_polynomial = polynomial.scale(alpha);
         prop_assert_eq!(
-            polynomial.evaluate(alpha * x),
-            scaled_polynomial.evaluate(x)
+            polynomial.evaluate_in_same_field(alpha * x),
+            scaled_polynomial.evaluate_in_same_field(x)
         );
     }
 
@@ -2795,7 +2812,7 @@ mod test_polynomials {
         #[filter(!#disturbance.is_zero())] disturbance: BFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let p2 = (p2_x, line.evaluate(p2_x) + disturbance);
+        let p2 = (p2_x, line.evaluate_in_same_field(p2_x) + disturbance);
         prop_assert!(!Polynomial::are_colinear_3(p0, p1, p2));
     }
 
@@ -2852,7 +2869,7 @@ mod test_polynomials {
         x: BFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let y = line.evaluate(x);
+        let y = line.evaluate_in_same_field(x);
         let y_from_get_point_on_line = Polynomial::get_colinear_y(p0, p1, x);
         prop_assert_eq!(y, y_from_get_point_on_line);
     }
@@ -2864,7 +2881,7 @@ mod test_polynomials {
         x: XFieldElement,
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
-        let y = line.evaluate(x);
+        let y = line.evaluate_in_same_field(x);
         let y_from_get_point_on_line = Polynomial::get_colinear_y(p0, p1, x);
         prop_assert_eq!(y, y_from_get_point_on_line);
     }
@@ -3292,7 +3309,10 @@ mod test_polynomials {
         poly: Polynomial<BFieldElement>,
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
     ) {
-        let evaluations = domain.iter().map(|&x| poly.evaluate(x)).collect_vec();
+        let evaluations = domain
+            .iter()
+            .map(|&x| poly.evaluate_in_same_field(x))
+            .collect_vec();
         let fast_evaluations = poly.batch_evaluate(&domain);
         prop_assert_eq!(evaluations, fast_evaluations);
     }
@@ -4434,9 +4454,21 @@ mod test_polynomials {
         let polynomial = Polynomial::from(&coefficients);
         let codeword = polynomial.batch_evaluate(&domain);
         prop_assert_eq!(
-            polynomial.evaluate(indeterminate),
+            polynomial.evaluate_in_same_field(indeterminate),
             barycentric_evaluate(&codeword, indeterminate)
         );
+    }
+
+    #[test]
+    fn regular_evaluation_works_with_various_types() {
+        let bfe_poly = Polynomial::new(bfe_vec![1]);
+        let _: BFieldElement = bfe_poly.evaluate(bfe!(0));
+        let _: XFieldElement = bfe_poly.evaluate(bfe!(0));
+        let _: XFieldElement = bfe_poly.evaluate(xfe!(0));
+
+        let xfe_poly = Polynomial::new(xfe_vec![1]);
+        let _: XFieldElement = xfe_poly.evaluate(bfe!(0));
+        let _: XFieldElement = xfe_poly.evaluate(xfe!(0));
     }
 
     #[test]

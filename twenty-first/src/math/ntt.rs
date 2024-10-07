@@ -505,18 +505,18 @@ mod fast_ntt_attempt_tests {
     fn test_compare_ntt_to_eval() {
         for log_size in 1..10 {
             let size = 1 << log_size;
-            let mut array: Vec<BFieldElement> = random_elements(size);
-            let polynomial = Polynomial::from(&array);
+            let mut coefficients = random_elements(size);
+            let polynomial = Polynomial::new(coefficients.clone());
 
             let omega = BFieldElement::primitive_root_of_unity(size.try_into().unwrap()).unwrap();
-            ntt(&mut array, omega, log_size.try_into().unwrap());
+            ntt(&mut coefficients, omega, log_size.try_into().unwrap());
 
             let evals = (0..size)
                 .map(|i| omega.mod_pow(i.try_into().unwrap()))
-                .map(|p| polynomial.evaluate(p))
+                .map(|p| polynomial.evaluate_in_same_field(p))
                 .collect_vec();
 
-            assert_eq!(evals, array);
+            assert_eq!(evals, coefficients);
         }
     }
 
