@@ -331,7 +331,12 @@ where
     /// Prefer this over [`self * other`](Self::mul) since it chooses the fastest multiplication
     /// strategy.
     #[must_use]
-    pub fn multiply(&self, other: &Self) -> Self {
+    pub fn multiply<FF2>(&self, other: &Polynomial<FF2>) -> Polynomial<<FF as Mul<FF2>>::Output>
+    where
+        FF: Mul<FF2>,
+        FF2: FiniteField + MulAssign<BFieldElement>,
+        <FF as Mul<FF2>>::Output: FiniteField + MulAssign<BFieldElement>,
+    {
         if self.degree() + other.degree() < Self::FAST_MULTIPLY_CUTOFF_THRESHOLD {
             self.naive_multiply(other)
         } else {
@@ -348,9 +353,17 @@ where
     /// The time complexity of this method is in O(n·log(n)), where `n` is the sum of the degrees
     /// of the operands. The time complexity of the naive multiplication is in O(n^2).
     #[doc(hidden)]
-    pub fn fast_multiply(&self, other: &Self) -> Self {
+    pub fn fast_multiply<FF2>(
+        &self,
+        other: &Polynomial<FF2>,
+    ) -> Polynomial<<FF as Mul<FF2>>::Output>
+    where
+        FF: Mul<FF2>,
+        FF2: FiniteField + MulAssign<BFieldElement>,
+        <FF as Mul<FF2>>::Output: FiniteField + MulAssign<BFieldElement>,
+    {
         let Ok(degree) = usize::try_from(self.degree() + other.degree()) else {
-            return Self::zero();
+            return Polynomial::zero();
         };
         let order = (degree + 1).next_power_of_two();
         let order_u64 = u64::try_from(order).unwrap();
@@ -360,20 +373,20 @@ where
         let mut rhs_coefficients = other.coefficients.to_vec();
 
         lhs_coefficients.resize(order, FF::ZERO);
-        rhs_coefficients.resize(order, FF::ZERO);
+        rhs_coefficients.resize(order, FF2::ZERO);
 
-        ntt::<FF>(&mut lhs_coefficients, root, order.ilog2());
-        ntt::<FF>(&mut rhs_coefficients, root, order.ilog2());
+        ntt(&mut lhs_coefficients, root, order.ilog2());
+        ntt(&mut rhs_coefficients, root, order.ilog2());
 
-        let mut hadamard_product: Vec<FF> = rhs_coefficients
+        let mut hadamard_product = lhs_coefficients
             .into_iter()
-            .zip(lhs_coefficients)
-            .map(|(r, l)| r * l)
-            .collect();
+            .zip(rhs_coefficients)
+            .map(|(l, r)| l * r)
+            .collect_vec();
 
-        intt::<FF>(&mut hadamard_product, root, order.ilog2());
+        intt(&mut hadamard_product, root, order.ilog2());
         hadamard_product.truncate(degree + 1);
-        Self::new(hadamard_product)
+        Polynomial::new(hadamard_product)
     }
 
     /// Multiply a bunch of polynomials together.
@@ -2111,22 +2124,30 @@ impl<FF: FiniteField> Polynomial<FF> {
 impl<FF: FiniteField> Polynomial<FF> {
     /// Only `pub` to allow benchmarking; not considered part of the public API.
     #[doc(hidden)]
-    pub fn naive_multiply(&self, other: &Self) -> Self {
+    pub fn naive_multiply<FF2>(
+        &self,
+        other: &Polynomial<FF2>,
+    ) -> Polynomial<<FF as Mul<FF2>>::Output>
+    where
+        FF: Mul<FF2>,
+        FF2: FiniteField,
+        <FF as Mul<FF2>>::Output: FiniteField,
+    {
         let Ok(degree_lhs) = usize::try_from(self.degree()) else {
-            return Self::zero();
+            return Polynomial::zero();
         };
         let Ok(degree_rhs) = usize::try_from(other.degree()) else {
-            return Self::zero();
+            return Polynomial::zero();
         };
 
-        let mut product = vec![FF::ZERO; degree_lhs + degree_rhs + 1];
+        let mut product = vec![<FF as Mul<FF2>>::Output::ZERO; degree_lhs + degree_rhs + 1];
         for i in 0..=degree_lhs {
             for j in 0..=degree_rhs {
                 product[i + j] += self.coefficients[i] * other.coefficients[j];
             }
         }
 
-        Self::new(product)
+        Polynomial::new(product)
     }
 
     /// Multiply `self` with itself `pow` times.
@@ -2512,13 +2533,15 @@ where
     }
 }
 
-impl<FF> Mul for Polynomial<FF>
+impl<FF, FF2> Mul<Polynomial<FF2>> for Polynomial<FF>
 where
-    FF: FiniteField,
+    FF: FiniteField + Mul<FF2>,
+    FF2: FiniteField,
+    <FF as Mul<FF2>>::Output: FiniteField,
 {
-    type Output = Self;
+    type Output = Polynomial<<FF as Mul<FF2>>::Output>;
 
-    fn mul(self, other: Self) -> Self {
+    fn mul(self, other: Polynomial<FF2>) -> Polynomial<<FF as Mul<FF2>>::Output> {
         self.naive_multiply(&other)
     }
 }
@@ -2999,14 +3022,16 @@ mod test_polynomials {
 
     #[proptest]
     fn polynomial_one_is_neutral_element_for_multiplication(a: Polynomial<BFieldElement>) {
-        prop_assert_eq!(a.clone() * Polynomial::one(), a.clone());
-        prop_assert_eq!(Polynomial::one() * a.clone(), a);
+        prop_assert_eq!(a.clone() * Polynomial::<BFieldElement>::one(), a.clone());
+        prop_assert_eq!(Polynomial::<BFieldElement>::one() * a.clone(), a);
     }
 
     #[proptest]
     fn multiplication_by_zero_is_zero(a: Polynomial<BFieldElement>) {
-        prop_assert_eq!(Polynomial::zero(), a.clone() * Polynomial::zero());
-        prop_assert_eq!(Polynomial::zero(), Polynomial::zero() * a.clone());
+        let zero = Polynomial::<BFieldElement>::zero();
+
+        prop_assert_eq!(Polynomial::zero(), a.clone() * zero.clone());
+        prop_assert_eq!(Polynomial::zero(), zero * a);
     }
 
     #[proptest]
@@ -3192,13 +3217,13 @@ mod test_polynomials {
 
     #[proptest]
     fn fast_multiplication_by_zero_gives_zero(poly: Polynomial<BFieldElement>) {
-        let product = poly.fast_multiply(&Polynomial::zero());
+        let product = poly.fast_multiply(&Polynomial::<BFieldElement>::zero());
         prop_assert_eq!(Polynomial::zero(), product);
     }
 
     #[proptest]
     fn fast_multiplication_by_one_gives_self(poly: Polynomial<BFieldElement>) {
-        let product = poly.fast_multiply(&Polynomial::one());
+        let product = poly.fast_multiply(&Polynomial::<BFieldElement>::one());
         prop_assert_eq!(poly, product);
     }
 
@@ -4480,5 +4505,31 @@ mod test_polynomials {
         let xfe_codeword = xfe_array![[1; 3]];
         let _ = barycentric_evaluate(&xfe_codeword, bfe!(0));
         let _ = barycentric_evaluate(&xfe_codeword, xfe!(0));
+    }
+
+    #[test]
+    fn various_multiplications_work_with_various_types() {
+        let b = Polynomial::<BFieldElement>::zero;
+        let x = Polynomial::<XFieldElement>::zero;
+
+        let _ = b() * b();
+        let _ = b() * x();
+        let _ = x() * b();
+        let _ = x() * x();
+
+        let _ = b().multiply(&b());
+        let _ = b().multiply(&x());
+        let _ = x().multiply(&b());
+        let _ = x().multiply(&x());
+
+        let _ = b().naive_multiply(&b());
+        let _ = b().naive_multiply(&x());
+        let _ = x().naive_multiply(&b());
+        let _ = x().naive_multiply(&x());
+
+        let _ = b().fast_multiply(&b());
+        let _ = b().fast_multiply(&x());
+        let _ = x().fast_multiply(&b());
+        let _ = x().fast_multiply(&x());
     }
 }
