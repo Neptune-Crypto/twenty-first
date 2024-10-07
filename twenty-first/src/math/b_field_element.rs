@@ -478,9 +478,9 @@ impl From<isize> for BFieldElement {
     }
 }
 
-impl From<i128> for BFieldElement {
-    fn from(value: i128) -> Self {
-        match value {
+impl From<i64> for BFieldElement {
+    fn from(value: i64) -> Self {
+        match i128::from(value) {
             0.. => value as u128,
             _ => (value as u128) - BFieldElement::R2 as u128,
         }
@@ -492,13 +492,13 @@ macro_rules! impl_from_for_small_signed_int {
     ($($t:ident),+ $(,)?) => {$(
         impl From<$t> for BFieldElement {
             fn from(value: $t) -> Self {
-                i128::from(value).into()
+                i64::from(value).into()
             }
         }
     )+};
 }
 
-impl_from_for_small_signed_int!(i8, i16, i32, i64);
+impl_from_for_small_signed_int!(i8, i16, i32);
 
 macro_rules! impl_try_into_for_int {
     ($($t:ident),+ $(,)?) => {$(
@@ -1453,7 +1453,6 @@ mod b_prime_field_element_test {
         assert_eq!(max, BFieldElement::from(-1_i16));
         assert_eq!(max, BFieldElement::from(-1_i32));
         assert_eq!(max, BFieldElement::from(-1_i64));
-        assert_eq!(max, BFieldElement::from(-1_i128));
         assert_eq!(max, BFieldElement::from(-1_isize));
 
         assert!(u8::try_from(BFieldElement::ZERO).is_ok());
@@ -1493,8 +1492,6 @@ mod b_prime_field_element_test {
         let _ = BFieldElement::from(i32::MAX);
         let _ = BFieldElement::from(i64::MIN);
         let _ = BFieldElement::from(i64::MAX);
-        let _ = BFieldElement::from(i128::MIN);
-        let _ = BFieldElement::from(i128::MAX);
         let _ = BFieldElement::from(isize::MIN);
         let _ = BFieldElement::from(isize::MAX);
     }
@@ -1511,10 +1508,10 @@ mod b_prime_field_element_test {
     }
 
     #[proptest]
-    fn naive_and_actual_conversion_from_i128_agree(v: i128) {
-        fn naive_conversion(x: i128) -> BFieldElement {
+    fn naive_and_actual_conversion_from_i64_agree(v: i64) {
+        fn naive_conversion(x: i64) -> BFieldElement {
             let p = BFieldElement::P as i128;
-            let value = x.rem_euclid(p) as u64;
+            let value = i128::from(x).rem_euclid(p) as u64;
             BFieldElement::new(value)
         }
 
