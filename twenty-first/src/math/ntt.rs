@@ -8,6 +8,7 @@ use super::b_field_element::BFieldElement;
 use super::traits::FiniteField;
 use super::traits::Inverse;
 use super::traits::ModPowU32;
+use super::traits::PrimitiveRootOfUnity;
 
 /// ## Perform NTT on slices of prime-field elements
 ///
@@ -32,52 +33,105 @@ use super::traits::ModPowU32;
 ///
 /// as well as inspired by <https://github.com/dusk-network/plonk>
 ///
-/// * `x` - a mutable slice of prime-field elements of length `n`
-/// * `omega` - a primitive `n`th root of unity
-/// * `log_2_of_n` - a precomputation of *log2(`n`)* to avoid repeating its
-///   computation
+/// The transform is performed in-place.
+/// If called on an empty array, returns an empty array.
 ///
-/// A primitive `n`th root of unity means:
+/// For the inverse, see [iNTT][self::intt].
 ///
-/// * `omega`^`n` = 1 (making it an `n`th root of unity), and
-/// * `omega`^`k` ≠ 1 for all integers 1 ≤ k < n (making it a primitive `n`th root of unity)
+/// # Panics
+///
+/// Panics if the length of the input slice is
+/// - not a power of two
+/// - larger than [`u32::MAX`]
+pub fn ntt<FF>(x: &mut [FF])
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let slice_len = u32::try_from(x.len()).expect("slice should be no longer than u32::MAX");
+
+    assert!(slice_len == 0 || slice_len.is_power_of_two());
+    let log2_slice_len = slice_len.checked_ilog2().unwrap_or(0);
+
+    // `slice_len` is 0 or a power of two smaller than u32::MAX
+    //  => `unwrap()` never panics
+    let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
+    ntt_unchecked(x, omega, log2_slice_len);
+}
+
+/// ## Perform INTT on slices of prime-field elements
+///
+/// INTT is the inverse [NTT][self::ntt], so abstractly,
+/// *intt(values) = ntt(values) / n*.
 ///
 /// This transform is performed in-place.
 ///
-/// If called on an empty array, returns an empty array.
-#[allow(clippy::many_single_char_names)]
-pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
-    x: &mut [FF],
-    omega: BFieldElement,
-    log_2_of_n: u32,
-) {
-    let n = x.len() as u32;
+/// # Example
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// # use twenty_first::math::ntt::ntt;
+/// # use twenty_first::math::ntt::intt;
+/// let original_values = bfe_vec![0, 1, 1, 2, 3, 5, 8, 13];
+/// let mut transformed_values = original_values.clone();
+/// ntt(&mut transformed_values);
+/// intt(&mut transformed_values);
+/// assert_eq!(original_values, transformed_values);
+/// ```
+///
+/// # Panics
+///
+/// Panics if the length of the input slice is
+/// - not a power of two
+/// - larger than [`u32::MAX`]
+pub fn intt<FF>(x: &mut [FF])
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let slice_len = u32::try_from(x.len()).expect("slice should be no longer than u32::MAX");
 
-    // `n` must be a power of 2, or be zero
-    debug_assert!(
-        n == 1 << log_2_of_n || n == 0 && log_2_of_n == 0,
-        "2^log2(n) == n || n == 0 && log_2_of_n == 0 must evaluate to true, but n was {n} and log_2_of_n was {log_2_of_n}"
-    );
+    assert!(slice_len == 0 || slice_len.is_power_of_two());
+    let log2_slice_len = slice_len.checked_ilog2().unwrap_or(0);
 
-    // `omega` must be a primitive root of unity of order `n`
-    debug_assert!(
-        omega.mod_pow_u32(n).is_one(),
-        "Got {omega} which is not a {n}th root of 1"
-    );
-    debug_assert!(!omega.mod_pow_u32(n / 2).is_one() || n == 0 || n == 1);
+    // `slice_len` is 0 or a power of two smaller than u32::MAX
+    //  => `unwrap()` never panics
+    let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
+    ntt_unchecked(x, omega.inverse(), log2_slice_len);
 
-    for k in 0..n {
-        let rk = bitreverse(k, log_2_of_n);
+    let n_inv_or_zero = BFieldElement::from(x.len()).inverse_or_zero();
+    for elem in x.iter_mut() {
+        *elem *= n_inv_or_zero
+    }
+}
+
+/// Like [NTT][self::ntt], but with greater control over the root of unity that
+/// is to be used.
+///
+/// Does _not_ check whether
+/// - the passed-in root of unity is indeed a primitive root of unity of the
+///   appropriate order, or whether
+/// - the passed-in log₂ of the slice length matches.
+///
+/// Use [NTT][self:ntt] if you want a nicer interface.
+#[expect(clippy::many_single_char_names)]
+#[inline]
+fn ntt_unchecked<FF>(x: &mut [FF], omega: BFieldElement, log2_slice_len: u32)
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let slice_len = x.len() as u32;
+
+    for k in 0..slice_len {
+        let rk = bitreverse(k, log2_slice_len);
         if k < rk {
             x.swap(rk as usize, k as usize);
         }
     }
 
     let mut m = 1;
-    for _ in 0..log_2_of_n {
-        let w_m = omega.mod_pow_u32(n / (2 * m));
+    for _ in 0..log2_slice_len {
+        let w_m = omega.mod_pow_u32(slice_len / (2 * m));
         let mut k = 0;
-        while k < n {
+        while k < slice_len {
             let mut w = BFieldElement::ONE;
             for j in 0..m {
                 let u = x[(k + j) as usize];
@@ -92,33 +146,6 @@ pub fn ntt<FF: FiniteField + MulAssign<BFieldElement>>(
         }
 
         m *= 2;
-    }
-}
-
-/// ## Perform INTT on slices of prime-field elements
-///
-/// INTT is the inverse NTT, so abstractly,
-/// *intt(values, omega, log2(n)) = ntt(values, 1/omega, log2(n)) / n*.
-///
-/// ```ignore
-/// let original_values: Vec<PF> = ...;
-/// let mut transformed_values = original_values.clone();
-/// ntt::<PF>(&mut values, omega, log_2_n);
-/// intt::<PF>(&mut values, omega, log_2_n);
-/// assert_eq!(original_values, transformed_values);
-/// ```
-///
-/// This transform is performed in-place.
-pub fn intt<FF: FiniteField + MulAssign<BFieldElement>>(
-    x: &mut [FF],
-    omega: BFieldElement,
-    log_2_of_n: u32,
-) {
-    let n = BFieldElement::new(u64::try_from(x.len()).unwrap());
-    let n_inv_or_zero = n.inverse_or_zero();
-    ntt::<FF>(x, omega.inverse(), log_2_of_n);
-    for elem in x.iter_mut() {
-        *elem *= n_inv_or_zero
     }
 }
 
@@ -287,17 +314,16 @@ mod fast_ntt_attempt_tests {
             for _ in 0..10 {
                 let mut values = random_elements(n);
                 let original_values = values.clone();
-                let omega = BFieldElement::primitive_root_of_unity(n as u64).unwrap();
-                ntt::<BFieldElement>(&mut values, omega, log_2_n);
+                ntt::<BFieldElement>(&mut values);
                 assert_ne!(original_values, values);
-                intt::<BFieldElement>(&mut values, omega, log_2_n);
+                intt::<BFieldElement>(&mut values);
                 assert_eq!(original_values, values);
 
                 values[0] = bfe!(BFieldElement::MAX);
                 let original_values_with_max_element = values.clone();
-                ntt::<BFieldElement>(&mut values, omega, log_2_n);
+                ntt::<BFieldElement>(&mut values);
                 assert_ne!(original_values, values);
-                intt::<BFieldElement>(&mut values, omega, log_2_n);
+                intt::<BFieldElement>(&mut values);
                 assert_eq!(original_values_with_max_element, values);
             }
         }
@@ -310,10 +336,9 @@ mod fast_ntt_attempt_tests {
             for _ in 0..10 {
                 let mut values = random_elements(n);
                 let original_values = values.clone();
-                let omega = XFieldElement::primitive_root_of_unity(n as u64).unwrap();
-                ntt::<XFieldElement>(&mut values, omega.unlift().unwrap(), log_2_n);
+                ntt::<XFieldElement>(&mut values);
                 assert_ne!(original_values, values);
-                intt::<XFieldElement>(&mut values, omega.unlift().unwrap(), log_2_n);
+                intt::<XFieldElement>(&mut values);
                 assert_eq!(original_values, values);
 
                 // Verify that we are not just operating in the B-field
@@ -326,9 +351,9 @@ mod fast_ntt_attempt_tests {
 
                 values[0] = xfe!([BFieldElement::MAX; EXTENSION_DEGREE]);
                 let original_values_with_max_element = values.clone();
-                ntt::<XFieldElement>(&mut values, omega.unlift().unwrap(), log_2_n);
+                ntt::<XFieldElement>(&mut values);
                 assert_ne!(original_values, values);
-                intt::<XFieldElement>(&mut values, omega.unlift().unwrap(), log_2_n);
+                intt::<XFieldElement>(&mut values);
                 assert_eq!(original_values_with_max_element, values);
             }
         }
@@ -349,15 +374,14 @@ mod fast_ntt_attempt_tests {
             XFieldElement::new_const(BFieldElement::ONE),
             XFieldElement::new_const(BFieldElement::ONE),
         ];
-        let omega = XFieldElement::primitive_root_of_unity(4).unwrap();
 
         println!("input_output = {input_output:?}");
-        ntt::<XFieldElement>(&mut input_output, omega.unlift().unwrap(), 2);
+        ntt::<XFieldElement>(&mut input_output);
         assert_eq!(expected, input_output);
         println!("input_output = {input_output:?}");
 
         // Verify that INTT(NTT(x)) = x
-        intt::<XFieldElement>(&mut input_output, omega.unlift().unwrap(), 2);
+        intt::<XFieldElement>(&mut input_output);
         assert_eq!(original_input, input_output);
     }
 
@@ -376,13 +400,12 @@ mod fast_ntt_attempt_tests {
             BFieldElement::new(18446744069414584318),
             BFieldElement::new(18445618169507741698),
         ];
-        let omega = BFieldElement::primitive_root_of_unity(4).unwrap();
 
-        ntt::<BFieldElement>(&mut input_output, omega, 2);
+        ntt::<BFieldElement>(&mut input_output);
         assert_eq!(expected, input_output);
 
         // Verify that INTT(NTT(x)) = x
-        intt::<BFieldElement>(&mut input_output, omega, 2);
+        intt::<BFieldElement>(&mut input_output);
         assert_eq!(original_input, input_output);
     }
 
@@ -401,13 +424,12 @@ mod fast_ntt_attempt_tests {
             BFieldElement::new(BFieldElement::MAX),
             BFieldElement::new(BFieldElement::MAX),
         ];
-        let omega = BFieldElement::primitive_root_of_unity(4).unwrap();
 
-        ntt::<BFieldElement>(&mut input_output, omega, 2);
+        ntt::<BFieldElement>(&mut input_output);
         assert_eq!(expected, input_output);
 
         // Verify that INTT(NTT(x)) = x
-        intt::<BFieldElement>(&mut input_output, omega, 2);
+        intt::<BFieldElement>(&mut input_output);
         assert_eq!(original_input, input_output);
     }
 
@@ -415,22 +437,19 @@ mod fast_ntt_attempt_tests {
     fn ntt_on_empty_input() {
         let mut input_output = vec![];
         let original_input = input_output.clone();
-        let omega = BFieldElement::primitive_root_of_unity(0).unwrap();
 
-        ntt::<BFieldElement>(&mut input_output, omega, 0);
+        ntt::<BFieldElement>(&mut input_output);
         assert_eq!(0, input_output.len());
 
         // Verify that INTT(NTT(x)) = x
-        intt::<BFieldElement>(&mut input_output, omega, 0);
+        intt::<BFieldElement>(&mut input_output);
         assert_eq!(original_input, input_output);
     }
 
     #[proptest]
     fn ntt_on_input_of_length_one(bfe: BFieldElement) {
         let mut test_vector = vec![bfe];
-        let root_of_unity = BFieldElement::ONE;
-
-        ntt(&mut test_vector, root_of_unity, 0);
+        ntt(&mut test_vector);
         assert_eq!(vec![bfe], test_vector);
     }
 
@@ -440,12 +459,8 @@ mod fast_ntt_attempt_tests {
         #[strategy(vec(arb(), #_vector_length))] mut input: Vec<BFieldElement>,
     ) {
         let original_input = input.clone();
-        let log_2_of_input_length = input.len().ilog2();
-        let root_of_unity = BFieldElement::primitive_root_of_unity(input.len() as u64).unwrap();
-
-        ntt::<BFieldElement>(&mut input, root_of_unity, log_2_of_input_length);
-        intt::<BFieldElement>(&mut input, root_of_unity, log_2_of_input_length);
-
+        ntt::<BFieldElement>(&mut input);
+        intt::<BFieldElement>(&mut input);
         assert_eq!(original_input, input);
     }
 
@@ -456,8 +471,7 @@ mod fast_ntt_attempt_tests {
             0, 0, 0,
         ];
         let original_input = input_output.clone();
-        let omega = BFieldElement::primitive_root_of_unity(32).unwrap();
-        ntt::<BFieldElement>(&mut input_output, omega, 5);
+        ntt::<BFieldElement>(&mut input_output);
         // let actual_output = ntt(&mut input_output, &omega, 5);
         println!("actual_output = {input_output:?}");
         let expected = bfe_vec![
@@ -497,7 +511,7 @@ mod fast_ntt_attempt_tests {
         assert_eq!(expected, input_output);
 
         // Verify that INTT(NTT(x)) = x
-        intt::<BFieldElement>(&mut input_output, omega, 5);
+        intt::<BFieldElement>(&mut input_output);
         assert_eq!(original_input, input_output);
     }
 
@@ -509,7 +523,7 @@ mod fast_ntt_attempt_tests {
             let polynomial = Polynomial::new(coefficients.clone());
 
             let omega = BFieldElement::primitive_root_of_unity(size.try_into().unwrap()).unwrap();
-            ntt(&mut coefficients, omega, log_size.try_into().unwrap());
+            ntt(&mut coefficients);
 
             let evals = (0..size)
                 .map(|i| omega.mod_pow(i.try_into().unwrap()))
@@ -528,13 +542,13 @@ mod fast_ntt_attempt_tests {
             let a: Vec<BFieldElement> = random_elements(size);
             let omega = BFieldElement::primitive_root_of_unity(size.try_into().unwrap()).unwrap();
             let mut a1 = a.clone();
-            ntt(&mut a1, omega, log_size);
+            ntt(&mut a1);
             let mut a2 = a.clone();
             ntt_noswap(&mut a2, omega);
             bitreverse_order(&mut a2);
             assert_eq!(a1, a2);
 
-            intt(&mut a1, omega, log_size);
+            intt(&mut a1);
             bitreverse_order(&mut a2);
             intt_noswap(&mut a2, omega);
             for a2e in a2.iter_mut() {
