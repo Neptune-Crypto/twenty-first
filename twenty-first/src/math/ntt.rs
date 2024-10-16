@@ -2,7 +2,6 @@ use std::ops::MulAssign;
 
 use num_traits::ConstOne;
 use num_traits::ConstZero;
-use rand_distr::num_traits::One;
 
 use super::b_field_element::BFieldElement;
 use super::traits::FiniteField;
@@ -173,27 +172,25 @@ pub fn bitreverse_order<FF>(array: &mut [FF]) {
     }
 }
 
-/// Compute the NTT, but leave the array in bitreversed order.
+/// Compute the [NTT][self::ntt], but leave the array in
+/// [bitreversed order][self::bitreverse_order].
 ///
 /// This method can be expected to outperform regular NTT when
-///  - it is followed up by INTT (e.g. for fast multiplication)
-///  - the powers_of_omega_bitreversed can be precomputed (which
-///    is not the case here).
+///  - it is followed up by [INTT][self::intt] (e.g. for fast multiplication)
+///  - the `powers_of_omega_bitreversed` can be precomputed (which is not the
+///    case here).
 ///
-/// In that case, be sure to use the matching `intt_noswap` and
-/// don't forget to unscale by n, e.g. using `unscale`.
-pub fn ntt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], omega: BFieldElement) {
+/// In that case, be sure to use the matching [`intt_noswap`] and don't forget
+/// to unscale by `n`, e.g. using [`unscale`].
+pub fn ntt_noswap<FF>(x: &mut [FF])
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
     let n: usize = x.len();
+    debug_assert!(n.is_power_of_two());
 
-    // `n` must be a power of 2
-    debug_assert_eq!(n & (n - 1), 0);
-
-    // `omega` must be a primitive root of unity of order `n`
-    debug_assert!(
-        omega.mod_pow_u32(n as u32).is_one(),
-        "Got {omega} which is not a {n}th root of 1"
-    );
-    debug_assert!(!omega.mod_pow_u32((n / 2).try_into().unwrap()).is_one());
+    let root_order = n.try_into().unwrap();
+    let omega = BFieldElement::primitive_root_of_unity(root_order).unwrap();
 
     let mut logn: usize = 0;
     while (1 << logn) < x.len() {
@@ -227,23 +224,21 @@ pub fn ntt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], omeg
     }
 }
 
-/// Compute the inverse NTT, assuming that the array is presented in
-/// bitreversed order. Also, don't unscale by n afterwards.
-pub fn intt_noswap<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], omega: BFieldElement) {
+/// Compute the [inverse NTT][self::intt], assuming that the array is presented
+/// in [bitreversed order][self::bitreverse_order]. Also, don't unscale by `n`
+/// afterward.
+///
+/// See also [`ntt_noswap`].
+pub fn intt_noswap<FF>(x: &mut [FF])
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
     let n = x.len();
+    debug_assert!(n.is_power_of_two());
+
+    let root_order = n.try_into().unwrap();
+    let omega = BFieldElement::primitive_root_of_unity(root_order).unwrap();
     let omega_inverse = omega.inverse();
-
-    // `n` must be a power of 2
-    debug_assert_eq!(n & (n - 1), 0, "array length must be power of 2");
-
-    // `omega` must be a primitive root of unity of order `n`
-    debug_assert!(
-        omega_inverse.mod_pow_u32(n.try_into().unwrap()).is_one(),
-        "Got {omega_inverse} which is not a {n}th root of 1"
-    );
-    debug_assert!(!omega_inverse
-        .mod_pow_u32((n / 2).try_into().unwrap())
-        .is_one());
 
     let mut logn: usize = 0;
     while (1 << logn) < x.len() {
@@ -540,17 +535,16 @@ mod fast_ntt_attempt_tests {
             let size = 1 << log_size;
             println!("size: {size}");
             let a: Vec<BFieldElement> = random_elements(size);
-            let omega = BFieldElement::primitive_root_of_unity(size.try_into().unwrap()).unwrap();
             let mut a1 = a.clone();
             ntt(&mut a1);
             let mut a2 = a.clone();
-            ntt_noswap(&mut a2, omega);
+            ntt_noswap(&mut a2);
             bitreverse_order(&mut a2);
             assert_eq!(a1, a2);
 
             intt(&mut a1);
             bitreverse_order(&mut a2);
-            intt_noswap(&mut a2, omega);
+            intt_noswap(&mut a2);
             for a2e in a2.iter_mut() {
                 *a2e *= BFieldElement::new(size.try_into().unwrap()).inverse();
             }
