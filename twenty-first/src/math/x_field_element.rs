@@ -226,18 +226,8 @@ where
     }
 }
 
-// TODO: Consider moving this to Polynomial file by untying XFieldElement, and\
-// instead referring to its internals. Not sure though.
-impl From<XFieldElement> for Polynomial<BFieldElement> {
-    fn from(item: XFieldElement) -> Self {
-        Self {
-            coefficients: item.coefficients.to_vec(),
-        }
-    }
-}
-
-impl From<Polynomial<BFieldElement>> for XFieldElement {
-    fn from(poly: Polynomial<BFieldElement>) -> Self {
+impl From<Polynomial<'_, BFieldElement>> for XFieldElement {
+    fn from(poly: Polynomial<'_, BFieldElement>) -> Self {
         let (_, rem) = poly.naive_divide(&Self::shah_polynomial());
         let mut xfe = [BFieldElement::ZERO; EXTENSION_DEGREE];
 
@@ -273,7 +263,7 @@ impl XFieldElement {
     /// The quotient defining the [field extension](XFieldElement) over the
     /// [base field](BFieldElement), namely x³ - x + 1.
     #[inline]
-    pub fn shah_polynomial() -> Polynomial<BFieldElement> {
+    pub fn shah_polynomial() -> Polynomial<'static, BFieldElement> {
         Polynomial::new(bfe_vec![1, -1, 0, 1])
     }
 

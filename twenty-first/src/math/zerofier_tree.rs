@@ -8,33 +8,33 @@ use super::polynomial::Polynomial;
 use super::traits::FiniteField;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Leaf<FF: FiniteField + MulAssign<BFieldElement>> {
+pub struct Leaf<'c, FF: FiniteField + MulAssign<BFieldElement>> {
     pub(crate) points: Vec<FF>,
-    zerofier: Polynomial<FF>,
+    zerofier: Polynomial<'c, FF>,
 }
 
-impl<FF> Leaf<FF>
+impl<FF> Leaf<'static, FF>
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    pub fn new(points: Vec<FF>) -> Self {
+    pub fn new(points: Vec<FF>) -> Leaf<'static, FF> {
         let zerofier = Polynomial::zerofier(&points);
         Self { points, zerofier }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Branch<FF: FiniteField + MulAssign<BFieldElement>> {
-    zerofier: Polynomial<FF>,
-    pub(crate) left: ZerofierTree<FF>,
-    pub(crate) right: ZerofierTree<FF>,
+pub struct Branch<'c, FF: FiniteField + MulAssign<BFieldElement>> {
+    zerofier: Polynomial<'c, FF>,
+    pub(crate) left: ZerofierTree<'c, FF>,
+    pub(crate) right: ZerofierTree<'c, FF>,
 }
 
-impl<FF> Branch<FF>
+impl<'c, FF> Branch<'c, FF>
 where
-    FF: FiniteField + MulAssign<BFieldElement>,
+    FF: FiniteField + MulAssign<BFieldElement> + 'static,
 {
-    pub fn new(left: ZerofierTree<FF>, right: ZerofierTree<FF>) -> Self {
+    pub fn new(left: ZerofierTree<'c, FF>, right: ZerofierTree<'c, FF>) -> Self {
         let zerofier = left.zerofier().multiply(&right.zerofier());
         Self {
             zerofier,
@@ -52,13 +52,13 @@ where
 /// leaf contains a chunk of points whose size is upper-bounded and more or less
 /// equal to some constant threshold.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ZerofierTree<FF: FiniteField + MulAssign<BFieldElement>> {
-    Leaf(Leaf<FF>),
-    Branch(Box<Branch<FF>>),
+pub enum ZerofierTree<'c, FF: FiniteField + MulAssign<BFieldElement>> {
+    Leaf(Leaf<'c, FF>),
+    Branch(Box<Branch<'c, FF>>),
     Padding,
 }
 
-impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<FF> {
+impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<'static, FF> {
     /// Regulates the depth at which the tree is truncated. Phrased differently,
     /// regulates the number of points contained by each leaf.
     const RECURSION_CUTOFF_THRESHOLD: usize = 16;
@@ -84,12 +84,17 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<FF> {
         }
         nodes.pop_front().unwrap()
     }
+}
 
-    pub fn zerofier(&self) -> Polynomial<FF> {
+impl<'c, FF> ZerofierTree<'c, FF>
+where
+    FF: FiniteField + MulAssign<BFieldElement> + 'static,
+{
+    pub fn zerofier(&self) -> Polynomial<'c, FF> {
         match self {
             ZerofierTree::Leaf(leaf) => leaf.zerofier.clone(),
             ZerofierTree::Branch(branch) => branch.zerofier.clone(),
-            ZerofierTree::Padding => Polynomial::<FF>::one(),
+            ZerofierTree::Padding => Polynomial::one(),
         }
     }
 }
