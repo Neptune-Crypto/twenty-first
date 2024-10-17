@@ -425,21 +425,10 @@ where
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
-        let mut normalized_self = self.clone();
-
-        // It's critical to normalize the polynomial, i.e. remove trailing zeros from the
-        // coefficients list, to make the encoding non-degenerate such that a polynomial maps to a
-        // unique encoding. Length of the coefficients field is prepended to the encoding to make
-        // the encoding consistent with a derived implementation, with the only difference that
-        // trailing zeros in the encoding is not allowed.
-        normalized_self.normalize();
-        let coefficients_encoded = normalized_self.coefficients.to_vec().encode();
-
-        [
-            bfe_vec!(coefficients_encoded.len() as u64),
-            coefficients_encoded,
-        ]
-        .concat()
+        // The length of the coefficients field is prepended to the encoding to make the
+        // encoding consistent with a hypothetical derived implementation.
+        let coefficients_encoded = self.coefficients().to_owned().encode();
+        [bfe_vec!(coefficients_encoded.len()), coefficients_encoded].concat()
     }
 
     fn static_length() -> Option<usize> {
@@ -745,7 +734,7 @@ mod tests {
     ) {
         let encoded = polynomial.encode();
 
-        let mut coefficients = polynomial.coefficients.into_owned();
+        let mut coefficients = polynomial.into_coefficients();
         coefficients.extend(vec![BFieldElement::ZERO; num_leading_zeros]);
         let poly_w_leading_zeros = Polynomial::new(coefficients);
 
@@ -759,7 +748,7 @@ mod tests {
     ) {
         let encoded = polynomial.encode();
 
-        let mut coefficients = polynomial.coefficients.into_owned();
+        let mut coefficients = polynomial.into_coefficients();
         coefficients.extend(vec![XFieldElement::ZERO; num_leading_zeros]);
         let poly_w_leading_zeros = Polynomial::new(coefficients);
 
@@ -774,26 +763,21 @@ mod tests {
     where
         FF: FiniteField + BFieldCodec + 'static,
     {
-        let mut polynomial_coefficients = polynomial.coefficients.into_owned();
+        let mut polynomial_coefficients = polynomial.into_coefficients();
         polynomial_coefficients.push(leading_coefficient);
         let actual_polynomial = Polynomial::new(polynomial_coefficients.clone());
-        let vec_encoding = actual_polynomial.coefficients.to_vec().encode();
+        let vec_encoding = actual_polynomial.coefficients().to_vec().encode();
         let poly_encoding = actual_polynomial.encode();
         prop_assert_eq!(
-            [bfe_vec!(vec_encoding.len() as u64), vec_encoding].concat(),
+            [bfe_vec!(vec_encoding.len()), vec_encoding].concat(),
             poly_encoding,
             "This test expects similarity of Vec and Polynomial encoding"
         );
 
-        polynomial_coefficients.extend(vec![FF::zero(); num_leading_zeros]);
-        let polynomial_w_leading_zeros = Polynomial::new(polynomial_coefficients);
-        let vec_encoding_with_leading_zeros =
-            polynomial_w_leading_zeros.coefficients.to_vec().encode();
-        let poly_encoding_with_leading_zeros = [
-            bfe_vec!(vec_encoding_with_leading_zeros.len() as u64),
-            vec_encoding_with_leading_zeros,
-        ]
-        .concat();
+        polynomial_coefficients.extend(vec![FF::ZERO; num_leading_zeros]);
+        let coefficient_encoding = polynomial_coefficients.encode();
+        let poly_encoding_with_leading_zeros =
+            [bfe_vec!(coefficient_encoding.len()), coefficient_encoding].concat();
         let decoding_result = Polynomial::<FF>::decode(&poly_encoding_with_leading_zeros);
         prop_assert!(matches!(
             decoding_result.unwrap_err(),

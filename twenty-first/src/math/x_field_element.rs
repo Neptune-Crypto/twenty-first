@@ -232,9 +232,9 @@ impl From<Polynomial<'_, BFieldElement>> for XFieldElement {
         let mut xfe = [BFieldElement::ZERO; EXTENSION_DEGREE];
 
         let Ok(rem_degree) = usize::try_from(rem.degree()) else {
-            return Self::zero();
+            return Self::ZERO;
         };
-        xfe[..=rem_degree].copy_from_slice(&rem.coefficients[..=rem_degree]);
+        xfe[..=rem_degree].copy_from_slice(&rem.coefficients()[..=rem_degree]);
 
         XFieldElement::new(xfe)
     }

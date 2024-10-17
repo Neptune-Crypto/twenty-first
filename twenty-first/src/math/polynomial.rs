@@ -69,9 +69,10 @@ pub struct ModularInterpolationPreprocessingData<'coeffs, FF: FiniteField> {
 /// A univariate polynomial with coefficients in a [finite field](FiniteField), in monomial form.
 #[derive(Clone)]
 pub struct Polynomial<'coeffs, FF: FiniteField> {
-    /// The polynomial's coefficients, in order of increasing degree. That is, the polynomial's
-    /// leading coefficient is the last element of the vector.
-    pub coefficients: Cow<'coeffs, [FF]>,
+    /// The polynomial's coefficients, in order of increasing degree. That is, the
+    /// leading coefficient is `coefficients.last()`. See [`Polynomial::normalize`]
+    /// and [`Polynomial::coefficients`] for caveats of that statement.
+    coefficients: Cow<'coeffs, [FF]>,
 }
 
 impl<'a, FF> Arbitrary<'a> for Polynomial<'static, FF>
@@ -157,10 +158,36 @@ where
         deg // -1 for the zero polynomial
     }
 
+    /// The polynomial's coefficients, in order of increasing degree. That is, the
+    /// leading coefficient is the slice's last element.
+    ///
+    /// The leading coefficient is guaranteed to be non-zero. Consequently, the
+    /// zero-polynomial is the empty slice.
+    ///
+    /// See also [`into_coefficients()`][Self::into_coefficients].
+    pub fn coefficients(&self) -> &[FF] {
+        let coefficients = self.coefficients.as_ref();
+
+        let Some(leading_coeff_idx) = coefficients.iter().rposition(|&c| !c.is_zero()) else {
+            // `coefficients` contains no elements or only zeroes
+            return &[];
+        };
+
+        &coefficients[0..=leading_coeff_idx]
+    }
+
+    /// Like [`coefficients()`][Self::coefficients], but consumes `self`.
+    ///
+    /// Only clones the underlying coefficients if they are not already owned.
+    pub fn into_coefficients(mut self) -> Vec<FF> {
+        self.normalize();
+        self.coefficients.into_owned()
+    }
+
     /// Remove any leading coefficients that are 0.
     ///
     /// Notably, does _not_ make `self` monic.
-    pub fn normalize(&mut self) {
+    fn normalize(&mut self) {
         while self.coefficients.last().is_some_and(Zero::is_zero) {
             self.coefficients.to_mut().pop();
         }
@@ -2725,6 +2752,40 @@ mod test_polynomials {
         let num_coefficients = polynomial_with_leading_zeros.coefficients.len();
 
         prop_assert_eq!(expected_num_coefficients, num_coefficients);
+    }
+
+    #[test]
+    fn accessing_coefficients_of_empty_polynomial_gives_empty_slice() {
+        let poly = BfePoly::new(vec![]);
+        assert!(poly.coefficients().is_empty());
+        assert!(poly.into_coefficients().is_empty());
+    }
+
+    #[proptest]
+    fn accessing_coefficients_of_polynomial_with_only_zero_coefficients_gives_empty_slice(
+        #[strategy(0_usize..30)] num_zeros: usize,
+    ) {
+        let poly = Polynomial::new(vec![BFieldElement::ZERO; num_zeros]);
+        prop_assert!(poly.coefficients().is_empty());
+        prop_assert!(poly.into_coefficients().is_empty());
+    }
+
+    #[proptest]
+    fn accessing_the_coefficients_is_equivalent_to_normalizing_then_raw_access(
+        mut coefficients: Vec<BFieldElement>,
+        #[strategy(0_usize..30)] num_leading_zeros: usize,
+    ) {
+        coefficients.extend(vec![BFieldElement::ZERO; num_leading_zeros]);
+        let mut polynomial = Polynomial::new(coefficients);
+
+        let accessed_coefficients_borrow = polynomial.coefficients().to_vec();
+        let accessed_coefficients_owned = polynomial.clone().into_coefficients();
+
+        polynomial.normalize();
+        let raw_coefficients = polynomial.coefficients.into_owned();
+
+        prop_assert_eq!(&raw_coefficients, &accessed_coefficients_borrow);
+        prop_assert_eq!(&raw_coefficients, &accessed_coefficients_owned);
     }
 
     #[test]
