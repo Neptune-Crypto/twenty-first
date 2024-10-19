@@ -1136,27 +1136,27 @@ mod tests {
 
     #[proptest(cases = 100)]
     fn xfe_intt_is_inverse_of_xfe_ntt(
-        #[strategy(1_u32..=11)] log_2_n: u32,
-        #[strategy(Just(1 << #log_2_n))] root_order: u64,
-        #[strategy(vec(arb(), #root_order as usize))] inputs: Vec<XFieldElement>,
+        #[strategy(1..=11)]
+        #[map(|log| 1_usize << log)]
+        _num_inputs: usize,
+        #[strategy(vec(arb(), #_num_inputs))] inputs: Vec<XFieldElement>,
     ) {
-        let root = XFieldElement::primitive_root_of_unity(root_order).unwrap();
-        let root = root.unlift().unwrap();
         let mut rv = inputs.clone();
-        ntt::<XFieldElement>(&mut rv, root, log_2_n);
-        intt::<XFieldElement>(&mut rv, root, log_2_n);
+        ntt::<XFieldElement>(&mut rv);
+        intt::<XFieldElement>(&mut rv);
         prop_assert_eq!(inputs, rv);
     }
 
     #[proptest(cases = 40)]
     fn xfe_ntt_corresponds_to_polynomial_evaluation(
-        #[strategy(1_u32..=11)] log_2_n: u32,
-        #[strategy(Just(1 << #log_2_n))] root_order: u64,
+        #[strategy(1..=11)]
+        #[map(|log_2| 1_u64 << log_2)]
+        root_order: u64,
         #[strategy(vec(arb(), #root_order as usize))] inputs: Vec<XFieldElement>,
     ) {
         let root = XFieldElement::primitive_root_of_unity(root_order).unwrap();
         let mut rv = inputs.clone();
-        ntt::<XFieldElement>(&mut rv, root.unlift().unwrap(), log_2_n);
+        ntt::<XFieldElement>(&mut rv);
 
         let poly = Polynomial::new(inputs);
         let domain = root.get_cyclic_group_elements(None);

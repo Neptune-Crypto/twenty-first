@@ -184,32 +184,36 @@ impl BFieldCodec for bool {
     }
 }
 
-impl BFieldCodec for u32 {
-    type Error = BFieldCodecError;
+macro_rules! impl_bfield_codec_for_small_primitive_uint {
+    ($($t:ident),+ $(,)?) => {$(
+        impl BFieldCodec for $t {
+            type Error = BFieldCodecError;
 
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
-        if sequence.is_empty() {
-            return Err(Self::Error::EmptySequence);
+            fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+                if sequence.is_empty() {
+                    return Err(Self::Error::EmptySequence);
+                }
+                let [first] = sequence[..] else {
+                    return Err(Self::Error::SequenceTooLong);
+                };
+                let element = $t::try_from(first.value())
+                    .map_err(|_| Self::Error::ElementOutOfRange)?;
+
+                Ok(Box::new(element))
+            }
+
+            fn encode(&self) -> Vec<BFieldElement> {
+                vec![BFieldElement::new(u64::from(*self))]
+            }
+
+            fn static_length() -> Option<usize> {
+                Some(1)
+            }
         }
-        if sequence.len() > 1 {
-            return Err(Self::Error::SequenceTooLong);
-        }
-        if sequence[0].value() > u32::MAX as u64 {
-            return Err(Self::Error::ElementOutOfRange);
-        }
-
-        let element = sequence[0].value() as u32;
-        Ok(Box::new(element))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        vec![BFieldElement::new(*self as u64)]
-    }
-
-    fn static_length() -> Option<usize> {
-        Some(1)
-    }
+    )+};
 }
+
+impl_bfield_codec_for_small_primitive_uint!(u8, u16, u32);
 
 impl<T: BFieldCodec> BFieldCodec for Box<T> {
     type Error = T::Error;

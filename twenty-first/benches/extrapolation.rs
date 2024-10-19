@@ -4,7 +4,6 @@ use criterion::BenchmarkId;
 use criterion::Criterion;
 use twenty_first::math::ntt::intt;
 use twenty_first::math::other::random_elements;
-use twenty_first::math::traits::PrimitiveRootOfUnity;
 use twenty_first::math::zerofier_tree::ZerofierTree;
 use twenty_first::prelude::*;
 
@@ -30,10 +29,8 @@ fn intt_then_evaluate(
     shift_coefficients: &[BFieldElement],
     tail_length: usize,
 ) -> Vec<BFieldElement> {
-    let omega = BFieldElement::primitive_root_of_unity(codeword.len() as u64).unwrap();
-    let log_domain_length = codeword.len().ilog2();
     let mut coefficients = codeword.to_vec();
-    intt(&mut coefficients, omega, log_domain_length);
+    intt(&mut coefficients);
     let polynomial: Polynomial<BFieldElement> = Polynomial::new(coefficients)
         .scale(offset.inverse())
         .reduce_by_ntt_friendly_modulus(shift_coefficients, tail_length);
