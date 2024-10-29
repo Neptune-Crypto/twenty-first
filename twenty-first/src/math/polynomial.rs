@@ -18,7 +18,6 @@ use arbitrary::Arbitrary;
 use arbitrary::Unstructured;
 use itertools::EitherOrBoth;
 use itertools::Itertools;
-use num_bigint::BigInt;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
 use num_traits::One;
@@ -375,12 +374,6 @@ where
         }
 
         acc
-    }
-
-    #[must_use]
-    #[deprecated(since = "0.42.0", note = "renaming; use `pow` instead")]
-    pub fn mod_pow(&self, pow: BigInt) -> Polynomial<'static, FF> {
-        self.pow(pow.try_into().unwrap())
     }
 
     /// Multiply a polynomial with x^power
@@ -764,12 +757,6 @@ where
         }
 
         acc
-    }
-
-    #[must_use]
-    #[deprecated(since = "0.42.0", note = "renaming; use `fast_pow` instead")]
-    pub fn fast_mod_pow(&self, pow: BigInt) -> Polynomial<'static, FF> {
-        self.fast_pow(pow.try_into().unwrap())
     }
 
     /// Multiply `self` by `other`.
