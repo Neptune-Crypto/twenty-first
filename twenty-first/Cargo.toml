@@ -1,6 +1,6 @@
 [package]
 name = "twenty-first"
-version = "0.42.0-alpha.11"
+version = "0.43.0"
 authors = ["Triton Software AG"]
 edition = "2021"
 
@@ -35,8 +35,8 @@ features = ["user-hooks"]
 [dependencies]
 arbitrary = { version = "1", features = ["derive"] }
 bfieldcodec_derive = "0.7"
-get-size2 = { version = "^0.1.2", features = ["derive"] }
-hashbrown = "0.14"
+get-size2 = { version = "0.1.2", features = ["derive"] }
+hashbrown = "0.15"
 hex = "0.4.3"
 itertools = "0.13"
 lazy_static = "1.5.0"

@@ -3,6 +3,105 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.43.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.41.0..v0.43.0) – 2024-10-29
+
+### ✨ Features
+
+- Generalize polynomial multiplication ([4235a802](https://github.com/neptune-crypto/twenty-first/commit/4235a802))
+- Generalize polynomial scalar multiplication ([e71b2662](https://github.com/neptune-crypto/twenty-first/commit/e71b2662))
+- Easily construct polynomials `x^n` ([2c1c08d8](https://github.com/neptune-crypto/twenty-first/commit/2c1c08d8))
+- Allow evaluating polynomials in “value form” ([b1baee8a](https://github.com/neptune-crypto/twenty-first/commit/b1baee8a))
+- Fast modular interpolate and extrapolate on coset ([2c491342](https://github.com/neptune-crypto/twenty-first/commit/2c491342))
+- Batch and parallel versions of coset extrapolate ([9e7585d3](https://github.com/neptune-crypto/twenty-first/commit/9e7585d3))
+- Convert BFieldElement from {u, i}size ([30c24c3b](https://github.com/neptune-crypto/twenty-first/commit/30c24c3b))
+- Implement `BFieldCodec` for `u8` and `u16` ([8ec5f680](https://github.com/neptune-crypto/twenty-first/commit/8ec5f680))
+- Add conversions from and to `BFieldElement` ([8e403080](https://github.com/neptune-crypto/twenty-first/commit/8e403080))
+- Implement `Const{Zero, One}` for xfe ([50a9fb3a](https://github.com/neptune-crypto/twenty-first/commit/50a9fb3a))
+- (!) Use `num_traits::Const{Zero, One}` ([60ed2b2b](https://github.com/neptune-crypto/twenty-first/commit/60ed2b2b))
+- Introduce struct to help prove MMR succession ([0f521bb5](https://github.com/neptune-crypto/twenty-first/commit/0f521bb5))
+- Implement `{Lower, Upper}Hex` for `Digest` ([65dc94d3](https://github.com/neptune-crypto/twenty-first/commit/65dc94d3))
+
+### 🐛 Bug Fixes
+
+- `Digest::try_from()` returns `NotCanonical` error ([a4daa23f](https://github.com/neptune-crypto/twenty-first/commit/a4daa23f))
+- Fix edge-case failure in `fast_interpolate` ([04ff58a2](https://github.com/neptune-crypto/twenty-first/commit/04ff58a2))
+- (!) Add field-length indicator to encoding of polynomial ([585b4a31](https://github.com/neptune-crypto/twenty-first/commit/585b4a31))
+- *(mmr)* Don't panic on out-of-bounds MMR membership proof ([45dcedcb](https://github.com/neptune-crypto/twenty-first/commit/45dcedcb))
+- (!) Fix platform-dependent digest encoding bug ([6e2c0127](https://github.com/neptune-crypto/twenty-first/commit/6e2c0127))
+- Fix `structured_multiple_of_degree` ([4d867366](https://github.com/neptune-crypto/twenty-first/commit/4d867366))
+- Fix MMR membership proof crash if peak list is too short ([52034e2e](https://github.com/neptune-crypto/twenty-first/commit/52034e2e))
+- Various edge case bugs exposed ([5c30ef45](https://github.com/neptune-crypto/twenty-first/commit/5c30ef45))
+
+### ⚡️ Performance
+
+- Fast reduce with preprocessing ([10e763ec](https://github.com/neptune-crypto/twenty-first/commit/10e763ec))
+- Integrate fast reduction into batch evaluate dispatcher ([7818ebe3](https://github.com/neptune-crypto/twenty-first/commit/7818ebe3))
+- Use separate dispatcher threshold for `par_interpolate` ([3589b5e2](https://github.com/neptune-crypto/twenty-first/commit/3589b5e2))
+- In `par_interpolate`, recurse to parallel version ([95a1f5a0](https://github.com/neptune-crypto/twenty-first/commit/95a1f5a0))
+- (!) *(polynomial)* Optionally borrow coefficients ([8ed2445f](https://github.com/neptune-crypto/twenty-first/commit/8ed2445f))
+
+### 📚 Documentation
+
+- Add docstrings to some MMR methods ([b7244744](https://github.com/neptune-crypto/twenty-first/commit/b7244744))
+- Improve some MMR-related documentation ([382fa32d](https://github.com/neptune-crypto/twenty-first/commit/382fa32d))
+- Conform to clippy v1.80.0 indentation rules in doc strings ([eaa0a991](https://github.com/neptune-crypto/twenty-first/commit/eaa0a991))
+- Drop instructions for installing leveldb ([938141e6](https://github.com/neptune-crypto/twenty-first/commit/938141e6))
+- *(`MmrSuccessorProof`)* Add panics disclaimer ([9560c99a](https://github.com/neptune-crypto/twenty-first/commit/9560c99a))
+
+### ⚙️ Miscellaneous
+
+- Add ZerofierTree ([5be2c43a](https://github.com/neptune-crypto/twenty-first/commit/5be2c43a))
+- Work around `nextest` bug ([0a71c3e7](https://github.com/neptune-crypto/twenty-first/commit/0a71c3e7))
+- Conform to new rust version (v1.80.0) linting rules
+- Update perflog ([4e0d872c](https://github.com/neptune-crypto/twenty-first/commit/4e0d872c))
+- *(Makefile)* Use `nextest` for better timing results ([638b0ae3](https://github.com/neptune-crypto/twenty-first/commit/638b0ae3))
+- Canonicalize `use` statements ([920c5db5](https://github.com/neptune-crypto/twenty-first/commit/920c5db5))
+- Move blake3 crate to dev-dependencies ([d3d76616](https://github.com/neptune-crypto/twenty-first/commit/d3d76616))
+
+### ♻️ Refactor
+
+- (!) Remove `tree_m_ary.rs` ([b9264abb](https://github.com/neptune-crypto/twenty-first/commit/b9264abb))
+- Separate parallel from sequential interpolate functions ([a0a4cc0e](https://github.com/neptune-crypto/twenty-first/commit/a0a4cc0e))
+- Separate parallel from sequential `zerofier` methods ([881d4411](https://github.com/neptune-crypto/twenty-first/commit/881d4411))
+- Drop `fast_divide` ([3e978b61](https://github.com/neptune-crypto/twenty-first/commit/3e978b61))
+- (!) Make `Digest::LEN` an associated const ([cb53ad64](https://github.com/neptune-crypto/twenty-first/commit/cb53ad64))
+- (!) Use `Const…` over `BFIELD_{ONE, ZERO}` ([6210f44c](https://github.com/neptune-crypto/twenty-first/commit/6210f44c))
+- (!) Use `Const{Zero, One}` in `FiniteField` ([a84927d4](https://github.com/neptune-crypto/twenty-first/commit/a84927d4))
+- (!) Drop generic type argument from MMR fn's and structs ([06f2c06d](https://github.com/neptune-crypto/twenty-first/commit/06f2c06d))
+- (!) Copy (don't point to) auth path in `LeafMutation` ([07e423bc](https://github.com/neptune-crypto/twenty-first/commit/07e423bc))
+- (!) Rename `MmrAccumulator`'s `new` to `new_from_leafs` ([750c057c](https://github.com/neptune-crypto/twenty-first/commit/750c057c))
+- (!) Drop unused `get_height_from_leaf_index` ([38d78358](https://github.com/neptune-crypto/twenty-first/commit/38d78358))
+- (!) Remove generic type from `MerkleTree` ([aa340ff6](https://github.com/neptune-crypto/twenty-first/commit/aa340ff6))
+- *(polynomial)* Disallow negative exponents ([5f81f862](https://github.com/neptune-crypto/twenty-first/commit/5f81f862))
+- (!) *(polynomial)* Generalize `evaluate()` ([8482f939](https://github.com/neptune-crypto/twenty-first/commit/8482f939))
+- (!) Move canon check to `BFieldElement` ([7dafa32e](https://github.com/neptune-crypto/twenty-first/commit/7dafa32e))
+- (!) Simplify interfaces of `ntt` and `intt` ([051fbfd0](https://github.com/neptune-crypto/twenty-first/commit/051fbfd0))
+- (!) Simplify interfaces of `{i}ntt_noswap` ([4af2ffa3](https://github.com/neptune-crypto/twenty-first/commit/4af2ffa3))
+- (!) *(polynomial)* Make `coefficients` private ([65914d5a](https://github.com/neptune-crypto/twenty-first/commit/65914d5a))
+
+### ✅ Testing
+
+- Ensure public types implement auto traits ([516ff9a7](https://github.com/neptune-crypto/twenty-first/commit/516ff9a7))
+- Add tests for mismatching lengths in leaf index lists
+- *(`MmrAccumulator`)* Make `Arbitrary` impl consistent ([18a2ff86](https://github.com/neptune-crypto/twenty-first/commit/18a2ff86))
+- Add tests for edge cases ([5c30ef45](https://github.com/neptune-crypto/twenty-first/commit/5c30ef45))
+- Add positive and negative tests for `MmrSuccessorProof`
+- *(mmra_with_mps)* Replace slow sanity checks with a test ([eac5e7ac](https://github.com/neptune-crypto/twenty-first/commit/eac5e7ac))
+- Reduce test runtimes for slow tests ([cbdaede2](https://github.com/neptune-crypto/twenty-first/commit/cbdaede2))
+
+### ⏱️ Benchmark
+
+- Add benchmark for polynomial modular reduction ([290a2f8a](https://github.com/neptune-crypto/twenty-first/commit/290a2f8a))
+- Benchmark `par_interpolate`
+- Formal power series inverse ([83a35ff6](https://github.com/neptune-crypto/twenty-first/commit/83a35ff6))
+- Benchmark coset extrapolate ([3b909945](https://github.com/neptune-crypto/twenty-first/commit/3b909945))
+- Reintroduce perflog-bench for evaluation ([80a5bec4](https://github.com/neptune-crypto/twenty-first/commit/80a5bec4))
+
+### 🎨 Styling
+
+- Harmonize divide interface ([8afef541](https://github.com/neptune-crypto/twenty-first/commit/8afef541))
+- Idiomatic padding with zeros ([cb892a36](https://github.com/neptune-crypto/twenty-first/commit/cb892a36))
+
 ## [0.41.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.40.0..v0.41.0) – 2024-04-24
 
 ### ✨ Features

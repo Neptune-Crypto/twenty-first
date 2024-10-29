@@ -23,7 +23,11 @@ fn fpsi(c: &mut Criterion) {
 
         let id = BenchmarkId::new("fpsi", format!("2^{log2_degree}"));
         group.bench_function(id, |b| {
-            b.iter(|| polynomial.formal_power_series_inverse_newton(1 << (log2_degree + 1)))
+            b.iter(|| {
+                let precision = 1 << (log2_degree + 1);
+                let polynomial = polynomial.clone();
+                polynomial.formal_power_series_inverse_newton(precision)
+            })
         });
     }
     group.finish();

@@ -22,9 +22,6 @@ use crate::math::b_field_element::BFieldElement;
 use crate::prelude::Tip5;
 use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
-#[deprecated(since = "0.42.0", note = "use `Digest::LEN` instead")]
-pub const DIGEST_LENGTH: usize = 5;
-
 /// The result of hashing a sequence of elements, for example using [Tip5].
 /// Sometimes called a “hash”.
 // note: Serialize and Deserialize have custom implementations below
