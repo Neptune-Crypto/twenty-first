@@ -15,7 +15,7 @@ use std::str::FromStr;
 
 use arbitrary::Arbitrary;
 use arbitrary::Unstructured;
-use get_size::GetSize;
+use get_size2::GetSize;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
 use num_traits::One;

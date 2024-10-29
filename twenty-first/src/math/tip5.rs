@@ -1,6 +1,6 @@
 use arbitrary::Arbitrary;
 use bfieldcodec_derive::BFieldCodec;
-use get_size::GetSize;
+use get_size2::GetSize;
 use itertools::Itertools;
 use num_traits::ConstOne;
 use num_traits::ConstZero;

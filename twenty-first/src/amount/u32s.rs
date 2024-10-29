@@ -7,7 +7,7 @@ use std::ops::Mul;
 use std::ops::Rem;
 use std::ops::Sub;
 
-use get_size::GetSize;
+use get_size2::GetSize;
 use num_bigint::BigUint;
 use num_traits::ConstZero;
 use num_traits::One;
