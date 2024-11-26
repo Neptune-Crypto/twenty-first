@@ -625,6 +625,7 @@ pub(crate) mod tip5_tests {
     use test_strategy::proptest;
 
     use super::*;
+    use crate::bfe_array;
     use crate::math::other::random_elements;
     use crate::math::x_field_element::XFieldElement;
 
@@ -767,6 +768,68 @@ pub(crate) mod tip5_tests {
             .max()
             .unwrap();
         println!("bitwise differential uniformity for fermat cube map: {du_fermat_bitwise}");
+    }
+
+    #[test]
+    fn three_round_collission() {
+        fn three_rounds(state: &mut Tip5) {
+            for i in 0..3 {
+                state.round(i);
+            }
+        }
+        // m0 = 0510053a63393b5e 070b433153c77856 a9df7ece7c71c3b6 dea507128a64faa1 a567a4cd0d87dbc1
+        // e4e0df5a55148b11 189548e9e2d5578e f021f746d17c1717 3c5e5bdf6e27f570 f54e8c4543ed13c8
+        //         m0' = ac95d195f2bd7273 967bebc4a6922bf0 4447e4bfc03b125f a8c7a57ed55a84ac 76fda4ee213a7dc1
+        // de3f65a907005d3f ee35e7d8c8ae4ed0 910d60b34fad5797 c9821c0110240935 201466ca5a0de071
+
+        // m0 (p. 45)
+        // let state = bfe_array![
+        //     0x0510053a63393b5eu64,
+        //     0x070b433153c77856u64,
+        //     0xa9df7ece7c71c3b6u64,
+        //     0xdea507128a64faa1u64,
+        //     0xa567a4cd0d87dbc1u64,
+        //     0xe4e0df5a55148b11u64,
+        //     0x189548e9e2d5578eu64,
+        //     0xf021f746d17c1717u64,
+        //     0x3c5e5bdf6e27f570u64,
+        //     0xf54e8c4543ed13c8u64,
+        //     0x63b5be0187fa05b0u64,
+        //     0x8f4db2bfcabd2302u64,
+        //     0x0a5c6021ee35d565u64,
+        //     0x11f40c2b7c8d452bu64,
+        //     0xbce318baebb56f57u64,
+        //     0xe98b25e991ed9829u64,
+        // ];
+        // m0' (p. 45)
+        let state = bfe_array![
+            0xac95d195f2bd7273u64,
+            0x967bebc4a6922bf0u64,
+            0x4447e4bfc03b125fu64,
+            0xa8c7a57ed55a84acu64,
+            0x76fda4ee213a7dc1u64,
+            0xde3f65a907005d3fu64,
+            0xee35e7d8c8ae4ed0u64,
+            0x910d60b34fad5797u64,
+            0xc9821c0110240935u64,
+            0x201466ca5a0de071u64,
+            0x63b5be0187fa05b0u64,
+            0x8f4db2bfcabd2302u64,
+            0x0a5c6021ee35d565u64,
+            0x11f40c2b7c8d452bu64,
+            0xbce318baebb56f57u64,
+            0xe98b25e991ed9829u64,
+        ];
+        let mut state = Tip5 { state };
+        three_rounds(&mut state);
+        println!(
+            "{}",
+            state
+                .state
+                .iter()
+                .map(|x| format!("{:x}", x.value()))
+                .join(", ")
+        );
     }
 
     #[test]
