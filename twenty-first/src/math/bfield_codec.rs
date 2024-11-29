@@ -33,6 +33,7 @@ pub trait BFieldCodec {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum BFieldCodecError {
     #[error("empty sequence")]
     EmptySequence,
@@ -51,6 +52,9 @@ pub enum BFieldCodecError {
 
     #[error("invalid length indicator")]
     InvalidLengthIndicator,
+
+    #[error(transparent)]
+    TryFromIntError(#[from] std::num::TryFromIntError),
 
     #[error("inner decoding error: {0}")]
     InnerDecodingFailure(#[from] Box<dyn Error + Send + Sync>),
@@ -174,7 +178,7 @@ macro_rules! impl_bfield_codec_for_small_primitive_uint {
             }
 
             fn encode(&self) -> Vec<BFieldElement> {
-                vec![BFieldElement::new(u64::from(*self))]
+                bfe_vec![*self]
             }
 
             fn static_length() -> Option<usize> {
@@ -239,8 +243,9 @@ macro_rules! impl_bfield_codec_for_tuple {
                     return Err(Self::Error::MissingLengthIndicator);
                 }
                 let (length, sequence) = $r::static_length()
-                    .map(|length| (length, sequence))
-                    .unwrap_or_else(|| (sequence[0].value() as usize, &sequence[1..]));
+                    .map(|length| (Ok(length), sequence))
+                    .unwrap_or_else(|| (sequence[0].try_into(), &sequence[1..]));
+                let length = length?;
                 if sequence.len() < length {
                     return Err(Self::Error::SequenceTooShort);
                 }
@@ -354,16 +359,14 @@ impl<T: BFieldCodec> BFieldCodec for Vec<T> {
             return Err(Self::Error::EmptySequence);
         }
 
-        let vec_length = sequence[0].value() as usize;
+        let vec_length = sequence[0].try_into()?;
         let vec = bfield_codec_decode_list(vec_length, &sequence[1..])?;
         Ok(Box::new(vec))
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
-        let num_elements = (self.len() as u64).into();
-        let mut encoding = vec![num_elements];
-        let encoded_items = bfield_codec_encode_list(self.iter());
-        encoding.extend(encoded_items);
+        let mut encoding = bfe_vec![self.len()];
+        encoding.extend(bfield_codec_encode_list(self.iter()));
         encoding
     }
 
@@ -483,10 +486,10 @@ fn bfield_codec_decode_list_with_dynamically_sized_items<T: BFieldCodec>(
     let mut vec = vec![];
     let mut sequence_index = 0;
     for _ in 0..num_items {
-        let Some(item_length) = sequence.get(sequence_index) else {
-            return Err(BFieldCodecError::MissingLengthIndicator);
-        };
-        let item_length = item_length.value() as usize;
+        let item_length = sequence
+            .get(sequence_index)
+            .ok_or(BFieldCodecError::MissingLengthIndicator)?;
+        let item_length = usize::try_from(item_length)?;
         sequence_index += 1;
         if sequence.len() < sequence_index + item_length {
             return Err(BFieldCodecError::SequenceTooShort);
@@ -512,8 +515,7 @@ fn bfield_codec_encode_list<T: BFieldCodec>(elements: Iter<T>) -> Vec<BFieldElem
     let mut encoding = vec![];
     for element in elements {
         let element_encoded = element.encode();
-        let element_length = (element_encoded.len() as u64).into();
-        encoding.push(element_length);
+        encoding.push(element_encoded.len().into());
         encoding.extend(element_encoded);
     }
     encoding
