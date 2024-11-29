@@ -231,67 +231,95 @@ impl<T: BFieldCodec> BFieldCodec for Box<T> {
     }
 }
 
-impl<T: BFieldCodec, S: BFieldCodec> BFieldCodec for (T, S) {
-    type Error = BFieldCodecError;
+macro_rules! impl_bfield_codec_for_tuple {
+    // entrypoint: introduce marker tokens to start reversing token sequence
+    ($($forward:ident),+) => {
+        impl_bfield_codec_for_tuple!(@>@ $($forward)+ @rev@);
+    };
 
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
-        // decode S
-        if S::static_length().is_none() && sequence.first().is_none() {
-            return Err(Self::Error::MissingLengthIndicator);
-        }
-        let (length_of_s, sequence) = S::static_length()
-            .map(|length| (length, sequence))
-            .unwrap_or_else(|| (sequence[0].value() as usize, &sequence[1..]));
-        if sequence.len() < length_of_s {
-            return Err(Self::Error::SequenceTooShort);
-        }
-        let (sequence_for_s, sequence) = sequence.split_at(length_of_s);
-        let s = *S::decode(sequence_for_s).map_err(|err| err.into())?;
+    // general case: reversing in progress, move marker token `@>@`
+    ($($a:ident)* @>@ $b:ident $($c:ident)* @rev@ $($reverse:ident)*) => {
+        impl_bfield_codec_for_tuple!($($a)* $b @>@ $($c)* @rev@ $b $($reverse)*);
+    };
 
-        // decode T
-        if T::static_length().is_none() && sequence.first().is_none() {
-            return Err(Self::Error::MissingLengthIndicator);
-        }
-        let (length_of_t, sequence) = T::static_length()
-            .map(|length| (length, sequence))
-            .unwrap_or_else(|| (sequence[0].value() as usize, &sequence[1..]));
-        if sequence.len() < length_of_t {
-            return Err(Self::Error::SequenceTooShort);
-        }
-        let (sequence_for_t, sequence) = sequence.split_at(length_of_t);
-        let t = *T::decode(sequence_for_t).map_err(|err| err.into())?;
+    // base case: reversing is done
+    //
+    // Use token sequence in “forward” mode to
+    //  - declare the tuple type,
+    //  - construct the tuple after successful decoding, and
+    //  - pattern-match-deconstruct `self` to prepare encoding.
+    // Use token sequence in “reverse” mode to en/decode in reverse order from type
+    // declaration.
+    //
+    // Because it is impossible to construct tuple accessors (like the 0 in
+    // `my_tuple.0`) in a declarative macro, pattern matching is used to
+    // deconstruct `self`. This requires identifiers. The current design uses the
+    // type identifiers for this purpose. While these identifiers don't follow the
+    // guidelines for variable identifiers, this is deemed acceptable in macro code.
+    ($($f:ident)+ @>@ @rev@ $($r:ident)+) => {
+        impl <$($f),+> BFieldCodec for ($($f),+)
+        where $($f: BFieldCodec),+
+        {
+            type Error = BFieldCodecError;
 
-        if !sequence.is_empty() {
-            return Err(Self::Error::SequenceTooLong);
+            fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+                $(
+                if $r::static_length().is_none() && sequence.first().is_none() {
+                    return Err(Self::Error::MissingLengthIndicator);
+                }
+                let (length, sequence) = $r::static_length()
+                    .map(|length| (length, sequence))
+                    .unwrap_or_else(|| (sequence[0].value() as usize, &sequence[1..]));
+                if sequence.len() < length {
+                    return Err(Self::Error::SequenceTooShort);
+                }
+                let (sequence_for_ty, sequence) = sequence.split_at(length);
+                #[allow(non_snake_case)]
+                let $r = *$r::decode(sequence_for_ty).map_err(|err| err.into())?;
+                )+
+
+                if !sequence.is_empty() {
+                    return Err(Self::Error::SequenceTooLong);
+                }
+                Ok(Box::new(($($f),+)))
+            }
+
+            fn encode(&self) -> Vec<BFieldElement> {
+                #[allow(non_snake_case)]
+                let ($($f),+) = self;
+                let mut sequence = vec![];
+
+                $(
+                let encoding = $r.encode();
+                if $r::static_length().is_none() {
+                    sequence.push(encoding.len().into());
+                }
+                sequence.extend(encoding);
+                )+
+
+                sequence
+            }
+
+            fn static_length() -> Option<usize> {
+                // Token `+` cannot be used as macro repetition separator. As a workaround, use
+                // it inside macro repetition, and make last emitted `+` syntactic by adding 0.
+                Some($($f::static_length()? +)+ 0)
+            }
         }
-        Ok(Box::new((t, s)))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        let mut sequence = vec![];
-
-        let encoding_of_s = self.1.encode();
-        if S::static_length().is_none() {
-            sequence.push((encoding_of_s.len() as u64).into());
-        }
-        sequence.extend(encoding_of_s);
-
-        let encoding_of_t = self.0.encode();
-        if T::static_length().is_none() {
-            sequence.push((encoding_of_t.len() as u64).into());
-        }
-        sequence.extend(encoding_of_t);
-
-        sequence
-    }
-
-    fn static_length() -> Option<usize> {
-        match (T::static_length(), S::static_length()) {
-            (Some(sl_t), Some(sl_s)) => Some(sl_t + sl_s),
-            _ => None,
-        }
-    }
+    };
 }
+
+impl_bfield_codec_for_tuple!(A, B);
+impl_bfield_codec_for_tuple!(A, B, C);
+impl_bfield_codec_for_tuple!(A, B, C, D);
+impl_bfield_codec_for_tuple!(A, B, C, D, E);
+impl_bfield_codec_for_tuple!(A, B, C, D, E, F);
+impl_bfield_codec_for_tuple!(A, B, C, D, E, F, G);
+impl_bfield_codec_for_tuple!(A, B, C, D, E, F, G, H);
+impl_bfield_codec_for_tuple!(A, B, C, D, E, F, G, H, I);
+impl_bfield_codec_for_tuple!(A, B, C, D, E, F, G, H, I, J);
+impl_bfield_codec_for_tuple!(A, B, C, D, E, F, G, H, I, J, K);
+impl_bfield_codec_for_tuple!(A, B, C, D, E, F, G, H, I, J, K, L);
 
 impl<T: BFieldCodec> BFieldCodec for Option<T> {
     type Error = BFieldCodecError;
@@ -693,6 +721,7 @@ mod tests {
     test_case! { fn tuples_static_static_size_3 for (BFieldElement, XFieldElement): Some(4) }
     test_case! { fn tuples_static_static_size_4 for (XFieldElement, BFieldElement): Some(4) }
     test_case! { fn tuples_static_static_size_5 for (XFieldElement, Digest): Some(8) }
+    test_case! { fn tuples_static_static_size_6 for (u8, u16, u32, u64): Some(5) }
     test_case! { fn tuples_static_dynamic_size_0 for (u32, Vec<u32>): None }
     test_case! { fn tuples_static_dynamic_size_1 for (u32, Vec<u64>): None }
     test_case! { fn tuples_static_dynamic_size_2 for (Digest, Vec<BFieldElement>): None }
@@ -714,6 +743,13 @@ mod tests {
     neg_test_case! { fn vec_of_vec_of_xfield_elements_neg for Vec<Vec<XFieldElement>> }
     neg_test_case! { fn poly_of_bfe_neg for Polynomial<BFieldElement> }
     neg_test_case! { fn poly_of_xfe_neg for Polynomial<XFieldElement> }
+
+    #[test]
+    fn encoding_tuple_puts_fields_in_expected_order() {
+        let encoding = (1_u8, 2_u16, 3_u32, 4_u64, true).encode();
+        let expected = bfe_vec![1, 4, 0, 3, 2, 1];
+        assert_eq!(expected, encoding);
+    }
 
     #[test]
     fn leading_zero_coefficient_have_no_effect_on_encoding_empty_poly_bfe() {
