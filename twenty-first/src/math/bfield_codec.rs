@@ -8,7 +8,6 @@ use std::slice::Iter;
 // Re-export the derive macro so that it can be used in other crates without having to add
 // an explicit dependency on `bfieldcodec_derive` to their Cargo.toml.
 pub use bfieldcodec_derive::BFieldCodec;
-use itertools::Itertools;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
 use thiserror::Error;
@@ -16,6 +15,7 @@ use thiserror::Error;
 use super::b_field_element::BFieldElement;
 use super::polynomial::Polynomial;
 use super::traits::FiniteField;
+use crate::bfe;
 use crate::bfe_vec;
 
 /// This trait provides functions for encoding to and decoding from a Vec of [BFieldElement]s.
@@ -82,79 +82,50 @@ impl BFieldCodec for BFieldElement {
     }
 }
 
-impl BFieldCodec for u128 {
-    type Error = BFieldCodecError;
+macro_rules! impl_bfield_codec_for_big_primitive_uint {
+    ($ty:ty, $size:literal) => {
+        impl BFieldCodec for $ty {
+            type Error = BFieldCodecError;
 
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
-        if sequence.is_empty() {
-            return Err(Self::Error::EmptySequence);
-        }
-        if sequence.len() < 4 {
-            return Err(Self::Error::SequenceTooShort);
-        }
-        if sequence.len() > 4 {
-            return Err(Self::Error::SequenceTooLong);
-        }
-        if sequence.iter().any(|s| s.value() > u32::MAX as u64) {
-            return Err(Self::Error::ElementOutOfRange);
-        }
+            fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+                if sequence.is_empty() {
+                    return Err(Self::Error::EmptySequence);
+                }
+                if sequence.len() < $size {
+                    return Err(Self::Error::SequenceTooShort);
+                }
+                if sequence.len() > $size {
+                    return Err(Self::Error::SequenceTooLong);
+                }
+                if sequence.iter().any(|s| s.value() > u32::MAX.into()) {
+                    return Err(Self::Error::ElementOutOfRange);
+                }
 
-        let element = sequence
-            .iter()
-            .enumerate()
-            .map(|(i, s)| (s.value() as u128) << (i * 32))
-            .sum();
-        Ok(Box::new(element))
-    }
+                let element = sequence
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| Self::from(s) << (i * 32))
+                    .sum();
+                Ok(Box::new(element))
+            }
 
-    fn encode(&self) -> Vec<BFieldElement> {
-        (0..4)
-            .map(|i| (*self >> (i * 32)) as u64 & u32::MAX as u64)
-            .map(BFieldElement::new)
-            .collect_vec()
-    }
+            fn encode(&self) -> Vec<BFieldElement> {
+                const LOW_BIT_MASK: $ty = u32::MAX as $ty;
 
-    fn static_length() -> Option<usize> {
-        Some(4)
-    }
+                (0..$size)
+                    .map(|i| bfe!((*self >> (i * 32)) & LOW_BIT_MASK))
+                    .collect()
+            }
+
+            fn static_length() -> Option<usize> {
+                Some($size)
+            }
+        }
+    };
 }
 
-impl BFieldCodec for u64 {
-    type Error = BFieldCodecError;
-
-    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
-        if sequence.is_empty() {
-            return Err(Self::Error::EmptySequence);
-        }
-        if sequence.len() < 2 {
-            return Err(Self::Error::SequenceTooShort);
-        }
-        if sequence.len() > 2 {
-            return Err(Self::Error::SequenceTooLong);
-        }
-        if sequence.iter().any(|s| s.value() > u32::MAX as u64) {
-            return Err(Self::Error::ElementOutOfRange);
-        }
-
-        let element = sequence
-            .iter()
-            .enumerate()
-            .map(|(i, s)| s.value() << (i * 32))
-            .sum();
-        Ok(Box::new(element))
-    }
-
-    fn encode(&self) -> Vec<BFieldElement> {
-        (0..2)
-            .map(|i| (*self >> (i * 32)) & u32::MAX as u64)
-            .map(BFieldElement::new)
-            .collect_vec()
-    }
-
-    fn static_length() -> Option<usize> {
-        Some(2)
-    }
-}
+impl_bfield_codec_for_big_primitive_uint!(u64, 2);
+impl_bfield_codec_for_big_primitive_uint!(u128, 4);
 
 impl BFieldCodec for bool {
     type Error = BFieldCodecError;
