@@ -632,7 +632,7 @@ impl Tip5 {
     ///
     /// [rate]: Sponge::RATE
     pub fn sample_scalars(&mut self, num_elements: usize) -> Vec<XFieldElement> {
-        let num_squeezes = (num_elements * EXTENSION_DEGREE + Self::RATE - 1) / Self::RATE;
+        let num_squeezes = (num_elements * EXTENSION_DEGREE).div_ceil(Self::RATE);
         debug_assert!(
             num_elements * EXTENSION_DEGREE <= num_squeezes * Self::RATE,
             "need {} elements but getting {}",

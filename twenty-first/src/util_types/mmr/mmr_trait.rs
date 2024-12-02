@@ -40,9 +40,6 @@ impl LeafMutation {
 }
 
 pub trait Mmr {
-    /// Create a new MMR instanc from a list of hash digests. The supplied digests
-    /// are the leafs of the MMR.
-
     // constructors cannot be part of the interface since the archival version requires a
     // database which we want the caller to create, and the accumulator does not need a
     // constructor.
