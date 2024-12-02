@@ -1,5 +1,4 @@
 use arbitrary::Arbitrary;
-use bfieldcodec_derive::BFieldCodec;
 use get_size2::GetSize;
 use itertools::Itertools;
 use num_traits::ConstOne;
@@ -10,9 +9,11 @@ use serde::Serialize;
 use crate::math::b_field_element::BFieldElement;
 pub use crate::math::digest::Digest;
 use crate::math::mds::generated_function;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
-use crate::util_types::algebraic_hasher::Domain;
-use crate::util_types::algebraic_hasher::Sponge;
+use crate::math::x_field_element::EXTENSION_DEGREE;
+use crate::prelude::BFieldCodec;
+use crate::prelude::XFieldElement;
+use crate::util_types::sponge::Domain;
+use crate::util_types::sponge::Sponge;
 
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;
@@ -558,7 +559,6 @@ impl Tip5 {
         trace
     }
 
-    /// hash_10
     /// Hash 10 elements, or two digests. There is no padding because
     /// the input length is fixed.
     pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; Digest::LEN] {
@@ -572,10 +572,8 @@ impl Tip5 {
         // squeeze once
         sponge.state[..Digest::LEN].try_into().unwrap()
     }
-}
 
-impl AlgebraicHasher for Tip5 {
-    fn hash_pair(left: Digest, right: Digest) -> Digest {
+    pub fn hash_pair(left: Digest, right: Digest) -> Digest {
         let mut sponge = Self::new(Domain::FixedLength);
         sponge.state[..Digest::LEN].copy_from_slice(&left.values());
         sponge.state[Digest::LEN..2 * Digest::LEN].copy_from_slice(&right.values());
@@ -584,6 +582,70 @@ impl AlgebraicHasher for Tip5 {
 
         let digest_values = sponge.state[..Digest::LEN].try_into().unwrap();
         Digest::new(digest_values)
+    }
+
+    /// Thin wrapper around [`hash_varlen`](Self::hash_varlen).
+    pub fn hash<T: BFieldCodec>(value: &T) -> Digest {
+        Self::hash_varlen(&value.encode())
+    }
+
+    /// Hash a variable-length sequence of [`BFieldElement`].
+    ///
+    /// - Apply the correct padding
+    /// - [Sponge::pad_and_absorb_all()]
+    /// - [Sponge::squeeze()] once.
+    pub fn hash_varlen(input: &[BFieldElement]) -> Digest {
+        let mut sponge = Self::init();
+        sponge.pad_and_absorb_all(input);
+        let produce: [BFieldElement; crate::util_types::sponge::RATE] = sponge.squeeze();
+
+        Digest::new((&produce[..Digest::LEN]).try_into().unwrap())
+    }
+
+    /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
+    /// `upper_bound` must be a power of 2.
+    ///
+    /// This method uses von Neumann rejection sampling.
+    /// Specifically, if the top 32 bits of a BFieldElement are all ones, then the bottom 32 bits
+    /// are not uniformly distributed, and so they are dropped. This method invokes squeeze until
+    /// enough uniform u32s have been sampled.
+    pub fn sample_indices(&mut self, upper_bound: u32, num_indices: usize) -> Vec<u32> {
+        debug_assert!(upper_bound.is_power_of_two());
+        let mut indices = vec![];
+        let mut squeezed_elements = vec![];
+        while indices.len() != num_indices {
+            if squeezed_elements.is_empty() {
+                squeezed_elements = self.squeeze().into_iter().rev().collect_vec();
+            }
+            let element = squeezed_elements.pop().unwrap();
+            if element != BFieldElement::new(BFieldElement::MAX) {
+                indices.push(element.value() as u32 % upper_bound);
+            }
+        }
+        indices
+    }
+
+    /// Produce `num_elements` random [`XFieldElement`] values.
+    ///
+    /// If `num_elements` is not divisible by [`RATE`][rate], spill the remaining elements of the
+    /// last [`squeeze`][Sponge::squeeze].
+    ///
+    /// [rate]: Sponge::RATE
+    pub fn sample_scalars(&mut self, num_elements: usize) -> Vec<XFieldElement> {
+        let num_squeezes = (num_elements * EXTENSION_DEGREE + Self::RATE - 1) / Self::RATE;
+        debug_assert!(
+            num_elements * EXTENSION_DEGREE <= num_squeezes * Self::RATE,
+            "need {} elements but getting {}",
+            num_elements * EXTENSION_DEGREE,
+            num_squeezes * Self::RATE
+        );
+        (0..num_squeezes)
+            .flat_map(|_| self.squeeze())
+            .collect_vec()
+            .chunks(3)
+            .take(num_elements)
+            .map(|elem| XFieldElement::new([elem[0], elem[1], elem[2]]))
+            .collect()
     }
 }
 

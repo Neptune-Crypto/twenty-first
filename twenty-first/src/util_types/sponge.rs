@@ -6,10 +6,6 @@ use num_traits::ConstOne;
 use num_traits::ConstZero;
 
 use crate::math::b_field_element::BFieldElement;
-use crate::math::bfield_codec::BFieldCodec;
-use crate::math::digest::Digest;
-use crate::math::x_field_element::XFieldElement;
-use crate::math::x_field_element::EXTENSION_DEGREE;
 
 pub const RATE: usize = 10;
 
@@ -25,7 +21,7 @@ pub enum Domain {
     VariableLength,
 
     /// The `FixedLength` domain is used for hashing objects that always fit within [RATE] number
-    /// of fields elements, e.g. a pair of [Digest].
+    /// of fields elements, e.g. a pair of [Digest](crate::math::digest::Digest)s.
     FixedLength,
 }
 
@@ -58,77 +54,8 @@ pub trait Sponge: Clone + Debug + Default + Send + Sync {
     }
 }
 
-pub trait AlgebraicHasher: Sponge {
-    /// 2-to-1 hashing
-    fn hash_pair(left: Digest, right: Digest) -> Digest;
-
-    /// Thin wrapper around [`hash_varlen`](Self::hash_varlen).
-    fn hash<T: BFieldCodec>(value: &T) -> Digest {
-        Self::hash_varlen(&value.encode())
-    }
-
-    /// Hash a variable-length sequence of [`BFieldElement`].
-    ///
-    /// - Apply the correct padding
-    /// - [Sponge::pad_and_absorb_all()]
-    /// - [Sponge::squeeze()] once.
-    fn hash_varlen(input: &[BFieldElement]) -> Digest {
-        let mut sponge = Self::init();
-        sponge.pad_and_absorb_all(input);
-        let produce: [BFieldElement; RATE] = sponge.squeeze();
-
-        Digest::new((&produce[..Digest::LEN]).try_into().unwrap())
-    }
-
-    /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
-    /// `upper_bound` must be a power of 2.
-    ///
-    /// This method uses von Neumann rejection sampling.
-    /// Specifically, if the top 32 bits of a BFieldElement are all ones, then the bottom 32 bits
-    /// are not uniformly distributed, and so they are dropped. This method invokes squeeze until
-    /// enough uniform u32s have been sampled.
-    fn sample_indices(&mut self, upper_bound: u32, num_indices: usize) -> Vec<u32> {
-        debug_assert!(upper_bound.is_power_of_two());
-        let mut indices = vec![];
-        let mut squeezed_elements = vec![];
-        while indices.len() != num_indices {
-            if squeezed_elements.is_empty() {
-                squeezed_elements = self.squeeze().into_iter().rev().collect_vec();
-            }
-            let element = squeezed_elements.pop().unwrap();
-            if element != BFieldElement::new(BFieldElement::MAX) {
-                indices.push(element.value() as u32 % upper_bound);
-            }
-        }
-        indices
-    }
-
-    /// Produce `num_elements` random [`XFieldElement`] values.
-    ///
-    /// If `num_elements` is not divisible by [`RATE`][rate], spill the remaining elements of the
-    /// last [`squeeze`][Sponge::squeeze].
-    ///
-    /// [rate]: Sponge::RATE
-    fn sample_scalars(&mut self, num_elements: usize) -> Vec<XFieldElement> {
-        let num_squeezes = (num_elements * EXTENSION_DEGREE + Self::RATE - 1) / Self::RATE;
-        debug_assert!(
-            num_elements * EXTENSION_DEGREE <= num_squeezes * Self::RATE,
-            "need {} elements but getting {}",
-            num_elements * EXTENSION_DEGREE,
-            num_squeezes * Self::RATE
-        );
-        (0..num_squeezes)
-            .flat_map(|_| self.squeeze())
-            .collect_vec()
-            .chunks(3)
-            .take(num_elements)
-            .map(|elem| XFieldElement::new([elem[0], elem[1], elem[2]]))
-            .collect()
-    }
-}
-
 #[cfg(test)]
-mod algebraic_hasher_tests {
+mod tests {
     use std::ops::Mul;
 
     use rand::Rng;
@@ -139,6 +66,8 @@ mod algebraic_hasher_tests {
     use crate::math::digest::Digest;
     use crate::math::tip5::Tip5;
     use crate::math::x_field_element::EXTENSION_DEGREE;
+    use crate::prelude::BFieldCodec;
+    use crate::prelude::XFieldElement;
 
     fn encode_prop<T>(smallest: T, largest: T)
     where

@@ -16,7 +16,6 @@ use super::shared_advanced;
 use super::shared_basic;
 use crate::math::bfield_codec::BFieldCodec;
 use crate::math::digest::Digest;
-use crate::prelude::AlgebraicHasher;
 use crate::prelude::Tip5;
 
 #[derive(Debug, Clone, Serialize, Deserialize, GetSize, BFieldCodec, Arbitrary)]

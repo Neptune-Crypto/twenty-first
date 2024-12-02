@@ -839,7 +839,6 @@ mod tests {
         use crate::math::digest::Digest;
         use crate::math::tip5::Tip5;
         use crate::math::x_field_element::XFieldElement;
-        use crate::util_types::algebraic_hasher::AlgebraicHasher;
         use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
         use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
 
@@ -927,26 +926,26 @@ mod tests {
         test_case! { fn struct_f for DeriveTestStructF: None }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
-        struct WithPhantomData<H: AlgebraicHasher> {
+        struct WithPhantomData<FF: FiniteField> {
             a_field: u128,
             #[bfield_codec(ignore)]
-            _phantom_data: PhantomData<H>,
+            _phantom_data: PhantomData<FF>,
             another_field: Vec<u64>,
         }
 
-        test_case! { fn with_phantom_data for WithPhantomData<Tip5>: None }
+        test_case! { fn with_phantom_data for WithPhantomData<BFieldElement>: None }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
-        struct WithNestedPhantomData<H: AlgebraicHasher> {
+        struct WithNestedPhantomData<FF: FiniteField> {
             a_field: u128,
             #[bfield_codec(ignore)]
-            _phantom_data: PhantomData<H>,
+            _phantom_data: PhantomData<FF>,
             another_field: Vec<u64>,
-            a_third_field: Vec<WithPhantomData<H>>,
-            a_fourth_field: WithPhantomData<Tip5>,
+            a_third_field: Vec<WithPhantomData<FF>>,
+            a_fourth_field: WithPhantomData<BFieldElement>,
         }
 
-        test_case! { fn with_nested_phantom_data for WithNestedPhantomData<Tip5>: None }
+        test_case! { fn with_nested_phantom_data for WithNestedPhantomData<XFieldElement>: None }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct WithNestedVec {

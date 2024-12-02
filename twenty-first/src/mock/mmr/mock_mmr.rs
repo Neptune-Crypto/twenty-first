@@ -2,7 +2,6 @@ use itertools::Itertools;
 
 use crate::math::digest::Digest;
 use crate::prelude::Tip5;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
 use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
 use crate::util_types::mmr::mmr_trait::LeafMutation;

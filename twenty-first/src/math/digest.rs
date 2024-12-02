@@ -20,7 +20,6 @@ use crate::error::TryFromDigestError;
 use crate::error::TryFromHexDigestError;
 use crate::math::b_field_element::BFieldElement;
 use crate::prelude::Tip5;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 /// The result of hashing a sequence of elements, for example using [Tip5].
 /// Sometimes called a “hash”.

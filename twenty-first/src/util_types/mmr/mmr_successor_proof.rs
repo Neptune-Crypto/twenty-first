@@ -8,7 +8,6 @@ use super::shared_advanced::parent;
 use super::shared_advanced::right_sibling;
 use super::shared_basic::calculate_new_peaks_from_append;
 use super::shared_basic::leaf_index_to_mt_index_and_peak_index;
-use crate::prelude::AlgebraicHasher;
 use crate::prelude::Digest;
 use crate::prelude::Mmr;
 use crate::prelude::Tip5;

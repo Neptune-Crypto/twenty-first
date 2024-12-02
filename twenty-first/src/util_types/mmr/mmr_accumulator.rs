@@ -14,7 +14,6 @@ use super::shared_basic;
 use crate::math::bfield_codec::BFieldCodec;
 use crate::math::digest::Digest;
 use crate::prelude::Tip5;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
 use crate::util_types::mmr::shared_advanced;
 use crate::util_types::shared::bag_peaks;
 

@@ -11,7 +11,6 @@ use thiserror::Error;
 
 use crate::math::digest::Digest;
 use crate::prelude::Tip5;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 const DEFAULT_PARALLELIZATION_CUTOFF: usize = 256;
 lazy_static! {

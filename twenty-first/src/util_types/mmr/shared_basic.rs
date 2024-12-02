@@ -1,7 +1,6 @@
 use super::mmr_membership_proof::MmrMembershipProof;
 use crate::math::digest::Digest;
 use crate::prelude::Tip5;
-use crate::util_types::algebraic_hasher::AlgebraicHasher;
 
 #[inline]
 pub fn left_child(node_index: u64, height: u32) -> u64 {

@@ -179,10 +179,10 @@ macro_rules! xfe_array {
 
 impl From<XFieldElement> for Digest {
     /// Interpret the `XFieldElement` as a [`Digest`]. No hashing is performed. This
-    /// interpretation can be useful for the
-    /// [`AlgebraicHasher`](crate::util_types::algebraic_hasher::AlgebraicHasher) trait and,
+    /// interpretation can be useful for [`Tip5`](crate::math::tip5::Tip5) and,
     /// by extension, allows building
-    /// [`MerkleTree`](crate::util_types::merkle_tree::MerkleTree)s directly from `XFieldElement`s.
+    /// [`MerkleTree`](crate::util_types::merkle_tree::MerkleTree)s directly from
+    /// `XFieldElement`s.
     fn from(xfe: XFieldElement) -> Self {
         let [c0, c1, c2] = xfe.coefficients;
         Digest::new([c0, c1, c2, BFieldElement::ZERO, BFieldElement::ZERO])
