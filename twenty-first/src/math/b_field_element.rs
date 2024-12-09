@@ -437,7 +437,7 @@ impl From<u128> for BFieldElement {
     }
 }
 
-macro_rules! impl_from_for_small_unsigned_int {
+macro_rules! impl_from_small_unsigned_int_for_bfe {
     ($($t:ident),+ $(,)?) => {$(
         impl From<$t> for BFieldElement {
             fn from(value: $t) -> Self {
@@ -447,7 +447,7 @@ macro_rules! impl_from_for_small_unsigned_int {
     )+};
 }
 
-impl_from_for_small_unsigned_int!(u8, u16, u32, u64);
+impl_from_small_unsigned_int_for_bfe!(u8, u16, u32, u64);
 
 impl From<isize> for BFieldElement {
     fn from(value: isize) -> Self {
@@ -477,7 +477,7 @@ impl From<i64> for BFieldElement {
     }
 }
 
-macro_rules! impl_from_for_small_signed_int {
+macro_rules! impl_from_small_signed_int_for_bfe {
     ($($t:ident),+ $(,)?) => {$(
         impl From<$t> for BFieldElement {
             fn from(value: $t) -> Self {
@@ -487,9 +487,9 @@ macro_rules! impl_from_for_small_signed_int {
     )+};
 }
 
-impl_from_for_small_signed_int!(i8, i16, i32);
+impl_from_small_signed_int_for_bfe!(i8, i16, i32);
 
-macro_rules! impl_try_into_for_int {
+macro_rules! impl_try_from_bfe_for_int {
     ($($t:ident),+ $(,)?) => {$(
         impl TryFrom<BFieldElement> for $t {
             type Error = TryFromIntError;
@@ -509,9 +509,9 @@ macro_rules! impl_try_into_for_int {
     )+};
 }
 
-impl_try_into_for_int!(u8, i8, u16, i16, u32, i32, usize, isize);
+impl_try_from_bfe_for_int!(u8, i8, u16, i16, u32, i32, usize, isize);
 
-macro_rules! impl_into_for_int {
+macro_rules! impl_from_bfe_for_int {
     ($($t:ident),+ $(,)?) => {$(
         impl From<BFieldElement> for $t {
             fn from(elem: BFieldElement) -> Self {
@@ -527,7 +527,7 @@ macro_rules! impl_into_for_int {
     )+};
 }
 
-impl_into_for_int!(u64, u128, i128);
+impl_from_bfe_for_int!(u64, u128, i128);
 
 impl From<BFieldElement> for i64 {
     fn from(elem: BFieldElement) -> Self {
