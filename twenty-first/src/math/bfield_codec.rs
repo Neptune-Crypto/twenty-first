@@ -232,7 +232,7 @@ macro_rules! impl_bfield_codec_for_tuple {
     // type identifiers for this purpose. While these identifiers don't follow the
     // guidelines for variable identifiers, this is deemed acceptable in macro code.
     ($($f:ident)+ @>@ @rev@ $($r:ident)+) => {
-        impl <$($f),+> BFieldCodec for ($($f),+)
+        impl <$($f),+> BFieldCodec for ($($f),+ ,)
         where $($f: BFieldCodec),+
         {
             type Error = BFieldCodecError;
@@ -257,12 +257,12 @@ macro_rules! impl_bfield_codec_for_tuple {
                 if !sequence.is_empty() {
                     return Err(Self::Error::SequenceTooLong);
                 }
-                Ok(Box::new(($($f),+)))
+                Ok(Box::new(($($f),+ ,)))
             }
 
             fn encode(&self) -> Vec<BFieldElement> {
                 #[allow(non_snake_case)]
-                let ($($f),+) = self;
+                let ($($f),+ ,) = self;
                 let mut sequence = vec![];
 
                 $(
@@ -285,6 +285,7 @@ macro_rules! impl_bfield_codec_for_tuple {
     };
 }
 
+impl_bfield_codec_for_tuple!(A);
 impl_bfield_codec_for_tuple!(A, B);
 impl_bfield_codec_for_tuple!(A, B, C);
 impl_bfield_codec_for_tuple!(A, B, C, D);
@@ -695,9 +696,11 @@ mod tests {
     test_case! { fn tuples_static_static_size_4 for (XFieldElement, BFieldElement): Some(4) }
     test_case! { fn tuples_static_static_size_5 for (XFieldElement, Digest): Some(8) }
     test_case! { fn tuples_static_static_size_6 for (u8, u16, u32, u64): Some(5) }
+    test_case! { fn tuples_static_static_size_7 for (u8,): Some(1) }
     test_case! { fn tuples_static_dynamic_size_0 for (u32, Vec<u32>): None }
     test_case! { fn tuples_static_dynamic_size_1 for (u32, Vec<u64>): None }
     test_case! { fn tuples_static_dynamic_size_2 for (Digest, Vec<BFieldElement>): None }
+    test_case! { fn tuples_static_dynamic_size_3 for (Vec<BFieldElement>,): None }
     test_case! { fn tuples_dynamic_static_size for (Vec<XFieldElement>, Digest): None }
     test_case! { fn tuples_dynamic_dynamic_size for (Vec<XFieldElement>, Vec<Digest>): None }
     test_case! { fn phantom_data for PhantomData<Tip5>: Some(0) }
