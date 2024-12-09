@@ -15,12 +15,12 @@ pub enum ParseBFieldElementError {
     #[error("invalid `u64`")]
     ParseU64Error(#[source] <u64 as FromStr>::Err),
 
-    #[error("non-canonical {0} >= {} == `BFieldElement::P`", BFieldElement::P)]
+    #[error("non-canonical {0} >= {p} == `BFieldElement::P`", p = BFieldElement::P)]
     NotCanonical(u64),
 
     #[error(
-        "incorrect number of bytes: {0} != {} == `BFieldElement::BYTES`",
-        BFieldElement::BYTES
+        "incorrect number of bytes: {0} != {bytes} == `BFieldElement::BYTES`",
+        bytes = BFieldElement::BYTES
     )]
     InvalidNumBytes(usize),
 }
@@ -45,7 +45,7 @@ pub enum TryFromXFieldElementError {
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 #[non_exhaustive]
 pub enum TryFromDigestError {
-    #[error("expected {} elements for digest, but got {0}", Digest::LEN)]
+    #[error("expected {len} elements for digest, but got {0}", len = Digest::LEN)]
     InvalidLength(usize),
 
     #[error("invalid `BFieldElement`")]
