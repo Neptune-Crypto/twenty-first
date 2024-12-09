@@ -131,6 +131,32 @@ macro_rules! impl_bfield_codec_for_big_primitive_uint {
 impl_bfield_codec_for_big_primitive_uint!(u64, 2);
 impl_bfield_codec_for_big_primitive_uint!(u128, 4);
 
+macro_rules! impl_bfield_codec_for_signed_int {
+    ($iint:ty, using $uint:ty) => {
+        impl BFieldCodec for $iint {
+            type Error = <$uint as BFieldCodec>::Error;
+
+            fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+                <$uint>::decode(sequence).map(|v| Box::new(*v as Self))
+            }
+
+            fn encode(&self) -> Vec<BFieldElement> {
+                (*self as $uint).encode()
+            }
+
+            fn static_length() -> Option<usize> {
+                <$uint>::static_length()
+            }
+        }
+    };
+}
+
+impl_bfield_codec_for_signed_int!(i8, using u8);
+impl_bfield_codec_for_signed_int!(i16, using u16);
+impl_bfield_codec_for_signed_int!(i32, using u32);
+impl_bfield_codec_for_signed_int!(i64, using u64);
+impl_bfield_codec_for_signed_int!(i128, using u128);
+
 impl BFieldCodec for bool {
     type Error = BFieldCodecError;
 
@@ -678,6 +704,16 @@ mod tests {
         };
     }
 
+    test_case! { fn test_u8 for u8: Some(1) }
+    test_case! { fn test_i8 for i8: Some(1) }
+    test_case! { fn test_u16 for u16: Some(1) }
+    test_case! { fn test_i16 for i16: Some(1) }
+    test_case! { fn test_u32 for u32: Some(1) }
+    test_case! { fn test_i32 for i32: Some(1) }
+    test_case! { fn test_u64 for u64: Some(2) }
+    test_case! { fn test_i64 for i64: Some(2) }
+    test_case! { fn test_u128 for u128: Some(4) }
+    test_case! { fn test_i128 for i128: Some(4) }
     test_case! { fn bfieldelement for BFieldElement: Some(1) }
     test_case! { fn xfieldelement for XFieldElement: Some(3) }
     test_case! { fn digest for Digest: Some(5) }
