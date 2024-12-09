@@ -3,6 +3,23 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.44.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.43.0..v0.44.0) – 2024-12-09
+
+### ✨ Features
+
+- Introduce `BFieldCodec` for 1-tuples ([3e048c6b](https://github.com/Neptune-Crypto/twenty-first/commit/3e048c6b))
+- Introduce `BFieldCodec` for up to 12-tuples ([ec466e6d](https://github.com/Neptune-Crypto/twenty-first/commit/ec466e6d))
+- Introduce `BFieldCodec` for signed integers ([34f37acb](https://github.com/Neptune-Crypto/twenty-first/commit/34f37acb))
+
+### 🐛 Bug Fixes
+
+- (!) *(BFieldCodec)* Avoid possibly wrong `as` casts ([1380e379](https://github.com/Neptune-Crypto/twenty-first/commit/1380e379))
+
+### ♻️ Refactor
+
+- (!) Remove deprecated functions ([f1e22eb1](https://github.com/Neptune-Crypto/twenty-first/commit/f1e22eb1))
+- (!) Remove trait `AlgebraicHasher` ([78d42b51](https://github.com/Neptune-Crypto/twenty-first/commit/78d42b51))
+
 ## [0.43.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.41.0..v0.43.0) – 2024-10-29
 
 ### ✨ Features
