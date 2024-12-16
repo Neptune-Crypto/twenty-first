@@ -22,6 +22,7 @@ mock = []
 blake3 = "1.5.4"
 bincode = "1.3.3"
 criterion = { version = "0.5", features = ["html_reports"] }
+insta = "1.41"
 proptest = "1.5"
 proptest-arbitrary-interop = "0.1"
 test-strategy = "0.4"
