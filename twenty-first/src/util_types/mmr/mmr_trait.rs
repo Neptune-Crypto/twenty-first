@@ -39,25 +39,111 @@ impl LeafMutation {
     }
 }
 
+/// A “Merkle Mountain Range” (MMR) is a data structure for storing lists of
+/// hashes. Similar to [Merkle trees](crate::prelude::MerkleTree), they enable
+/// efficient set inclusion proofs. Unlike Merkle trees, the number of leafs of
+/// an MMR is not required to be a power of 2.
+///
+/// One valid perspective of this data structure is to see it as a list of
+/// Merkle trees. Each of the Merkle tree's roots is one peak of the MMR.
+/// In order to keep the number of peaks to a minimum, any two neighboring
+/// Merkle trees of the same height are merged, which results in a single tree
+/// that has one additional “tier”.
+///
+/// # Example
+///
+/// The following is a Merkle Mountain Range, annotated with both node and leaf
+/// indices:
+///
+/// ```markdown
+///         ──── 14 ───                           ╮
+///        ╱           ╲                          │
+///       6             13            21          │
+///      ╱  ╲          ╱  ╲          ╱  ╲         ├╴ node indices
+///     ╱    ╲        ╱    ╲        ╱    ╲        │
+///    2      5      9      12     17     20      │
+///   ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲      │
+///  0   1  3   4  7   8  10 11  15 16  18 19 22  ╯
+///
+///  0   1  2   3  4   5  6   7  8   9  10 11 12  ←── leaf indices
+/// ```
+///
+/// Adding another leaf to the above MMR will result in the following MMR:
+///
+/// ```markdown
+///         ──── 14 ───
+///        ╱           ╲
+///       6             13            21
+///      ╱  ╲          ╱  ╲          ╱  ╲
+///     ╱    ╲        ╱    ╲        ╱    ╲
+///    2      5      9      12     17     20    24
+///   ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲   ╱ ╲
+///  0   1  3   4  7   8  10 11  15 16  18 19 22 23
+///
+///  0   1  2   3  4   5  6   7  8   9  10 11 12 13
+/// ```
+///
+/// Note how the new leaf with index 13, which by itself is a Merkle tree of
+/// height 0, was merged with its neighboring Merkle tree of equal height,
+/// resulting in a new Merkle tree of height 1 (the nodes 22, 23, and 24).
+///
+/// Adding two more leafs to this MMR results in a single Merkle tree of height
+/// four.
+///
+/// # Counterexample
+///
+/// The following is **not** a valid Merkle Mountain Range:
+///
+/// ```markdown
+///       _                        _
+///      ╱  ╲                     ╱  ╲
+///     ╱    ╲                   ╱    ╲
+///    _      _     _     _     _      _
+///   ╱ ╲    ╱ ╲   ╱ ╲   ╱ ╲   ╱ ╲    ╱ ╲
+///  _   _  _   _ _   _ _   _ _   _  _   _
+/// ```
+///
+/// It has multiple problems: There are two neighboring Merkle trees of equal
+/// height, and there is a Merkle tree that is higher than its left neighbor.
+///
+/// # Terminology
+///
+/// Similar to Merkle trees, Merkle Mountain Ranges have “leafs” and “nodes”.
+/// Any leaf is a node, but the reverse is not true. Note that the indexing
+/// scheme for the nodes does not follow that of a Merkle tree – see
+/// [this][mt_proof] explanation for Merkle tree indexing.
+///
+/// A single Merkle tree's root is one “peak” of the MMR. The number of peaks in
+/// the MMR equals the number of Merkle trees it is made out of. Because of the
+/// 1-to-1 mapping between peaks and Merkle trees, the “peak index” uniquely
+/// identifies any one Merkle tree.
+///
+/// When selecting for a single Merkle tree within a Merkle Mountain Range, the
+/// usual Merkel tree indexing is used to identify nodes. This is called the
+/// “Merkle tree index” and is usually only meaningful in combination with a
+/// peak index, for example like [here][mt_peak_idx].
+///
+/// [mt_proof]: crate::util_types::merkle_tree::MerkleTree::authentication_structure
+/// [mt_peak_idx]: crate::util_types::mmr::shared_basic::leaf_index_to_mt_index_and_peak_index
 pub trait Mmr {
     // constructors cannot be part of the interface since the archival version requires a
     // database which we want the caller to create, and the accumulator does not need a
     // constructor.
 
-    /// Calculate a single hash digest committing to the entire MMR.
+    /// A single digest committing to the entire MMR.
     fn bag_peaks(&self) -> Digest;
 
-    /// Returns the peaks of the MMR, which are roots of the Merkle trees that constitute
-    /// the MMR
+    /// The peaks of the MMR, _i.e._, the roots of the Merkle trees that constitute
+    /// the MMR.
     fn peaks(&self) -> Vec<Digest>;
 
-    /// Returns `true` iff the MMR has no leafs
+    /// `true` iff the MMR has no leafs.
     fn is_empty(&self) -> bool;
 
-    /// Returns the number of leafs in the MMR
+    /// The number of leafs in the MMR.
     fn num_leafs(&self) -> u64;
 
-    /// Append a hash digest to the MMR
+    /// Append a hash digest to the MMR.
     fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof;
 
     /// Mutate an existing leaf. It is the caller's responsibility that the
@@ -65,8 +151,9 @@ pub trait Mmr {
     /// will end up in a broken state.
     fn mutate_leaf(&mut self, leaf_mutation: LeafMutation);
 
-    /// Batch mutate an MMR while updating a list of membership proofs. Returns the indices of the
-    /// membership proofs that have changed as a result of this operation.
+    /// Batch mutate an MMR while updating a list of membership proofs. Returns the
+    /// indices of the membership proofs that have changed as a result of this
+    /// operation.
     fn batch_mutate_leaf_and_update_mps(
         &mut self,
         membership_proofs: &mut [&mut MmrMembershipProof],
@@ -74,7 +161,7 @@ pub trait Mmr {
         mutation_data: Vec<LeafMutation>,
     ) -> Vec<usize>;
 
-    /// Returns true if a list of leaf mutations and a list of appends results in the expected
+    /// `true` iff a list of leaf mutations and a list of appends results in the expected
     /// `new_peaks`.
     fn verify_batch_update(
         &self,
@@ -83,6 +170,7 @@ pub trait Mmr {
         leaf_mutations: Vec<LeafMutation>,
     ) -> bool;
 
-    /// Return an MMR accumulator containing only peaks and leaf count
+    /// Derive an MMR accumulator, which contains only peaks and the number of
+    /// leafs.
     fn to_accumulator(&self) -> MmrAccumulator;
 }
