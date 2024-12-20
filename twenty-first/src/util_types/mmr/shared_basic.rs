@@ -34,7 +34,7 @@ pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u64, leaf_count: u64) -
     // that list is the Merkle root that its authentication path refers to.
     assert!(
         leaf_index < leaf_count,
-        "Leaf index must be stricly smaller than leaf count"
+        "Leaf index must be strictly smaller than leaf count"
     );
 
     // a) Get the index as if this was a Merkle tree

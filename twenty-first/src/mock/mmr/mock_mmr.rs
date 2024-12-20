@@ -64,7 +64,7 @@ impl Mmr for MockMmr {
     }
 
     /// Append an element to the MockMmr, return the membership proof of the newly added leaf.
-    /// The membership proof is returned here since the accumulater MMR has no other way of
+    /// The membership proof is returned here since the accumulator MMR has no other way of
     /// retrieving a membership proof for a leaf. And the archival and accumulator MMR share
     /// this interface.
     fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof {
@@ -614,7 +614,7 @@ mod mmr_test {
 
     #[test]
     fn accumulator_mmr_mutate_leaf_test() {
-        // Verify that upating leafs in archival and in accumulator MMR results in the same peaks
+        // Verify that updating leafs in archival and in accumulator MMR results in the same peaks
         // and verify that updating all leafs in an MMR results in the expected MMR
         for size in 1..150 {
             let new_leaf: Digest = random();
@@ -661,7 +661,7 @@ mod mmr_test {
                 let bad_leaf_mutation = LeafMutation::new(leaf_index, bad_leaf, mp);
                 assert!(
                     !acc.verify_batch_update(&archival.peaks(), &[], vec![bad_leaf_mutation]),
-                    "Inalid batch update parameters must fail"
+                    "Invalid batch update parameters must fail"
                 );
 
                 acc.mutate_leaf(leaf_mutation);
@@ -767,7 +767,7 @@ mod mmr_test {
         // let mmr_after_append = mmr.clone();
         let new_leaf: Digest = H::hash(&BFieldElement::new(987223));
 
-        // When verifying the batch update with two consequtive leaf mutations, we must get the
+        // When verifying the batch update with two consecutive leaf mutations, we must get the
         // membership proofs prior to all mutations. This is because the `verify_batch_update` method
         // updates the membership proofs internally to account for the mutations.
         for &leaf_index in &[0u64, 1] {
@@ -893,7 +893,7 @@ mod mmr_test {
 
             // // Make a new MMR where we append with a value and run the verify_append
             let new_leaf_hash = H::hash(&BFieldElement::new(201));
-            let orignal_peaks = mmr.peaks();
+            let original_peaks = mmr.peaks();
             let mp = mmr.append(new_leaf_hash);
             let leaf_index = leaf_count;
             assert!(
@@ -901,7 +901,7 @@ mod mmr_test {
                 "Returned membership proof from append must verify"
             );
             assert_ne!(
-                orignal_peaks,
+                original_peaks,
                 mmr.peaks(),
                 "peaks must change when appending"
             );

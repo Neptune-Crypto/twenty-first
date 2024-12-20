@@ -2219,7 +2219,7 @@ where
 }
 
 impl Polynomial<'_, BFieldElement> {
-    /// [Clean division](Self::clean_divide) is slower than [naïve divison](Self::naive_divide) for
+    /// [Clean division](Self::clean_divide) is slower than [naïve division](Self::naive_divide) for
     /// polynomials of degree less than this threshold.
     ///
     /// Extracted from `cargo bench --bench poly_clean_div` on mjolnir.

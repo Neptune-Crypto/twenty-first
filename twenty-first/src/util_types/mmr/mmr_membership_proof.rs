@@ -206,7 +206,7 @@ impl MmrMembershipProof {
             // peaks are always left children, so we don't have to check for that
             acc_hash = Tip5::hash_pair(old_peak_digest, acc_hash);
 
-            // once we encouter the first of the needed accumulator indices,
+            // once we encounter the first of the needed accumulator indices,
             // we can break. Just like we could in the update for the leaf update
             // membership proof update.
             // The reason for this break is that the authentication path consists of

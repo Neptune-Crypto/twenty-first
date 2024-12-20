@@ -38,25 +38,25 @@ fn karatsuba<
 
     let half = n / 2;
 
-    let alo = &a[0..half];
-    let ahi = &a[half..];
-    let asu = alo
+    let a_lo = &a[0..half];
+    let a_hi = &a[half..];
+    let a_su = a_lo
         .iter()
-        .zip(ahi.iter())
+        .zip(a_hi)
         .map(|(l, r)| l.wrapping_add(r))
         .collect_vec();
 
-    let blo = &b[0..half];
-    let bhi = &b[half..];
-    let bsu = blo
+    let b_lo = &b[0..half];
+    let b_hi = &b[half..];
+    let b_su = b_lo
         .iter()
-        .zip(bhi.iter())
+        .zip(b_hi)
         .map(|(l, r)| l.wrapping_add(r))
         .collect_vec();
 
-    let los = karatsuba(alo, blo, half, zero.clone());
-    let his = karatsuba(ahi, bhi, half, zero.clone());
-    let sus = karatsuba(&asu, &bsu, half, zero.clone());
+    let los = karatsuba(a_lo, b_lo, half, zero.clone());
+    let his = karatsuba(a_hi, b_hi, half, zero.clone());
+    let sus = karatsuba(&a_su, &b_su, half, zero.clone());
 
     let mut c = vec![zero; 2 * n - 1];
     for i in 0..los.len() {
@@ -191,39 +191,39 @@ pub fn recursive_cyclic_mul<
 
     let half = n / 2;
 
-    let alo = &a[0..half];
-    let ahi = &a[half..];
+    let a_lo = &a[0..half];
+    let a_hi = &a[half..];
 
-    let blo = &b[0..half];
-    let bhi = &b[half..];
+    let b_lo = &b[0..half];
+    let b_hi = &b[half..];
 
-    let asum = alo
+    let a_sum = a_lo
         .iter()
-        .zip(ahi.iter())
+        .zip(a_hi)
         .map(|(l, r)| l.to_owned() + r.to_owned())
         .collect_vec();
 
-    let bsum = blo
+    let b_sum = b_lo
         .iter()
-        .zip(bhi.iter())
+        .zip(b_hi)
         .map(|(l, r)| l.to_owned() + r.to_owned())
         .collect_vec();
 
-    let sums = recursive_cyclic_mul(&asum, &bsum, half, zero.clone(), two.clone());
+    let sums = recursive_cyclic_mul(&a_sum, &b_sum, half, zero.clone(), two.clone());
 
-    let adiff = alo
+    let a_diff = a_lo
         .iter()
-        .zip(ahi.iter())
+        .zip(a_hi)
         .map(|(l, r)| l.wrapping_sub(r))
         .collect_vec();
 
-    let bdiff = blo
+    let b_diff = b_lo
         .iter()
-        .zip(bhi.iter())
+        .zip(b_hi)
         .map(|(l, r)| l.wrapping_sub(r))
         .collect_vec();
 
-    let mut diffs = karatsuba_negacyclic_mul(&adiff, &bdiff, half, zero.clone());
+    let mut diffs = karatsuba_negacyclic_mul(&a_diff, &b_diff, half, zero.clone());
     let mut nnn = half;
     while nnn > 1 {
         diffs = diffs

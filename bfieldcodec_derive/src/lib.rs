@@ -66,7 +66,7 @@ use syn::Variant;
 ///
 /// ### Known limitations
 ///
-/// - Enums whith variants that have named fields are currently not supported. Example:
+/// - Enums with variants that have named fields are currently not supported. Example:
 ///      ```ignore
 ///     #[derive(BFieldCodec)]  // Currently not supported.
 ///     enum Foo {
