@@ -35,10 +35,6 @@ const MAX_NUM_LEAFS: usize = MAX_NUM_NODES / 2;
 /// The maximum height of a Merkle tree.
 pub const MAX_TREE_HEIGHT: usize = MAX_NUM_LEAFS.ilog2() as usize;
 
-/// The index of the root node in a [Merkle tree](MerkleTree).
-/// It is recommended to use [`root()`](MerkleTree::root) instead.
-const ROOT_INDEX: usize = 1;
-
 type Result<T> = result::Result<T, MerkleTreeError>;
 
 /// A [Merkle tree][merkle_tree] is a binary tree of [digests](Digest) that is
@@ -146,6 +142,11 @@ pub(crate) struct PartialMerkleTree {
 }
 
 impl MerkleTree {
+    /// The index of the root node.
+    ///
+    /// If you need to read the root, try [`root()`](Self::root) instead.
+    pub(crate) const ROOT_INDEX: usize = 1;
+
     pub fn new<Maker: MerkleTreeMaker>(leafs: &[Digest]) -> Result<Self> {
         Maker::from_digests(leafs)
     }
@@ -176,7 +177,7 @@ impl MerkleTree {
             }
 
             let mut node_index = leaf_index + num_leafs;
-            while node_index > ROOT_INDEX {
+            while node_index > Self::ROOT_INDEX {
                 let sibling_index = node_index ^ 1;
                 node_can_be_computed.insert(node_index);
                 node_is_needed.insert(sibling_index);
@@ -230,7 +231,7 @@ impl MerkleTree {
     }
 
     pub fn root(&self) -> Digest {
-        self.nodes[ROOT_INDEX]
+        self.nodes[Self::ROOT_INDEX]
     }
 
     pub fn num_leafs(&self) -> usize {
@@ -365,7 +366,7 @@ impl MerkleTreeInclusionProof {
 impl PartialMerkleTree {
     pub fn root(&self) -> Result<Digest> {
         self.nodes
-            .get(&ROOT_INDEX)
+            .get(&MerkleTree::ROOT_INDEX)
             .copied()
             .ok_or(MerkleTreeError::RootNotFound)
     }
@@ -459,7 +460,7 @@ impl PartialMerkleTree {
         let num_leafs = self.num_leafs()?;
         let mut authentication_path = vec![];
         let mut node_index = leaf_index + num_leafs;
-        while node_index > ROOT_INDEX {
+        while node_index > MerkleTree::ROOT_INDEX {
             let sibling_index = node_index ^ 1;
             let sibling = self.node(sibling_index)?;
             authentication_path.push(sibling);
@@ -559,7 +560,7 @@ impl MerkleTreeMaker for CpuParallel {
         }
 
         // Sequential digest calculations
-        for i in (ROOT_INDEX..(digests.len() - count_acc)).rev() {
+        for i in (MerkleTree::ROOT_INDEX..(digests.len() - count_acc)).rev() {
             nodes[i] = Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
         }
 

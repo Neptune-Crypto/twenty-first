@@ -1,5 +1,4 @@
 use arbitrary::Arbitrary;
-use bfieldcodec_derive::BFieldCodec;
 use itertools::Itertools;
 
 use super::mmr_accumulator::MmrAccumulator;
@@ -8,9 +7,7 @@ use super::shared_advanced::parent;
 use super::shared_advanced::right_sibling;
 use super::shared_basic::calculate_new_peaks_from_append;
 use super::shared_basic::leaf_index_to_mt_index_and_peak_index;
-use crate::prelude::Digest;
-use crate::prelude::Mmr;
-use crate::prelude::Tip5;
+use crate::prelude::*;
 use crate::util_types::mmr::shared_advanced::left_sibling;
 use crate::util_types::mmr::shared_advanced::node_indices_added_by_append;
 
@@ -115,75 +112,72 @@ impl MmrSuccessorProof {
         }
     }
 
-    /// Verify that `old_mmra` is a predecessor of `new_mmra`.
-    pub fn verify(&self, old_mmra: &MmrAccumulator, new_mmra: &MmrAccumulator) -> bool {
-        if old_mmra.num_leafs() > new_mmra.num_leafs() {
+    /// Verify that the `old` [`MmrAccumulator`] is a predecessor of the `new` one.
+    pub fn verify(&self, old: &MmrAccumulator, new: &MmrAccumulator) -> bool {
+        let merkle_tree_root_index = u64::try_from(MerkleTree::ROOT_INDEX)
+            .expect("internal error: type `usize` should have at most 64 bits");
+
+        if old.num_leafs() > new.num_leafs() {
             return false;
         }
 
-        let num_new_peaks: u32 = new_mmra.peaks().len().try_into().unwrap();
-        if new_mmra.num_leafs().count_ones() != num_new_peaks {
+        let num_new_peaks = u32::try_from(new.peaks().len())
+            .expect("internal error: Merkle Mountain Ranges should have at most 2^63 leafs");
+        if num_new_peaks != new.num_leafs().count_ones() {
             return false;
         }
 
-        let mut ap_index = 0;
-        let mut running_leaf_count = 0;
-        let strip_top_bit = |num: u64| (num.ilog2(), num - (1 << num.ilog2()));
-        let mut num_leafs_remaining = old_mmra.num_leafs();
-        for old_peak in old_mmra.peaks().into_iter() {
-            let (old_height, nlr) = strip_top_bit(num_leafs_remaining);
-            num_leafs_remaining = nlr;
+        let mut verified_old_leafs_count = 0;
+        let mut authentication_paths = self.paths.iter();
+        for old_peak in old.peaks() {
+            let (merkle_tree_index_of_first_leaf_under_new_peak, new_peak_index) =
+                leaf_index_to_mt_index_and_peak_index(verified_old_leafs_count, new.num_leafs());
 
-            let (merkle_tree_index_of_first_leaf_under_this_peak, new_peak_index) =
-                leaf_index_to_mt_index_and_peak_index(running_leaf_count, new_mmra.num_leafs());
+            let num_remaining_leafs = old.num_leafs() - verified_old_leafs_count;
+            let old_peak_height = num_remaining_leafs.ilog2();
             let mut current_merkle_tree_index =
-                merkle_tree_index_of_first_leaf_under_this_peak >> old_height;
-            running_leaf_count += 1 << old_height;
-
+                merkle_tree_index_of_first_leaf_under_new_peak >> old_peak_height;
             let mut current_node = old_peak;
-            while current_merkle_tree_index != 1 {
-                let sibling = self
-                    .paths
-                    .get(ap_index)
-                    .copied()
-                    .unwrap_or(Digest::default());
-                let is_left_sibling = current_merkle_tree_index & 1 == 0;
+            while current_merkle_tree_index > merkle_tree_root_index {
+                let Some(&sibling) = authentication_paths.next() else {
+                    return false;
+                };
+                let is_left_sibling = current_merkle_tree_index % 2 == 0;
                 current_node = if is_left_sibling {
                     Tip5::hash_pair(current_node, sibling)
                 } else {
                     Tip5::hash_pair(sibling, current_node)
                 };
                 current_merkle_tree_index >>= 1;
-                ap_index += 1;
             }
+            debug_assert_eq!(merkle_tree_root_index, current_merkle_tree_index);
 
-            if new_mmra.peaks()[new_peak_index as usize] != current_node {
+            let new_peak_index = usize::try_from(new_peak_index)
+                .expect("internal error: type `usize` should have at least 32 bits");
+            let Some(&new_peak) = new.peaks().get(new_peak_index) else {
+                return false;
+            };
+            if current_node != new_peak {
                 return false;
             }
+
+            verified_old_leafs_count += 1 << old_peak_height;
         }
 
-        // Ensure all digests were read
-        ap_index == self.paths.len()
+        // ensure all digests were read
+        authentication_paths.count() == 0
     }
 }
 
 #[cfg(test)]
 mod test {
-    use itertools::Itertools;
     use proptest::collection::vec;
     use proptest::prop_assert;
     use proptest_arbitrary_interop::arb;
-    use rand::rngs::StdRng;
-    use rand::thread_rng;
-    use rand::Rng;
-    use rand::RngCore;
-    use rand::SeedableRng;
+    use rand::prelude::*;
     use test_strategy::proptest;
 
-    use super::MmrSuccessorProof;
-    use crate::prelude::Digest;
-    use crate::prelude::Mmr;
-    use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
+    use super::*;
 
     fn verification_succeeds_with_n_leafs_append_m(n: usize, m: usize, rng: &mut dyn RngCore) {
         let original_leafs = (0..n).map(|_| rng.gen::<Digest>()).collect_vec();

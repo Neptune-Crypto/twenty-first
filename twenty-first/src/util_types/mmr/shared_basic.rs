@@ -1,6 +1,4 @@
-use super::mmr_membership_proof::MmrMembershipProof;
-use crate::math::digest::Digest;
-use crate::prelude::Tip5;
+use crate::prelude::*;
 
 #[inline]
 pub fn left_child(node_index: u64, height: u32) -> u64 {
@@ -15,13 +13,11 @@ pub fn right_child(node_index: u64) -> u64 {
 /// Given the leaf index in the MMR as well as the number of leafs in the MMR,
 /// compute that leaf's Merkle tree index and its peak index.
 ///
-/// For an explanation of the terminology, see [MMR].
+/// For an explanation of the terminology, see [`Mmr`].
 ///
 /// # Panics
 ///
 /// - if the leaf index is larger than or equal to the number of leafs
-///
-/// [MMR]: crate::util_types::mmr::mmr_trait::Mmr
 #[inline]
 pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u64, num_leafs: u64) -> (u64, u32) {
     // This algorithm works by first identifying how high the local Merkle tree is. This is
@@ -99,6 +95,12 @@ pub fn calculate_new_peaks_from_append(
 /// Calculate a new peak list given the mutation of a leaf
 /// The new peak list will only (max) have *one* element different
 /// from `old_peaks`
+///
+/// # Panics
+///
+/// Panics if the `membership_proof`'s authentication path is of insufficient
+/// length. This can only happen if the `membership_proof` is invalid (but
+/// there are other ways in which it can be invalid, too).
 pub fn calculate_new_peaks_from_leaf_mutation(
     old_peaks: &[Digest],
     num_leafs: u64,
@@ -106,23 +108,26 @@ pub fn calculate_new_peaks_from_leaf_mutation(
     leaf_index: u64,
     membership_proof: &MmrMembershipProof,
 ) -> Vec<Digest> {
+    let merkle_tree_root_index = u64::try_from(MerkleTree::ROOT_INDEX)
+        .expect("internal error: type `usize` should have at most 64 bits");
+
     let (mut acc_mt_index, peak_index) =
         leaf_index_to_mt_index_and_peak_index(leaf_index, num_leafs);
-    let mut acc_hash: Digest = new_leaf.to_owned();
-    let mut i = 0;
-    while acc_mt_index != 1 {
-        let ap_element = membership_proof.authentication_path[i];
-        if acc_mt_index % 2 == 1 {
-            // Node with `acc_hash` is a right child
-            acc_hash = Tip5::hash_pair(ap_element, acc_hash);
-        } else {
-            // Node with `acc_hash` is a left child
+
+    let mut acc_hash = new_leaf;
+    let mut authentication_path = membership_proof.authentication_path.iter();
+    while acc_mt_index > merkle_tree_root_index {
+        let &ap_element = authentication_path.next().unwrap();
+        let accumulator_is_left_child = acc_mt_index % 2 == 0;
+        if accumulator_is_left_child {
             acc_hash = Tip5::hash_pair(acc_hash, ap_element);
+        } else {
+            acc_hash = Tip5::hash_pair(ap_element, acc_hash);
         }
 
         acc_mt_index /= 2;
-        i += 1;
     }
+    debug_assert_eq!(merkle_tree_root_index, acc_mt_index);
 
     let mut calculated_peaks: Vec<Digest> = old_peaks.to_vec();
     calculated_peaks[peak_index as usize] = acc_hash;
@@ -134,8 +139,7 @@ pub fn calculate_new_peaks_from_leaf_mutation(
 mod mmr_test {
     use proptest::collection::vec;
     use proptest_arbitrary_interop::arb;
-    use rand::thread_rng;
-    use rand::Rng;
+    use rand::prelude::*;
     use test_strategy::proptest;
 
     use super::*;

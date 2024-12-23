@@ -14,23 +14,12 @@ use serde::Serialize;
 use super::mmr_trait::LeafMutation;
 use super::shared_advanced;
 use super::shared_basic;
-use crate::math::bfield_codec::BFieldCodec;
-use crate::math::digest::Digest;
-use crate::prelude::Tip5;
+use crate::prelude::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize, GetSize, BFieldCodec, Arbitrary)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, GetSize, BFieldCodec, Arbitrary)]
 pub struct MmrMembershipProof {
     pub authentication_path: Vec<Digest>,
 }
-
-impl PartialEq for MmrMembershipProof {
-    // Two membership proofs are considered equal if they contain the same authentication path
-    fn eq(&self, other: &Self) -> bool {
-        self.authentication_path == other.authentication_path
-    }
-}
-
-impl Eq for MmrMembershipProof {}
 
 impl MmrMembershipProof {
     pub fn new(authentication_path: Vec<Digest>) -> Self {
@@ -45,47 +34,45 @@ impl MmrMembershipProof {
         leaf_index: u64,
         leaf_hash: Digest,
         peaks: &[Digest],
-        leaf_count: u64,
+        num_leafs: u64,
     ) -> bool {
-        // Return false if leaf index is out-of-bounds.
-        if leaf_index >= leaf_count {
+        if leaf_index >= num_leafs {
+            // out of bounds
             return false;
         }
 
-        // Return false if `peaks` list has wrong length
         let (mut mt_index, peak_index) =
-            shared_basic::leaf_index_to_mt_index_and_peak_index(leaf_index, leaf_count);
-        let expected_peak_count = leaf_count.count_ones();
-        let received_peak_count: u32 = peaks.len().try_into().unwrap();
-        if expected_peak_count != received_peak_count {
+            shared_basic::leaf_index_to_mt_index_and_peak_index(leaf_index, num_leafs);
+        let expected_peak_count = num_leafs.count_ones();
+        let actual_peak_count = u32::try_from(peaks.len())
+            .expect("internal error: Merkle Mountain Ranges should have at most 2^63 leafs");
+        if expected_peak_count != actual_peak_count {
             return false;
         }
 
-        // Verify that authentication path has correct length. This is done to fail gracefully when
-        // fed a too short authentication path.
-        if mt_index.ilog2() as u64 != self.authentication_path.len() as u64 {
+        let merkle_tree_height = u64::from(mt_index.ilog2());
+        let auth_path_len = u64::try_from(self.authentication_path.len())
+            .expect("internal error: type `usize` should have at most 64 bits");
+        if merkle_tree_height != auth_path_len {
             return false;
         }
 
-        let mut i = 0;
-        let mut acc_hash: Digest = leaf_hash.to_owned();
-        while mt_index != 1 {
-            let ap_element = self.authentication_path[i];
-            if mt_index % 2 == 0 {
-                // node of `acc_hash` is left child
-                acc_hash = Tip5::hash_pair(acc_hash, ap_element);
+        let mut current_node = leaf_hash;
+        for &sibling in &self.authentication_path {
+            let current_node_is_left_sibling = mt_index % 2 == 0;
+            current_node = if current_node_is_left_sibling {
+                Tip5::hash_pair(current_node, sibling)
             } else {
-                // node of `acc_hash` is right child
-                acc_hash = Tip5::hash_pair(ap_element, acc_hash);
-            }
-
-            i += 1;
+                Tip5::hash_pair(sibling, current_node)
+            };
             mt_index /= 2;
         }
+        debug_assert_eq!(MerkleTree::ROOT_INDEX as u64, mt_index);
 
-        let expected_peak = peaks[peak_index as usize];
+        let peak_index = usize::try_from(peak_index)
+            .expect("internal error: type `usize` should have at least 32 bits");
 
-        expected_peak == acc_hash
+        peaks[peak_index] == current_node
     }
 
     /// Return the node indices for the authentication path in this membership proof
