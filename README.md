@@ -51,4 +51,4 @@ If you do not have the privilege to create git tags or run `cargo publish`, subm
 
 ## Building
 
-For detailed buildings instructions, see the description in `HACKING.md`.
+For detailed building instructions, see the description in `HACKING.md`.
