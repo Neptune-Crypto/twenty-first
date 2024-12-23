@@ -930,12 +930,16 @@ mod tests {
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct DeriveTestStructWithBfePolynomialField(Polynomial<'static, BFieldElement>);
 
-        test_case! { fn struct_with_bfe_poly_field for DeriveTestStructWithBfePolynomialField: None }
+        test_case! {
+            fn struct_with_bfe_poly_field for DeriveTestStructWithBfePolynomialField: None
+        }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct DeriveTestStructWithXfePolynomialField(Polynomial<'static, XFieldElement>);
 
-        test_case! { fn struct_with_xfe_poly_field for DeriveTestStructWithXfePolynomialField: None }
+        test_case! {
+            fn struct_with_xfe_poly_field for DeriveTestStructWithXfePolynomialField: None
+        }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         enum EnumWithVariantWithPolyField {

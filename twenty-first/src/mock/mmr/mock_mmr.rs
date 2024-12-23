@@ -209,11 +209,12 @@ impl MockMmr {
 
     /// Return the MMR membership proof for a leaf with a given index.
     pub fn prove_membership(&self, leaf_index: u64) -> MmrMembershipProof {
-        // A proof consists of an authentication path
-        // and a list of peaks
+        // A proof consists of an authentication path and a list of peaks
         assert!(
             leaf_index < self.num_leafs(),
-            "Cannot prove membership of leaf outside of range. Got leaf_index {leaf_index}. Leaf count is {}", self.num_leafs()
+            "Cannot prove membership of leaf outside of range. \
+            Leaf index: {leaf_index}. Number of leafs: {}",
+            self.num_leafs()
         );
 
         // Find out how long the authentication path is
@@ -497,8 +498,8 @@ mod mmr_test {
         let membership_proof = archival_mmr.prove_membership(mp_leaf_index);
         let peaks = archival_mmr.peaks();
 
-        // Verify that the accumulated hash in the verifier is compared against the **correct** hash,
-        // not just **any** hash in the peaks list.
+        // Verify that the accumulated hash in the verifier is compared against the
+        // **correct** hash, not just **any** hash in the peaks list.
         assert!(membership_proof.verify(mp_leaf_index, leaf_hashes[0], &peaks, 3));
         assert!(!membership_proof.verify(2, leaf_hashes[0], &peaks, 3));
 
@@ -716,7 +717,8 @@ mod mmr_test {
             assert_eq!(size as u64, accumulator_iterative.num_leafs());
             assert_eq!(archival_iterative.peaks(), accumulator_iterative.peaks());
 
-            // Run a batch-append verification on the entire mutation of the MMR and verify that it succeeds
+            // Run a batch-append verification on the entire mutation of the MMR and verify
+            // that it succeeds
             let empty_accumulator = MmrAccumulator::new_from_leafs(vec![]);
             assert!(empty_accumulator.verify_batch_update(
                 &archival_batch.peaks(),
@@ -767,9 +769,10 @@ mod mmr_test {
         // let mmr_after_append = mmr.clone();
         let new_leaf: Digest = H::hash(&BFieldElement::new(987223));
 
-        // When verifying the batch update with two consecutive leaf mutations, we must get the
-        // membership proofs prior to all mutations. This is because the `verify_batch_update` method
-        // updates the membership proofs internally to account for the mutations.
+        // When verifying the batch update with two consecutive leaf mutations, we must
+        // get the membership proofs prior to all mutations. This is because the
+        // `verify_batch_update` method updates the membership proofs internally to
+        // account for the mutations.
         for &leaf_index in &[0u64, 1] {
             let mp = mmr.prove_membership(leaf_index);
             let leaf_mutation = LeafMutation::new(leaf_index, new_leaf, mp);

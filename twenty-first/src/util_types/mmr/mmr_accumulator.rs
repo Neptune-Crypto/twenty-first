@@ -90,8 +90,9 @@ impl Mmr for MmrAccumulator {
         )
     }
 
-    /// Returns true if the `new_peaks` input matches the calculated new MMR peaks resulting from the
-    /// provided appends and mutations. Can panic if initial state is not a valid MMR.
+    /// `true` if the `new_peaks` input matches the calculated new MMR peaks
+    /// resulting from the provided appends and mutations. Can panic if initial
+    /// state is not a valid MMR.
     fn verify_batch_update(
         &self,
         new_peaks: &[Digest],
@@ -281,10 +282,11 @@ impl Mmr for MmrAccumulator {
         {
             let ap_indices = membership_proof.get_node_indices(*mp_leaf_index);
 
-            // Some of the hashes in may `membership_proof` need to be updated. We can loop over
-            // `authentication_path_indices` and check if the element is contained `deducible_hashes`.
-            // If it is, then the appropriate element in `membership_proof.authentication_path` needs to
-            // be replaced with an element from `deducible_hashes`.
+            // Some of the hashes in `membership_proof` might need to be updated. We can
+            // loop over `authentication_path_indices` and check if the element is
+            // contained `deducible_hashes`. If it is, then the appropriate element in
+            // `membership_proof.authentication_path` needs to be replaced with an element
+            // from `deducible_hashes`.
             for (digest, authentication_path_indices) in membership_proof
                 .authentication_path
                 .iter_mut()
@@ -321,8 +323,9 @@ pub mod util {
     use crate::util_types::mmr::shared_advanced::right_lineage_length_from_node_index;
     use crate::util_types::mmr::shared_basic::leaf_index_to_mt_index_and_peak_index;
 
-    /// Get an MMR accumulator with a requested number of leafs, and requested leaf digests at specified indices
-    /// Also returns the MMR membership proofs for the specified leafs.
+    /// Get an MMR accumulator with a requested number of leafs, and requested leaf
+    /// digests at specified indices. Also returns the MMR membership proofs for the
+    /// specified leafs.
     pub fn mmra_with_mps(
         leaf_count: u64,
         specified_leafs: Vec<(u64, Digest)>,
@@ -738,7 +741,8 @@ mod accumulator_mmr_tests {
                     mmra.num_leafs()
                 )));
 
-            // Manually construct an MMRA from the new data and verify that peaks and leaf count matches
+            // Manually construct an MMRA from the new data and verify that peaks and leaf
+            // count matches
             assert!(
                 mutated_leaf_count == 0 || ammr_copy.peaks() != ammr.peaks(),
                 "If mutated leaf count is non-zero, at least on peaks must be different"
@@ -752,7 +756,12 @@ mod accumulator_mmr_tests {
                     ammr_copy.mutate_leaf_raw(leaf_index, new_leaf);
                 },
             );
-            assert_eq!(ammr_copy.peaks(), ammr.peaks(), "Mutation though batch mutation function must transform the MMR like a list of individual leaf mutations");
+            assert_eq!(
+                ammr_copy.peaks(),
+                ammr.peaks(),
+                "Mutation though batch mutation function must transform the MMR \
+                like a list of individual leaf mutations"
+            );
         }
     }
 
@@ -904,8 +913,8 @@ mod accumulator_mmr_tests {
 
         // For some reason this failed on GitHub's server when only multiplied by 4. This worked
         // consistently on my machine with `4`. It's probably because of a different architecture.
-        // So the number was just increased to 100.
-        // See: https://github.com/Neptune-Crypto/twenty-first/actions/runs/4928129170/jobs/8806086355
+        // So the number was just increased to 100. See:
+        // https://github.com/Neptune-Crypto/twenty-first/actions/runs/4928129170/jobs/8806086355
         assert!(mmra.get_size() < 100 * std::mem::size_of::<Digest>());
     }
 

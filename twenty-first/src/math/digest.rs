@@ -606,8 +606,7 @@ pub(crate) mod digest_tests {
                 "10000000000000000000000000000000000000000000000000000000000000000000000000000000",
                 "0000000000000000000000000000000000000000000000000000000000000000000000000000000f",
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                // note: this would result in NotCanonical error. See issue 195
-                // "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                // note: all "ff…ff" would result in NotCanonical error. See issue 195
             ];
             for hex in hex_vals {
                 let digest = Digest::try_from_hex(hex)?;

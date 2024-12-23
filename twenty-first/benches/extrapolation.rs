@@ -68,16 +68,18 @@ fn extrapolation<const SIZE: usize, const NUM_POINTS: usize>(c: &mut Criterion) 
     // We used to have another benchmark here that used barycentric evaluation
     // (from `fri.rs` in repo triton-vm) inside of a loop over all points. It
     // was never close to faster.
+
     let id = BenchmarkId::new("Fast Codeword Extrapolation", log2_of_size);
+    type BfePoly = Polynomial<'static, BFieldElement>;
     group.bench_function(id, |b| {
         b.iter(|| {
             let minimal_interpolant =
-        Polynomial::<BFieldElement>::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
-            &codeword,
-                offset,
-                &modulus,
-                &preprocessing_data
-            );
+                BfePoly::fast_modular_coset_interpolate_with_zerofiers_and_ntt_friendly_multiple(
+                    &codeword,
+                    offset,
+                    &modulus,
+                    &preprocessing_data,
+                );
             minimal_interpolant.divide_and_conquer_batch_evaluate(&zerofier_tree)
         })
     });

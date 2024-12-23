@@ -132,7 +132,8 @@ impl MmrMembershipProof {
     ) -> bool {
         // 1. Get index of authentication paths's peak
         // 2. Get node indices for nodes added by the append
-        // 3. Check if authentication path's peak's parent is present in the added nodes (peak can only be left child)
+        // 3. Check if authentication path's peak's parent is present in the added nodes
+        //   (peak can only be left child)
         //   a. If not, then we are done, return from method
         // 4. Get the indices that auth path must be extended with
         // 5. Get all derivable node digests, store in hash map
@@ -295,7 +296,8 @@ impl MmrMembershipProof {
                 membership_proof.get_peak_index_and_height(*mp_leaf_index);
 
             // Any peak is a left child, so we don't have to check if it's a right or left child.
-            // This means we can use a faster method to find the parent index than the generic method.
+            // This means we can use a faster method to find the parent index than the generic
+            // method.
             let peak_parent_index = old_peak_index + (1 << (old_peak_height + 1));
             if !added_node_indices.contains(&peak_parent_index) {
                 continue;
@@ -406,9 +408,11 @@ impl MmrMembershipProof {
         true
     }
 
-    /// Update multiple membership proofs with a `leaf_mutation` proof. For the `leaf_mutation_membership_proof`
-    /// parameter, it doesn't matter if you use the old or new membership proof associated
-    /// with the leaf mutation, as they are the same before and after the leaf mutation.
+    /// Update multiple membership proofs with a `leaf_mutation` proof. For the
+    /// `leaf_mutation_membership_proof` parameter, it doesn't matter if you use the
+    /// old or new membership proof associated with the leaf mutation, as they are
+    /// the same before and after the leaf mutation.
+    ///
     /// Returns the indices of the membership proofs that were modified where index refers
     /// to the order in which the membership proofs were given to this function.
     /// Panics if `membership_proofs` and `membership_proof_leaf_indices` do not have
@@ -474,10 +478,11 @@ impl MmrMembershipProof {
         {
             let ap_indices = membership_proof.get_node_indices(*mp_leaf_index);
 
-            // Some of the hashes in may `membership_proof` need to be updated. We can loop over
-            // `authentication_path_indices` and check if the element is contained `deducible_hashes`.
-            // If it is, then the appropriate element in `membership_proof.authentication_path` needs to
-            // be replaced with an element from `deducible_hashes`.
+            // Some of the hashes in `membership_proof` might need to be updated. We can loop over
+            // `authentication_path_indices` and check if the element is contained
+            // `deducible_hashes`.
+            // If it is, then the appropriate element in `membership_proof.authentication_path`
+            // needs to be replaced with an element from `deducible_hashes`.
             for (digest, authentication_path_indices) in membership_proof
                 .authentication_path
                 .iter_mut()
@@ -594,10 +599,11 @@ impl MmrMembershipProof {
         {
             let ap_indices = membership_proof.get_node_indices(*mp_leaf_index);
 
-            // Some of the hashes in `membership_proof` may need to be updated. We can loop over
-            // `authentication_path_indices` and check if the element is contained `deducible_hashes`.
-            // If it is, then the appropriate element in `membership_proof.authentication_path` needs to
-            // be replaced with an element from `deducible_hashes`.
+            // Some of the hashes in `membership_proof` might need to be updated. We can
+            // loop over `authentication_path_indices` and check if the element is contained
+            // `deducible_hashes`. If it is, then the appropriate element in
+            // `membership_proof.authentication_path` needs to be replaced with an element
+            // from `deducible_hashes`.
             for (digest, authentication_path_indices) in membership_proof
                 .authentication_path
                 .iter_mut()
@@ -1438,7 +1444,8 @@ mod mmr_membership_proof_test {
                     assert!(original_membership_proof_verifies,);
                 }
 
-                // 6. Assert that updating an old membership proof is equivalent to getting a proof for an appended MockMmr
+                // 6. Assert that updating an old membership proof is equivalent to getting a
+                // proof for an appended MockMmr
                 assert_eq!(
                     updated_membership_proof,
                     appended_archival_mmr.prove_membership(leaf_index)
@@ -1652,7 +1659,8 @@ mod mmr_membership_proof_test {
     #[test]
     #[should_panic(expected = "Lists must have same length. Got: 0 and 3")]
     fn test_diff_len_lists_batch_update_from_batch_leaf_mutation() {
-        // Checks that batch_update_from_batch_leaf_mutation() panics when passed differing length lists
+        // Checks that batch_update_from_batch_leaf_mutation() panics when passed
+        // differing length lists
 
         // differing length lists
         let mut mock_membership_proofs: Vec<MmrMembershipProof> = vec![];

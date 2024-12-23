@@ -4446,8 +4446,10 @@ mod test_polynomials {
 
     #[test]
     fn fast_modular_coset_interpolate_thresholds_relate_properly() {
-        let intt = Polynomial::<BFieldElement>::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT;
-        let lagrange = Polynomial::<BFieldElement>::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE;
+        type BfePoly = Polynomial<'static, BFieldElement>;
+
+        let intt = BfePoly::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT;
+        let lagrange = BfePoly::FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_LAGRANGE;
         assert!(intt > lagrange);
     }
 

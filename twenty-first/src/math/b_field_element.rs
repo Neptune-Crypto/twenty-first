@@ -1260,7 +1260,7 @@ mod b_prime_field_element_test {
             BFieldElement::new(281474976710656),
             BFieldElement::new(281474976710656).mod_pow(5)
         );
-        assert!(BFieldElement::new(18446744069414584320).mod_pow(2).is_one()); // 18446744069414584320, 2nd
+        assert!(BFieldElement::new(18446744069414584320).mod_pow(2).is_one());
         assert!(BFieldElement::new(18446744069397807105).mod_pow(8).is_one());
         assert!(BFieldElement::new(2625919085333925275).mod_pow(10).is_one());
         assert!(BFieldElement::new(281474976645120).mod_pow(12).is_one());

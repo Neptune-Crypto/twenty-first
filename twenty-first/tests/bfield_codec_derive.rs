@@ -2,8 +2,10 @@ use arbitrary::Arbitrary;
 use proptest::prelude::*;
 use proptest_arbitrary_interop::arb;
 use test_strategy::proptest;
-// Required by the `BFieldCodec` derive macro. This is generally only needed once per crate, at the top-level `lib.rs`.
-#[allow(clippy::single_component_path_imports)]
+
+// Required by the `BFieldCodec` derive macro. This is generally only needed
+// once per crate, at the top-level `lib.rs`.
+#[expect(clippy::single_component_path_imports)]
 use twenty_first;
 use twenty_first::math::b_field_element::BFieldElement;
 use twenty_first::math::bfield_codec::BFieldCodec;

@@ -719,7 +719,8 @@ mod u32s_tests {
             assert!(sum >= inputs[2 * i]);
             assert!(sum >= inputs[2 * i + 1]);
 
-            // subtracting/adding one could overflow if LHS is zero, but the chances are negligible (~= 2^(-126))
+            // subtracting/adding one could overflow if LHS is zero, but the chances are
+            // negligible (~= 2^(-126))
             assert!(inputs[2 * i] - one < inputs[2 * i]);
             assert!(inputs[2 * i] + one > inputs[2 * i]);
             assert!(inputs[2 * i] == inputs[2 * i]);
