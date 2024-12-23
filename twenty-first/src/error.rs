@@ -9,6 +9,11 @@ use crate::prelude::x_field_element::EXTENSION_DEGREE;
 use crate::prelude::BFieldElement;
 pub use crate::util_types::merkle_tree::MerkleTreeError;
 
+pub(crate) const USIZE_TO_U64_ERR: &str =
+    "internal error: type `usize` should have at most 64 bits";
+pub(crate) const U32_TO_USIZE_ERR: &str =
+    "internal error: type `usize` should have at least 32 bits";
+
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 #[non_exhaustive]
 pub enum ParseBFieldElementError {

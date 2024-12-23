@@ -1,3 +1,4 @@
+use crate::error::USIZE_TO_U64_ERR;
 use crate::prelude::*;
 
 #[inline]
@@ -108,8 +109,7 @@ pub fn calculate_new_peaks_from_leaf_mutation(
     leaf_index: u64,
     membership_proof: &MmrMembershipProof,
 ) -> Vec<Digest> {
-    let merkle_tree_root_index = u64::try_from(MerkleTree::ROOT_INDEX)
-        .expect("internal error: type `usize` should have at most 64 bits");
+    let merkle_tree_root_index = u64::try_from(MerkleTree::ROOT_INDEX).expect(USIZE_TO_U64_ERR);
 
     let (mut acc_mt_index, peak_index) =
         leaf_index_to_mt_index_and_peak_index(leaf_index, num_leafs);
