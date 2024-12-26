@@ -30,7 +30,7 @@ jobs:
 
       - name: Check max line length
         # rustfmt gives up on lines that are too long
-        run: ! grep -rP '^.{101}' --include='*.rs' .
+        run: "! grep -rP '^.{101}' --include='*.rs' ."
 
       - name: Run fmt
         run: cargo fmt --all -- --check
