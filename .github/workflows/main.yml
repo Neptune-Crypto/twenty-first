@@ -30,6 +30,7 @@ jobs:
 
       - name: Check max line length
         # rustfmt gives up on lines that are too long
+        if: runner.os == 'Linux'
         run: "! grep -rP '^.{101}' --include='*.rs' ."
 
       - name: Run fmt
