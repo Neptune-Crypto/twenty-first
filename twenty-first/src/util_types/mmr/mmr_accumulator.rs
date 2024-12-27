@@ -7,13 +7,10 @@ use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
 
-use super::mmr_membership_proof::MmrMembershipProof;
 use super::mmr_trait::LeafMutation;
-use super::mmr_trait::Mmr;
 use super::shared_basic;
-use crate::math::bfield_codec::BFieldCodec;
-use crate::math::digest::Digest;
-use crate::prelude::Tip5;
+use super::TOO_MANY_LEAFS_ERR;
+use crate::prelude::*;
 use crate::util_types::mmr::shared_advanced;
 use crate::util_types::shared::bag_peaks;
 
@@ -38,6 +35,13 @@ impl MmrAccumulator {
         }
 
         mmra
+    }
+
+    /// Is `self` self-consistent? That is, is it possible to have the claimed
+    /// number of leafs given the number of peaks?
+    pub(crate) fn is_consistent(&self) -> bool {
+        let num_peaks = u32::try_from(self.peaks.len()).expect(TOO_MANY_LEAFS_ERR);
+        num_peaks == self.num_leafs().count_ones()
     }
 }
 

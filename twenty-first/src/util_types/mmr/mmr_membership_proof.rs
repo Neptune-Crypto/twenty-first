@@ -14,6 +14,9 @@ use serde::Serialize;
 use super::mmr_trait::LeafMutation;
 use super::shared_advanced;
 use super::shared_basic;
+use super::TOO_MANY_LEAFS_ERR;
+use crate::error::U32_TO_USIZE_ERR;
+use crate::error::USIZE_TO_U64_ERR;
 use crate::prelude::*;
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, GetSize, BFieldCodec, Arbitrary)]
@@ -44,15 +47,13 @@ impl MmrMembershipProof {
         let (mut mt_index, peak_index) =
             shared_basic::leaf_index_to_mt_index_and_peak_index(leaf_index, num_leafs);
         let expected_peak_count = num_leafs.count_ones();
-        let actual_peak_count = u32::try_from(peaks.len())
-            .expect("internal error: Merkle Mountain Ranges should have at most 2^63 leafs");
+        let actual_peak_count = u32::try_from(peaks.len()).expect(TOO_MANY_LEAFS_ERR);
         if expected_peak_count != actual_peak_count {
             return false;
         }
 
         let merkle_tree_height = u64::from(mt_index.ilog2());
-        let auth_path_len = u64::try_from(self.authentication_path.len())
-            .expect("internal error: type `usize` should have at most 64 bits");
+        let auth_path_len = u64::try_from(self.authentication_path.len()).expect(USIZE_TO_U64_ERR);
         if merkle_tree_height != auth_path_len {
             return false;
         }
@@ -69,8 +70,7 @@ impl MmrMembershipProof {
         }
         debug_assert_eq!(MerkleTree::ROOT_INDEX as u64, mt_index);
 
-        let peak_index = usize::try_from(peak_index)
-            .expect("internal error: type `usize` should have at least 32 bits");
+        let peak_index = usize::try_from(peak_index).expect(U32_TO_USIZE_ERR);
 
         peaks[peak_index] == current_node
     }
