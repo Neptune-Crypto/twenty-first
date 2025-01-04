@@ -53,6 +53,7 @@ serde_derive = "1"
 serde_json = "1.0"
 sha3 = "^0.10.8"
 thiserror = "2.0"
+zeroize = { version = "1.8.1", features = ["derive"] }
 
 [[bench]]
 name = "tip5"
