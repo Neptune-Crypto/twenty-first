@@ -638,6 +638,7 @@ pub mod kem {
     use sha3::Shake256;
     use sha3::digest::ExtendableOutput;
     use sha3::digest::Update;
+    use zeroize::Zeroize;
 
     use super::CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES;
     use super::CyclotomicRingElement;
@@ -646,7 +647,7 @@ pub mod kem {
     use super::extract_msg;
     use crate::math::b_field_element::BFieldElement;
 
-    #[derive(PartialEq, Eq, Copy, Clone, Debug, Serialize, Deserialize)]
+    #[derive(PartialEq, Eq, Copy, Clone, Debug, Serialize, Deserialize, Zeroize)]
     pub struct SecretKey {
         key: [u8; 32],
         seed: [u8; 32],
@@ -809,6 +810,24 @@ pub mod kem {
 
         let shared_key = Sha3_256::digest(payload).into();
         Some(shared_key)
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[test]
+        fn secret_key_zeroize_test() {
+            let mut secret_key = SecretKey {
+                key: rand::random(),
+                seed: rand::random(),
+            };
+
+            secret_key.zeroize();
+
+            assert_eq!([0; 32], secret_key.key);
+            assert_eq!([0; 32], secret_key.seed);
+        }
     }
 }
 
