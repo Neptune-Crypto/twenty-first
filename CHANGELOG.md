@@ -3,6 +3,25 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.44.1](https://github.com/Neptune-Crypto/twenty-first/compare/v0.44.0..v0.44.1) – 2025-01-07
+
+### ⚡️ Performance
+
+- *(MmrSuccessorProof)* Use shorter auth paths ([b0e4e93b](https://github.com/Neptune-Crypto/twenty-first/commit/b0e4e93b))
+
+### 📚 Documentation
+
+- Describe Merkle Mountain Ranges ([9012fb07](https://github.com/Neptune-Crypto/twenty-first/commit/9012fb07))
+
+### ⚙️ Miscellaneous
+
+- Fix typos ([3e57923f](https://github.com/Neptune-Crypto/twenty-first/commit/3e57923f))
+
+### ♻️ Refactor
+
+- Simplify bagging of peaks ([ab4dc32e](https://github.com/Neptune-Crypto/twenty-first/commit/ab4dc32e))
+- Clean up some MMR verification ([c1415cf3](https://github.com/Neptune-Crypto/twenty-first/commit/c1415cf3))
+
 ## [0.44.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.43.0..v0.44.0) – 2024-12-09
 
 ### ✨ Features
