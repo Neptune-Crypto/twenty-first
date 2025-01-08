@@ -14,6 +14,7 @@ pub use crate::math::traits::ModPowU32;
 pub use crate::math::x_field_element;
 pub use crate::math::x_field_element::XFieldElement;
 pub use crate::util_types::merkle_tree::CpuParallel;
+pub use crate::util_types::merkle_tree::CpuSequential;
 pub use crate::util_types::merkle_tree::MerkleTree;
 pub use crate::util_types::merkle_tree::MerkleTreeInclusionProof;
 pub use crate::util_types::merkle_tree::MerkleTreeMaker;
