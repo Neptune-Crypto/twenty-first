@@ -6,7 +6,6 @@ use criterion::BenchmarkId;
 use criterion::Criterion;
 use twenty_first::math::digest::Digest;
 use twenty_first::math::other::random_elements;
-use twenty_first::util_types::merkle_tree::CpuParallel;
 use twenty_first::util_types::merkle_tree::MerkleTree;
 
 fn merkle_tree(c: &mut Criterion) {
@@ -20,7 +19,7 @@ fn merkle_tree(c: &mut Criterion) {
     let elements: Vec<Digest> = random_elements(size);
 
     group.bench_function(BenchmarkId::new("merkle_tree", size), |bencher| {
-        bencher.iter(|| MerkleTree::new::<CpuParallel>(&elements).unwrap());
+        bencher.iter(|| MerkleTree::par_new(&elements).unwrap());
     });
 }
 

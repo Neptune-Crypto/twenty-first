@@ -48,54 +48,6 @@ pub struct MerkleTree {
     nodes: Vec<Digest>,
 }
 
-/// A trait for creating a [`MerkleTree`] from a list of [`Digest`]s.
-///
-/// This trait defines the method required to construct a `MerkleTree` given an
-/// array of `Digest` values. Implementations of this trait can define different
-/// strategies for building the tree, for example parallel or sequential
-/// construction, using the CPU or a GPU, et cetera.
-///
-/// It might be more intuitive to use [`MerkleTree::new`] over directly calling
-/// implementors of this trait. For example:
-///
-/// ```
-/// # use twenty_first::error::MerkleTreeError;
-/// # use twenty_first::prelude::*;
-///
-/// # fn wrapper_fn() -> Result<(), MerkleTreeError> {
-/// let leafs = [bfe_vec![42, 43, 44], bfe_vec![1337, 1338]];
-/// let leaf_digests = leafs.map(|leaf| Tip5::hash_varlen(&leaf));
-///
-/// let tree = MerkleTree::new::<CpuParallel>(&leaf_digests)?;
-///
-/// // also works:
-/// let tree = CpuParallel::from_digests(&leaf_digests)?;
-/// # Ok(())
-/// # }
-/// # wrapper_fn().unwrap();
-/// ```
-///
-/// # Implementing
-///
-/// Implementing this trait requires intimate knowledge of the internal
-/// representation of a [`MerkleTree`], in particular, the indexing of its
-/// nodes. For a starting point, see [`MerkleTree::authentication_structure`].
-///
-/// ## Errors
-///
-/// Implementations of this trait should return an error if:
-/// - The number of digests is zero.
-/// - The number of digests is not a power of two.
-pub trait MerkleTreeMaker {
-    /// Build a MerkleTree. The passed-in digests are copied as the leafs of the tree.
-    ///
-    /// # Errors
-    ///
-    /// - If the number of digests is zero.
-    /// - If the number of digests is not a power of two.
-    fn from_digests(digests: &[Digest]) -> Result<MerkleTree>;
-}
-
 /// A full inclusion proof for the leafs at the supplied indices, including the
 /// leafs themselves. The proof is relative to some [Merkle tree](MerkleTree),
 /// which is not necessarily (and generally cannot be) known in its entirety by
@@ -152,8 +104,79 @@ impl MerkleTree {
     /// If you need to read the root, try [`root()`](Self::root) instead.
     pub(crate) const ROOT_INDEX: usize = 1;
 
-    pub fn new<Maker: MerkleTreeMaker>(leafs: &[Digest]) -> Result<Self> {
-        Maker::from_digests(leafs)
+    /// Build a MerkleTree with the given leafs.
+    ///
+    /// [`MerkleTree::par_new`] is equivalent and usually faster.
+    ///
+    /// # Errors
+    ///
+    /// - If the number of leafs is zero.
+    /// - If the number of leafs is not a power of two.
+    pub fn sequential_new(leafs: &[Digest]) -> Result<Self> {
+        let mut nodes = Self::initialize_merkle_tree_nodes(leafs)?;
+
+        for i in (MerkleTree::ROOT_INDEX..leafs.len()).rev() {
+            nodes[i] = Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
+        }
+
+        Ok(MerkleTree { nodes })
+    }
+
+    /// Build a MerkleTree with the given leafs.
+    ///
+    /// Uses [`rayon`] to parallelize Merkle tree construction. If the use of
+    /// [`rayon`] is not an option in your context, use
+    /// [`MerkleTree::sequential_new`], which is equivalent but usually slower.
+    ///
+    /// # Errors
+    ///
+    /// - If the number of leafs is zero.
+    /// - If the number of leafs is not a power of two.
+    pub fn par_new(leafs: &[Digest]) -> Result<Self> {
+        let mut nodes = Self::initialize_merkle_tree_nodes(leafs)?;
+
+        // parallel
+        let mut num_nodes_on_this_level = leafs.len();
+        while num_nodes_on_this_level >= *PARALLELIZATION_CUTOFF {
+            num_nodes_on_this_level /= 2;
+            let node_indices_on_this_level = num_nodes_on_this_level..2 * num_nodes_on_this_level;
+            let nodes_on_this_level = node_indices_on_this_level
+                .clone()
+                .into_par_iter()
+                .map(|i| Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]))
+                .collect::<Vec<_>>();
+            nodes[node_indices_on_this_level].copy_from_slice(&nodes_on_this_level);
+        }
+
+        // sequential
+        let num_remaining_nodes = num_nodes_on_this_level;
+        for i in (MerkleTree::ROOT_INDEX..num_remaining_nodes).rev() {
+            nodes[i] = Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
+        }
+
+        Ok(MerkleTree { nodes })
+    }
+
+    /// Helps to kick off Merkle tree construction. Sets up the Merkle tree's
+    /// internal nodes if (and only if) it is possible to construct a Merkle
+    /// tree with the given leafs.
+    fn initialize_merkle_tree_nodes(leafs: &[Digest]) -> Result<Vec<Digest>> {
+        if leafs.is_empty() {
+            return Err(MerkleTreeError::TooFewLeafs);
+        }
+
+        let num_leafs = leafs.len();
+        if !num_leafs.is_power_of_two() {
+            return Err(MerkleTreeError::IncorrectNumberOfLeafs);
+        }
+        if num_leafs > MAX_NUM_LEAFS {
+            return Err(MerkleTreeError::TreeTooHigh);
+        }
+
+        let mut nodes = vec![Digest::default(); 2 * num_leafs];
+        nodes[num_leafs..].copy_from_slice(leafs);
+
+        Ok(nodes)
     }
 
     /// Given a list of leaf indices, return the indices of exactly those nodes that
@@ -307,7 +330,7 @@ impl<'a> Arbitrary<'a> for MerkleTree {
         let leaf_digests: arbitrary::Result<Vec<_>> =
             (0..num_leafs).map(|_| u.arbitrary()).collect();
 
-        let tree = Self::new::<CpuParallel>(&leaf_digests?).unwrap();
+        let tree = Self::par_new(&leaf_digests?).unwrap();
         Ok(tree)
     }
 }
@@ -518,76 +541,6 @@ impl TryFrom<MerkleTreeInclusionProof> for PartialMerkleTree {
     }
 }
 
-/// [Build a Merkle tree](MerkleTreeMaker) using parallelism.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
-pub struct CpuParallel;
-
-impl MerkleTreeMaker for CpuParallel {
-    fn from_digests(digests: &[Digest]) -> Result<MerkleTree> {
-        let mut nodes = initialize_merkle_tree_nodes(digests)?;
-
-        // parallel
-        let mut num_nodes_on_this_level = digests.len();
-        while num_nodes_on_this_level >= *PARALLELIZATION_CUTOFF {
-            num_nodes_on_this_level /= 2;
-            let node_indices_on_this_level = num_nodes_on_this_level..2 * num_nodes_on_this_level;
-            let nodes_on_this_level = node_indices_on_this_level
-                .clone()
-                .into_par_iter()
-                .map(|i| Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]))
-                .collect::<Vec<_>>();
-            nodes[node_indices_on_this_level].copy_from_slice(&nodes_on_this_level);
-        }
-
-        // sequential
-        let num_remaining_nodes = num_nodes_on_this_level;
-        for i in (MerkleTree::ROOT_INDEX..num_remaining_nodes).rev() {
-            nodes[i] = Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
-        }
-
-        Ok(MerkleTree { nodes })
-    }
-}
-
-/// [Build a Merkle tree](MerkleTreeMaker) without any parallelism.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Default)]
-pub struct CpuSequential;
-
-impl MerkleTreeMaker for CpuSequential {
-    fn from_digests(digests: &[Digest]) -> Result<MerkleTree> {
-        let mut nodes = initialize_merkle_tree_nodes(digests)?;
-
-        let num_leafs = digests.len();
-        for i in (MerkleTree::ROOT_INDEX..num_leafs).rev() {
-            nodes[i] = Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
-        }
-
-        Ok(MerkleTree { nodes })
-    }
-}
-
-/// Helps to kick off Merkle tree construction. Sets up the Merkle tree's
-/// internal nodes if (and only if) it is possible to construct a Merkle
-/// tree with the given leafs.
-fn initialize_merkle_tree_nodes(digests: &[Digest]) -> Result<Vec<Digest>> {
-    if digests.is_empty() {
-        return Err(MerkleTreeError::TooFewLeafs);
-    }
-
-    let num_leafs = digests.len();
-    if !num_leafs.is_power_of_two() {
-        return Err(MerkleTreeError::IncorrectNumberOfLeafs);
-    }
-    if num_leafs > MAX_NUM_LEAFS {
-        return Err(MerkleTreeError::TreeTooHigh);
-    }
-
-    let mut nodes = vec![Digest::default(); 2 * num_leafs];
-    nodes[num_leafs..].copy_from_slice(digests);
-
-    Ok(nodes)
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum MerkleTreeError {
     #[error("All leaf indices must be valid, i.e., less than {num_leafs}.")]
@@ -633,7 +586,7 @@ pub mod merkle_tree_test {
             let num_leafs = 1 << tree_height;
             let leafs = (0..num_leafs).map(BFieldElement::new);
             let leaf_digests = leafs.map(|bfe| Tip5::hash_varlen(&[bfe])).collect_vec();
-            let tree = Self::new::<CpuParallel>(&leaf_digests).unwrap();
+            let tree = Self::par_new(&leaf_digests).unwrap();
             assert!(leaf_digests.iter().all_unique());
             tree
         }
@@ -674,7 +627,7 @@ pub mod merkle_tree_test {
 
     #[test]
     fn building_merkle_tree_from_empty_list_of_digests_fails_with_expected_error() {
-        let maybe_tree = MerkleTree::new::<CpuParallel>(&[]);
+        let maybe_tree = MerkleTree::par_new(&[]);
         let err = maybe_tree.unwrap_err();
         assert_eq!(MerkleTreeError::TooFewLeafs, err);
     }
@@ -682,14 +635,14 @@ pub mod merkle_tree_test {
     #[test]
     fn merkle_tree_with_one_leaf_has_expected_height_and_number_of_leafs() {
         let digest = Digest::default();
-        let tree = MerkleTree::new::<CpuParallel>(&[digest]).unwrap();
+        let tree = MerkleTree::par_new(&[digest]).unwrap();
         assert_eq!(1, tree.num_leafs());
         assert_eq!(0, tree.height());
     }
 
     #[proptest]
     fn building_merkle_tree_from_one_digest_makes_that_digest_the_root(digest: Digest) {
-        let tree = MerkleTree::new::<CpuParallel>(&[digest]).unwrap();
+        let tree = MerkleTree::par_new(&[digest]).unwrap();
         assert_eq!(digest, tree.root());
     }
 
@@ -701,26 +654,26 @@ pub mod merkle_tree_test {
     ) {
         let digest = Digest::default();
         let digests = vec![digest; num_leafs];
-        let maybe_tree = MerkleTree::new::<CpuParallel>(&digests);
+        let maybe_tree = MerkleTree::par_new(&digests);
         let err = maybe_tree.unwrap_err();
         assert_eq!(MerkleTreeError::IncorrectNumberOfLeafs, err);
     }
 
     #[proptest]
-    fn merkle_tree_makers_behave_identically_on_random_input(leafs: Vec<Digest>) {
-        let parallel = MerkleTree::new::<CpuParallel>(&leafs);
-        let sequential = MerkleTree::new::<CpuSequential>(&leafs);
-        prop_assert_eq!(parallel, sequential);
+    fn merkle_tree_construction_strategies_behave_identically_on_random_input(leafs: Vec<Digest>) {
+        let sequential = MerkleTree::sequential_new(&leafs);
+        let parallel = MerkleTree::par_new(&leafs);
+        prop_assert_eq!(sequential, parallel);
     }
 
     #[proptest]
-    fn merkle_tree_makers_produce_identical_trees(
+    fn merkle_tree_construction_strategies_produce_identical_trees(
         #[strategy(0_usize..10)] _tree_height: usize,
         #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
     ) {
-        let parallel = MerkleTree::new::<CpuParallel>(&leafs)?;
-        let sequential = MerkleTree::new::<CpuSequential>(&leafs)?;
-        prop_assert_eq!(parallel, sequential);
+        let sequential = MerkleTree::sequential_new(&leafs)?;
+        let parallel = MerkleTree::par_new(&leafs)?;
+        prop_assert_eq!(sequential, parallel);
     }
 
     #[proptest(cases = 100)]

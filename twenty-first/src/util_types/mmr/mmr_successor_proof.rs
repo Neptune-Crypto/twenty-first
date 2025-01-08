@@ -44,7 +44,7 @@ impl MmrSuccessorProof {
         }
 
         let leafs_in_initial_right_tree = &new_leafs[..num_leafs_in_lowest_peak];
-        let initial_right_tree = MerkleTree::new::<CpuParallel>(leafs_in_initial_right_tree)
+        let initial_right_tree = MerkleTree::par_new(leafs_in_initial_right_tree)
             .expect("internal error: should be able to build Merkle tree");
 
         let num_total_leafs =
@@ -69,7 +69,7 @@ impl MmrSuccessorProof {
                 let indices_of_leafs_in_right_tree =
                     first_unused_new_leaf_idx..first_unused_new_leaf_idx + num_leafs_in_right_tree;
                 let leafs_in_right_tree = &new_leafs[indices_of_leafs_in_right_tree];
-                let right_tree = MerkleTree::new::<CpuParallel>(leafs_in_right_tree)
+                let right_tree = MerkleTree::par_new(leafs_in_right_tree)
                     .expect("internal error: should be able to build Merkle tree");
                 first_unused_new_leaf_idx += num_leafs_in_right_tree;
 
@@ -363,11 +363,11 @@ mod test {
         assert_eq!(2, relation.proof.paths.len());
 
         let first_merkle_tree_leafs = [42_u64, 43].map(|i| Tip5::hash(&i));
-        let first_merkle_tree = MerkleTree::new::<CpuParallel>(&first_merkle_tree_leafs).unwrap();
+        let first_merkle_tree = MerkleTree::par_new(&first_merkle_tree_leafs).unwrap();
         assert_eq!(first_merkle_tree.root(), relation.proof.paths[0]);
 
         let second_merkle_tree_leafs = [44_u64, 45, 46, 47].map(|i| Tip5::hash(&i));
-        let second_merkle_tree = MerkleTree::new::<CpuParallel>(&second_merkle_tree_leafs).unwrap();
+        let second_merkle_tree = MerkleTree::par_new(&second_merkle_tree_leafs).unwrap();
         assert_eq!(second_merkle_tree.root(), relation.proof.paths[1]);
 
         relation.verify().unwrap();
