@@ -168,9 +168,9 @@ impl MmrSuccessorProof {
             _ => return Err(Error::OldHasMoreLeafsThanNew),
         };
 
-        let first_unshared_peak_idx = (old.num_leafs() ^ new.num_leafs()).ilog2();
-        let keep_high_bits_mask = !((1 << first_unshared_peak_idx) - 1);
-        let num_unchanged_peaks = (old.num_leafs() & keep_high_bits_mask).count_ones();
+        let index_of_first_unverified_leaf = old.num_leafs();
+        let (merkle_tree_index, num_unchanged_peaks) =
+            leaf_index_to_mt_index_and_peak_index(index_of_first_unverified_leaf, new.num_leafs());
 
         let mut old_peaks = old.peaks().into_iter();
         let mut new_peaks = new.peaks().into_iter();
@@ -190,13 +190,9 @@ impl MmrSuccessorProof {
             return verify_auth_path_is_empty();
         }
 
-        let index_of_first_unverified_leaf = old.num_leafs();
-        let (mut merkle_tree_index, _) =
-            leaf_index_to_mt_index_and_peak_index(index_of_first_unverified_leaf, new.num_leafs());
-        merkle_tree_index >>= height_of_lowest_old_peak;
-
         let mut auth_path = self.paths.iter();
         let mut current_node = *auth_path.next().ok_or(Error::AuthenticationPathTooShort)?;
+        let mut merkle_tree_index = merkle_tree_index >> height_of_lowest_old_peak;
 
         let merkle_tree_root_index = u64::try_from(MerkleTree::ROOT_INDEX).expect(USIZE_TO_U64_ERR);
         while merkle_tree_index > merkle_tree_root_index {
