@@ -18,9 +18,15 @@ use super::traits::FiniteField;
 use crate::bfe;
 use crate::bfe_vec;
 
-/// This trait provides functions for encoding to and decoding from a Vec of [BFieldElement]s.
-/// This encoding does not record the size of objects nor their type information; this is
-/// the responsibility of the decoder.
+/// This trait provides functions for encoding to and decoding from a Vec of
+/// [BFieldElement]s. This encoding does not record the size of objects nor
+/// their type information; this is the responsibility of the decoder.
+///
+/// ### Dyn-Compatibility
+///
+/// This trait is _not_ [dyn-compatible] (previously known as “object safe”).
+///
+/// [dyn-compatible]: https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility
 pub trait BFieldCodec {
     type Error: Into<Box<dyn Error + Send + Sync>> + Debug + Display;
 
