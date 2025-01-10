@@ -1,3 +1,4 @@
+use crate::error::U32_TO_USIZE_ERR;
 use crate::error::USIZE_TO_U64_ERR;
 use crate::prelude::*;
 
@@ -60,37 +61,38 @@ pub fn leaf_index_to_mt_index_and_peak_index(leaf_index: u64, num_leafs: u64) ->
 }
 
 #[inline]
-/// Return the number of parents that need to be added when a new leaf is inserted.
-///
-/// Expects the `leaf_index` to be at most 63 bits; may crash otherwise.
+/// The number of parents that need to be added when a new leaf is inserted.
 pub fn right_lineage_length_from_leaf_index(leaf_index: u64) -> u32 {
-    // Identify the last (least-significant) nonzero bit
-    let pow2 = (leaf_index + 1) & !leaf_index;
-
-    // Get the index of that bit, counting from least-significant bit
-    u64::BITS - pow2.leading_zeros() - 1
+    leaf_index.trailing_ones()
 }
 
 /// Return the new peaks of the MMR after adding `new_leaf` as well as the membership
 /// proof for the added leaf.
+///
+/// # Panics
+///
+/// - if the `old_peaks` and the `old_num_leafs` are inconsistent
 pub fn calculate_new_peaks_from_append(
     old_num_leafs: u64,
     old_peaks: Vec<Digest>,
     new_leaf: Digest,
 ) -> (Vec<Digest>, MmrMembershipProof) {
+    assert_eq!(
+        old_peaks.len(),
+        usize::try_from(old_num_leafs.count_ones()).expect(U32_TO_USIZE_ERR)
+    );
+
     let mut peaks = old_peaks;
     peaks.push(new_leaf);
-    let mut right_lineage_count = right_lineage_length_from_leaf_index(old_num_leafs);
-    let mut membership_proof = MmrMembershipProof::new(vec![]);
-    while right_lineage_count != 0 {
-        let new_hash = peaks.pop().unwrap();
+    let mut authentication_path = vec![];
+    for _ in 0..right_lineage_length_from_leaf_index(old_num_leafs) {
+        let in_progress_peak = peaks.pop().unwrap();
         let previous_peak = peaks.pop().unwrap();
-        membership_proof.authentication_path.push(previous_peak);
-        peaks.push(Tip5::hash_pair(previous_peak, new_hash));
-        right_lineage_count -= 1;
+        authentication_path.push(previous_peak);
+        peaks.push(Tip5::hash_pair(previous_peak, in_progress_peak));
     }
 
-    (peaks, membership_proof)
+    (peaks, MmrMembershipProof::new(authentication_path))
 }
 
 /// Calculate a new peak list given the mutation of a leaf
@@ -163,25 +165,25 @@ mod mmr_test {
 
     #[test]
     fn leaf_index_to_mt_index_test() {
-        // num_leafs = 1
+        // 1 leaf
         assert_eq!((1, 0), leaf_index_to_mt_index_and_peak_index(0, 1));
 
-        // num_leafs = 2
+        // 2 leafs
         assert_eq!((2, 0), leaf_index_to_mt_index_and_peak_index(0, 2));
         assert_eq!((3, 0), leaf_index_to_mt_index_and_peak_index(1, 2));
 
-        // num_leafs = 3
+        // 3 leafs
         assert_eq!((2, 0), leaf_index_to_mt_index_and_peak_index(0, 3));
         assert_eq!((3, 0), leaf_index_to_mt_index_and_peak_index(1, 3));
         assert_eq!((1, 1), leaf_index_to_mt_index_and_peak_index(2, 3));
 
-        // num_leafs = 4
+        // 4 leafs
         assert_eq!((4, 0), leaf_index_to_mt_index_and_peak_index(0, 4));
         assert_eq!((5, 0), leaf_index_to_mt_index_and_peak_index(1, 4));
         assert_eq!((6, 0), leaf_index_to_mt_index_and_peak_index(2, 4));
         assert_eq!((7, 0), leaf_index_to_mt_index_and_peak_index(3, 4));
 
-        // num_leafs = 14
+        // 14 leafs
         assert_eq!((8, 0), leaf_index_to_mt_index_and_peak_index(0, 14));
         assert_eq!((9, 0), leaf_index_to_mt_index_and_peak_index(1, 14));
         assert_eq!((10, 0), leaf_index_to_mt_index_and_peak_index(2, 14));
@@ -196,7 +198,7 @@ mod mmr_test {
         assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(11, 14));
         assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(11, 14));
 
-        // num_leafs = 22
+        // 22 leafs
         assert_eq!((16, 0), leaf_index_to_mt_index_and_peak_index(0, 23));
         assert_eq!((17, 0), leaf_index_to_mt_index_and_peak_index(1, 23));
         assert_eq!((18, 0), leaf_index_to_mt_index_and_peak_index(2, 23));
@@ -211,25 +213,25 @@ mod mmr_test {
         assert_eq!((3, 2), leaf_index_to_mt_index_and_peak_index(21, 23));
         assert_eq!((1, 3), leaf_index_to_mt_index_and_peak_index(22, 23));
 
-        // num_leafs = 32
+        // 32 leafs
         for i in 0..32 {
             assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 32));
         }
 
-        // num_leafs = 33
+        // 33 leafs
         for i in 0..32 {
             assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 33));
         }
         assert_eq!((1, 1), leaf_index_to_mt_index_and_peak_index(32, 33));
 
-        // num_leafs = 34
+        // 34 leafs
         for i in 0..32 {
             assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 34));
         }
         assert_eq!((2, 1), leaf_index_to_mt_index_and_peak_index(32, 34));
         assert_eq!((3, 1), leaf_index_to_mt_index_and_peak_index(33, 34));
 
-        // num_leafs = 35
+        // 35 leafs
         for i in 0..32 {
             assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 35));
         }
@@ -237,7 +239,7 @@ mod mmr_test {
         assert_eq!((3, 1), leaf_index_to_mt_index_and_peak_index(33, 35));
         assert_eq!((1, 2), leaf_index_to_mt_index_and_peak_index(34, 35));
 
-        // num_leafs = 36
+        // 36 leafs
         for i in 0..32 {
             assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 36));
         }
@@ -246,7 +248,7 @@ mod mmr_test {
         assert_eq!((6, 1), leaf_index_to_mt_index_and_peak_index(34, 36));
         assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(35, 36));
 
-        // num_leafs = 37
+        // 37 leafs
         for i in 0..32 {
             assert_eq!((32 + i, 0), leaf_index_to_mt_index_and_peak_index(i, 37));
         }
@@ -256,18 +258,12 @@ mod mmr_test {
         assert_eq!((7, 1), leaf_index_to_mt_index_and_peak_index(35, 37));
         assert_eq!((1, 2), leaf_index_to_mt_index_and_peak_index(36, 37));
 
-        for i in 10..63 {
-            assert_eq!(
-                (14 + (1 << i), 0),
-                leaf_index_to_mt_index_and_peak_index(14, 1 << i)
-            );
-            assert_eq!(
-                (3, 2),
-                leaf_index_to_mt_index_and_peak_index((1 << i) + 9, (1 << i) + 11)
-            );
+        for i in (10..63).map(|x| 1 << x) {
+            assert_eq!((14 + i, 0), leaf_index_to_mt_index_and_peak_index(14, i));
+            assert_eq!((3, 2), leaf_index_to_mt_index_and_peak_index(i + 9, i + 11));
             assert_eq!(
                 (1, 3),
-                leaf_index_to_mt_index_and_peak_index((1 << i) + 10, (1 << i) + 11)
+                leaf_index_to_mt_index_and_peak_index(i + 10, i + 11)
             );
         }
     }
@@ -336,17 +332,14 @@ mod mmr_test {
     #[proptest]
     fn calculate_new_peaks_from_append_does_not_crash(
         #[strategy(0..u64::MAX >> 1)] old_num_leafs: u64,
-        #[strategy(vec(arb::<Digest>(), #old_num_leafs.count_zeros() as usize))] old_peaks: Vec<
-            Digest,
-        >,
-        #[strategy(arb::<Digest>())] new_leaf: Digest,
+        #[strategy(vec(arb(), #old_num_leafs.count_ones() as usize))] old_peaks: Vec<Digest>,
+        #[strategy(arb())] new_leaf: Digest,
     ) {
         calculate_new_peaks_from_append(old_num_leafs, old_peaks, new_leaf);
     }
 
     #[test]
     fn calculate_new_peaks_from_append_to_empty_mmra_does_not_crash() {
-        let mut rng = thread_rng();
-        calculate_new_peaks_from_append(0, vec![], rng.gen::<Digest>());
+        calculate_new_peaks_from_append(0, vec![], random());
     }
 }

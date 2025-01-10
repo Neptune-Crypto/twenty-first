@@ -94,96 +94,6 @@ impl Mmr for MmrAccumulator {
         )
     }
 
-    /// `true` if the `new_peaks` input matches the calculated new MMR peaks
-    /// resulting from the provided appends and mutations. Can panic if initial
-    /// state is not a valid MMR.
-    fn verify_batch_update(
-        &self,
-        new_peaks: &[Digest],
-        appended_leafs: &[Digest],
-        mut leaf_mutations: Vec<LeafMutation>,
-    ) -> bool {
-        // Verify that all leaf mutations operate on unique leafs
-        let manipulated_leaf_indices: Vec<u64> =
-            leaf_mutations.iter().map(|x| x.leaf_index).collect();
-        if !manipulated_leaf_indices.iter().all_unique() {
-            return false;
-        }
-
-        // Disallow updating of out-of-bounds leafs
-        if self.is_empty() && !manipulated_leaf_indices.is_empty()
-            || !manipulated_leaf_indices.is_empty()
-                && manipulated_leaf_indices.into_iter().max().unwrap() >= self.leaf_count
-        {
-            return false;
-        }
-
-        // Reverse the leaf mutation vectors, since we want to apply them using `pop`
-        leaf_mutations.reverse();
-        let mut leaf_mutation_target_values: Vec<Digest> = leaf_mutations
-            .iter()
-            .map(|x| x.new_leaf.to_owned())
-            .collect();
-        let mut leaf_mutation_indices: Vec<u64> =
-            leaf_mutations.iter().map(|x| x.leaf_index).collect();
-        let mut updated_membership_proofs: Vec<MmrMembershipProof> = leaf_mutations
-            .into_iter()
-            .map(|x| x.membership_proof.to_owned())
-            .collect();
-
-        // First we apply all the leaf mutations
-        let mut running_peaks: Vec<Digest> = self.peaks.clone();
-        while let Some(membership_proof) = updated_membership_proofs.pop() {
-            // `new_leaf_value` and `leaf_index` are guaranteed to exist since all three
-            // mutable lists have the same length.
-            let new_leaf_value = leaf_mutation_target_values.pop().unwrap();
-            let leaf_index_mutated_leaf = leaf_mutation_indices.pop().unwrap();
-
-            // TODO: Should we verify the membership proof here?
-
-            // Calculate the new peaks after mutating a leaf
-            running_peaks = shared_basic::calculate_new_peaks_from_leaf_mutation(
-                &running_peaks,
-                self.leaf_count,
-                new_leaf_value,
-                leaf_index_mutated_leaf,
-                &membership_proof,
-            );
-
-            // TODO: Replace this with the new batch updater `batch_update_from_batch_leaf_mutation`
-            // Update all remaining membership proofs with this leaf mutation
-            let leaf_mutation =
-                LeafMutation::new(leaf_index_mutated_leaf, new_leaf_value, membership_proof);
-            MmrMembershipProof::batch_update_from_leaf_mutation(
-                &mut updated_membership_proofs,
-                &leaf_mutation_indices,
-                leaf_mutation,
-            );
-        }
-
-        // Then apply all the leaf appends
-        let mut new_leafs_cloned: Vec<Digest> = appended_leafs.to_vec();
-
-        // Reverse the new leafs to apply them in the same order as they were input,
-        // using pop
-        new_leafs_cloned.reverse();
-
-        // Apply all leaf appends
-        let mut running_leaf_count = self.leaf_count;
-        while let Some(new_leaf_for_append) = new_leafs_cloned.pop() {
-            let (calculated_new_peaks, _new_membership_proof) =
-                shared_basic::calculate_new_peaks_from_append(
-                    running_leaf_count,
-                    running_peaks,
-                    new_leaf_for_append,
-                );
-            running_peaks = calculated_new_peaks;
-            running_leaf_count += 1;
-        }
-
-        running_peaks == new_peaks
-    }
-
     /// Mutate multiple leafs in the MMR. Takes a list of membership proofs
     /// that will be updated accordingly. Meaning that the provided membership
     /// proofs will be valid for the new MMR, provided they were valid before
@@ -312,6 +222,73 @@ impl Mmr for MmrAccumulator {
 
         modified_membership_proof_indices.dedup();
         modified_membership_proof_indices
+    }
+
+    /// `true` if the `new_peaks` input matches the calculated new MMR peaks
+    /// resulting from the provided appends and mutations. Can panic if initial
+    /// state is not a valid MMR.
+    fn verify_batch_update(
+        &self,
+        new_peaks: &[Digest],
+        appended_leafs: &[Digest],
+        leaf_mutations: Vec<LeafMutation>,
+    ) -> bool {
+        let mut manipulated_leaf_indices = leaf_mutations.iter().map(|x| x.leaf_index);
+        if !manipulated_leaf_indices.clone().all_unique() {
+            return false;
+        }
+        if manipulated_leaf_indices.any(|idx| idx >= self.leaf_count) {
+            return false;
+        }
+
+        // Reverse the leaf mutation vectors, since we want to apply them using `pop`
+        let (
+            mut leaf_mutation_indices,
+            mut leaf_mutation_target_values,
+            mut updated_membership_proofs,
+        ): (Vec<_>, Vec<_>, Vec<_>) = leaf_mutations
+            .into_iter()
+            .rev()
+            .map(|m| (m.leaf_index, m.new_leaf, m.membership_proof))
+            .multiunzip();
+
+        let mut running_peaks = self.peaks.clone();
+        while let Some(membership_proof) = updated_membership_proofs.pop() {
+            let new_leaf_value = leaf_mutation_target_values.pop().unwrap();
+            let leaf_index_mutated_leaf = leaf_mutation_indices.pop().unwrap();
+
+            // TODO: Should we verify the membership proof here?
+
+            // Calculate the new peaks after mutating a leaf
+            running_peaks = shared_basic::calculate_new_peaks_from_leaf_mutation(
+                &running_peaks,
+                self.leaf_count,
+                new_leaf_value,
+                leaf_index_mutated_leaf,
+                &membership_proof,
+            );
+
+            // TODO: Replace this with the new batch updater `batch_update_from_batch_leaf_mutation`
+            // Update all remaining membership proofs with this leaf mutation
+            let leaf_mutation =
+                LeafMutation::new(leaf_index_mutated_leaf, new_leaf_value, membership_proof);
+            MmrMembershipProof::batch_update_from_leaf_mutation(
+                &mut updated_membership_proofs,
+                &leaf_mutation_indices,
+                leaf_mutation,
+            );
+        }
+
+        for (append_count, &leaf_to_append) in (0..).zip(appended_leafs) {
+            let (calculated_new_peaks, _) = shared_basic::calculate_new_peaks_from_append(
+                self.leaf_count + append_count,
+                running_peaks,
+                leaf_to_append,
+            );
+            running_peaks = calculated_new_peaks;
+        }
+
+        running_peaks == new_peaks
     }
 
     fn to_accumulator(&self) -> MmrAccumulator {

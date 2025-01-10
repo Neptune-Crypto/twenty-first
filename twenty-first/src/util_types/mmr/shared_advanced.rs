@@ -9,10 +9,11 @@ pub fn leftmost_ancestor(node_index: u64) -> (u64, u32) {
     if node_index.leading_zeros() == 0 {
         return (u64::MAX, 63);
     }
-    let h = u64::BITS - node_index.leading_zeros() - 1;
-    let ret = (1 << (h + 1)) - 1;
 
-    (ret, h)
+    let height = node_index.ilog2();
+    let index = (1 << (height + 1)) - 1;
+
+    (index, height)
 }
 
 /// Traversing from this node upwards, count how many of the ancestor (including itself)
@@ -240,7 +241,6 @@ pub fn node_index_to_leaf_index(node_index: u64) -> Option<u64> {
 #[cfg(test)]
 mod mmr_test {
     use proptest::prop_assert_eq;
-    use proptest_arbitrary_interop::arb;
     use rand::RngCore;
     use test_strategy::proptest;
 
@@ -507,21 +507,17 @@ mod mmr_test {
     }
 
     #[proptest]
-    fn right_lineage_length_from_node_index_does_not_crash(
-        #[strategy(arb::<u64>())] node_index: u64,
-    ) {
+    fn right_lineage_length_from_node_index_does_not_crash(node_index: u64) {
         right_lineage_length_from_node_index(node_index);
     }
 
     #[proptest]
-    fn leftmost_ancestor_does_not_crash(#[strategy(arb::<u64>())] node_index: u64) {
+    fn leftmost_ancestor_does_not_crash(node_index: u64) {
         leftmost_ancestor(node_index);
     }
 
     #[proptest]
-    fn right_lineage_length_and_own_height_does_not_crash(
-        #[strategy(arb::<u64>())] node_index: u64,
-    ) {
+    fn right_lineage_length_and_own_height_does_not_crash(node_index: u64) {
         right_lineage_length_and_own_height(node_index);
     }
 }

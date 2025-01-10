@@ -136,8 +136,8 @@ impl Mmr for MockMmr {
         appended_leafs: &[Digest],
         leaf_mutations: Vec<LeafMutation>,
     ) -> bool {
-        let accumulator: MmrAccumulator = self.to_accumulator();
-        accumulator.verify_batch_update(new_peaks, appended_leafs, leaf_mutations)
+        self.to_accumulator()
+            .verify_batch_update(new_peaks, appended_leafs, leaf_mutations)
     }
 
     fn to_accumulator(&self) -> MmrAccumulator {
