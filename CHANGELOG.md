@@ -3,6 +3,20 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.45.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.44.1..v0.45.0) – 2025-01-13
+
+### ✨ Features
+
+- Provide sequential Merkle tree builder ([0a5a8b3c](https://github.com/Neptune-Crypto/twenty-first/commit/0a5a8b3c))
+
+### 📚 Documentation
+
+- *(BFieldCodec)* Mention dyn-incompatibility ([56dd14cf](https://github.com/Neptune-Crypto/twenty-first/commit/56dd14cf))
+
+### ♻️ Refactor
+
+- (!) Drop `MerkleTreeMaker` ([cf6a3983](https://github.com/Neptune-Crypto/twenty-first/commit/cf6a3983))
+
 ## [0.44.1](https://github.com/Neptune-Crypto/twenty-first/compare/v0.44.0..v0.44.1) – 2025-01-07
 
 ### ⚡️ Performance
