@@ -80,6 +80,15 @@ use syn::Variant;
 ///     #[derive(BFieldCodec)]  // Currently not supported.
 ///     enum Foo {}             // Consider `struct Foo;` instead.
 ///     ```
+///
+/// - Ignoring fields in tuple structs is currently not supported. Consider
+///   using a struct with named fields instead. Example:
+///   ```ignore
+///   #[derive(BFieldCodec)]
+///   struct Foo(#[bfield_codec(ignore)] u32);
+///   //         ~~~~~~~~~~~~~~~~~~~~~~~
+///   //         Currently not supported in tuple structs
+///   ```
 #[proc_macro_derive(BFieldCodec, attributes(bfield_codec))]
 pub fn bfieldcodec_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
@@ -210,11 +219,14 @@ impl BFieldCodecDeriveBuilder {
             .attrs
             .iter()
             .filter(|attr| attr.path().is_ident("bfield_codec"));
-        let attribute = match relevant_attributes.clone().count() {
-            0 => return false,
-            1 => relevant_attributes.next().unwrap(),
-            _ => panic!("field `{field_name}` must have at most 1 `bfield_codec` attribute"),
+
+        let Some(attribute) = relevant_attributes.next() else {
+            return false;
         };
+        if relevant_attributes.next().is_some() {
+            panic!("field `{field_name}` must have at most 1 `bfield_codec` attribute");
+        }
+
         let parse_ignore = attribute.parse_nested_meta(|meta| match meta.path.get_ident() {
             Some(ident) if ident == "ignore" => Ok(()),
             Some(ident) => panic!("unknown identifier `{ident}` for field `{field_name}`"),
