@@ -112,6 +112,40 @@ pub fn node_indices_added_by_append(old_leaf_count: u64) -> Vec<u64> {
     added_node_indices
 }
 
+/// Get the node indices of the authentication path starting from the specified
+/// leaf, to its peak.
+pub fn auth_path_node_indices(num_leafs: u64, leaf_index: u64) -> Vec<u64> {
+    assert!(
+        leaf_index < num_leafs,
+        "Leaf index out-of-bounds: {leaf_index}/{num_leafs}"
+    );
+
+    let (mut merkle_tree_index, _) = leaf_index_to_mt_index_and_peak_index(leaf_index, num_leafs);
+    let mut node_index = leaf_index_to_node_index(leaf_index);
+    let mut height = 0;
+    let tree_height = u64::BITS - merkle_tree_index.leading_zeros() - 1;
+    let mut ret = Vec::with_capacity(tree_height as usize);
+    while merkle_tree_index > 1 {
+        let is_left_sibling = merkle_tree_index & 1 == 0;
+        let height_pow = 1u64 << (height + 1);
+        let as_1_or_minus_1: u64 = (2 * (is_left_sibling as i64) - 1) as u64;
+        let signed_height_pow = height_pow.wrapping_mul(as_1_or_minus_1);
+        let sibling = node_index
+            .wrapping_add(signed_height_pow)
+            .wrapping_sub(as_1_or_minus_1);
+
+        node_index += 1 << ((height + 1) * is_left_sibling as u32);
+
+        ret.push(sibling);
+        merkle_tree_index >>= 1;
+        height += 1;
+    }
+
+    debug_assert_eq!(tree_height, ret.len() as u32, "Allocation must be optimal");
+
+    ret
+}
+
 /// Get the node indices of the authentication path hash digest needed
 /// to calculate the digest of `peak_node_index` from `start_node_index`
 pub fn get_authentication_path_node_indices(
@@ -502,6 +536,40 @@ mod mmr_test {
             assert_eq!(
                 expected,
                 get_authentication_path_node_indices(start, end, node_count)
+            );
+        }
+    }
+
+    #[test]
+    fn auth_path_indices_unit_test() {
+        assert_eq!(vec![2, 6, 14, 30], auth_path_node_indices(16, 0));
+        assert_eq!(vec![1, 6, 14, 30], auth_path_node_indices(16, 1));
+        assert_eq!(vec![5, 3, 14, 30], auth_path_node_indices(16, 2));
+        assert_eq!(vec![4, 3, 14, 30], auth_path_node_indices(16, 3));
+        assert_eq!(vec![9, 13, 7, 30], auth_path_node_indices(16, 4));
+        assert_eq!(vec![8, 13, 7, 30], auth_path_node_indices(16, 5));
+        assert_eq!(vec![12, 10, 7, 30], auth_path_node_indices(16, 6));
+        assert_eq!(vec![11, 10, 7, 30], auth_path_node_indices(16, 7));
+        assert_eq!(vec![17, 21, 29, 15], auth_path_node_indices(16, 8));
+        assert_eq!(vec![16, 21, 29, 15], auth_path_node_indices(16, 9));
+        assert_eq!(vec![20, 18, 29, 15], auth_path_node_indices(16, 10));
+        assert_eq!(vec![19, 18, 29, 15], auth_path_node_indices(16, 11));
+        assert_eq!(vec![24, 28, 22, 15], auth_path_node_indices(16, 12));
+        assert_eq!(vec![23, 28, 22, 15], auth_path_node_indices(16, 13));
+        assert_eq!(vec![27, 25, 22, 15], auth_path_node_indices(16, 14));
+        assert_eq!(vec![26, 25, 22, 15], auth_path_node_indices(16, 15));
+
+        assert_eq!(Vec::<u64>::new(), auth_path_node_indices(1, 0));
+        assert_eq!(vec![2], auth_path_node_indices(2, 0));
+        assert_eq!(vec![1], auth_path_node_indices(2, 1));
+
+        let mut expected = vec![];
+        for i in 1..63 {
+            expected.push((1u64 << (i + 1)) - 2);
+            assert_eq!(
+                expected,
+                auth_path_node_indices(1 << i, 0),
+                "must match for i={i}"
             );
         }
     }
