@@ -1,3 +1,5 @@
+use std::hash::Hasher;
+
 use arbitrary::Arbitrary;
 use get_size2::GetSize;
 use itertools::Itertools;
@@ -673,10 +675,35 @@ impl Sponge for Tip5 {
     }
 }
 
+impl Hasher for Tip5 {
+    fn finish(&self) -> u64 {
+        self.state[0].value()
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        let bfield_elements = bytes.chunks(BFieldElement::BYTES).map(|chunk| {
+            let mut buffer = [0u8; BFieldElement::BYTES];
+            buffer[..chunk.len()].copy_from_slice(chunk);
+            BFieldElement::new(u64::from_le_bytes(buffer))
+        });
+
+        for chunk in bfield_elements.chunks(Tip5::RATE).into_iter() {
+            let mut buffer = [BFieldElement::ZERO; Tip5::RATE];
+            for (buffer_elem, chunk_elem) in buffer.iter_mut().zip(chunk) {
+                *buffer_elem = chunk_elem;
+            }
+            self.absorb(buffer)
+        }
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tip5_tests {
+    use std::hash::Hash;
     use std::ops::Mul;
 
+    use insta::assert_snapshot;
+    use prop::sample::size_range;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use rand::thread_rng;
@@ -1085,6 +1112,38 @@ pub(crate) mod tip5_tests {
             sponge_cyclomut.state.into_iter().join(","),
             sponge_generated.state.into_iter().join(",")
         );
+    }
+
+    #[test]
+    fn tip5_hasher_trait_test() {
+        let mut hasher = Tip5::init();
+        let data = b"hello world";
+        hasher.write(data);
+        assert_snapshot!(hasher.finish(), @"2267905471610932299");
+    }
+
+    #[proptest]
+    fn tip5_hasher_consumes_small_data(#[filter(!#bytes.is_empty())] bytes: Vec<u8>) {
+        let mut hasher = Tip5::init();
+        bytes.hash(&mut hasher);
+
+        prop_assert_ne!(Tip5::init().finish(), hasher.finish());
+    }
+
+    #[proptest]
+    fn appending_small_data_to_big_data_changes_tip5_hash(
+        #[any(size_range(2_000..8_000).lift())] big_data: Vec<u8>,
+        #[filter(!#small_data.is_empty())] small_data: Vec<u8>,
+    ) {
+        let mut hasher = Tip5::init();
+        big_data.hash(&mut hasher);
+        let big_data_hash = hasher.finish();
+
+        // finish doesn't terminate the hasher; see it's documentation
+        small_data.hash(&mut hasher);
+        let all_data_hash = hasher.finish();
+
+        prop_assert_ne!(big_data_hash, all_data_hash);
     }
 
     #[proptest]
