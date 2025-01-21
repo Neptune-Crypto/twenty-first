@@ -114,6 +114,10 @@ pub fn node_indices_added_by_append(old_leaf_count: u64) -> Vec<u64> {
 
 /// Get the node indices of the authentication path starting from the specified
 /// leaf, to its peak.
+///
+/// # Panics
+///
+/// Panics if the leaf index is out-of-bounds.
 pub fn auth_path_node_indices(num_leafs: u64, leaf_index: u64) -> Vec<u64> {
     assert!(
         leaf_index < num_leafs,
@@ -274,11 +278,14 @@ pub fn node_index_to_leaf_index(node_index: u64) -> Option<u64> {
 
 #[cfg(test)]
 mod mmr_test {
+    use proptest::prelude::Just;
     use proptest::prop_assert_eq;
     use rand::RngCore;
     use test_strategy::proptest;
 
     use super::*;
+    use crate::prelude::Digest;
+    use crate::prelude::MmrMembershipProof;
 
     #[test]
     fn leaf_index_to_node_index_test() {
@@ -538,6 +545,24 @@ mod mmr_test {
                 get_authentication_path_node_indices(start, end, node_count)
             );
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "Leaf index out-of-bounds: 5/5")]
+    fn auth_path_indices_out_of_bounds_unit_test() {
+        auth_path_node_indices(5, 5);
+    }
+
+    #[proptest]
+    fn auth_path_indices_prop(
+        #[strategy(0u64..(u64::MAX>>1))] _num_leafs: u64,
+        #[strategy(0u64..(#_num_leafs))] leaf_index: u64,
+        #[strategy(Just(auth_path_node_indices(#_num_leafs, #leaf_index)))] node_indices: Vec<u64>,
+    ) {
+        let mp = MmrMembershipProof {
+            authentication_path: vec![Digest::default(); node_indices.len()],
+        };
+        prop_assert_eq!(mp.get_node_indices(leaf_index), node_indices);
     }
 
     #[test]
