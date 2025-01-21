@@ -301,10 +301,9 @@ pub(crate) mod digest_tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
+    use super::*;
     use crate::error::ParseBFieldElementError;
     use crate::prelude::*;
-
-    use super::*;
 
     impl ProptestArbitrary for Digest {
         type Parameters = ();

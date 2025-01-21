@@ -420,7 +420,7 @@ mod u32s_tests {
     fn u128_conversion_test() {
         let mut rng = thread_rng();
         for _ in 0..100 {
-            let a_as_u128: u128 = (rng.next_u64() as u128) << 64 | rng.next_u64() as u128;
+            let a_as_u128: u128 = ((rng.next_u64() as u128) << 64) | rng.next_u64() as u128;
             let a: U32s<4> = a_as_u128.try_into().unwrap();
             let a_as_biguint: BigUint = a_as_u128.into();
             assert_eq!(a, Into::<U32s<4>>::into(a_as_biguint));

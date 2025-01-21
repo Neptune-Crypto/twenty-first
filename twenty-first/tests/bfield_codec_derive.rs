@@ -2,7 +2,6 @@ use arbitrary::Arbitrary;
 use proptest::prelude::*;
 use proptest_arbitrary_interop::arb;
 use test_strategy::proptest;
-
 // Required by the `BFieldCodec` derive macro. This is generally only needed
 // once per crate, at the top-level `lib.rs`.
 #[expect(clippy::single_component_path_imports)]

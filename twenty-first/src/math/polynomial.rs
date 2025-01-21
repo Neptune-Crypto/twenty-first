@@ -367,7 +367,7 @@ where
         let mut acc = Polynomial::one();
         for i in 0..=bit_length {
             acc = acc.slow_square();
-            let bit_is_set = (pow >> (bit_length - i) & 1) == 1;
+            let bit_is_set = (pow >> (bit_length - i)) & 1 == 1;
             if bit_is_set {
                 acc = acc * self.clone();
             }
@@ -750,7 +750,7 @@ where
         let mut acc = Polynomial::one();
         for i in 0..=bit_length {
             acc = acc.square();
-            let bit_is_set = (pow >> (bit_length - i) & 1) == 1;
+            let bit_is_set = (pow >> (bit_length - i)) & 1 == 1;
             if bit_is_set {
                 acc = self.multiply(&acc);
             }
