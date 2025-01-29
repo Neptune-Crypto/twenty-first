@@ -623,7 +623,7 @@ where
 
     /// Regulates the recursion depth at which
     /// [Fast modular coset interpolation](Self::fast_modular_coset_interpolate)
-    /// is slower and switches to [INTT](ntt::intt)-then-[reduce](Self::reduce).
+    /// is slower and switches to [INTT][intt]-then-[reduce](Self::reduce).
     const FAST_MODULAR_COSET_INTERPOLATE_CUTOFF_THRESHOLD_PREFER_INTT: usize = 1 << 17;
 
     /// Regulates when to prefer the [Fast coset extrapolation](Self::fast_coset_extrapolate)

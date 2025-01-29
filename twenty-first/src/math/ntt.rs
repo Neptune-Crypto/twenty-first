@@ -110,7 +110,7 @@ where
 ///   appropriate order, or whether
 /// - the passed-in log₂ of the slice length matches.
 ///
-/// Use [NTT][self:ntt] if you want a nicer interface.
+/// Use [NTT][self::ntt] if you want a nicer interface.
 #[expect(clippy::many_single_char_names)]
 #[inline]
 fn ntt_unchecked<FF>(x: &mut [FF], omega: BFieldElement, log2_slice_len: u32)
