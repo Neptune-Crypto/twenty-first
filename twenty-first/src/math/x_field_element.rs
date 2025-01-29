@@ -278,6 +278,17 @@ impl XFieldElement {
         Self::new([element, zero, zero])
     }
 
+    #[must_use]
+    pub fn inverse(&self) -> Self {
+        assert!(
+            !self.is_zero(),
+            "Cannot invert the zero element in the extension field."
+        );
+        let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
+        let (_, a, _) = Polynomial::<BFieldElement>::xgcd(self_as_poly, Self::shah_polynomial());
+        a.into()
+    }
+
     pub fn unlift(&self) -> Option<BFieldElement> {
         if self.coefficients[1].is_zero() && self.coefficients[2].is_zero() {
             Some(self.coefficients[0])
@@ -299,13 +310,7 @@ impl XFieldElement {
 impl Inverse for XFieldElement {
     #[must_use]
     fn inverse(&self) -> Self {
-        assert!(
-            !self.is_zero(),
-            "Cannot invert the zero element in the extension field."
-        );
-        let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
-        let (_, a, _) = Polynomial::<BFieldElement>::xgcd(self_as_poly, Self::shah_polynomial());
-        a.into()
+        self.inverse()
     }
 }
 

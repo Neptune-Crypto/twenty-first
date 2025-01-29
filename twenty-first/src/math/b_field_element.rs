@@ -234,6 +234,40 @@ impl BFieldElement {
         self.canonical_representation()
     }
 
+    #[must_use]
+    #[inline]
+    pub fn inverse(&self) -> Self {
+        #[inline(always)]
+        const fn exp(base: BFieldElement, exponent: u64) -> BFieldElement {
+            let mut res = base;
+            let mut i = 0;
+            while i < exponent {
+                res = BFieldElement(BFieldElement::montyred(res.0 as u128 * res.0 as u128));
+                i += 1;
+            }
+            res
+        }
+
+        let x = *self;
+        assert_ne!(
+            x,
+            Self::zero(),
+            "Attempted to find the multiplicative inverse of zero."
+        );
+
+        let bin_2_ones = x.square() * x;
+        let bin_3_ones = bin_2_ones.square() * x;
+        let bin_6_ones = exp(bin_3_ones, 3) * bin_3_ones;
+        let bin_12_ones = exp(bin_6_ones, 6) * bin_6_ones;
+        let bin_24_ones = exp(bin_12_ones, 12) * bin_12_ones;
+        let bin_30_ones = exp(bin_24_ones, 6) * bin_6_ones;
+        let bin_31_ones = bin_30_ones.square() * x;
+        let bin_31_ones_1_zero = bin_31_ones.square();
+        let bin_32_ones = bin_31_ones.square() * x;
+
+        exp(bin_31_ones_1_zero, 32) * bin_32_ones
+    }
+
     #[inline]
     /// Square the base M times and multiply the result by the tail value
     pub const fn power_accumulator<const N: usize, const M: usize>(
@@ -582,35 +616,7 @@ impl Inverse for BFieldElement {
     #[must_use]
     #[inline]
     fn inverse(&self) -> Self {
-        let x = *self;
-        assert_ne!(
-            x,
-            Self::zero(),
-            "Attempted to find the multiplicative inverse of zero."
-        );
-
-        #[inline(always)]
-        const fn exp(base: BFieldElement, exponent: u64) -> BFieldElement {
-            let mut res = base;
-            let mut i = 0;
-            while i < exponent {
-                res = BFieldElement(BFieldElement::montyred(res.0 as u128 * res.0 as u128));
-                i += 1;
-            }
-            res
-        }
-
-        let bin_2_ones = x.square() * x;
-        let bin_3_ones = bin_2_ones.square() * x;
-        let bin_6_ones = exp(bin_3_ones, 3) * bin_3_ones;
-        let bin_12_ones = exp(bin_6_ones, 6) * bin_6_ones;
-        let bin_24_ones = exp(bin_12_ones, 12) * bin_12_ones;
-        let bin_30_ones = exp(bin_24_ones, 6) * bin_6_ones;
-        let bin_31_ones = bin_30_ones.square() * x;
-        let bin_31_ones_1_zero = bin_31_ones.square();
-        let bin_32_ones = bin_31_ones.square() * x;
-
-        exp(bin_31_ones_1_zero, 32) * bin_32_ones
+        self.inverse()
     }
 }
 

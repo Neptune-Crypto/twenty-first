@@ -5,13 +5,12 @@ use criterion::Criterion;
 use itertools::Itertools;
 use twenty_first::math::b_field_element::BFieldElement;
 use twenty_first::math::other::random_elements;
-use twenty_first::math::traits::Inverse;
 
 /// Run with `cargo criterion --bench inverse`
 fn inverse(c: &mut Criterion) {
     let mut group = c.benchmark_group("Inverses");
     group.sample_size(10); // runs
-    let count = 1024 * 1024; // count of elements to be inversed per run
+    let count = 1024 * 1024; // count of elements to be inverted per run
 
     let rnd_elems: Vec<BFieldElement> = random_elements(count);
 

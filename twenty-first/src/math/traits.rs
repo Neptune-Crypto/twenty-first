@@ -28,6 +28,12 @@ pub trait Inverse
 where
     Self: Sized + Zero,
 {
+    /// The multiplicative inverse: `a * a.inverse() == 1`
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` does not have a multiplicative inverse, for example, when
+    /// `self` is zero. (For fields, this is the only case.)
     fn inverse(&self) -> Self;
 
     fn inverse_or_zero(&self) -> Self {
