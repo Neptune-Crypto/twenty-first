@@ -554,18 +554,37 @@ fn bfield_codec_encode_list<T: BFieldCodec>(elements: Iter<T>) -> Vec<BFieldElem
     encoding
 }
 
+impl BFieldCodec for () {
+    type Error = BFieldCodecError;
+
+    fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
+        sequence
+            .is_empty()
+            .then(|| Box::new(()))
+            .ok_or_else(|| BFieldCodecError::SequenceTooLong)
+    }
+
+    fn encode(&self) -> Vec<BFieldElement> {
+        Vec::new()
+    }
+
+    fn static_length() -> Option<usize> {
+        Some(0)
+    }
+}
+
 impl<T> BFieldCodec for PhantomData<T> {
     type Error = BFieldCodecError;
 
     fn decode(sequence: &[BFieldElement]) -> Result<Box<Self>, Self::Error> {
-        if !sequence.is_empty() {
-            return Err(Self::Error::SequenceTooLong);
-        }
-        Ok(Box::new(PhantomData))
+        sequence
+            .is_empty()
+            .then(|| Box::new(PhantomData))
+            .ok_or_else(|| BFieldCodecError::SequenceTooLong)
     }
 
     fn encode(&self) -> Vec<BFieldElement> {
-        vec![]
+        Vec::new()
     }
 
     fn static_length() -> Option<usize> {
@@ -613,23 +632,24 @@ mod tests {
     where
         T: 'static + BFieldCodec + Eq + Debug + Clone + for<'a> arbitrary::Arbitrary<'a>,
     {
-        fn assert_bfield_codec_properties(&self) -> Result<(), TestCaseError> {
+        fn assert_bfield_codec_properties(&self) -> TestCaseResult {
             self.assert_static_length_is_equal_to_encoded_length()?;
             self.assert_decoded_encoding_is_self()?;
             self.assert_decoding_too_long_encoding_fails()?;
             self.assert_decoding_too_short_encoding_fails()?;
             self.modify_each_element_and_assert_decoding_failure()?;
-            self.assert_decoding_random_too_short_encoding_fails_gracefully()
+            self.assert_decoding_random_too_short_encoding_fails_gracefully()?;
+            Ok(())
         }
 
-        fn assert_static_length_is_equal_to_encoded_length(&self) -> Result<(), TestCaseError> {
+        fn assert_static_length_is_equal_to_encoded_length(&self) -> TestCaseResult {
             if let Some(static_len) = T::static_length() {
                 prop_assert_eq!(static_len, self.encoding.len());
             }
             Ok(())
         }
 
-        fn assert_decoded_encoding_is_self(&self) -> Result<(), TestCaseError> {
+        fn assert_decoded_encoding_is_self(&self) -> TestCaseResult {
             let Ok(decoding) = T::decode(&self.encoding) else {
                 let err = TestCaseError::Fail("decoding canonical encoding must not fail".into());
                 return Err(err);
@@ -638,14 +658,14 @@ mod tests {
             Ok(())
         }
 
-        fn assert_decoding_too_long_encoding_fails(&self) -> Result<(), TestCaseError> {
+        fn assert_decoding_too_long_encoding_fails(&self) -> TestCaseResult {
             let mut too_long_encoding = self.encoding.to_owned();
             too_long_encoding.extend(self.encoding_lengthener.to_owned());
             prop_assert!(T::decode(&too_long_encoding).is_err());
             Ok(())
         }
 
-        fn assert_decoding_too_short_encoding_fails(&self) -> Result<(), TestCaseError> {
+        fn assert_decoding_too_short_encoding_fails(&self) -> TestCaseResult {
             if self.failure_assertions_for_decoding_too_short_sequence_is_not_meaningful() {
                 return Ok(());
             }
@@ -655,7 +675,7 @@ mod tests {
             Ok(())
         }
 
-        fn modify_each_element_and_assert_decoding_failure(&self) -> Result<(), TestCaseError> {
+        fn modify_each_element_and_assert_decoding_failure(&self) -> TestCaseResult {
             let mut encoding = self.encoding.to_owned();
             for i in 0..encoding.len() {
                 let original_value = encoding[i];
@@ -669,9 +689,7 @@ mod tests {
             Ok(())
         }
 
-        fn assert_decoding_random_too_short_encoding_fails_gracefully(
-            &self,
-        ) -> Result<(), TestCaseError> {
+        fn assert_decoding_random_too_short_encoding_fails_gracefully(&self) -> TestCaseResult {
             if self.failure_assertions_for_decoding_too_short_sequence_is_not_meaningful() {
                 return Ok(());
             }
@@ -745,6 +763,7 @@ mod tests {
     test_case! { fn tuples_static_dynamic_size_3 for (Vec<BFieldElement>,): None }
     test_case! { fn tuples_dynamic_static_size for (Vec<XFieldElement>, Digest): None }
     test_case! { fn tuples_dynamic_dynamic_size for (Vec<XFieldElement>, Vec<Digest>): None }
+    test_case! { fn unit for (): Some(0) }
     test_case! { fn phantom_data for PhantomData<Tip5>: Some(0) }
     test_case! { fn boxed_u32s for Box<u32>: Some(1) }
     test_case! { fn tuple_with_boxed_bfe for (u64, Box<BFieldElement>): Some(3) }
