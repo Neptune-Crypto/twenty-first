@@ -1030,73 +1030,68 @@ mod tests {
         }
     }
 
-    #[test]
-    fn x_field_division_mul_pbt() {
-        let test_iterations = 1000;
-        let rands_a: Vec<XFieldElement> = random_elements(test_iterations);
-        let rands_b: Vec<XFieldElement> = random_elements(test_iterations);
-        for (a, b) in izip!(rands_a, rands_b) {
-            let ab = a * b;
-            let ba = b * a;
-            assert_eq!(ab, ba);
-            assert_eq!(ab / b, a);
-            assert_eq!(ab / a, b);
-            assert_eq!(a * a, a.square());
+    #[proptest(cases = 1_000)]
+    fn x_field_division_mul_pbt(a: XFieldElement, b: XFieldElement) {
+        let a_b = a * b;
+        let b_a = b * a;
+        prop_assert_eq!(a_b, b_a);
+        prop_assert_eq!(a_b / b, a);
+        prop_assert_eq!(a_b / a, b);
+        prop_assert_eq!(a * a, a.square());
 
-            // Test the add/sub/mul assign operators
-            let mut a_minus_b = a;
-            a_minus_b -= b;
-            assert_eq!(a - b, a_minus_b);
+        // Test the add/sub/mul assign operators
+        let mut a_minus_b = a;
+        a_minus_b -= b;
+        prop_assert_eq!(a - b, a_minus_b);
 
-            let mut a_plus_b = a;
-            a_plus_b += b;
-            assert_eq!(a + b, a_plus_b);
+        let mut a_plus_b = a;
+        a_plus_b += b;
+        prop_assert_eq!(a + b, a_plus_b);
 
-            let mut a_mul_b = a;
-            a_mul_b *= b;
-            assert_eq!(a * b, a_mul_b);
+        let mut a_mul_b = a;
+        a_mul_b *= b;
+        prop_assert_eq!(a * b, a_mul_b);
 
-            // Test the add/sub/mul assign operators, when the higher coefficients are zero.
-            // Also tests add/sub/mul operators and add/sub/mul assign operators when RHS has
-            // the type of B field element. And add/sub/mul operators when LHS is a B-field
-            // element and RHS is an X-field element.
-            // mul-assign `*=`
-            let b_field_b = XFieldElement::new_const(b.coefficients[0]);
-            let mut a_mul_b_field_b_as_x = a;
-            a_mul_b_field_b_as_x *= b_field_b;
-            assert_eq!(a * b_field_b, a_mul_b_field_b_as_x);
-            assert_eq!(a, a_mul_b_field_b_as_x / b_field_b);
-            assert_eq!(b_field_b, a_mul_b_field_b_as_x / a);
-            assert_eq!(a_mul_b_field_b_as_x, a * b.coefficients[0]);
-            assert_eq!(a_mul_b_field_b_as_x, b.coefficients[0] * a);
-            let mut a_mul_b_field_b_as_b = a;
-            a_mul_b_field_b_as_b *= b.coefficients[0];
-            assert_eq!(a_mul_b_field_b_as_b, a_mul_b_field_b_as_x);
+        // Test the add/sub/mul assign operators, when the higher coefficients are zero.
+        // Also tests add/sub/mul operators and add/sub/mul assign operators when RHS has
+        // the type of B field element. And add/sub/mul operators when LHS is a B-field
+        // element and RHS is an X-field element.
+        // mul-assign `*=`
+        let b_field_b = XFieldElement::new_const(b.coefficients[0]);
+        let mut a_mul_b_field_b_as_x = a;
+        a_mul_b_field_b_as_x *= b_field_b;
+        prop_assert_eq!(a * b_field_b, a_mul_b_field_b_as_x);
+        prop_assert_eq!(a, a_mul_b_field_b_as_x / b_field_b);
+        prop_assert_eq!(b_field_b, a_mul_b_field_b_as_x / a);
+        prop_assert_eq!(a_mul_b_field_b_as_x, a * b.coefficients[0]);
+        prop_assert_eq!(a_mul_b_field_b_as_x, b.coefficients[0] * a);
+        let mut a_mul_b_field_b_as_b = a;
+        a_mul_b_field_b_as_b *= b.coefficients[0];
+        prop_assert_eq!(a_mul_b_field_b_as_b, a_mul_b_field_b_as_x);
 
-            // `+=`
-            let mut a_plus_b_field_b_as_x = a;
-            a_plus_b_field_b_as_x += b_field_b;
-            assert_eq!(a + b_field_b, a_plus_b_field_b_as_x);
-            assert_eq!(a, a_plus_b_field_b_as_x - b_field_b);
-            assert_eq!(b_field_b, a_plus_b_field_b_as_x - a);
-            assert_eq!(a_plus_b_field_b_as_x, a + b.coefficients[0]);
-            assert_eq!(a_plus_b_field_b_as_x, b.coefficients[0] + a);
-            let mut a_plus_b_field_b_as_b = a;
-            a_plus_b_field_b_as_b += b.coefficients[0];
-            assert_eq!(a_plus_b_field_b_as_b, a_plus_b_field_b_as_x);
+        // `+=`
+        let mut a_plus_b_field_b_as_x = a;
+        a_plus_b_field_b_as_x += b_field_b;
+        prop_assert_eq!(a + b_field_b, a_plus_b_field_b_as_x);
+        prop_assert_eq!(a, a_plus_b_field_b_as_x - b_field_b);
+        prop_assert_eq!(b_field_b, a_plus_b_field_b_as_x - a);
+        prop_assert_eq!(a_plus_b_field_b_as_x, a + b.coefficients[0]);
+        prop_assert_eq!(a_plus_b_field_b_as_x, b.coefficients[0] + a);
+        let mut a_plus_b_field_b_as_b = a;
+        a_plus_b_field_b_as_b += b.coefficients[0];
+        prop_assert_eq!(a_plus_b_field_b_as_b, a_plus_b_field_b_as_x);
 
-            // `-=`
-            let mut a_minus_b_field_b_as_x = a;
-            a_minus_b_field_b_as_x -= b_field_b;
-            assert_eq!(a - b_field_b, a_minus_b_field_b_as_x);
-            assert_eq!(a, a_minus_b_field_b_as_x + b_field_b);
-            assert_eq!(-b_field_b, a_minus_b_field_b_as_x - a);
-            assert_eq!(a_minus_b_field_b_as_x, a - b.coefficients[0]);
-            assert_eq!(-a_minus_b_field_b_as_x, b.coefficients[0] - a);
-            let mut a_minus_b_field_b_as_b = a;
-            a_minus_b_field_b_as_b -= b.coefficients[0];
-            assert_eq!(a_minus_b_field_b_as_b, a_minus_b_field_b_as_x);
-        }
+        // `-=`
+        let mut a_minus_b_field_b_as_x = a;
+        a_minus_b_field_b_as_x -= b_field_b;
+        prop_assert_eq!(a - b_field_b, a_minus_b_field_b_as_x);
+        prop_assert_eq!(a, a_minus_b_field_b_as_x + b_field_b);
+        prop_assert_eq!(-b_field_b, a_minus_b_field_b_as_x - a);
+        prop_assert_eq!(a_minus_b_field_b_as_x, a - b.coefficients[0]);
+        prop_assert_eq!(-a_minus_b_field_b_as_x, b.coefficients[0] - a);
+        let mut a_minus_b_field_b_as_b = a;
+        a_minus_b_field_b_as_b -= b.coefficients[0];
+        prop_assert_eq!(a_minus_b_field_b_as_b, a_minus_b_field_b_as_x);
     }
 
     #[test]
