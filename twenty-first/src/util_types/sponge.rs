@@ -58,9 +58,9 @@ pub trait Sponge: Clone + Debug + Default + Send + Sync {
 mod tests {
     use std::ops::Mul;
 
+    use rand::distr::Distribution;
+    use rand::distr::StandardUniform;
     use rand::Rng;
-    use rand_distr::Distribution;
-    use rand_distr::Standard;
 
     use super::*;
     use crate::math::digest::Digest;
@@ -72,16 +72,16 @@ mod tests {
     fn encode_prop<T>(smallest: T, largest: T)
     where
         T: Eq + BFieldCodec,
-        Standard: Distribution<T>,
+        StandardUniform: Distribution<T>,
     {
         let smallest_seq = smallest.encode();
         let largest_seq = largest.encode();
         assert_ne!(smallest_seq, largest_seq);
         assert_eq!(smallest_seq.len(), largest_seq.len());
 
-        let mut rng = rand::thread_rng();
-        let random_a: T = rng.gen();
-        let random_b: T = rng.gen();
+        let mut rng = rand::rng();
+        let random_a: T = rng.random();
+        let random_b: T = rng.random();
 
         if random_a != random_b {
             assert_ne!(random_a.encode(), random_b.encode());

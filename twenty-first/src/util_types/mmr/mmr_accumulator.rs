@@ -461,11 +461,9 @@ mod accumulator_mmr_tests {
     use proptest::collection::vec;
     use proptest::prop_assert_eq;
     use proptest_arbitrary_interop::arb;
-    use rand::distributions::Uniform;
+    use rand::distr::Uniform;
     use rand::random;
-    use rand::thread_rng;
     use rand::Rng;
-    use rand::RngCore;
     use test_strategy::proptest;
 
     use super::*;
@@ -623,7 +621,7 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn batch_mutate_leaf_and_update_mps_test() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for mmr_leaf_count in 1..100 {
             let initial_leaf_digests: Vec<Digest> = random_elements(mmr_leaf_count);
 
@@ -632,23 +630,25 @@ mod accumulator_mmr_tests {
             let mut ammr: MockMmr = get_mock_ammr_from_digests(initial_leaf_digests.clone());
             let mut ammr_copy: MockMmr = get_mock_ammr_from_digests(initial_leaf_digests.clone());
 
-            let mutated_leaf_count = rng.gen_range(0..mmr_leaf_count);
+            let mutated_leaf_count = rng.random_range(0..mmr_leaf_count);
             let all_indices: Vec<u64> = (0..mmr_leaf_count as u64).collect();
 
             // Pick indices for leafs that are being mutated
             let mut all_indices_mut0 = all_indices.clone();
             let mut mutated_leaf_indices: Vec<u64> = vec![];
             for _ in 0..mutated_leaf_count {
-                let leaf_index = all_indices_mut0.remove(rng.gen_range(0..all_indices_mut0.len()));
+                let leaf_index =
+                    all_indices_mut0.remove(rng.random_range(0..all_indices_mut0.len()));
                 mutated_leaf_indices.push(leaf_index);
             }
 
             // Pick membership proofs that we want to update
-            let membership_proof_count = rng.gen_range(0..mmr_leaf_count);
+            let membership_proof_count = rng.random_range(0..mmr_leaf_count);
             let mut all_indices_mut1 = all_indices.clone();
             let mut membership_proof_indices: Vec<u64> = vec![];
             for _ in 0..membership_proof_count {
-                let leaf_index = all_indices_mut1.remove(rng.gen_range(0..all_indices_mut1.len()));
+                let leaf_index =
+                    all_indices_mut1.remove(rng.random_range(0..all_indices_mut1.len()));
                 membership_proof_indices.push(leaf_index);
             }
 
@@ -776,8 +776,8 @@ mod accumulator_mmr_tests {
 
                     // Ensure that indices are unique since batch updating cannot update
                     // the same leaf twice in one go
-                    let mutated_indices: Vec<u64> = thread_rng()
-                        .sample_iter(Uniform::new(0, start_size as u64))
+                    let mutated_indices: Vec<u64> = rand::rng()
+                        .sample_iter(Uniform::new(0, start_size as u64).unwrap())
                         .take(mutate_size)
                         .sorted()
                         .unique()
@@ -902,8 +902,8 @@ mod accumulator_mmr_tests {
     #[test]
     fn test_mmr_accumulator_decode() {
         for _ in 0..100 {
-            let num_leafs = (thread_rng().next_u32() % 100) as usize;
-            let leafs: Vec<Digest> = random_elements(num_leafs);
+            let num_leafs = rand::random_range(0..100);
+            let leafs = random_elements(num_leafs);
             let mmra = MmrAccumulator::new_from_leafs(leafs);
             let encoded = mmra.encode();
             let decoded = *MmrAccumulator::decode(&encoded).unwrap();

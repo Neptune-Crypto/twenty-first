@@ -633,9 +633,7 @@ mod mmr_membership_proof_test {
     use itertools::Itertools;
     use proptest_arbitrary_interop::arb;
     use rand::random;
-    use rand::thread_rng;
     use rand::Rng;
-    use rand::RngCore;
     use test_strategy::proptest;
 
     use super::*;
@@ -652,9 +650,9 @@ mod mmr_membership_proof_test {
     #[test]
     fn equality_and_hash_test() {
         type H = Tip5;
-        let mut rng = rand::thread_rng();
-        let some_digest: Digest = rng.gen();
-        let other_digest: Digest = rng.gen();
+        let mut rng = rand::rng();
+        let some_digest: Digest = rng.random();
+        let other_digest: Digest = rng.random();
 
         // Assert that both membership proofs and their digests are equal
         let mp0 = MmrMembershipProof::new(vec![]);
@@ -910,15 +908,16 @@ mod mmr_membership_proof_test {
         let total_leaf_count = 34;
         let mut leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
         let mut archival_mmr: MockMmr = get_mock_ammr_from_digests(leaf_hashes.clone());
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for modified_leaf_count in 0..=total_leaf_count {
             // Pick a set of membership proofs that we want to batch-update
-            let own_membership_proof_count = rng.gen_range(0..total_leaf_count);
+            let own_membership_proof_count = rng.random_range(0..total_leaf_count);
             let mut all_leaf_indices: Vec<u64> = (0..total_leaf_count as u64).collect();
             let mut own_mp_leaf_indices = vec![];
             let mut own_membership_proofs: Vec<MmrMembershipProof> = vec![];
             for _ in 0..own_membership_proof_count {
-                let leaf_index = all_leaf_indices.remove(rng.gen_range(0..all_leaf_indices.len()));
+                let leaf_index =
+                    all_leaf_indices.remove(rng.random_range(0..all_leaf_indices.len()));
                 own_membership_proofs.push(archival_mmr.prove_membership(leaf_index));
                 own_mp_leaf_indices.push(leaf_index);
             }
@@ -931,7 +930,7 @@ mod mmr_membership_proof_test {
             let mut mutated_leaf_leaf_indices = vec![];
             for _ in 0..modified_leaf_count {
                 let leaf_index =
-                    all_leaf_indices_new.remove(rng.gen_range(0..all_leaf_indices_new.len()));
+                    all_leaf_indices_new.remove(rng.random_range(0..all_leaf_indices_new.len()));
                 authentication_paths.push(archival_mmr.prove_membership(leaf_index));
                 mutated_leaf_leaf_indices.push(leaf_index);
             }
@@ -1300,10 +1299,10 @@ mod mmr_membership_proof_test {
         let original_leaf_count = (1 << 35) + (1 << 7) - 1;
 
         let specified_count = 40;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut specified_indices: HashSet<u64> = HashSet::default();
         for _ in 0..specified_count {
-            specified_indices.insert(rng.gen_range(0..original_leaf_count));
+            specified_indices.insert(rng.random_range(0..original_leaf_count));
         }
 
         // Ensure that at least *one* MP will be mutated upon insertion of a new leaf
@@ -1399,7 +1398,7 @@ mod mmr_membership_proof_test {
         for leaf_count in 0..68u64 {
             // 1. Build a MockMmr with a variable amount of leafs
             let leaf_digests: Vec<Digest> = random_elements(leaf_count as usize);
-            let new_leaf_digest: Digest = rand::thread_rng().gen();
+            let new_leaf_digest: Digest = random();
             let archival_mmr: MockMmr = get_mock_ammr_from_digests(leaf_digests.clone());
 
             // For every valid data index
@@ -1603,12 +1602,12 @@ mod mmr_membership_proof_test {
 
     #[test]
     fn test_decode_mmr_membership_proof() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..100 {
-            let num_leafs = 2 + (rng.next_u32() as usize % 1000);
+            let num_leafs = 2 + rng.random_range(0..1000);
             let leaf_hashes = random_elements(num_leafs);
             let archival_mmr = get_mock_ammr_from_digests(leaf_hashes);
-            let leaf_index = (rng.next_u32() as usize % num_leafs) as u64;
+            let leaf_index = rng.random_range(0..num_leafs) as u64;
             let mp = archival_mmr.prove_membership(leaf_index);
             let mp_encoded = mp.encode();
             let mp_decoded = *MmrMembershipProof::decode(&mp_encoded).unwrap();

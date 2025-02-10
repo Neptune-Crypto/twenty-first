@@ -19,7 +19,6 @@ pub fn bag_peaks(peaks: &[Digest]) -> Digest {
 #[cfg(test)]
 mod tests {
     use insta::assert_snapshot;
-    use itertools::Itertools;
     use rand::prelude::*;
 
     use super::*;
@@ -29,10 +28,10 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(0x92ca758afeec6d29);
 
         assert_snapshot!(bag_peaks(&[]).0[0], @"14353333629925222640");
-        assert_snapshot!(bag_peaks(&[rng.gen()]).0[0], @"17149516008269095361");
-        assert_snapshot!(bag_peaks(&[rng.gen(), rng.gen()]).0[0], @"10916225144661041397");
+        assert_snapshot!(bag_peaks(&[rng.random()]).0[0], @"17149516008269095361");
+        assert_snapshot!(bag_peaks(&[rng.random(), rng.random()]).0[0], @"06487327802841213551");
 
-        let peaks = (0..10).map(|_| rng.gen()).collect_vec();
-        assert_snapshot!(bag_peaks(&peaks).0[0], @"07834432385918213217");
+        let peaks: [Digest; 10] = rng.random();
+        assert_snapshot!(bag_peaks(&peaks).0[0], @"08165051011961773585");
     }
 }

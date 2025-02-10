@@ -818,7 +818,6 @@ mod lattice_test {
     use num_traits::ConstOne;
     use num_traits::Zero;
     use rand::random;
-    use rand::thread_rng;
     use rand::RngCore;
     use sha3::Digest as Sha3Digest;
     use sha3::Sha3_256;
@@ -875,7 +874,7 @@ mod lattice_test {
 
     #[test]
     fn test_embedding() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let msg: [u8; 32] = (0..32)
             .map(|_| (rng.next_u32() % 256) as u8)
             .collect_vec()
@@ -889,7 +888,7 @@ mod lattice_test {
 
     #[test]
     fn test_module_distributivity() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let randomness = (0..(2 * 3 + 2 * 3 + 3) * 64 * 9)
             .map(|_| (rng.next_u32() % 256) as u8)
             .collect_vec();
@@ -912,7 +911,7 @@ mod lattice_test {
 
     #[test]
     fn test_module_multiply() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let randomness = (0..(2 * 3 + 2 * 3 + 3) * 64 * 9)
             .map(|_| (rng.next_u32() % 256) as u8)
             .collect_vec();
@@ -931,7 +930,7 @@ mod lattice_test {
 
     #[test]
     fn test_kem() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let mut key_randomness: [u8; 32] = [0u8; 32];
         rng.fill_bytes(&mut key_randomness);
         let mut ctxt_randomness: [u8; 32] = [0u8; 32];
@@ -978,7 +977,7 @@ mod lattice_test {
     fn serialization_deserialization_test() {
         // This is tested here since the serialization for these objects is a bit more complicated
         // than the standard serde stuff. So to be sure that it works, we just run this test here.
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let mut key_randomness: [u8; 32] = [0u8; 32];
         rng.fill_bytes(&mut key_randomness);
         let mut ctxt_randomness: [u8; 32] = [0u8; 32];

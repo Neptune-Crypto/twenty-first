@@ -41,11 +41,11 @@ mod shared_tests_tests {
 
     #[test]
     fn mmra_and_mps_construct_test_cornercases() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for leaf_count in 0..5 {
             let (_mmra, _mps) = mmra_with_mps(leaf_count, vec![]);
         }
-        let some: Digest = rng.gen();
+        let some: Digest = rng.random();
         for leaf_count in 1..10 {
             for leaf_index in 0..leaf_count {
                 let (mmra, mps) = mmra_with_mps(leaf_count, vec![(leaf_index, some)]);
@@ -53,7 +53,7 @@ mod shared_tests_tests {
             }
         }
 
-        let other: Digest = rng.gen();
+        let other: Digest = rng.random();
         for leaf_count in 2..10 {
             for some_index in 0..leaf_count {
                 for other_index in 0..leaf_count {
@@ -80,9 +80,9 @@ mod shared_tests_tests {
 
     #[test]
     fn mmra_and_mps_construct_test_small() {
-        let mut rng = rand::thread_rng();
-        let digest_leaf_idx12: Digest = rng.gen();
-        let digest_leaf_idx14: Digest = rng.gen();
+        let mut rng = rand::rng();
+        let digest_leaf_idx12: Digest = rng.random();
+        let digest_leaf_idx14: Digest = rng.random();
 
         let (mmra, mps) = mmra_with_mps(32, vec![(12, digest_leaf_idx12), (14, digest_leaf_idx14)]);
         assert!(mps[0].verify(12, digest_leaf_idx12, &mmra.peaks(), mmra.num_leafs()));
@@ -91,13 +91,13 @@ mod shared_tests_tests {
 
     #[test]
     fn mmra_and_mps_construct_test_pbt() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for leaf_count in 2..25 {
             for specified_count in 0..leaf_count {
                 let mut specified_indices: HashSet<u64> = HashSet::default();
                 for _ in 0..specified_count {
-                    specified_indices.insert(rng.gen_range(0..leaf_count));
+                    specified_indices.insert(rng.random_range(0..leaf_count));
                 }
 
                 let collected_values = specified_indices.len();
@@ -116,12 +116,12 @@ mod shared_tests_tests {
 
     #[test]
     fn mmra_and_mps_construct_test_big() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let leaf_count = (1 << 59) + (1 << 44) + 1234567890;
         let specified_count = 40;
         let mut specified_indices: HashSet<u64> = HashSet::default();
         for _ in 0..specified_count {
-            specified_indices.insert(rng.gen_range(0..leaf_count));
+            specified_indices.insert(rng.random_range(0..leaf_count));
         }
 
         let collected_values = specified_indices.len();

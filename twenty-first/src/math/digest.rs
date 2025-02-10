@@ -8,9 +8,9 @@ use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::ConstZero;
 use num_traits::Zero;
+use rand::distr::Distribution;
+use rand::distr::StandardUniform;
 use rand::Rng;
-use rand_distr::Distribution;
-use rand_distr::Standard;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::Serialize;
@@ -105,16 +105,9 @@ impl fmt::UpperHex for Digest {
     }
 }
 
-impl Distribution<Digest> for Standard {
+impl Distribution<Digest> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Digest {
-        // FIXME: impl Fill for [BFieldElement] to rng.fill() a [BFieldElement; Digest::LEN].
-        let elements = rng
-            .sample_iter(Standard)
-            .take(Digest::LEN)
-            .collect_vec()
-            .try_into()
-            .unwrap();
-        Digest::new(elements)
+        Digest::new(rng.random())
     }
 }
 

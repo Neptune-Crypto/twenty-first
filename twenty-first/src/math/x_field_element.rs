@@ -15,9 +15,9 @@ use num_traits::ConstOne;
 use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
+use rand::distr::Distribution;
+use rand::distr::StandardUniform;
 use rand::Rng;
-use rand_distr::Distribution;
-use rand_distr::Standard;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -321,14 +321,9 @@ impl PrimitiveRootOfUnity for XFieldElement {
     }
 }
 
-impl Distribution<XFieldElement> for Standard {
+impl Distribution<XFieldElement> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> XFieldElement {
-        let coefficients = [
-            rng.gen::<BFieldElement>(),
-            rng.gen::<BFieldElement>(),
-            rng.gen::<BFieldElement>(),
-        ];
-        XFieldElement { coefficients }
+        XFieldElement::new(rng.random())
     }
 }
 
@@ -834,10 +829,10 @@ mod tests {
 
     #[test]
     fn x_field_overloaded_arithmetic_test() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..100 {
-            let xfe = rng.gen::<XFieldElement>();
-            let bfe = rng.gen::<BFieldElement>();
+            let xfe = rng.random::<XFieldElement>();
+            let bfe = rng.random::<BFieldElement>();
 
             // 1. xfe + bfe.lift() = bfe.lift() + xfe
             // 2. xfe + bfe = xfe + bfe.lift()

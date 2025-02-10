@@ -498,14 +498,13 @@ pub fn generated_function(input: &[u64]) -> [u64; 16] {
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
-    use rand::thread_rng;
     use rand::RngCore;
 
     use super::*;
 
     #[test]
     fn test_karatsuba() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let n = 8;
         let a = (0..n)
             .map(|_| (rng.next_u32() % (1 << 20)) as u64)
@@ -525,7 +524,7 @@ mod tests {
 
     #[test]
     fn test_negacyclic_mul() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let n = 8;
         let a = (0..n)
             .map(|_| (rng.next_u32() % (1 << 20)) as u64)
@@ -548,7 +547,7 @@ mod tests {
 
     #[test]
     fn test_recursive_cyclic_mul() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let n = 16;
         let a = (0..n).map(|_| rng.next_u32() as u64).collect_vec();
         let b = (0..n)

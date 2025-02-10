@@ -12,9 +12,9 @@ use num_bigint::BigUint;
 use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
+use rand::distr::Distribution;
+use rand::distr::StandardUniform;
 use rand::Rng;
-use rand_distr::Distribution;
-use rand_distr::Standard;
 use serde_big_array;
 use serde_big_array::BigArray;
 use serde_derive::Deserialize;
@@ -304,9 +304,9 @@ impl<const N: usize> Sum for U32s<N> {
     }
 }
 
-impl<const N: usize> Distribution<U32s<N>> for Standard {
+impl<const N: usize> Distribution<U32s<N>> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> U32s<N> {
-        let values = rng.sample::<[u32; N], Standard>(Standard);
+        let values = rng.random();
         U32s { values }
     }
 }
@@ -386,7 +386,6 @@ impl<const N: usize> BFieldCodec for U32s<N> {
 #[cfg(test)]
 mod u32s_tests {
     use rand::random;
-    use rand::thread_rng;
     use rand::Rng;
     use rand::RngCore;
 
@@ -418,7 +417,7 @@ mod u32s_tests {
 
     #[test]
     fn u128_conversion_test() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..100 {
             let a_as_u128: u128 = ((rng.next_u64() as u128) << 64) | rng.next_u64() as u128;
             let a: U32s<4> = a_as_u128.try_into().unwrap();
@@ -756,12 +755,12 @@ mod u32s_tests {
     fn get_bit_set_bit_pbt() {
         let outer_count = 100;
         let inner_count = 20;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let vals: Vec<U32s<4>> = random_elements(outer_count);
         for mut val in vals {
-            let bit_value: bool = rng.gen();
+            let bit_value: bool = rng.random();
             for _ in 0..inner_count {
-                let bit_index = rng.gen_range(0..4 * 32);
+                let bit_index = rng.random_range(0..4 * 32);
                 val.set_bit(bit_index, bit_value);
                 assert_eq!(bit_value, val.get_bit(bit_index));
             }

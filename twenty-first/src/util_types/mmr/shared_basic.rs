@@ -141,7 +141,6 @@ pub fn calculate_new_peaks_from_leaf_mutation(
 mod mmr_test {
     use proptest::collection::vec;
     use proptest_arbitrary_interop::arb;
-    use rand::prelude::*;
     use test_strategy::proptest;
 
     use super::*;
@@ -340,6 +339,6 @@ mod mmr_test {
 
     #[test]
     fn calculate_new_peaks_from_append_to_empty_mmra_does_not_crash() {
-        calculate_new_peaks_from_append(0, vec![], random());
+        calculate_new_peaks_from_append(0, vec![], rand::random());
     }
 }

@@ -21,9 +21,9 @@ use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
 use phf::phf_map;
+use rand::distr::Distribution;
+use rand::distr::StandardUniform;
 use rand::Rng;
-use rand_distr::Distribution;
-use rand_distr::Standard;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::Serialize;
@@ -643,9 +643,9 @@ impl CyclicGroupGenerator for BFieldElement {
     }
 }
 
-impl Distribution<BFieldElement> for Standard {
+impl Distribution<BFieldElement> for StandardUniform {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BFieldElement {
-        BFieldElement::new(rng.gen_range(0..=BFieldElement::MAX))
+        BFieldElement::new(rng.random_range(0..=BFieldElement::MAX))
     }
 }
 
@@ -802,7 +802,6 @@ mod b_prime_field_element_test {
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use rand::random;
-    use rand::thread_rng;
     use test_strategy::proptest;
 
     use crate::math::b_field_element::*;
@@ -1314,8 +1313,8 @@ mod b_prime_field_element_test {
         let one = BFieldElement::ONE;
         assert_eq!(zero, zero.inverse_or_zero());
 
-        let mut rng = rand::thread_rng();
-        let elem: BFieldElement = rng.gen();
+        let mut rng = rand::rng();
+        let elem: BFieldElement = rng.random();
         if elem.is_zero() {
             assert_eq!(zero, elem.inverse_or_zero())
         } else {
@@ -1325,10 +1324,10 @@ mod b_prime_field_element_test {
 
     #[test]
     fn test_random_squares() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let p = BFieldElement::P;
         for _ in 0..100 {
-            let a = rng.gen_range(0..p);
+            let a = rng.random_range(0..p);
             let asq = (((a as u128) * (a as u128)) % (p as u128)) as u64;
             let b = BFieldElement::new(a);
             let bsq = BFieldElement::new(asq);
@@ -1353,9 +1352,9 @@ mod b_prime_field_element_test {
 
     #[test]
     fn test_random_raw() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..100 {
-            let e: BFieldElement = rng.gen();
+            let e: BFieldElement = rng.random();
             let bytes = e.raw_bytes();
             let c = BFieldElement::from_raw_bytes(&bytes);
             assert_eq!(e, c);

@@ -84,7 +84,7 @@ fn auth_structure_len(c: &mut Criterion<AuthStructureEncodingLength>) {
                 let mut total_len = AuthStructureEncodingLength(0.0);
                 for _ in 0..iters {
                     let opened_indices = (0..num_opened_indices)
-                        .map(|_| rng.gen_range(0..num_leafs))
+                        .map(|_| rng.random_range(0..num_leafs))
                         .collect_vec();
                     let auth_structure = mt.authentication_structure(&opened_indices).unwrap();
                     let this_len = auth_structure.encode().len();

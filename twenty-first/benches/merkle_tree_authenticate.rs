@@ -74,7 +74,7 @@ impl MerkleTreeSampler {
 
     fn indices_to_open(&mut self) -> Vec<usize> {
         (0..self.num_opened_indices)
-            .map(|_| self.rng.gen_range(0..self.num_leafs()))
+            .map(|_| self.rng.random_range(0..self.num_leafs()))
             .collect()
     }
 

@@ -706,7 +706,6 @@ pub(crate) mod tip5_tests {
     use prop::sample::size_range;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use rand::thread_rng;
     use rand::Rng;
     use rand::RngCore;
     use rayon::prelude::IntoParallelIterator;
@@ -720,8 +719,8 @@ pub(crate) mod tip5_tests {
     impl Tip5 {
         pub(crate) fn randomly_seeded() -> Self {
             let mut sponge = Self::init();
-            let mut rng = thread_rng();
-            sponge.absorb(rng.gen());
+            let mut rng = rand::rng();
+            sponge.absorb(rng.random());
             sponge
         }
     }
@@ -1061,7 +1060,7 @@ pub(crate) mod tip5_tests {
 
     #[test]
     fn test_complex_product() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let mut random_small_i64 = || (rng.next_u32() % (1 << 16)) as i64;
         for _ in 0..1000 {
             let f = (random_small_i64(), random_small_i64());
@@ -1088,9 +1087,9 @@ pub(crate) mod tip5_tests {
 
     #[test]
     fn test_mds_agree() {
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
         let initial_state: [BFieldElement; STATE_SIZE] = (0..STATE_SIZE)
-            .map(|_| BFieldElement::new(rng.gen_range(0..10)))
+            .map(|_| BFieldElement::new(rng.random_range(0..10)))
             .collect_vec()
             .try_into()
             .unwrap();
