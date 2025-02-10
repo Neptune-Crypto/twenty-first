@@ -48,7 +48,3 @@ While twenty-first's version is `0.x.y`, releasing a new version:
 [crates]: https://crates.io/crates/twenty-first/versions
 
 If you do not have the privilege to create git tags or run `cargo publish`, submit a PR and the merger will take care of these.
-
-## Building
-
-For detailed buildings instructions, see the description in `HACKING.md`.
