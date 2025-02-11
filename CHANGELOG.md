@@ -3,6 +3,32 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.48.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.45.0..v0.48.0) – 2025-02-11
+
+### ✨ Features
+
+- *(mmr)* Get auth-path node indices ([38102c84](https://github.com/Neptune-Crypto/twenty-first/commit/38102c84))
+- *(Tip5)* Implement the Hasher trait ([9a6a74ee](https://github.com/Neptune-Crypto/twenty-first/commit/9a6a74ee))
+- Implement `BFieldCodec` for `()` (“Unit”) ([9906d5ef](https://github.com/Neptune-Crypto/twenty-first/commit/9906d5ef))
+- (!) Commit to leaf count when bagging peaks ([7bfc2eda](https://github.com/Neptune-Crypto/twenty-first/commit/7bfc2eda))
+
+### 📚 Documentation
+
+- Document limitation of `BFieldCodec` derive ([2dba3182](https://github.com/Neptune-Crypto/twenty-first/commit/2dba3182))
+
+### ⚙️ Miscellaneous
+
+- (!) *(deps)* Upgrade dependency `rand` to v0.9 ([6c598811](https://github.com/Neptune-Crypto/twenty-first/commit/6c598811))
+- Drop “detailed build instructions” ([b65eb12e](https://github.com/Neptune-Crypto/twenty-first/commit/b65eb12e))
+
+### ♻️ Refactor
+
+- Don't require trait to invert element ([21562072](https://github.com/Neptune-Crypto/twenty-first/commit/21562072))
+
+### ✅ Testing
+
+- Add proptest for `auth_path_node_indices` ([437116f2](https://github.com/Neptune-Crypto/twenty-first/commit/437116f2))
+
 ## [0.45.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.44.1..v0.45.0) – 2025-01-13
 
 ### ✨ Features
