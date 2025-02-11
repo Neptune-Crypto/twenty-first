@@ -12,7 +12,6 @@ use super::shared_basic;
 use super::TOO_MANY_LEAFS_ERR;
 use crate::prelude::*;
 use crate::util_types::mmr::shared_advanced;
-use crate::util_types::shared::bag_peaks;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, GetSize, BFieldCodec)]
 pub struct MmrAccumulator {
@@ -48,7 +47,7 @@ impl MmrAccumulator {
 impl Mmr for MmrAccumulator {
     /// Calculate a commitment to the entire MMR.
     fn bag_peaks(&self) -> Digest {
-        bag_peaks(&self.peaks)
+        bag_peaks(&self.peaks, self.leaf_count)
     }
 
     /// Return the Merkle tree roots of the Merkle trees that this MMR consists
@@ -296,6 +295,23 @@ impl Mmr for MmrAccumulator {
     }
 }
 
+/// Follows the description on
+/// <https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#hashing-and-bagging>
+/// to calculate a root from a list of peaks and the size of the MMR.
+pub(crate) fn bag_peaks(peaks: &[Digest], leaf_count: u64) -> Digest {
+    // use `hash_10` over `hash` or `hash_varlen` to simplify hashing in Triton VM
+    let [lo_limb, hi_limb] = leaf_count.encode()[..] else {
+        panic!("internal error: unknown encoding of type `u64`")
+    };
+    let padded_leaf_count = bfe_array![lo_limb, hi_limb, 0, 0, 0, 0, 0, 0, 0, 0];
+    let hashed_leaf_count = Digest::new(Tip5::hash_10(&padded_leaf_count));
+
+    peaks
+        .iter()
+        .rev()
+        .fold(hashed_leaf_count, |acc, &peak| Tip5::hash_pair(peak, acc))
+}
+
 pub mod util {
     use itertools::Itertools;
 
@@ -455,6 +471,7 @@ impl<'a> Arbitrary<'a> for MmrAccumulator {
 mod accumulator_mmr_tests {
     use std::cmp;
 
+    use insta::assert_snapshot;
     use itertools::izip;
     use itertools::Itertools;
     use num_traits::ConstZero;
@@ -462,8 +479,8 @@ mod accumulator_mmr_tests {
     use proptest::prop_assert_eq;
     use proptest_arbitrary_interop::arb;
     use rand::distr::Uniform;
+    use rand::prelude::*;
     use rand::random;
-    use rand::Rng;
     use test_strategy::proptest;
 
     use super::*;
@@ -956,5 +973,28 @@ mod accumulator_mmr_tests {
         {
             mmr_mp.verify(*mmr_leaf_index, *leaf, &mmra.peaks(), mmra.num_leafs());
         }
+    }
+
+    #[test]
+    fn computing_mmr_root_for_no_leafs_produces_some_digest() {
+        MmrAccumulator::new_from_leafs(vec![]).bag_peaks();
+    }
+
+    #[test]
+    fn bag_peaks_snapshot() {
+        let mut rng = StdRng::seed_from_u64(0x92ca758afeec6d29);
+
+        let empty_mmr = MmrAccumulator::new_from_leafs(vec![]);
+        assert_snapshot!(empty_mmr.bag_peaks().0[0], @"00941080798860502477");
+
+        let one_leaf_mmr = MmrAccumulator::new_from_leafs(vec![rng.random()]);
+        assert_snapshot!(one_leaf_mmr.bag_peaks().0[0], @"16030278140236594076");
+
+        let two_leafs_mmr = MmrAccumulator::new_from_leafs(vec![rng.random()]);
+        assert_snapshot!(two_leafs_mmr.bag_peaks().0[0], @"09405464453414142998");
+
+        let ten_peaks: [Digest; 10] = rng.random();
+        let ten_peak_mmr = MmrAccumulator::init(ten_peaks.to_vec(), 0b11_1111_1111);
+        assert_snapshot!(ten_peak_mmr.bag_peaks().0[0], @"03780783030734820370");
     }
 }

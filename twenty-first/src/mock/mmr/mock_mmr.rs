@@ -2,13 +2,13 @@ use itertools::Itertools;
 
 use crate::math::digest::Digest;
 use crate::prelude::Tip5;
+use crate::util_types::mmr::mmr_accumulator::bag_peaks;
 use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
 use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
 use crate::util_types::mmr::mmr_trait::LeafMutation;
 use crate::util_types::mmr::mmr_trait::Mmr;
 use crate::util_types::mmr::shared_advanced;
 use crate::util_types::mmr::shared_basic;
-use crate::util_types::shared::bag_peaks;
 
 /// MockMmr is available for feature `mock` and for unit tests.
 ///
@@ -29,14 +29,13 @@ use crate::util_types::shared::bag_peaks;
 /// wrapper to this data structure.
 #[derive(Debug, Clone)]
 pub struct MockMmr {
-    digests: MyVec<Digest>,
+    leafs: MyVec<Digest>,
 }
 
 impl Mmr for MockMmr {
     /// Calculate the root for the entire MMR
     fn bag_peaks(&self) -> Digest {
-        let peaks: Vec<Digest> = self.peaks();
-        bag_peaks(&peaks)
+        bag_peaks(&self.peaks(), self.num_leafs())
     }
 
     /// Return the digests of the peaks of the MMR
@@ -49,7 +48,7 @@ impl Mmr for MockMmr {
     /// 1, the `digests` contain must always contain at least one
     /// element: a dummy digest.
     fn is_empty(&self) -> bool {
-        self.digests.len() == 1
+        self.leafs.len() == 1
     }
 
     /// Return the number of leafs in the tree
@@ -68,7 +67,7 @@ impl Mmr for MockMmr {
     /// retrieving a membership proof for a leaf. And the archival and accumulator MMR share
     /// this interface.
     fn append(&mut self, new_leaf: Digest) -> MmrMembershipProof {
-        let node_index = self.digests.len();
+        let node_index = self.leafs.len();
         let leaf_index = shared_advanced::node_index_to_leaf_index(node_index).unwrap();
         self.append_raw(new_leaf);
         self.prove_membership(leaf_index)
@@ -149,7 +148,7 @@ impl MockMmr {
     /// Create a new MockMmr
     pub fn new(pv: Vec<Digest>) -> Self {
         let mut ret = Self {
-            digests: MyVec::from(pv),
+            leafs: MyVec::from(pv),
         };
         ret.fix_dummy();
         ret
@@ -161,35 +160,35 @@ impl MockMmr {
     /// this data structure can be set to the default vector, which
     /// is the empty vector. This method fixes that.
     pub fn fix_dummy(&mut self) {
-        if self.digests.len() == 0 {
-            self.digests.push(Digest::default());
+        if self.leafs.len() == 0 {
+            self.leafs.push(Digest::default());
         }
     }
 
     /// Get a leaf from the MMR, will panic if index is out of range
     pub fn get_leaf(&self, leaf_index: u64) -> Digest {
         let node_index = shared_advanced::leaf_index_to_node_index(leaf_index);
-        self.digests.get(node_index)
+        self.leafs.get(node_index)
     }
 
     /// Update a hash in the existing MockMmr
     pub fn mutate_leaf_raw(&mut self, leaf_index: u64, new_leaf: Digest) {
         // 1. change the leaf value
         let mut node_index = shared_advanced::leaf_index_to_node_index(leaf_index);
-        self.digests.set(node_index, new_leaf);
+        self.leafs.set(node_index, new_leaf);
 
         // 2. Calculate hash changes for all parents
         let mut parent_index = shared_advanced::parent(node_index);
         let mut acc_hash = new_leaf;
 
         // While parent exists in MMR, update parent
-        while parent_index < self.digests.len() {
+        while parent_index < self.leafs.len() {
             let (right_lineage_count, height) =
                 shared_advanced::right_lineage_length_and_own_height(node_index);
             acc_hash = if right_lineage_count != 0 {
                 // node is right child
                 Tip5::hash_pair(
-                    self.digests
+                    self.leafs
                         .get(shared_advanced::left_sibling(node_index, height)),
                     acc_hash,
                 )
@@ -197,11 +196,11 @@ impl MockMmr {
                 // node is left child
                 Tip5::hash_pair(
                     acc_hash,
-                    self.digests
+                    self.leafs
                         .get(shared_advanced::right_sibling(node_index, height)),
                 )
             };
-            self.digests.set(parent_index, acc_hash);
+            self.leafs.set(parent_index, acc_hash);
             node_index = parent_index;
             parent_index = shared_advanced::parent(parent_index);
         }
@@ -221,7 +220,7 @@ impl MockMmr {
         let node_index = shared_advanced::leaf_index_to_node_index(leaf_index);
         let mut top_height: i32 = -1;
         let mut parent_index = node_index;
-        while parent_index < self.digests.len() {
+        while parent_index < self.leafs.len() {
             parent_index = shared_advanced::parent(parent_index);
             top_height += 1;
         }
@@ -235,14 +234,14 @@ impl MockMmr {
             if right_ancestor_count != 0 {
                 // index is right child
                 let left_sibling_index = shared_advanced::left_sibling(index, index_height);
-                authentication_path.push(self.digests.get(left_sibling_index));
+                authentication_path.push(self.leafs.get(left_sibling_index));
 
                 // parent of right child is index + 1
                 index += 1;
             } else {
                 // index is left child
                 let right_sibling_index = shared_advanced::right_sibling(index, index_height);
-                authentication_path.push(self.digests.get(right_sibling_index));
+                authentication_path.push(self.leafs.get(right_sibling_index));
 
                 // parent of left child:
                 index += 1 << (index_height + 1);
@@ -268,21 +267,21 @@ impl MockMmr {
         // 5. Take left child of sibling, continue until a node in tree is found
         let mut peaks_and_heights: Vec<(Digest, u32)> = vec![];
         let (mut top_peak, mut top_height) =
-            shared_advanced::leftmost_ancestor(self.digests.len() - 1);
-        if top_peak > self.digests.len() - 1 {
+            shared_advanced::leftmost_ancestor(self.leafs.len() - 1);
+        if top_peak > self.leafs.len() - 1 {
             top_peak = shared_basic::left_child(top_peak, top_height);
             top_height -= 1;
         }
 
-        peaks_and_heights.push((self.digests.get(top_peak), top_height));
+        peaks_and_heights.push((self.leafs.get(top_peak), top_height));
         let mut height = top_height;
         let mut candidate = shared_advanced::right_sibling(top_peak, height);
         'outer: while height > 0 {
-            '_inner: while candidate > self.digests.len() && height > 0 {
+            '_inner: while candidate > self.leafs.len() && height > 0 {
                 candidate = shared_basic::left_child(candidate, height);
                 height -= 1;
-                if candidate < self.digests.len() {
-                    peaks_and_heights.push((self.digests.get(candidate), height));
+                if candidate < self.leafs.len() {
+                    peaks_and_heights.push((self.leafs.get(candidate), height));
                     candidate = shared_advanced::right_sibling(candidate, height);
                     continue 'outer;
                 }
@@ -294,15 +293,15 @@ impl MockMmr {
 
     /// Append an element to the MockMmr
     pub fn append_raw(&mut self, new_leaf: Digest) {
-        let node_index = self.digests.len();
-        self.digests.push(new_leaf);
+        let node_index = self.leafs.len();
+        self.leafs.push(new_leaf);
         let (right_parent_count, own_height) =
             shared_advanced::right_lineage_length_and_own_height(node_index);
 
         // This function could be rewritten with a while-loop instead of being recursive.
         if right_parent_count != 0 {
             let left_sibling_hash = self
-                .digests
+                .leafs
                 .get(shared_advanced::left_sibling(node_index, own_height));
             let parent_hash: Digest = Tip5::hash_pair(left_sibling_hash, new_leaf);
             self.append_raw(parent_hash);
@@ -315,11 +314,11 @@ impl MockMmr {
             return None;
         }
 
-        let node_index = self.digests.len() - 1;
-        let mut ret = self.digests.pop().unwrap();
+        let node_index = self.leafs.len() - 1;
+        let mut ret = self.leafs.pop().unwrap();
         let (_, mut height) = shared_advanced::right_lineage_length_and_own_height(node_index);
         while height > 0 {
-            ret = self.digests.pop().unwrap();
+            ret = self.leafs.pop().unwrap();
             height -= 1;
         }
 
@@ -367,53 +366,20 @@ impl<T: Clone> MyVec<T> {
 mod mmr_test {
     use itertools::*;
     use rand::random;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::other::*;
     use crate::math::tip5::Tip5;
     use crate::mock::mmr::*;
-    use crate::util_types::merkle_tree::merkle_tree_test::MerkleTreeToTest;
-    use crate::util_types::merkle_tree::*;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
-    use crate::util_types::mmr::shared_advanced::get_peak_heights;
     use crate::util_types::mmr::shared_advanced::get_peak_heights_and_peak_node_indices;
 
     impl MockMmr {
         /// Return the number of nodes in all the trees in the MMR
         fn count_nodes(&mut self) -> u64 {
-            self.digests.len() - 1
+            self.leafs.len() - 1
         }
-    }
-
-    /// Calculate a Merkle root from a list of digests of arbitrary length.
-    pub fn root_from_arbitrary_number_of_digests(digests: &[Digest]) -> Digest {
-        let mut trees = vec![];
-        let mut num_processed_digests = 0;
-        for tree_height in get_peak_heights(digests.len() as u64) {
-            let num_leafs_in_tree = 1 << tree_height;
-            let leaf_digests =
-                &digests[num_processed_digests..num_processed_digests + num_leafs_in_tree];
-            let tree = MerkleTree::par_new(leaf_digests).unwrap();
-            num_processed_digests += num_leafs_in_tree;
-            trees.push(tree);
-        }
-        let roots = trees.iter().map(|t| t.root()).collect_vec();
-        bag_peaks(&roots)
-    }
-
-    #[test]
-    fn computing_mmr_root_for_no_leafs_produces_some_digest() {
-        root_from_arbitrary_number_of_digests(&[]);
-    }
-
-    #[proptest(cases = 30)]
-    fn mmr_root_of_arbitrary_number_of_leafs_is_merkle_root_when_number_of_leafs_is_a_power_of_two(
-        test_tree: MerkleTreeToTest,
-    ) {
-        let root = root_from_arbitrary_number_of_digests(test_tree.tree.leafs());
-        assert_eq!(test_tree.tree.root(), root);
     }
 
     #[test]
@@ -428,8 +394,7 @@ mod mmr_test {
         assert_eq!(archival_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
         assert_eq!(
             archival_mmr.bag_peaks(),
-            root_from_arbitrary_number_of_digests(&[]),
-            "Bagged peaks for empty MMR must agree with MT root finder"
+            MmrAccumulator::new_from_leafs(vec![]).bag_peaks(),
         );
         assert_eq!(0, archival_mmr.count_nodes());
         assert!(accumulator_mmr.is_empty());
@@ -587,10 +552,10 @@ mod mmr_test {
         // modified MMR, and verify that the two MMRs are equivalent
 
         let archival_mmr_new: MockMmr = get_mock_ammr_from_digests(leaf_hashes);
-        assert_eq!(archival_mmr.digests.len(), archival_mmr_new.digests.len());
+        assert_eq!(archival_mmr.leafs.len(), archival_mmr_new.leafs.len());
 
         for i in 0..leaf_count {
-            assert_eq!(archival_mmr.digests.get(i), archival_mmr_new.digests.get(i));
+            assert_eq!(archival_mmr.leafs.get(i), archival_mmr_new.leafs.get(i));
         }
     }
 
@@ -603,10 +568,8 @@ mod mmr_test {
             archival_mmr_small.bag_peaks(),
             accumulator_mmr_small.bag_peaks()
         );
-        assert_eq!(
-            archival_mmr_small.bag_peaks(),
-            bag_peaks(&accumulator_mmr_small.peaks())
-        );
+
+        // bagged peaks must never correspond to any peak
         assert!(!accumulator_mmr_small
             .peaks()
             .iter()
@@ -874,13 +837,9 @@ mod mmr_test {
             assert_eq!(peak_count, actual_peak_count);
 
             // Verify that MMR root from odd number of digests and MMR bagged peaks agree
-            let mmra_root = mmr.bag_peaks();
-            let mt_root = root_from_arbitrary_number_of_digests(&input_hashes);
-
-            assert_eq!(
-                mmra_root, mt_root,
-                "MMRA bagged peaks and MT root must agree"
-            );
+            let mock_mmr_root = mmr.bag_peaks();
+            let mmra_root = MmrAccumulator::new_from_leafs(input_hashes.clone()).bag_peaks();
+            assert_eq!(mock_mmr_root, mmra_root);
 
             // Get an authentication path for **all** values in MMR,
             // verify that it is valid
@@ -989,12 +948,9 @@ mod mmr_test {
             assert_eq!(peak_count, original_peaks_and_heights.len() as u64);
 
             // Verify that MMR root from odd number of digests and MMR bagged peaks agree
-            let mmra_root = mmr.bag_peaks();
-            let mt_root = root_from_arbitrary_number_of_digests(&input_digests);
-            assert_eq!(
-                mmra_root, mt_root,
-                "MMRA bagged peaks and MT root must agree"
-            );
+            let mock_mmr_root = mmr.bag_peaks();
+            let mmra_root = MmrAccumulator::new_from_leafs(input_digests.clone()).bag_peaks();
+            assert_eq!(mock_mmr_root, mmra_root);
 
             // Get an authentication path for **all** values in MMR,
             // verify that it is valid
