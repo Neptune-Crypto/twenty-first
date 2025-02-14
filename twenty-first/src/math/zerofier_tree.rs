@@ -122,7 +122,7 @@ mod test {
         points: Vec<BFieldElement>,
     ) {
         let zerofier_tree = ZerofierTree::new_from_domain(&points);
-        let ZerofierTree::Branch(ref branch) = &zerofier_tree else {
+        let ZerofierTree::Branch(ref branch) = zerofier_tree else {
             panic!("not enough leafs");
         };
         prop_assert_eq!(

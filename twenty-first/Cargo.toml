@@ -53,6 +53,10 @@ serde_json = "1.0"
 sha3 = "^0.10.8"
 thiserror = "2.0"
 
+[lints.rust]
+edition-2024-expr-fragment-specifier = "allow" # accept the new `expr` fragment specifier rules
+rust-2024-compatibility = "warn"
+
 [[bench]]
 name = "tip5"
 harness = false

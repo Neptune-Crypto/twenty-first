@@ -187,7 +187,7 @@ impl MerkleTree {
     fn authentication_structure_node_indices(
         num_leafs: usize,
         leaf_indices: &[usize],
-    ) -> Result<impl ExactSizeIterator<Item = usize>> {
+    ) -> Result<impl ExactSizeIterator<Item = usize> + use<>> {
         // The set of indices of nodes that need to be included in the authentications
         // structure. In principle, every node of every authentication path is needed.
         // The root is never needed. Hence, it is not considered below.
