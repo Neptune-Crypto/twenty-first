@@ -193,10 +193,9 @@ impl TryFrom<Digest> for XFieldElement {
     type Error = TryFromXFieldElementError;
 
     fn try_from(digest: Digest) -> Result<Self, Self::Error> {
-        let [c0, c1, c2, zero_0, zero_1] = digest.values();
-        if zero_0 != BFieldElement::ZERO || zero_1 != BFieldElement::ZERO {
+        let Digest([c0, c1, c2, BFieldElement::ZERO, BFieldElement::ZERO]) = digest else {
             return Err(TryFromXFieldElementError::InvalidDigest);
-        }
+        };
 
         Ok(Self::new([c0, c1, c2]))
     }
