@@ -7,9 +7,9 @@ use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
 
+use super::TOO_MANY_LEAFS_ERR;
 use super::mmr_trait::LeafMutation;
 use super::shared_basic;
-use super::TOO_MANY_LEAFS_ERR;
 use crate::prelude::*;
 use crate::util_types::mmr::shared_advanced;
 
@@ -472,8 +472,8 @@ mod accumulator_mmr_tests {
     use std::cmp;
 
     use insta::assert_snapshot;
-    use itertools::izip;
     use itertools::Itertools;
+    use itertools::izip;
     use num_traits::ConstZero;
     use proptest::collection::vec;
     use proptest::prop_assert_eq;
@@ -487,8 +487,8 @@ mod accumulator_mmr_tests {
     use crate::math::b_field_element::BFieldElement;
     use crate::math::other::random_elements;
     use crate::math::tip5::Tip5;
-    use crate::mock::mmr::get_mock_ammr_from_digests;
     use crate::mock::mmr::MockMmr;
+    use crate::mock::mmr::get_mock_ammr_from_digests;
 
     impl From<MockMmr> for MmrAccumulator {
         fn from(ammr: MockMmr) -> Self {
@@ -728,38 +728,23 @@ mod accumulator_mmr_tests {
             assert_eq!(ammr_mps, mmra_mps);
 
             // Verify that all membership proofs still work
-            assert!(mmra_mps
-                .iter()
-                .zip(terminal_leafs_for_mps.iter())
-                .zip(membership_proof_indices.iter())
-                .all(|((mp, &leaf), leaf_index)| mp.verify(
-                    *leaf_index,
-                    leaf,
-                    &mmra.peaks(),
-                    mmra.num_leafs()
-                )));
+            let peaks = mmra.peaks();
+            let num_leafs = mmra.num_leafs();
+            for (membership_proof, leaf, leaf_index) in
+                izip!(mmra_mps, terminal_leafs_for_mps, membership_proof_indices)
+            {
+                assert!(membership_proof.verify(leaf_index, leaf, &peaks, num_leafs));
+            }
 
             // Manually construct an MMRA from the new data and verify that peaks and leaf
             // count matches
-            assert!(
-                mutated_leaf_count == 0 || ammr_copy.peaks() != ammr.peaks(),
-                "If mutated leaf count is non-zero, at least on peaks must be different"
-            );
-            mutation_data.into_iter().for_each(
-                |LeafMutation {
-                     leaf_index,
-                     new_leaf,
-                     ..
-                 }| {
-                    ammr_copy.mutate_leaf_raw(leaf_index, new_leaf);
-                },
-            );
-            assert_eq!(
-                ammr_copy.peaks(),
-                ammr.peaks(),
-                "Mutation though batch mutation function must transform the MMR \
-                like a list of individual leaf mutations"
-            );
+            if mutated_leaf_count != 0 {
+                assert_ne!(ammr_copy.peaks(), ammr.peaks());
+            }
+            for mutation in mutation_data {
+                ammr_copy.mutate_leaf_raw(mutation.leaf_index, mutation.new_leaf);
+            }
+            assert_eq!(ammr_copy.peaks(), ammr.peaks());
         }
     }
 

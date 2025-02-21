@@ -1,9 +1,15 @@
 [package]
 name = "bfieldcodec_derive"
 version = "0.7.0"
-edition = "2021"
-license = "GPL-2.0"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
 description = "Derive macro for BFieldCodec."
+license.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
 
 [dependencies]
 syn = { version = "^2", features = ["full", "derive"] }
@@ -12,3 +18,6 @@ proc-macro2 = "1.0"
 
 [lib]
 proc-macro = true
+
+[lints]
+workspace = true

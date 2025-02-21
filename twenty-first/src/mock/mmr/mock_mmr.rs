@@ -2,8 +2,8 @@ use itertools::Itertools;
 
 use crate::math::digest::Digest;
 use crate::prelude::Tip5;
-use crate::util_types::mmr::mmr_accumulator::bag_peaks;
 use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
+use crate::util_types::mmr::mmr_accumulator::bag_peaks;
 use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
 use crate::util_types::mmr::mmr_trait::LeafMutation;
 use crate::util_types::mmr::mmr_trait::Mmr;
@@ -570,10 +570,12 @@ mod mmr_test {
         );
 
         // bagged peaks must never correspond to any peak
-        assert!(!accumulator_mmr_small
+        let bag = accumulator_mmr_small.bag_peaks();
+        let no_peak_is_bag = accumulator_mmr_small
             .peaks()
-            .iter()
-            .any(|peak| *peak == accumulator_mmr_small.bag_peaks()));
+            .into_iter()
+            .all(|peak| peak != bag);
+        assert!(no_peak_is_bag);
     }
 
     #[test]

@@ -1,12 +1,12 @@
 use std::hint::black_box;
 
-use criterion::criterion_group;
-use criterion::criterion_main;
-use criterion::measurement::WallTime;
 use criterion::BenchmarkGroup;
 use criterion::BenchmarkId;
 use criterion::Criterion;
 use criterion::Throughput;
+use criterion::criterion_group;
+use criterion::criterion_main;
+use criterion::measurement::WallTime;
 use twenty_first::math::b_field_element::BFieldElement;
 use twenty_first::math::other::random_elements;
 use twenty_first::math::x_field_element::XFieldElement;

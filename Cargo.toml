@@ -2,5 +2,18 @@
 members = ["twenty-first", "bfieldcodec_derive"]
 resolver = "2"
 
+[workspace.package]
+authors = ["Triton Software AG"]
+edition = "2024"
+rust-version = "1.85"
+
+license = "GPL-2.0"
+homepage = "https://github.com/Neptune-Crypto/twenty-first"
+documentation = "https://github.com/Neptune-Crypto/twenty-first"
+repository = "https://github.com/Neptune-Crypto/twenty-first"
+readme = "README.md"
+
+[workspace.lints]
+
 [profile.release]
 lto = "thin"

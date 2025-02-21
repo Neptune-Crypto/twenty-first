@@ -1,7 +1,7 @@
-use std::collections::hash_map::RandomState;
-use std::collections::hash_set::Intersection;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::hash_map::RandomState;
+use std::collections::hash_set::Intersection;
 use std::fmt::Debug;
 use std::iter::FromIterator;
 
@@ -11,10 +11,10 @@ use itertools::Itertools;
 use serde::Deserialize;
 use serde::Serialize;
 
+use super::TOO_MANY_LEAFS_ERR;
 use super::mmr_trait::LeafMutation;
 use super::shared_advanced;
 use super::shared_basic;
-use super::TOO_MANY_LEAFS_ERR;
 use crate::error::U32_TO_USIZE_ERR;
 use crate::error::USIZE_TO_U64_ERR;
 use crate::prelude::*;
@@ -632,8 +632,8 @@ impl MmrMembershipProof {
 mod mmr_membership_proof_test {
     use itertools::Itertools;
     use proptest_arbitrary_interop::arb;
-    use rand::random;
     use rand::Rng;
+    use rand::random;
     use test_strategy::proptest;
 
     use super::*;
@@ -641,10 +641,10 @@ mod mmr_membership_proof_test {
     use crate::math::digest::Digest;
     use crate::math::other::random_elements;
     use crate::math::tip5::Tip5;
-    use crate::mock::mmr::get_mock_ammr_from_digests;
     use crate::mock::mmr::MockMmr;
-    use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
+    use crate::mock::mmr::get_mock_ammr_from_digests;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
+    use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
     use crate::util_types::mmr::mmr_trait::Mmr;
 
     #[test]
@@ -1319,15 +1319,12 @@ mod mmr_membership_proof_test {
         let new_leaf: Digest = random();
         let old_peaks = mmra.peaks();
         mmra.append(new_leaf);
-        assert!(!mps
+        let some_proof_is_invalid = mps
             .iter()
-            .zip_eq(specified_leafs.iter())
-            .all(|(mp, (leaf_index, leaf))| mp.verify(
-                *leaf_index,
-                *leaf,
-                &mmra.peaks(),
-                mmra.num_leafs()
-            )));
+            .zip_eq(&specified_leafs)
+            .any(|(mp, &(idx, leaf))| !mp.verify(idx, leaf, &mmra.peaks(), mmra.num_leafs()));
+        assert!(some_proof_is_invalid);
+
         MmrMembershipProof::batch_update_from_append(
             &mut mps.iter_mut().collect_vec(),
             &specified_indices.into_iter().collect_vec(),
@@ -1336,15 +1333,11 @@ mod mmr_membership_proof_test {
             &old_peaks,
         );
 
-        assert!(mps
-            .iter()
-            .zip_eq(specified_leafs.iter())
-            .all(|(mp, (leaf_index, leaf))| mp.verify(
-                *leaf_index,
-                *leaf,
-                &mmra.peaks(),
-                mmra.num_leafs()
-            )));
+        let all_proofs_are_valid = mps
+            .into_iter()
+            .zip_eq(specified_leafs)
+            .all(|(mp, (idx, leaf))| mp.verify(idx, leaf, &mmra.peaks(), mmra.num_leafs()));
+        assert!(all_proofs_are_valid);
     }
 
     #[test]

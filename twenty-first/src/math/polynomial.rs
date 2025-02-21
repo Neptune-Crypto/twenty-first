@@ -2223,13 +2223,7 @@ impl Polynomial<'_, BFieldElement> {
     /// polynomials of degree less than this threshold.
     ///
     /// Extracted from `cargo bench --bench poly_clean_div` on mjolnir.
-    const CLEAN_DIVIDE_CUTOFF_THRESHOLD: isize = {
-        if cfg!(test) {
-            0
-        } else {
-            1 << 9
-        }
-    };
+    const CLEAN_DIVIDE_CUTOFF_THRESHOLD: isize = { if cfg!(test) { 0 } else { 1 << 9 } };
 
     /// A fast way of dividing two polynomials. Only works if division is clean, _i.e._, if the
     /// remainder of polynomial long division is [zero]. This **must** be known ahead of time. If
@@ -3878,12 +3872,11 @@ mod test_polynomials {
 
     #[test]
     fn formal_derivative_of_zero_is_zero() {
-        assert!(Polynomial::<BFieldElement>::zero()
-            .formal_derivative()
-            .is_zero());
-        assert!(Polynomial::<XFieldElement>::zero()
-            .formal_derivative()
-            .is_zero());
+        let bfe_0_poly = Polynomial::<BFieldElement>::zero();
+        assert!(bfe_0_poly.formal_derivative().is_zero());
+
+        let xfe_0_poly = Polynomial::<XFieldElement>::zero();
+        assert!(xfe_0_poly.formal_derivative().is_zero());
     }
 
     #[proptest]

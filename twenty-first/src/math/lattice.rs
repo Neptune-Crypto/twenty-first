@@ -633,17 +633,17 @@ pub mod kem {
     use itertools::Itertools;
     use serde_derive::Deserialize;
     use serde_derive::Serialize;
-    use sha3::digest::ExtendableOutput;
-    use sha3::digest::Update;
     use sha3::Digest as Sha3Digest;
     use sha3::Sha3_256;
     use sha3::Shake256;
+    use sha3::digest::ExtendableOutput;
+    use sha3::digest::Update;
 
-    use super::embed_msg;
-    use super::extract_msg;
+    use super::CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES;
     use super::CyclotomicRingElement;
     use super::ModuleElement;
-    use super::CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES;
+    use super::embed_msg;
+    use super::extract_msg;
     use crate::math::b_field_element::BFieldElement;
 
     #[derive(PartialEq, Eq, Copy, Clone, Debug, Serialize, Deserialize)]
@@ -817,14 +817,14 @@ mod lattice_test {
     use itertools::Itertools;
     use num_traits::ConstOne;
     use num_traits::Zero;
-    use rand::random;
     use rand::RngCore;
+    use rand::random;
     use sha3::Digest as Sha3Digest;
     use sha3::Sha3_256;
 
-    use super::kem::shake256;
-    use super::kem::SecretKey;
     use super::kem::CIPHERTEXT_SIZE_IN_BFES;
+    use super::kem::SecretKey;
+    use super::kem::shake256;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::lattice::kem::Ciphertext;
     use crate::math::lattice::kem::PublicKey;

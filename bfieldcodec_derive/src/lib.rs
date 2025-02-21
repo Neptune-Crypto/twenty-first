@@ -18,9 +18,6 @@ use std::collections::HashMap;
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::parse_macro_input;
-use syn::punctuated::Punctuated;
-use syn::token::Comma;
 use syn::Attribute;
 use syn::DeriveInput;
 use syn::Field;
@@ -28,6 +25,9 @@ use syn::Fields;
 use syn::Ident;
 use syn::Type;
 use syn::Variant;
+use syn::parse_macro_input;
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
 
 /// Derives `BFieldCodec` for structs and enums.
 ///

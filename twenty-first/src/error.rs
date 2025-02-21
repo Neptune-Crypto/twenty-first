@@ -4,9 +4,9 @@ use thiserror::Error;
 
 pub use crate::math::bfield_codec::BFieldCodecError;
 pub use crate::math::bfield_codec::PolynomialBFieldCodecError;
+use crate::prelude::BFieldElement;
 use crate::prelude::tip5::Digest;
 use crate::prelude::x_field_element::EXTENSION_DEGREE;
-use crate::prelude::BFieldElement;
 pub use crate::util_types::merkle_tree::MerkleTreeError;
 
 pub(crate) const USIZE_TO_U64_ERR: &str =

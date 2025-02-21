@@ -25,8 +25,8 @@ pub fn get_mock_ammr_from_digests(digests: Vec<Digest>) -> MockMmr {
 mod shared_tests_tests {
     use hashbrown::HashSet;
     use itertools::Itertools;
-    use rand::random;
     use rand::Rng;
+    use rand::random;
 
     use super::*;
     use crate::math::other::random_elements;

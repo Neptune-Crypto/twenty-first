@@ -13,8 +13,8 @@ use std::ops::SubAssign;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
 use num_traits::Zero;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 pub trait CyclicGroupGenerator
 where

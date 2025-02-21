@@ -1,15 +1,16 @@
 [package]
 name = "twenty-first"
 version = "0.48.0"
-authors = ["Triton Software AG"]
-edition = "2021"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
-license = "GPL-2.0"
 description = "Collection of mathematics routines and cryptography for the twenty-first century."
-homepage = "https://github.com/Neptune-Crypto/twenty-first"
-documentation = "https://github.com/Neptune-Crypto/twenty-first"
-repository = "https://github.com/Neptune-Crypto/twenty-first"
-readme = "../README.md"
+license.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+readme.workspace = true
 
 keywords = ["polynomial", "merkle-tree", "post-quantum", "algebra", "tip5"]
 categories = ["cryptography", "mathematics"]
@@ -53,9 +54,8 @@ serde_json = "1.0"
 sha3 = "^0.10.8"
 thiserror = "2.0"
 
-[lints.rust]
-edition-2024-expr-fragment-specifier = "allow" # accept the new `expr` fragment specifier rules
-rust-2024-compatibility = "warn"
+[lints]
+workspace = true
 
 [[bench]]
 name = "tip5"

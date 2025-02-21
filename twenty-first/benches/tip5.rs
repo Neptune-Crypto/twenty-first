@@ -1,7 +1,7 @@
-use criterion::criterion_group;
-use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
+use criterion::criterion_group;
+use criterion::criterion_main;
 use rand::random;
 use rayon::prelude::*;
 use twenty_first::math::other::random_elements;

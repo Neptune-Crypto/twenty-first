@@ -12,9 +12,9 @@ use num_bigint::BigUint;
 use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
+use rand::Rng;
 use rand::distr::Distribution;
 use rand::distr::StandardUniform;
-use rand::Rng;
 use serde_big_array;
 use serde_big_array::BigArray;
 use serde_derive::Deserialize;
@@ -385,9 +385,9 @@ impl<const N: usize> BFieldCodec for U32s<N> {
 
 #[cfg(test)]
 mod u32s_tests {
-    use rand::random;
     use rand::Rng;
     use rand::RngCore;
+    use rand::random;
 
     use super::*;
     use crate::math::other::random_elements;

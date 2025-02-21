@@ -1,7 +1,7 @@
-use criterion::criterion_group;
-use criterion::criterion_main;
 use criterion::BenchmarkId;
 use criterion::Criterion;
+use criterion::criterion_group;
+use criterion::criterion_main;
 use twenty_first::math::b_field_element::BFieldElement;
 use twenty_first::math::other::random_elements;
 use twenty_first::math::polynomial::Polynomial;

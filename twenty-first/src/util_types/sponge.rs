@@ -58,9 +58,9 @@ pub trait Sponge: Clone + Debug + Default + Send + Sync {
 mod tests {
     use std::ops::Mul;
 
+    use rand::Rng;
     use rand::distr::Distribution;
     use rand::distr::StandardUniform;
-    use rand::Rng;
 
     use super::*;
     use crate::math::digest::Digest;

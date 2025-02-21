@@ -15,9 +15,9 @@ use num_traits::ConstOne;
 use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
+use rand::Rng;
 use rand::distr::Distribution;
 use rand::distr::StandardUniform;
-use rand::Rng;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -585,8 +585,8 @@ impl ModPowU32 for XFieldElement {
 
 #[cfg(test)]
 mod tests {
-    use itertools::izip;
     use itertools::Itertools;
+    use itertools::izip;
     use num_traits::ConstOne;
     use proptest::collection::vec;
     use proptest::prelude::*;
