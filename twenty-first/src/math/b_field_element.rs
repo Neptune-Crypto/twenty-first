@@ -226,7 +226,7 @@ impl BFieldElement {
     fn try_new(v: u64) -> Result<Self, ParseBFieldElementError> {
         Self::is_canonical(v)
             .then(|| Self::new(v))
-            .ok_or(ParseBFieldElementError::NotCanonical(v))
+            .ok_or(ParseBFieldElementError::NotCanonical(i128::from(v)))
     }
 
     #[inline]
@@ -427,8 +427,17 @@ impl FromStr for BFieldElement {
     type Err = ParseBFieldElementError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let parsed = s.parse().map_err(Self::Err::ParseU64Error)?;
-        Self::try_new(parsed)
+        let parsed = s.parse::<i128>().map_err(Self::Err::ParseIntError)?;
+
+        let p = i128::from(Self::P);
+        let normalized = match parsed {
+            n if n <= -p => return Err(Self::Err::NotCanonical(parsed)),
+            n if n < 0 => n + p,
+            n => n,
+        };
+
+        let bfe_value = u64::try_from(normalized).map_err(|_| Self::Err::NotCanonical(parsed))?;
+        Self::try_new(bfe_value)
     }
 }
 
@@ -837,19 +846,46 @@ mod b_prime_field_element_test {
         prop_assert_eq!(bfe, deserialized);
     }
 
+    #[test]
+    fn parsing_interval_is_open_minus_p_to_p() {
+        let p = i128::from(BFieldElement::P);
+        let display_then_parse = |v: i128| BFieldElement::from_str(&v.to_string());
+
+        assert!(display_then_parse(-p).is_err());
+        assert!(display_then_parse(-p + 1).is_ok());
+        assert!(display_then_parse(p - 1).is_ok());
+        assert!(display_then_parse(p).is_err());
+    }
+
     #[proptest]
-    fn parsing_string_representing_canonical_u64_gives_correct_bfield_element(
+    fn parsing_string_representing_canonical_negative_integer_gives_correct_bfield_element(
         #[strategy(0..=BFieldElement::MAX)] v: u64,
     ) {
-        let bfe = BFieldElement::from_str(&v.to_string()).unwrap();
+        let bfe = BFieldElement::from_str(&(-i128::from(v)).to_string())?;
+        prop_assert_eq!(BFieldElement::P - v, bfe.value());
+    }
+
+    #[proptest]
+    fn parsing_string_representing_canonical_positive_integer_gives_correct_bfield_element(
+        #[strategy(0..=BFieldElement::MAX)] v: u64,
+    ) {
+        let bfe = BFieldElement::from_str(&v.to_string())?;
         prop_assert_eq!(v, bfe.value());
     }
 
     #[proptest]
-    fn parsing_string_representing_too_big_u64_as_bfield_element_gives_error(
-        #[strategy(BFieldElement::P..)] v: u64,
+    fn parsing_string_representing_too_big_positive_integer_as_bfield_element_gives_error(
+        #[strategy(i128::from(BFieldElement::P)..)] v: i128,
     ) {
-        let err = BFieldElement::from_str(&v.to_string()).err().unwrap();
+        let err = BFieldElement::from_str(&v.to_string()).unwrap_err();
+        prop_assert_eq!(ParseBFieldElementError::NotCanonical(v), err);
+    }
+
+    #[proptest]
+    fn parsing_string_representing_too_small_negative_integer_as_bfield_element_gives_error(
+        #[strategy(..=i128::from(BFieldElement::P))] v: i128,
+    ) {
+        let err = BFieldElement::from_str(&v.to_string()).unwrap_err();
         prop_assert_eq!(ParseBFieldElementError::NotCanonical(v), err);
     }
 
@@ -941,6 +977,22 @@ mod b_prime_field_element_test {
 
         let minus_fifteen: BFieldElement = BFieldElement::new(BFieldElement::P - 15);
         assert_eq!("-15", format!("{minus_fifteen}"));
+    }
+
+    #[test]
+    fn display_and_from_str_are_reciprocal_unit_test() {
+        for bfe in bfe_array![
+            -1000, -500, -200, -100, -10, -1, 0, 1, 10, 100, 200, 500, 1000
+        ] {
+            let bfe_again = bfe.to_string().parse().unwrap();
+            assert_eq!(bfe, bfe_again);
+        }
+    }
+
+    #[proptest]
+    fn display_and_from_str_are_reciprocal_prop_test(bfe: BFieldElement) {
+        let bfe_again = bfe.to_string().parse()?;
+        prop_assert_eq!(bfe, bfe_again);
     }
 
     #[test]

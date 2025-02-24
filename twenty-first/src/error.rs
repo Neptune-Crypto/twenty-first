@@ -17,11 +17,11 @@ pub(crate) const U32_TO_USIZE_ERR: &str =
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 #[non_exhaustive]
 pub enum ParseBFieldElementError {
-    #[error("invalid `u64`")]
-    ParseU64Error(#[source] <u64 as FromStr>::Err),
+    #[error("invalid `i128`")]
+    ParseIntError(#[source] <i128 as FromStr>::Err),
 
-    #[error("non-canonical {0} >= {p} == `BFieldElement::P`", p = BFieldElement::P)]
-    NotCanonical(u64),
+    #[error("{0} must be in canonical (open) interval (-{p}, {p})", p = BFieldElement::P - 1)]
+    NotCanonical(i128),
 
     #[error(
         "incorrect number of bytes: {0} != {bytes} == `BFieldElement::BYTES`",
