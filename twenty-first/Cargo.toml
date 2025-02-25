@@ -58,6 +58,10 @@ thiserror = "2.0"
 workspace = true
 
 [[bench]]
+name = "block_fast_kernel_mast_hash"
+harness = false
+
+[[bench]]
 name = "tip5"
 harness = false
 
