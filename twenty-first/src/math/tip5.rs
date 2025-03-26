@@ -668,9 +668,9 @@ impl Sponge for Tip5 {
     }
 
     fn squeeze(&mut self) -> [BFieldElement; RATE] {
-        let produce: [BFieldElement; RATE] = (&self.state[..RATE]).try_into().unwrap();
         self.permutation();
 
+        let produce: [BFieldElement; RATE] = (&self.state[..RATE]).try_into().unwrap();
         produce
     }
 }
