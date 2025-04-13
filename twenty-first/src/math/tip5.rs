@@ -561,8 +561,15 @@ impl Tip5 {
         trace
     }
 
-    /// Hash 10 elements, or two digests. There is no padding because
-    /// the input length is fixed.
+    /// Hash 10 [`BFieldElement`]s.
+    ///
+    /// There is no input-padding because the input length is fixed.
+    ///
+    /// When you want to hash together two [`Digest`]s, use [`Self::hash_pair`]
+    /// instead. In some rare cases you do want to hash a fixed-length string
+    /// of individual [`BFieldElement`]s, which is why this function is exposed.
+    ///
+    /// See also: [`Self::hash_pair`], [`Self::hash`], [`Self::hash_varlen`].
     pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; Digest::LEN] {
         let mut sponge = Self::new(Domain::FixedLength);
 
@@ -575,6 +582,12 @@ impl Tip5 {
         sponge.state[..Digest::LEN].try_into().unwrap()
     }
 
+    /// Hash two [`Digest`]s together.
+    ///
+    /// This function is syntax sugar for calling [`Self::hash_10`] on the
+    /// concatenation of the digests' values.
+    ///
+    /// See also: [`Self::hash_10`], [`Self::hash`], [`Self::hash_varlen`].
     pub fn hash_pair(left: Digest, right: Digest) -> Digest {
         let mut sponge = Self::new(Domain::FixedLength);
         sponge.state[..Digest::LEN].copy_from_slice(&left.values());
@@ -586,16 +599,35 @@ impl Tip5 {
         Digest::new(digest_values)
     }
 
+    /// Hash an object based on its [`BFieldCodec`]-encoding.
+    ///
     /// Thin wrapper around [`hash_varlen`](Self::hash_varlen).
+    ///
+    /// See also: [`Self::hash_10`], [`Self::hash_pair`], [`Self::hash_varlen`].
     pub fn hash<T: BFieldCodec>(value: &T) -> Digest {
         Self::hash_varlen(&value.encode())
     }
 
     /// Hash a variable-length sequence of [`BFieldElement`].
     ///
-    /// - Apply the correct padding
-    /// - [Sponge::pad_and_absorb_all()]
-    /// - [Sponge::squeeze()] once.
+    /// This function pads the input as its length is variable.
+    ///
+    /// Note that [`Self::hash_varlen`] and [`Self::hash_10`] are different
+    /// functions, even when the input to the former, after padding, agrees with
+    /// the input to the latter. The difference comes from the initial value of
+    /// the capacity-part of the state, which in the case of variable-length
+    /// hashing is all-ones but in the case of fixed-length hashing is
+    /// all-zeroes.
+    ///
+    /// Prefer [`Self::hash`] whenever an object is being hashed whose type
+    /// implements [`BFieldCodec`]. However, such an object is not always
+    /// available, which is why this function is exposed.
+    ///
+    /// See also: [`Self::hash_10`], [`Self::hash_pair`], [`Self::hash`].
+    //
+    // - Apply the correct padding
+    // - [Sponge::pad_and_absorb_all()]
+    // - [Sponge::squeeze()] once.
     pub fn hash_varlen(input: &[BFieldElement]) -> Digest {
         let mut sponge = Self::init();
         sponge.pad_and_absorb_all(input);
