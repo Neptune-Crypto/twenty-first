@@ -658,7 +658,14 @@ pub mod merkle_tree_test {
         #[strategy(arb())]
         pub tree: MerkleTree,
 
-        #[strategy(vec((0 as MerkleTreeLeafIndex)..#tree.num_leafs(), 0..(#tree.num_leafs() as usize)))]
+        #[
+            strategy(
+                vec(
+                    (0 as MerkleTreeLeafIndex)..#tree.num_leafs(),
+                    0..(#tree.num_leafs() as usize)
+                )
+            )
+        ]
         pub selected_indices: Vec<MerkleTreeLeafIndex>,
     }
 
@@ -834,7 +841,14 @@ pub mod merkle_tree_test {
     #[proptest(cases = 30)]
     fn checking_set_inclusion_of_items_not_in_set_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
-        #[strategy(vec(0..#test_tree.tree.num_leafs(), 1..=(#test_tree.tree.num_leafs() as usize)))]
+        #[
+            strategy(
+                vec(
+                    0..#test_tree.tree.num_leafs(),
+                    1..=(#test_tree.tree.num_leafs() as usize)
+                )
+            )
+        ]
         spurious_indices: Vec<MerkleTreeLeafIndex>,
         #[strategy(vec(any::<Digest>(), #spurious_indices.len()))] spurious_digests: Vec<Digest>,
     ) {
