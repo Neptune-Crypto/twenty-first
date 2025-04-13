@@ -42,8 +42,6 @@ const MAX_NUM_NODES: MerkleTreeNodeIndex =
 const MAX_NUM_LEAFS: MerkleTreeLeafIndex = MAX_NUM_NODES / 2;
 
 /// The maximum height of Merkle trees that functions in this module support.
-///
-/// See also: [`MAX_NUM_NODES`], [`MAX_NUM_LEAFS`].
 pub const MAX_TREE_HEIGHT: MerkleTreeHeight = MAX_NUM_LEAFS.ilog2() as MerkleTreeHeight;
 
 /// The index of the root node.
@@ -51,18 +49,18 @@ pub(crate) const ROOT_INDEX: MerkleTreeNodeIndex = 1;
 
 type Result<T> = result::Result<T, MerkleTreeError>;
 
-/// A [Merkle tree][merkle_tree] is a binary tree of [digests](Digest) that is
+/// A [Merkle tree][1] is a binary tree of [digests](Digest) that is
 /// used to efficiently prove the inclusion of items in a set. Set inclusion can
 /// be verified through an [inclusion proof](MerkleTreeInclusionProof). This
-/// struct can hold at most 2^25 digests[^1], limiting the height of the tree to
+/// struct can hold at most 2^25 digests[^2], limiting the height of the tree to
 /// 2^24. However, the associated functions (*i.e.*, the ones that don't take
 /// `self`) make abstraction of this limitation and work for Merkle trees of up
 /// to 2^63 nodes, 2^62 leafs, or height up to 62.
 ///
 /// The used hash function is [`Tip5`].
 ///
-/// [^1]: https://github.com/Neptune-Crypto/twenty-first/pull/250#issuecomment-2782490889
-/// [merkle_tree]: https://en.wikipedia.org/wiki/Merkle_tree
+/// [1]: <https://en.wikipedia.org/wiki/Merkle_tree>
+/// [^2]: <https://github.com/Neptune-Crypto/twenty-first/pull/250#issuecomment-2782490889>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MerkleTree {
     nodes: Vec<Digest>,
