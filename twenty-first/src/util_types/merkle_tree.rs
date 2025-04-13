@@ -203,12 +203,15 @@ impl MerkleTree {
         Ok(nodes)
     }
 
-    /// Given a list of leaf indices, return the indices of exactly those nodes that
-    /// are needed to prove (or verify) that the indicated leafs are in the Merkle
-    /// tree.
-    // This function is not defined as a method (taking self as argument) since it's
-    // needed by the verifier, who does not have access to the Merkle tree.
-    fn authentication_structure_node_indices(
+    /// Compute the node indices for an authentication structure.
+    ///
+    /// Given a list of leaf indices, return the indices of exactly those nodes
+    /// that are needed to prove (or verify) that the indicated leafs are in the
+    /// Merkle tree.
+    ///
+    /// Returns an error if any of the leaf indices is bigger than the number of
+    /// leafs.
+    pub fn authentication_structure_node_indices(
         num_leafs: MerkleTreeLeafIndex,
         leaf_indices: &[MerkleTreeLeafIndex],
     ) -> Result<impl ExactSizeIterator<Item = MerkleTreeLeafIndex> + use<>> {
