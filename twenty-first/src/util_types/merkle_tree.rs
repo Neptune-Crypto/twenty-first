@@ -121,7 +121,7 @@ impl MerkleTree {
     /// with the same type as the index type used by `Vec`.
     ///
     /// If you need to read the root, try [`root()`](Self::root) instead.
-    const ROOT_INDEX: usize = 1_usize;
+    const ROOT_INDEX: usize = ROOT_INDEX as usize;
 
     const MAX_NUM_NODES: usize = 1_usize << 25;
     const MAX_NUM_LEAFS: usize = Self::MAX_NUM_NODES / 2;
@@ -299,7 +299,7 @@ impl MerkleTree {
     pub fn height(&self) -> MerkleTreeHeight {
         let leaf_count = self.num_leafs();
         debug_assert!(leaf_count.is_power_of_two());
-        MerkleTreeHeight::try_from(leaf_count.ilog2()).expect("log of num leafs should fit in u32")
+        leaf_count.ilog2()
     }
 
     /// All nodes of the Merkle tree.
@@ -316,11 +316,14 @@ impl MerkleTree {
 
     /// All leafs of the Merkle tree.
     pub fn leafs(&self) -> impl Iterator<Item = &Digest> {
-        self.nodes.iter().skip(
-            (self.num_nodes() / 2)
-                .try_into()
-                .expect("MerkleTreeNodeIndex to usize conversion error"),
-        )
+        // This conversion can only fail if the number of leafs is larger than
+        // usize::MAX. This implies that the number of nodes is larger than
+        // usize::MAX. Since the nodes are stored in a Vec, the number of nodes
+        // can never exceed usize::MAX.
+        // This proof by contradiction shows that unwrapping is fine.
+        let num_leafs = usize::try_from(self.num_leafs()).unwrap();
+
+        self.nodes.iter().skip(num_leafs)
     }
 
     /// The leaf at the given index, if it exists.
@@ -656,14 +659,7 @@ pub mod merkle_tree_test {
         #[strategy(arb())]
         pub tree: MerkleTree,
 
-        #[
-            strategy(
-                vec(
-                    (0 as MerkleTreeLeafIndex)..#tree.num_leafs(),
-                    0..(#tree.num_leafs() as usize)
-                )
-            )
-        ]
+        #[strategy(vec(0..#tree.num_leafs(), 0..(#tree.num_leafs() as usize)))]
         pub selected_indices: Vec<MerkleTreeLeafIndex>,
     }
 
