@@ -303,12 +303,10 @@ impl MerkleTree {
         leaf_count.ilog2()
     }
 
-    /// All nodes of the Merkle tree.
-    pub fn nodes(&self) -> impl Iterator<Item = &Digest> {
-        self.nodes.iter()
-    }
-
     /// The node at the given node index, if it exists.
+    ///
+    /// Note that nodes are 1-indexed, meaning that the root lives at index 1
+    /// and all the other nodes have larger indices.
     pub fn node(&self, index: MerkleTreeNodeIndex) -> Option<Digest> {
         // If `MerkleTreeNodeIndex` aka u64 cannot be converted to usize, that
         // means
@@ -336,7 +334,7 @@ impl MerkleTree {
 
     /// The leaf at the given index, if it exists.
     pub fn leaf(&self, index: MerkleTreeLeafIndex) -> Option<Digest> {
-        let first_leaf_index = self.num_nodes() / 2;
+        let first_leaf_index = self.num_leafs();
         self.node(first_leaf_index + index)
     }
 
@@ -349,10 +347,6 @@ impl MerkleTree {
         let maybe_indexed_leaf = |&i| self.leaf(i).ok_or(invalid_index).map(|leaf| (i, leaf));
 
         indices.iter().map(maybe_indexed_leaf).collect()
-    }
-
-    fn num_nodes(&self) -> MerkleTreeNodeIndex {
-        MerkleTreeNodeIndex::try_from(self.nodes.len()).expect(USIZE_TO_U64_ERR)
     }
 
     /// A full inclusion proof for the leafs at the supplied indices, including the
