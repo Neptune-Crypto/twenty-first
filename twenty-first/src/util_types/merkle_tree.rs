@@ -9,6 +9,7 @@ use lazy_static::lazy_static;
 use rayon::prelude::*;
 use thiserror::Error;
 
+use crate::error::USIZE_TO_U64_ERR;
 use crate::prelude::*;
 
 const DEFAULT_PARALLELIZATION_CUTOFF: usize = 512;
@@ -212,7 +213,7 @@ impl MerkleTree {
     pub fn authentication_structure_node_indices(
         num_leafs: MerkleTreeLeafIndex,
         leaf_indices: &[MerkleTreeLeafIndex],
-    ) -> Result<impl ExactSizeIterator<Item = MerkleTreeLeafIndex> + use<>> {
+    ) -> Result<impl ExactSizeIterator<Item = MerkleTreeNodeIndex> + use<>> {
         // The set of indices of nodes that need to be included in the authentications
         // structure. In principle, every node of every authentication path is needed.
         // The root is never needed. Hence, it is not considered below.
@@ -291,7 +292,7 @@ impl MerkleTree {
     }
 
     pub fn num_leafs(&self) -> MerkleTreeLeafIndex {
-        let node_count = MerkleTreeNodeIndex::try_from(self.nodes.len()).expect("usize to u64");
+        let node_count = MerkleTreeNodeIndex::try_from(self.nodes.len()).expect(USIZE_TO_U64_ERR);
         debug_assert!(node_count.is_power_of_two());
         node_count / 2
     }
@@ -309,6 +310,13 @@ impl MerkleTree {
 
     /// The node at the given node index, if it exists.
     pub fn node(&self, index: MerkleTreeNodeIndex) -> Option<Digest> {
+        // If `MerkleTreeNodeIndex` aka u64 cannot be converted to usize, that
+        // means
+        //  (1) the current architecture has a pointer width smaller than 64
+        //      bits, and
+        //  (2) the current index is larger than the pointer width.
+        // Therefore, Merkle trees with the number of nodes implied by the
+        // requested index cannot even constructed on the current architecture.
         usize::try_from(index)
             .ok()
             .and_then(|idx| self.nodes.get(idx).copied())
@@ -344,8 +352,7 @@ impl MerkleTree {
     }
 
     fn num_nodes(&self) -> MerkleTreeNodeIndex {
-        MerkleTreeNodeIndex::try_from(self.nodes.len())
-            .expect("`MerkleTreeNodeIndex` should be large enough to hold any usize")
+        MerkleTreeNodeIndex::try_from(self.nodes.len()).expect(USIZE_TO_U64_ERR)
     }
 
     /// A full inclusion proof for the leafs at the supplied indices, including the
