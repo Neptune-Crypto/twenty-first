@@ -21,8 +21,47 @@ lazy_static! {
             .unwrap_or(DEFAULT_PARALLELIZATION_CUTOFF);
 }
 
+/// Indexes internal nodes of a [`MerkleTree`].
+///
+/// The following convention is used.
+///  - Nothing lives at index 0.
+///  - Index 1 points to the root.
+///  - Indices 2 and 3 contain the two children of the root.
+///  - Indices 4 and 5 contain the two children of node 2.
+///  - Indices 6 and 7 contain the two children of node 3.
+///  - And so on. In general, the position (starting at 0) of the top bit
+///    indicates the number of layers of separation between this node and the
+///    root.
+///  - The node indices corresponding to leafs range from (1<<tree_height) to
+///    (2<<tree_height)-1.
+///
+/// For example:
+/// ```markdown
+///         ──── 1 ────          ╮
+///        ╱           ╲         │
+///       2             3        │
+///      ╱  ╲          ╱  ╲      ├╴ node indices
+///     ╱    ╲        ╱    ╲     │
+///    4      5      6      7    │
+///   ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲   │
+///  8   9  10 11  12 13  14 15  ╯
+/// ```
+///
+/// Type alias for [u64].
 pub type MerkleTreeNodeIndex = u64;
+
+/// Indexes the leafs of a Merkle tree, left to right, starting with zero and
+/// ending with one less than a power of two. The exponent of that power of two
+/// coincides with the tree's height.
+///
+/// Type alias for [u64].
 pub type MerkleTreeLeafIndex = u64;
+
+/// Counts the number of layers in the Merkle tree, not including the root.
+/// Equivalently, counts the number of nodes on a path from a leaf to the root,
+/// including the leaf but not the root.
+///
+/// Type alias for [u32].
 pub type MerkleTreeHeight = u32;
 
 /// The maximum number of nodes in Merkle trees that functions in this module
@@ -202,14 +241,14 @@ impl MerkleTree {
         Ok(nodes)
     }
 
-    /// Compute the node indices for an authentication structure.
+    /// Compute the [`MerkleTreeNodeIndex`]es for an authentication structure.
     ///
-    /// Given a list of leaf indices, return the indices of exactly those nodes
-    /// that are needed to prove (or verify) that the indicated leafs are in the
-    /// Merkle tree.
+    /// Given a list of [`MerkleTreeLeafIndex`]es, return the (node) indices of
+    /// exactly those nodes that are needed to prove (or verify) that the
+    /// indicated leafs are in the Merkle tree.
     ///
-    /// Returns an error if any of the leaf indices is bigger than the number of
-    /// leafs.
+    /// Returns an error if any of the leaf indices is bigger than or equal to
+    /// the total number of leafs in the tree.
     pub fn authentication_structure_node_indices(
         num_leafs: MerkleTreeLeafIndex,
         leaf_indices: &[MerkleTreeLeafIndex],
@@ -243,11 +282,14 @@ impl MerkleTree {
         Ok(set_difference.sorted_unstable().rev())
     }
 
-    /// Generate a de-duplicated authentication structure for the given leaf indices.
+    /// Generate a de-duplicated authentication structure for the given
+    /// [`MerkleTreeLeafIndex`]es.
+    ///
     /// If a single index is supplied, the authentication structure is the
     /// authentication path for the indicated leaf.
     ///
-    /// For example, consider the following Merkle tree.
+    /// For example, consider the following Merkle tree, and note the difference
+    /// between [`MerkleTreeLeafIndex`] and [`MerkleTreeNodeIndex`].
     ///
     /// ```markdown
     ///         ──── 1 ────          ╮
@@ -303,7 +345,7 @@ impl MerkleTree {
         leaf_count.ilog2()
     }
 
-    /// The node at the given node index, if it exists.
+    /// The node at the given [`MerkleTreeNodeIndex`], if it exists.
     ///
     /// Note that nodes are 1-indexed, meaning that the root lives at index 1
     /// and all the other nodes have larger indices.
@@ -332,12 +374,14 @@ impl MerkleTree {
         self.nodes.iter().skip(num_leafs)
     }
 
-    /// The leaf at the given index, if it exists.
+    /// The leaf at the given [`MerkleTreeLeafIndex`], if it exists.
     pub fn leaf(&self, index: MerkleTreeLeafIndex) -> Option<Digest> {
         let first_leaf_index = self.num_leafs();
         self.node(first_leaf_index + index)
     }
 
+    /// Produce a [`Vec`] of ([`MerkleTreeLeafIndex`], [`Digest`]) covering all
+    /// leafs.
     pub fn indexed_leafs(
         &self,
         indices: &[MerkleTreeLeafIndex],
@@ -349,10 +393,12 @@ impl MerkleTree {
         indices.iter().map(maybe_indexed_leaf).collect()
     }
 
-    /// A full inclusion proof for the leafs at the supplied indices, including the
-    /// leafs. Generally, using [`authentication_structure`][auth_structure] is
-    /// preferable. Use this method only if the verifier needs explicit access to the
-    /// leafs, _i.e._, cannot compute them from other information.
+    /// A full inclusion proof for the leafs at the supplied
+    /// [`MerkleTreeLeafIndex`]es, *including* the leafs
+    ///
+    /// Generally, using [`authentication_structure`][auth_structure] is
+    /// preferable. Use this method only if the verifier needs explicit access
+    /// to the leafs, _i.e._, cannot compute them from other information.
     ///
     /// [auth_structure]: Self::authentication_structure
     pub fn inclusion_proof_for_leaf_indices(
