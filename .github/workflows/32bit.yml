@@ -1,0 +1,26 @@
+name: 32bit
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Build for 32-bit targets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build for 32-bit architectures
+        run: |
+          rustup target add i686-unknown-linux-gnu wasm32-unknown-unknown
+          cargo build --target i686-unknown-linux-gnu
+          cargo build --target wasm32-unknown-unknown
