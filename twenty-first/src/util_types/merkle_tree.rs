@@ -64,26 +64,6 @@ pub type MerkleTreeLeafIndex = u64;
 /// Type alias for [u32].
 pub type MerkleTreeHeight = u32;
 
-/// The maximum number of nodes in Merkle trees that functions in this module
-/// support.
-///
-/// This constant enforces that all compilation targets have a consistent
-/// [`MAX_TREE_HEIGHT`] and [`MAX_NUM_LEAFS`].
-///
-/// Note that the struct [`MerkleTree`] can hold only 2^25 nodes. This constant
-/// applies to associated functions that do not take `self`.
-const MAX_NUM_NODES: MerkleTreeNodeIndex =
-    MerkleTreeNodeIndex::MAX ^ (MerkleTreeNodeIndex::MAX >> 1);
-
-/// The maximum number of leafs in Merkle trees that functions in this module
-/// support.
-///
-/// See also: [`MAX_NUM_NODES`], [`MAX_TREE_HEIGHT`].
-const MAX_NUM_LEAFS: MerkleTreeLeafIndex = MAX_NUM_NODES / 2;
-
-/// The maximum height of Merkle trees that functions in this module support.
-pub const MAX_TREE_HEIGHT: MerkleTreeHeight = MAX_NUM_LEAFS.ilog2() as MerkleTreeHeight;
-
 /// The index of the root node.
 pub(crate) const ROOT_INDEX: MerkleTreeNodeIndex = 1;
 
@@ -163,9 +143,6 @@ impl MerkleTree {
     /// If you need to read the root, try [`root()`](Self::root) instead.
     const ROOT_INDEX: usize = ROOT_INDEX as usize;
 
-    const MAX_NUM_NODES: usize = 1_usize << 25;
-    const MAX_NUM_LEAFS: usize = Self::MAX_NUM_NODES / 2;
-
     /// Build a MerkleTree with the given leafs.
     ///
     /// [`MerkleTree::par_new`] is equivalent and usually faster.
@@ -231,11 +208,16 @@ impl MerkleTree {
         if !num_leafs.is_power_of_two() {
             return Err(MerkleTreeError::IncorrectNumberOfLeafs);
         }
-        if num_leafs > Self::MAX_NUM_LEAFS {
-            return Err(MerkleTreeError::TreeTooHigh);
-        }
 
-        let mut nodes = vec![Digest::default(); 2 * num_leafs];
+        let num_nodes = 2 * num_leafs;
+        let mut nodes = Vec::new();
+
+        // Use `try_reserve_exact` because we want to get an error not a panic
+        // if allocation fails. The error can be bubbled up.
+        nodes
+            .try_reserve_exact(num_nodes)
+            .map_err(|_| MerkleTreeError::TreeTooHigh)?;
+        nodes.resize(num_nodes, Digest::default());
         nodes[num_leafs..].copy_from_slice(leafs);
 
         Ok(nodes)
@@ -498,10 +480,8 @@ impl PartialMerkleTree {
     }
 
     fn num_leafs(&self) -> Result<MerkleTreeLeafIndex> {
-        if self.tree_height > MAX_TREE_HEIGHT {
-            return Err(MerkleTreeError::TreeTooHigh);
-        }
-        Ok(1 << self.tree_height)
+        1u64.checked_shl(self.tree_height)
+            .ok_or(MerkleTreeError::TreeTooHigh)
     }
 
     /// Compute all computable digests of the partial Merkle tree, modifying self.
@@ -663,7 +643,7 @@ pub enum MerkleTreeError {
     #[error("The number of leafs must be a power of two.")]
     IncorrectNumberOfLeafs,
 
-    #[error("Tree height must not exceed {MAX_TREE_HEIGHT}.")]
+    #[error("Tree height must not exceed 63.")]
     TreeTooHigh,
 }
 
@@ -923,7 +903,7 @@ pub mod merkle_tree_test {
     #[proptest(cases = 40)]
     fn incorrect_tree_height_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
-        #[strategy(0..=MAX_TREE_HEIGHT)]
+        #[strategy(0_u32..64)]
         #[filter(#test_tree.tree.height() != #incorrect_height)]
         incorrect_height: MerkleTreeHeight,
     ) {
