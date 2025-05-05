@@ -19,8 +19,13 @@ jobs:
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build for 32-bit architectures
-        run: |
-          rustup target add i686-unknown-linux-gnu wasm32-unknown-unknown
-          cargo build --target i686-unknown-linux-gnu
-          cargo build --target wasm32-unknown-unknown
+      - name: Add targets
+        run: rustup target add i686-unknown-linux-gnu wasm32-unknown-unknown
+
+      - name: Build for i686-unknown-linux-gnu
+        run: cargo build --target i686-unknown-linux-gnu
+
+      - name: Build for wasm32-unknown-unknown
+        run: cargo build --target wasm32-unknown-unknown
+        env:
+          RUSTFLAGS: --cfg getrandom_backend="wasm_js"
