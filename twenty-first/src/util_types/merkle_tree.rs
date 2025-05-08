@@ -47,15 +47,15 @@ lazy_static! {
 ///  8   9  10 11  12 13  14 15  ╯
 /// ```
 ///
-/// Type alias for [u64].
-pub type MerkleTreeNodeIndex = u64;
+/// Type alias for [usize].
+pub type MerkleTreeNodeIndex = usize;
 
 /// Indexes the leafs of a Merkle tree, left to right, starting with zero and
 /// ending with one less than a power of two. The exponent of that power of two
 /// coincides with the tree's height.
 ///
-/// Type alias for [u64].
-pub type MerkleTreeLeafIndex = u64;
+/// Type alias for [usize].
+pub type MerkleTreeLeafIndex = usize;
 
 /// Counts the number of layers in the Merkle tree, not including the root.
 /// Equivalently, counts the number of nodes on a path from a leaf to the root,
@@ -137,12 +137,6 @@ pub(crate) struct PartialMerkleTree {
 }
 
 impl MerkleTree {
-    /// When iterating over [`Self::nodes`] it pays to have an starting index
-    /// with the same type as the index type used by `Vec`.
-    ///
-    /// If you need to read the root, try [`root()`](Self::root) instead.
-    const ROOT_INDEX: usize = ROOT_INDEX as usize;
-
     /// Build a MerkleTree with the given leafs.
     ///
     /// [`MerkleTree::par_new`] is equivalent and usually faster.
@@ -154,7 +148,7 @@ impl MerkleTree {
     pub fn sequential_new(leafs: &[Digest]) -> Result<Self> {
         let mut nodes = Self::initialize_merkle_tree_nodes(leafs)?;
 
-        for i in (MerkleTree::ROOT_INDEX..leafs.len()).rev() {
+        for i in (ROOT_INDEX..leafs.len()).rev() {
             nodes[i] = Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
         }
 
@@ -189,7 +183,7 @@ impl MerkleTree {
 
         // sequential
         let num_remaining_nodes = num_nodes_on_this_level;
-        for i in (MerkleTree::ROOT_INDEX..num_remaining_nodes).rev() {
+        for i in (ROOT_INDEX..num_remaining_nodes).rev() {
             nodes[i] = Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
         }
 
@@ -312,7 +306,7 @@ impl MerkleTree {
     }
 
     pub fn root(&self) -> Digest {
-        self.nodes[Self::ROOT_INDEX]
+        self.nodes[ROOT_INDEX]
     }
 
     pub fn num_leafs(&self) -> MerkleTreeLeafIndex {
@@ -332,16 +326,11 @@ impl MerkleTree {
     /// Note that nodes are 1-indexed, meaning that the root lives at index 1
     /// and all the other nodes have larger indices.
     pub fn node(&self, index: MerkleTreeNodeIndex) -> Option<Digest> {
-        // If `MerkleTreeNodeIndex` aka u64 cannot be converted to usize, that
-        // means
-        //  (1) the current architecture has a pointer width smaller than 64
-        //      bits, and
-        //  (2) the current index is larger than the pointer width.
-        // Therefore, Merkle trees with the number of nodes implied by the
-        // requested index cannot even constructed on the current architecture.
-        usize::try_from(index)
-            .ok()
-            .and_then(|idx| self.nodes.get(idx).copied())
+        if index == 0 {
+            None
+        } else {
+            self.nodes.get(index).copied()
+        }
     }
 
     /// All leafs of the Merkle tree.
@@ -351,7 +340,7 @@ impl MerkleTree {
         // usize::MAX. Since the nodes are stored in a Vec, the number of nodes
         // can never exceed usize::MAX.
         // This proof by contradiction shows that unwrapping is fine.
-        let num_leafs = usize::try_from(self.num_leafs()).unwrap();
+        let num_leafs = self.num_leafs();
 
         self.nodes.iter().skip(num_leafs)
     }
@@ -480,7 +469,8 @@ impl PartialMerkleTree {
     }
 
     fn num_leafs(&self) -> Result<MerkleTreeLeafIndex> {
-        1u64.checked_shl(self.tree_height)
+        1usize
+            .checked_shl(self.tree_height)
             .ok_or(MerkleTreeError::TreeTooHigh)
     }
 
@@ -674,7 +664,7 @@ pub mod merkle_tree_test {
         ) -> HashMap<MerkleTreeNodeIndex, Digest> {
             node_indices
                 .iter()
-                .map(|&i| (i, BFieldElement::new(i)))
+                .map(|&i| (i, BFieldElement::new(u64::try_from(i).unwrap())))
                 .map(|(i, leaf)| (i, Tip5::hash_varlen(&[leaf])))
                 .collect()
         }
@@ -686,7 +676,7 @@ pub mod merkle_tree_test {
         #[strategy(arb())]
         pub tree: MerkleTree,
 
-        #[strategy(vec(0..#tree.num_leafs(), 0..(#tree.num_leafs() as usize)))]
+        #[strategy(vec(0..#tree.num_leafs(), 0..(#tree.num_leafs())))]
         pub selected_indices: Vec<MerkleTreeLeafIndex>,
     }
 
@@ -866,7 +856,7 @@ pub mod merkle_tree_test {
             strategy(
                 vec(
                     0..#test_tree.tree.num_leafs(),
-                    1..=(#test_tree.tree.num_leafs() as usize)
+                    1..=(#test_tree.tree.num_leafs())
                 )
             )
         ]
@@ -989,9 +979,7 @@ pub mod merkle_tree_test {
     fn each_leaf_can_be_verified_individually(test_tree: MerkleTreeToTest) {
         let tree = test_tree.tree;
         for (leaf_index, &leaf) in tree.leafs().enumerate() {
-            let authentication_path = tree
-                .authentication_structure(&[leaf_index.try_into().unwrap()])
-                .unwrap();
+            let authentication_path = tree.authentication_structure(&[leaf_index]).unwrap();
             let proof = MerkleTreeInclusionProof {
                 tree_height: tree.height(),
                 indexed_leafs: [(leaf_index as MerkleTreeLeafIndex, leaf)].into(),

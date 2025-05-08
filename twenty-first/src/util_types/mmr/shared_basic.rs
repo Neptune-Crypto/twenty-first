@@ -111,7 +111,7 @@ pub fn calculate_new_peaks_from_leaf_mutation(
     leaf_index: u64,
     membership_proof: &MmrMembershipProof,
 ) -> Vec<Digest> {
-    let merkle_tree_root_index = merkle_tree::ROOT_INDEX;
+    let merkle_tree_root_index = merkle_tree::ROOT_INDEX as u64;
 
     let (mut acc_mt_index, peak_index) =
         leaf_index_to_mt_index_and_peak_index(leaf_index, num_leafs);

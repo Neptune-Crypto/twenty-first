@@ -61,7 +61,7 @@ impl MmrSuccessorProof {
         let mut old_peaks = mmra.peaks().into_iter();
         let mut first_unused_new_leaf_idx = num_leafs_in_lowest_peak;
 
-        let merkle_tree_root_index = merkle_tree::ROOT_INDEX;
+        let merkle_tree_root_index = merkle_tree::ROOT_INDEX as u64;
         while merkle_tree_index > merkle_tree_root_index {
             let current_node_is_left_sibling = merkle_tree_index % 2 == 0;
             current_node = if current_node_is_left_sibling {
@@ -195,7 +195,7 @@ impl MmrSuccessorProof {
         let mut current_node = *auth_path.next().ok_or(Error::AuthenticationPathTooShort)?;
         let mut merkle_tree_index = merkle_tree_index >> height_of_lowest_old_peak;
 
-        let merkle_tree_root_index = merkle_tree::ROOT_INDEX;
+        let merkle_tree_root_index = merkle_tree::ROOT_INDEX as u64;
         while merkle_tree_index > merkle_tree_root_index {
             let current_node_is_left_sibling = merkle_tree_index % 2 == 0;
             current_node = if current_node_is_left_sibling {
