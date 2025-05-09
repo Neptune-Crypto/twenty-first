@@ -18,6 +18,7 @@ use super::shared_basic;
 use crate::error::U32_TO_USIZE_ERR;
 use crate::error::USIZE_TO_U64_ERR;
 use crate::prelude::*;
+use crate::util_types::merkle_tree;
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, GetSize, BFieldCodec, Arbitrary)]
 pub struct MmrMembershipProof {
@@ -68,7 +69,7 @@ impl MmrMembershipProof {
             };
             mt_index /= 2;
         }
-        debug_assert_eq!(MerkleTree::ROOT_INDEX as u64, mt_index);
+        debug_assert_eq!(merkle_tree::ROOT_INDEX as u64, mt_index);
 
         let peak_index = usize::try_from(peak_index).expect(U32_TO_USIZE_ERR);
 
