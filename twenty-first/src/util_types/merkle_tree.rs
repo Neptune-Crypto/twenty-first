@@ -662,7 +662,7 @@ pub mod merkle_tree_test {
         ) -> HashMap<MerkleTreeNodeIndex, Digest> {
             node_indices
                 .iter()
-                .map(|&i| (i, BFieldElement::new(u64::try_from(i).unwrap())))
+                .map(|&i| (i, bfe!(i)))
                 .map(|(i, leaf)| (i, Tip5::hash_varlen(&[leaf])))
                 .collect()
         }
