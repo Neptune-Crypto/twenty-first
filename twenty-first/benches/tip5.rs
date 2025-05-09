@@ -33,14 +33,23 @@ fn bench_pair(c: &mut Criterion) {
 fn bench_varlen(c: &mut Criterion) {
     let mut group = c.benchmark_group("tip5/hash_varlen");
 
-    let size = 16_384;
-    group.sample_size(50);
-    let elements: Vec<BFieldElement> = random_elements(size);
+    let many = 16_384;
+    let many_elements: Vec<BFieldElement> = random_elements(many);
 
+    group.sample_size(50);
     group.bench_function(
-        BenchmarkId::new("Tip5 / Hash Variable Length", size),
+        BenchmarkId::new("Tip5 / Hash Variable Length", many),
         |bencher| {
-            bencher.iter(|| Tip5::hash_varlen(&elements));
+            bencher.iter(|| Tip5::hash_varlen(&many_elements));
+        },
+    );
+
+    let few = 10;
+    let few_elements: Vec<BFieldElement> = random_elements(few);
+    group.bench_function(
+        BenchmarkId::new("Tip5 / Hash Variable Length", few),
+        |bencher| {
+            bencher.iter(|| Tip5::hash_varlen(&few_elements));
         },
     );
 }

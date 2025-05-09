@@ -627,13 +627,14 @@ impl Tip5 {
     //
     // - Apply the correct padding
     // - [Sponge::pad_and_absorb_all()]
-    // - [Sponge::squeeze()] once.
+    // - Read the digest from the resulting state.
     pub fn hash_varlen(input: &[BFieldElement]) -> Digest {
         let mut sponge = Self::init();
         sponge.pad_and_absorb_all(input);
-        let produce: [BFieldElement; crate::util_types::sponge::RATE] = sponge.squeeze();
+        let produce: [BFieldElement; Digest::LEN] =
+            (&sponge.state[..Digest::LEN]).try_into().unwrap();
 
-        Digest::new((&produce[..Digest::LEN]).try_into().unwrap())
+        Digest::new(produce)
     }
 
     /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
