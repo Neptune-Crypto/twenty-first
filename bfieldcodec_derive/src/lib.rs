@@ -75,7 +75,7 @@ use syn::token::Comma;
 ///     ```
 ///
 /// - Enums with no variants are currently not supported. Consider using a unit struct instead.
-///     Example:
+///   Example:
 ///     ```ignore
 ///     #[derive(BFieldCodec)]  // Currently not supported.
 ///     enum Foo {}             // Consider `struct Foo;` instead.

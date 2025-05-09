@@ -622,7 +622,6 @@ impl TryFrom<&[u8]> for BFieldElement {
 }
 
 impl Inverse for BFieldElement {
-    #[must_use]
     #[inline]
     fn inverse(&self) -> Self {
         self.inverse()

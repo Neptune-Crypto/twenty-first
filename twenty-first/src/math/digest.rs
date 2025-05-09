@@ -529,9 +529,6 @@ pub(crate) mod digest_tests {
         let bytes2: [u8; Digest::BYTES] = d1.into();
         let d2 = Digest::try_from(bytes2)?;
 
-        println!("bytes1: {:?}", bytes1);
-        println!("bytes2: {:?}", bytes2);
-
         assert_eq!(d1, d2);
         assert_eq!(bytes1, bytes2);
 
@@ -658,7 +655,7 @@ pub(crate) mod digest_tests {
             #[test]
             fn serialize() -> Result<(), serde_json::Error> {
                 for (digest, hex) in hex_examples() {
-                    assert_eq!(serde_json::to_string(&digest)?, format!("\"{}\"", hex));
+                    assert_eq!(serde_json::to_string(&digest)?, format!("\"{hex}\""));
                 }
                 Ok(())
             }
@@ -666,7 +663,7 @@ pub(crate) mod digest_tests {
             #[test]
             fn deserialize() -> Result<(), serde_json::Error> {
                 for (digest, hex) in hex_examples() {
-                    let json_hex = format!("\"{}\"", hex);
+                    let json_hex = format!("\"{hex}\"");
                     let digest_deserialized: Digest = serde_json::from_str::<Digest>(&json_hex)?;
                     assert_eq!(digest_deserialized, digest);
                 }

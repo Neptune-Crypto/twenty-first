@@ -307,7 +307,6 @@ impl XFieldElement {
 }
 
 impl Inverse for XFieldElement {
-    #[must_use]
     fn inverse(&self) -> Self {
         self.inverse()
     }

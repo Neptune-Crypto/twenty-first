@@ -1713,7 +1713,7 @@ where
         );
 
         // add vectors of polynomials
-        let interpolants = left_interpolants
+        left_interpolants
             .par_iter()
             .zip(right_interpolants.par_iter())
             .map(|(left_interpolant, right_interpolant)| {
@@ -1722,9 +1722,7 @@ where
 
                 left_term + right_term
             })
-            .collect();
-
-        interpolants
+            .collect()
     }
 
     /// Evaluate the polynomial on a batch of points.
@@ -4148,8 +4146,7 @@ mod test_polynomials {
 
         assert_eq!(
             long_remainder, structured_remainder,
-            "naive: {}\nstructured: {}",
-            long_remainder, structured_remainder
+            "naive: {long_remainder}\nstructured: {structured_remainder}",
         );
     }
 
@@ -4202,8 +4199,7 @@ mod test_polynomials {
 
         assert_eq!(
             long_remainder, structured_remainder,
-            "full modulus: {}",
-            full_modulus
+            "full modulus: {full_modulus}",
         );
     }
 
@@ -4252,11 +4248,9 @@ mod test_polynomials {
     fn reduce_long_division_and_fast_reduce_agree_simple_fixed() {
         let roots = (0..10).map(BFieldElement::new).collect_vec();
         let numerator = Polynomial::zerofier(&roots).formal_derivative();
-        println!("numerator: {}", numerator);
 
         let divisor_roots = &roots[..roots.len() / 5];
         let denominator = Polynomial::zerofier(divisor_roots);
-        println!("modulus: {}", denominator);
 
         let (quotient, remainder) = numerator.divide(&denominator);
         assert_eq!(
@@ -4265,11 +4259,9 @@ mod test_polynomials {
         );
 
         let long_div_remainder = numerator.reduce_long_division(&denominator);
-        println!("long div remainder: {}", long_div_remainder);
         assert_eq!(remainder, long_div_remainder);
 
         let preprocessed_remainder = numerator.fast_reduce(&denominator);
-        println!("fast remainder: {}", preprocessed_remainder);
 
         assert_eq!(long_div_remainder, preprocessed_remainder);
     }
