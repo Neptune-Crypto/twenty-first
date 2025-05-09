@@ -335,11 +335,6 @@ impl MerkleTree {
 
     /// All leafs of the Merkle tree.
     pub fn leafs(&self) -> impl Iterator<Item = &Digest> {
-        // This conversion can only fail if the number of leafs is larger than
-        // usize::MAX. This implies that the number of nodes is larger than
-        // usize::MAX. Since the nodes are stored in a Vec, the number of nodes
-        // can never exceed usize::MAX.
-        // This proof by contradiction shows that unwrapping is fine.
         self.nodes.iter().skip(self.num_leafs())
     }
 
