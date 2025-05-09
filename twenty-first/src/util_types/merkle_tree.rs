@@ -340,9 +340,7 @@ impl MerkleTree {
         // usize::MAX. Since the nodes are stored in a Vec, the number of nodes
         // can never exceed usize::MAX.
         // This proof by contradiction shows that unwrapping is fine.
-        let num_leafs = self.num_leafs();
-
-        self.nodes.iter().skip(num_leafs)
+        self.nodes.iter().skip(self.num_leafs())
     }
 
     /// The leaf at the given [`MerkleTreeLeafIndex`], if it exists.
