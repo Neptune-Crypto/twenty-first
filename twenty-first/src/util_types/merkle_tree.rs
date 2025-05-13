@@ -904,8 +904,9 @@ pub mod merkle_tree_test {
     #[proptest(cases = 30)]
     fn requesting_inclusion_proof_for_nonexistent_leaf_fails_with_expected_error(
         #[strategy(arb())] tree: MerkleTree,
-        #[filter(#leaf_indices.iter().any(|&i| i > #tree.num_leafs()))]
-        leaf_indices: Vec<MerkleTreeLeafIndex>,
+        #[filter(#leaf_indices.iter().any(|&i| i > #tree.num_leafs()))] leaf_indices: Vec<
+            MerkleTreeLeafIndex,
+        >,
     ) {
         let maybe_proof = tree.inclusion_proof_for_leaf_indices(&leaf_indices);
         let err = maybe_proof.unwrap_err();
