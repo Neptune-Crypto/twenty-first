@@ -462,7 +462,7 @@ impl PartialMerkleTree {
     }
 
     fn num_leafs(&self) -> Result<MerkleTreeLeafIndex> {
-        1usize
+        1_usize
             .checked_shl(self.tree_height)
             .ok_or(MerkleTreeError::TreeTooHigh)
     }
@@ -626,7 +626,7 @@ pub enum MerkleTreeError {
     #[error("The number of leafs must be a power of two.")]
     IncorrectNumberOfLeafs,
 
-    #[error("Tree height must not exceed 63.")]
+    #[error("Tree height implies a tree that does not fit in RAM")]
     TreeTooHigh,
 }
 
@@ -845,14 +845,7 @@ pub mod merkle_tree_test {
     #[proptest(cases = 30)]
     fn checking_set_inclusion_of_items_not_in_set_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
-        #[
-            strategy(
-                vec(
-                    0..#test_tree.tree.num_leafs(),
-                    1..=(#test_tree.tree.num_leafs())
-                )
-            )
-        ]
+        #[strategy(vec(0..#test_tree.tree.num_leafs(), 1..=(#test_tree.tree.num_leafs())))]
         spurious_indices: Vec<MerkleTreeLeafIndex>,
         #[strategy(vec(any::<Digest>(), #spurious_indices.len()))] spurious_digests: Vec<Digest>,
     ) {
@@ -911,7 +904,7 @@ pub mod merkle_tree_test {
     #[proptest(cases = 30)]
     fn requesting_inclusion_proof_for_nonexistent_leaf_fails_with_expected_error(
         #[strategy(arb())] tree: MerkleTree,
-        #[filter(#leaf_indices.iter().any(|&i| i > (#tree.num_leafs() as MerkleTreeLeafIndex)))]
+        #[filter(#leaf_indices.iter().any(|&i| i > #tree.num_leafs()))]
         leaf_indices: Vec<MerkleTreeLeafIndex>,
     ) {
         let maybe_proof = tree.inclusion_proof_for_leaf_indices(&leaf_indices);
@@ -975,7 +968,7 @@ pub mod merkle_tree_test {
             let authentication_path = tree.authentication_structure(&[leaf_index]).unwrap();
             let proof = MerkleTreeInclusionProof {
                 tree_height: tree.height(),
-                indexed_leafs: [(leaf_index as MerkleTreeLeafIndex, leaf)].into(),
+                indexed_leafs: [(leaf_index, leaf)].into(),
                 authentication_structure: authentication_path,
             };
             let verdict = proof.verify(tree.root());
@@ -1020,7 +1013,7 @@ pub mod merkle_tree_test {
         //
         //  0      2   <-- opened_leaf_indices
 
-        let node_indices = [3 as MerkleTreeNodeIndex, 8, 9, 10, 11];
+        let node_indices = [3, 8, 9, 10, 11];
         let mut partial_tree = PartialMerkleTree {
             tree_height: 3,
             leaf_indices: vec![0, 2],
