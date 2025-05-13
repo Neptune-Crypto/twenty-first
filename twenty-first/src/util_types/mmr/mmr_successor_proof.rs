@@ -61,7 +61,8 @@ impl MmrSuccessorProof {
         let mut old_peaks = mmra.peaks().into_iter();
         let mut first_unused_new_leaf_idx = num_leafs_in_lowest_peak;
 
-        let merkle_tree_root_index = merkle_tree::ROOT_INDEX as u64;
+        let merkle_tree_root_index =
+            u64::try_from(merkle_tree::ROOT_INDEX).expect(USIZE_TO_U64_ERR);
         while merkle_tree_index > merkle_tree_root_index {
             let current_node_is_left_sibling = merkle_tree_index % 2 == 0;
             current_node = if current_node_is_left_sibling {

@@ -9,7 +9,6 @@ use lazy_static::lazy_static;
 use rayon::prelude::*;
 use thiserror::Error;
 
-use crate::error::USIZE_TO_U64_ERR;
 use crate::prelude::*;
 
 const DEFAULT_PARALLELIZATION_CUTOFF: usize = 512;
@@ -310,7 +309,7 @@ impl MerkleTree {
     }
 
     pub fn num_leafs(&self) -> MerkleTreeLeafIndex {
-        let node_count = MerkleTreeNodeIndex::try_from(self.nodes.len()).expect(USIZE_TO_U64_ERR);
+        let node_count = self.nodes.len();
         debug_assert!(node_count.is_power_of_two());
         node_count / 2
     }
@@ -824,8 +823,9 @@ pub mod merkle_tree_test {
     fn removing_leafs_from_proof_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(Just(#test_tree.proof().indexed_leafs.len()))] _n_leafs: usize,
-        #[strategy(vec(0..(#_n_leafs as MerkleTreeLeafIndex), 1..=#_n_leafs))]
-        leaf_indices_to_remove: Vec<MerkleTreeLeafIndex>,
+        #[strategy(vec(0..(#_n_leafs), 1..=#_n_leafs))] leaf_indices_to_remove: Vec<
+            MerkleTreeLeafIndex,
+        >,
     ) {
         let mut proof = test_tree.proof();
         let leafs_to_keep = proof
