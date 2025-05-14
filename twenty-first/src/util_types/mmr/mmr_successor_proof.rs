@@ -4,6 +4,7 @@ use super::mmr_accumulator::MmrAccumulator;
 use super::shared_basic::leaf_index_to_mt_index_and_peak_index;
 use crate::error::USIZE_TO_U64_ERR;
 use crate::prelude::*;
+use crate::util_types::merkle_tree;
 
 /// Asserts that one [MMR Accumulator] is the descendant of another, *i.e.*,
 /// that the second can be obtained by appending a set of leafs to the first. It
@@ -60,7 +61,8 @@ impl MmrSuccessorProof {
         let mut old_peaks = mmra.peaks().into_iter();
         let mut first_unused_new_leaf_idx = num_leafs_in_lowest_peak;
 
-        let merkle_tree_root_index = u64::try_from(MerkleTree::ROOT_INDEX).expect(USIZE_TO_U64_ERR);
+        let merkle_tree_root_index =
+            u64::try_from(merkle_tree::ROOT_INDEX).expect(USIZE_TO_U64_ERR);
         while merkle_tree_index > merkle_tree_root_index {
             let current_node_is_left_sibling = merkle_tree_index % 2 == 0;
             current_node = if current_node_is_left_sibling {
@@ -194,7 +196,7 @@ impl MmrSuccessorProof {
         let mut current_node = *auth_path.next().ok_or(Error::AuthenticationPathTooShort)?;
         let mut merkle_tree_index = merkle_tree_index >> height_of_lowest_old_peak;
 
-        let merkle_tree_root_index = u64::try_from(MerkleTree::ROOT_INDEX).expect(USIZE_TO_U64_ERR);
+        let merkle_tree_root_index = merkle_tree::ROOT_INDEX as u64;
         while merkle_tree_index > merkle_tree_root_index {
             let current_node_is_left_sibling = merkle_tree_index % 2 == 0;
             current_node = if current_node_is_left_sibling {
