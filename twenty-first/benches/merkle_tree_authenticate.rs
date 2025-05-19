@@ -56,8 +56,8 @@ impl Default for MerkleTreeSampler {
 }
 
 impl MerkleTreeSampler {
-    fn num_leafs(&self) -> usize {
-        1 << self.tree_height
+    fn num_leafs(&self) -> MerkleTreeLeafIndex {
+        (1 << self.tree_height) as MerkleTreeLeafIndex
     }
 
     fn leaf_digests(&mut self) -> Vec<Digest> {
@@ -72,7 +72,7 @@ impl MerkleTreeSampler {
         MerkleTree::par_new(&leaf_digests).unwrap()
     }
 
-    fn indices_to_open(&mut self) -> Vec<usize> {
+    fn indices_to_open(&mut self) -> Vec<MerkleTreeLeafIndex> {
         (0..self.num_opened_indices)
             .map(|_| self.rng.random_range(0..self.num_leafs()))
             .collect()

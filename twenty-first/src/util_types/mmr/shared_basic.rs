@@ -1,6 +1,6 @@
 use crate::error::U32_TO_USIZE_ERR;
-use crate::error::USIZE_TO_U64_ERR;
 use crate::prelude::*;
+use crate::util_types::merkle_tree;
 
 #[inline]
 pub fn left_child(node_index: u64, height: u32) -> u64 {
@@ -111,7 +111,7 @@ pub fn calculate_new_peaks_from_leaf_mutation(
     leaf_index: u64,
     membership_proof: &MmrMembershipProof,
 ) -> Vec<Digest> {
-    let merkle_tree_root_index = u64::try_from(MerkleTree::ROOT_INDEX).expect(USIZE_TO_U64_ERR);
+    let merkle_tree_root_index = merkle_tree::ROOT_INDEX as u64;
 
     let (mut acc_mt_index, peak_index) =
         leaf_index_to_mt_index_and_peak_index(leaf_index, num_leafs);
