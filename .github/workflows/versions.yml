@@ -1,0 +1,43 @@
+name: Version Check
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  check-rust-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Stable Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # Capture the version installed by the action (immediately after install)
+      # Ignore the point (patch) release number.
+      - name: Capture installed rustc version
+        id: installed_version
+        run: |
+          INSTALLED=$(rustc --version | awk '{print $2}' | awk -F. '{print $1"."$2}')
+          echo "installed_version=$INSTALLED" >> $GITHUB_OUTPUT
+
+      - name: Extract rust-toolchain.toml version
+        id: toolchain_version
+        run: |
+          VERSION=$(grep -E '^channel\s*=' rust-toolchain.toml | cut -d '"' -f2)
+          echo "toolchain_version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Compare Rust versions
+        run: |
+          echo "Installed rustc version:   ${{ steps.installed_version.outputs.installed_version }}"
+          echo "rust-toolchain.toml version: ${{ steps.toolchain_version.outputs.toolchain_version }}"
+
+          if [[ "${{ steps.toolchain_version.outputs.toolchain_version }}" != "${{ steps.installed_version.outputs.installed_version }}" ]]; then
+            echo "Mismatch: rust-toolchain.toml and installed rustc version differ"
+            exit 1
+          fi
+          echo "All Rust versions match."
