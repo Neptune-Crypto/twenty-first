@@ -687,7 +687,7 @@ Lines marked “(!)” indicate a breaking change.
 
 ### ✨ Features
 
-- New functionality for databse vector
+- New functionality for database vector
 - Scalar and index sampling from sponges
 
 ## [0.17.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.16.0..v0.17.0) – 2023-02-24
