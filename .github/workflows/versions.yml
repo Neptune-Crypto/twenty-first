@@ -22,7 +22,7 @@ jobs:
       - name: Capture installed rustc version
         id: installed_version
         run: |
-          INSTALLED=$(rustc --version | awk '{print $2}' | awk -F. '{print $1"."$2}')
+          INSTALLED=$(rustc --version | awk '{print $2}')
           echo "installed_version=$INSTALLED" >> $GITHUB_OUTPUT
 
       - name: Extract rust-toolchain.toml version
