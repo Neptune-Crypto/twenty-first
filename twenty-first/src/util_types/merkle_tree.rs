@@ -236,7 +236,7 @@ impl MerkleTree {
     //   merged, resulting in node 3.
     // - On diagonal (3), internal node 4 is computed, and no internal nodes can
     //   be merged.
-    // - On diagonal (4), internal node 5 is computed. Then, nodes 4 and 5 ar
+    // - On diagonal (4), internal node 5 is computed. Then, nodes 4 and 5 are
     //   merged, resulting in node 6. Then, nodes 3 and 6 are merged, resulting
     //   in node 7.
     //
@@ -262,16 +262,12 @@ impl MerkleTree {
         let tree_height = num_leafs.ilog2().try_into().expect(U32_TO_USIZE_ERR);
         let mut buffer = Vec::with_capacity(tree_height);
         for i in 0..num_leafs / 2 {
-            let new_digest = Tip5::hash_pair(leafs[2 * i], leafs[2 * i + 1]);
-            buffer.push(new_digest);
-
-            // move to top of the current diagonal
+            let mut right = Tip5::hash_pair(leafs[2 * i], leafs[2 * i + 1]);
             for _ in 0..(i + 1).trailing_zeros() {
-                let right = buffer.pop().unwrap();
                 let left = buffer.pop().unwrap();
-                let new_d = Tip5::hash_pair(left, right);
-                buffer.push(new_d);
+                right = Tip5::hash_pair(left, right);
             }
+            buffer.push(right);
         }
         debug_assert_eq!(1, buffer.len());
 
