@@ -10,6 +10,8 @@ use serde::Serialize;
 use super::TOO_MANY_LEAFS_ERR;
 use super::mmr_trait::LeafMutation;
 use super::shared_basic;
+use crate::error::U32_TO_USIZE_ERR;
+use crate::error::USIZE_TO_U64_ERR;
 use crate::prelude::*;
 use crate::util_types::mmr::shared_advanced;
 
@@ -24,16 +26,92 @@ impl MmrAccumulator {
         Self { leaf_count, peaks }
     }
 
-    pub fn new_from_leafs(digests: Vec<Digest>) -> Self {
-        let mut mmra = MmrAccumulator {
-            leaf_count: 0,
-            peaks: vec![],
-        };
-        for digest in digests {
-            mmra.append(digest);
+    pub fn new_from_leafs(leafs: Vec<Digest>) -> Self {
+        let leaf_count = leafs.len().try_into().expect(USIZE_TO_U64_ERR);
+        let peaks = Self::peaks_from_leafs(&leafs);
+
+        Self { leaf_count, peaks }
+    }
+
+    /// Given a list of leafs, compute the corresponding Merkle-Mountain Range's
+    /// peak(s).
+    ///
+    /// Consumes as little RAM as possible, without sacrificing runtime
+    /// performance.
+    ///
+    /// The result…
+    /// - is the empty vector if and only if the argument is the empty slice.
+    /// - contains a single element if and only if the number of leafs is a
+    ///   power of two.
+    //
+    // The strategy of the algorithm is best explained using an example and a
+    // picture. Consider the following tree. The numeral annotations are
+    // explained below.
+    //
+    //
+    //               (3)   (4)    (5)   (6)                 Legend:
+    //                 ╲     ╲      ╲     ╲                 (i) – diagonal
+    //         (2)                                           i  – internal node
+    //           ╲   ──── 7 ────                             _  – leaf
+    //              ╱           ╲
+    //     (1)     3             6             10
+    //       ╲    ╱  ╲          ╱  ╲          ╱  ╲
+    //           ╱    ╲        ╱    ╲        ╱    ╲
+    //          1      2      4      5      8      9
+    //         ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲
+    //        _   _  _   _  _   _  _   _  _   _  _   _  _
+    //
+    //
+    // The internal nodes are numbered in the order they are computed. Any two
+    // internal nodes are merged as soon as possible. In order to know how many
+    // of the internal nodes can be merged, and to keep bookkeeping to a
+    // minimum, it's helpful to think about the tree's “diagonals”. In the
+    // picture, they are marked (1) through (6). The algorithm iterates over
+    // the diagonals:
+    //
+    // - On diagonal (1), internal node 1 is computed, and no internal nodes
+    //   can be merged.
+    // - On diagonal (2), internal node 2 is computed. Then, nodes 1 and 2 are
+    //   merged, resulting in node 3.
+    // - On diagonal (3), internal node 4 is computed, and no internal nodes
+    //   can be merged.
+    // - On diagonal (4), internal node 5 is computed. Then, nodes 4 and 5 are
+    //   merged, resulting in node 6. Then, nodes 3 and 6 are merged, resulting
+    //   in node 7.
+    // - On diagonal (5), internal node 8 is computed, and no internal nodes
+    //   can be merged.
+    // - On diagonal (6), internal node 9 is computed. Then, nodes 8 and 9 are
+    //   merged, resulting in node 10.
+    //
+    // The final result is the vector containing nodes 7, 10, and the straggling
+    // leaf.
+    //
+    // The maximum number of internal nodes that have to be stored is
+    // upper-bounded by the height of the smallest Merkle tree that can fit all
+    // the given leafs, i.e., the rounded-up log₂ of the number of leafs.
+    //
+    // Note the regularity in the number of merges. The sequence goes:
+    // 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, …
+    // This is the number of trailing zeros of the diagonal's index.
+    pub(crate) fn peaks_from_leafs(leafs: &[Digest]) -> Vec<Digest> {
+        let max_tree_height = leafs.len().next_power_of_two().ilog2();
+        let max_tree_height = max_tree_height.try_into().expect(U32_TO_USIZE_ERR);
+        let mut peaks = Vec::with_capacity(max_tree_height);
+
+        for (diagonal_idx, (&left_leaf, &right_leaf)) in (1_usize..).zip(leafs.iter().tuples()) {
+            let mut right = Tip5::hash_pair(left_leaf, right_leaf);
+            for _ in 0..diagonal_idx.trailing_zeros() {
+                let left = peaks.pop().unwrap();
+                right = Tip5::hash_pair(left, right);
+            }
+            peaks.push(right);
         }
 
-        mmra
+        if leafs.len() % 2 == 1 {
+            peaks.push(*leafs.last().unwrap());
+        }
+
+        peaks
     }
 
     /// Is `self` self-consistent? That is, is it possible to have the claimed

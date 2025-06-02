@@ -9,7 +9,6 @@ use lazy_static::lazy_static;
 use rayon::prelude::*;
 use thiserror::Error;
 
-use crate::error::U32_TO_USIZE_ERR;
 use crate::prelude::*;
 
 const DEFAULT_PARALLELIZATION_CUTOFF: usize = 512;
@@ -206,72 +205,16 @@ impl MerkleTree {
     ///
     /// [root]: Self::root
     /// [auth_struct]: MerkleTreeInclusionProof::authentication_structure
-    //
-    // The strategy of the algorithm is best explained using an example and a
-    // picture. Consider the following tree. The numeral annotations are
-    // explained below.
-    //
-    //               (3)   (4)
-    //                 ╲     ╲               Legend:
-    //         (2)                           (i) – diagonal
-    //           ╲   ──── 7 ────              i  – internal node
-    //              ╱           ╲             _  – leaf
-    //     (1)     3             6
-    //       ╲    ╱  ╲          ╱  ╲
-    //           ╱    ╲        ╱    ╲
-    //          1      2      4      5
-    //         ╱ ╲    ╱ ╲    ╱ ╲    ╱ ╲
-    //        _   _  _   _  _   _  _   _
-    //
-    // The internal nodes are numbered in the order they are computed. Any two
-    // internal nodes are merged as soon as possible. In order to know how many
-    // of the internal nodes can be merged, and to keep bookkeeping to a
-    // minimum, it's helpful to think about the tree's “diagonals”. In the
-    // picture, they are marked (1) through (4). The algorithm iterates over the
-    // diagonals:
-    //
-    // - On diagonal (1), internal node 1 is computed, and no internal nodes can
-    //   be merged.
-    // - On diagonal (2), internal node 2 is computed. Then, nodes 1 and 2 are
-    //   merged, resulting in node 3.
-    // - On diagonal (3), internal node 4 is computed, and no internal nodes can
-    //   be merged.
-    // - On diagonal (4), internal node 5 is computed. Then, nodes 4 and 5 are
-    //   merged, resulting in node 6. Then, nodes 3 and 6 are merged, resulting
-    //   in node 7.
-    //
-    // The maximum number of internal nodes that have to be stored is identical
-    // to the tree's height, i.e., the log₂ of the number of leafs.
-    //
-    // Note the regularity in the number of merges. The sequence goes:
-    // 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0, 4, …
-    // This is the number of trailing zeros of the diagonal's index.
     pub fn sequential_frugal_root(leafs: &[Digest]) -> Result<Digest> {
         if leafs.is_empty() {
             return Err(MerkleTreeError::TooFewLeafs);
-        }
-
-        let num_leafs = leafs.len();
-        if !num_leafs.is_power_of_two() {
+        };
+        let peaks = super::mmr::mmr_accumulator::MmrAccumulator::peaks_from_leafs(leafs);
+        let [root] = peaks[..] else {
             return Err(MerkleTreeError::IncorrectNumberOfLeafs);
-        }
-        if num_leafs == 1 {
-            return Ok(leafs[0]);
-        }
+        };
 
-        let tree_height = num_leafs.ilog2().try_into().expect(U32_TO_USIZE_ERR);
-        let mut buffer = Vec::with_capacity(tree_height);
-        for i in 0..num_leafs / 2 {
-            let mut right = Tip5::hash_pair(leafs[2 * i], leafs[2 * i + 1]);
-            for _ in 0..(i + 1).trailing_zeros() {
-                let left = buffer.pop().unwrap();
-                right = Tip5::hash_pair(left, right);
-            }
-            buffer.push(right);
-        }
-        debug_assert_eq!(1, buffer.len());
-
-        Ok(buffer[0])
+        Ok(root)
     }
 
     /// Helps to kick off Merkle tree construction. Sets up the Merkle tree's
