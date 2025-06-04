@@ -13,12 +13,20 @@ use thiserror::Error;
 use crate::prelude::*;
 
 const DEFAULT_PARALLELIZATION_CUTOFF: usize = 512;
+
+/// Parallelizing work with fewer than 2 elements
+/// 1. leads to infinite iteration in [`MerkleTree::par_new`] and
+///    [`MerkleTree::par_frugal_root`], and
+/// 2. does not make sense.
+const MINIMUM_PARALLELIZATION_CUTOFF: usize = 2;
+
 lazy_static! {
     static ref PARALLELIZATION_CUTOFF: usize =
         std::env::var("TWENTY_FIRST_MERKLE_TREE_PARALLELIZATION_CUTOFF")
             .ok()
             .and_then(|v| v.parse().ok())
-            .unwrap_or(DEFAULT_PARALLELIZATION_CUTOFF);
+            .unwrap_or(DEFAULT_PARALLELIZATION_CUTOFF)
+            .max(MINIMUM_PARALLELIZATION_CUTOFF);
 }
 
 /// Indexes internal nodes of a [`MerkleTree`].
