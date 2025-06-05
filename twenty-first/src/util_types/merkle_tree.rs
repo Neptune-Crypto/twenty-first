@@ -335,6 +335,10 @@ impl MerkleTree {
         num_leafs: MerkleTreeLeafIndex,
         leaf_indices: &[MerkleTreeLeafIndex],
     ) -> Result<impl ExactSizeIterator<Item = MerkleTreeNodeIndex> + use<>> {
+        if !num_leafs.is_power_of_two() {
+            return Err(MerkleTreeError::IncorrectNumberOfLeafs);
+        }
+
         // The set of indices of nodes that need to be included in the authentications
         // structure. In principle, every node of every authentication path is needed.
         // The root is never needed. Hence, it is not considered below.
