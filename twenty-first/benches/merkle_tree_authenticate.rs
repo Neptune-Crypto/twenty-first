@@ -5,63 +5,78 @@ use twenty_first::math::digest::Digest;
 use twenty_first::math::tip5::Tip5;
 use twenty_first::util_types::merkle_tree::*;
 
-criterion_main!(merkle_tree_authenticate);
+criterion_main!(benches);
 criterion_group!(
-    merkle_tree_authenticate,
-    gen_auth_structure,
-    verify_auth_structure
+    name = benches;
+    config = Criterion::default();
+    targets = auth_structure::<16>,
+              auth_structure::<20>,
 );
 
-fn gen_auth_structure(c: &mut Criterion) {
-    let mut sampler = MerkleTreeSampler::default();
+fn auth_structure<const TREE_HEIGHT: usize>(c: &mut Criterion) {
+    let bench_id = BenchmarkId::new("height", TREE_HEIGHT);
+    let mut sampler = MerkleTreeSampler::<TREE_HEIGHT>::default();
     let tree = sampler.tree();
 
-    c.bench_function("gen_auth_structure", |bencher| {
-        bencher.iter_batched(
-            || sampler.indices_to_open(),
-            |indices| tree.authentication_structure(&indices),
-            BatchSize::SmallInput,
-        )
-    });
-}
+    c.benchmark_group("gen_auth_structure")
+        .bench_function(bench_id.clone(), |bencher| {
+            bencher.iter_batched(
+                || sampler.indices_to_open(),
+                |indices| tree.authentication_structure(&indices),
+                BatchSize::SmallInput,
+            )
+        });
 
-fn verify_auth_structure(c: &mut Criterion) {
-    let mut sampler = MerkleTreeSampler::default();
-    let tree = sampler.tree();
+    c.benchmark_group("verify_auth_structure")
+        .bench_function(bench_id.clone(), |bencher| {
+            bencher.iter_batched(
+                || sampler.proof(&tree),
+                |proof| proof.verify(tree.root()),
+                BatchSize::SmallInput,
+            );
+        });
 
-    c.bench_function("verify_auth_structure", |bencher| {
-        bencher.iter_batched(
-            || sampler.proof(&tree),
-            |proof| proof.verify(tree.root()),
-            BatchSize::SmallInput,
-        );
-    });
+    let leafs = sampler.leaf_digests();
+    c.benchmark_group("recompute_auth_structure_sequential")
+        .sample_size(10)
+        .bench_function(bench_id.clone(), |bencher| {
+            bencher.iter_batched(
+                || sampler.indices_to_open(),
+                |idxs| MerkleTree::sequential_authentication_structure_from_leafs(&leafs, &idxs),
+                BatchSize::SmallInput,
+            )
+        });
+
+    c.benchmark_group("recompute_auth_structure_parallel")
+        .bench_function(bench_id, |bencher| {
+            bencher.iter_batched(
+                || sampler.indices_to_open(),
+                |idxs| MerkleTree::par_authentication_structure_from_leafs(&leafs, &idxs),
+                BatchSize::SmallInput,
+            )
+        });
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MerkleTreeSampler {
+struct MerkleTreeSampler<const HEIGHT: usize> {
     rng: StdRng,
-    tree_height: usize,
     num_opened_indices: usize,
 }
 
-impl Default for MerkleTreeSampler {
+impl<const HEIGHT: usize> Default for MerkleTreeSampler<HEIGHT> {
     fn default() -> Self {
         Self {
             rng: StdRng::seed_from_u64(0),
-            tree_height: 22,
             num_opened_indices: 40,
         }
     }
 }
 
-impl MerkleTreeSampler {
-    fn num_leafs(&self) -> MerkleTreeLeafIndex {
-        (1 << self.tree_height) as MerkleTreeLeafIndex
-    }
+impl<const HEIGHT: usize> MerkleTreeSampler<HEIGHT> {
+    const NUM_LEAFS: usize = 1 << HEIGHT;
 
     fn leaf_digests(&mut self) -> Vec<Digest> {
-        (0..self.num_leafs())
+        (0..Self::NUM_LEAFS)
             .map(|_| self.rng.next_u64())
             .map(|leaf| Tip5::hash(&leaf))
             .collect()
@@ -74,7 +89,7 @@ impl MerkleTreeSampler {
 
     fn indices_to_open(&mut self) -> Vec<MerkleTreeLeafIndex> {
         (0..self.num_opened_indices)
-            .map(|_| self.rng.random_range(0..self.num_leafs()))
+            .map(|_| self.rng.random_range(0..Self::NUM_LEAFS))
             .collect()
     }
 

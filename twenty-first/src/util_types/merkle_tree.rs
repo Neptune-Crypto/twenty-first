@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::hash_map::Entry::*;
 use std::collections::*;
 use std::fmt::Debug;
@@ -189,6 +190,104 @@ impl MerkleTree {
         Ok(MerkleTree { nodes })
     }
 
+    /// Compute the Merkle root from the given leafs without recording any
+    /// internal nodes.
+    ///
+    /// This is equivalent to
+    /// [`MerkleTree::sequential_new`]`(leafs).map(|t| t.`[`root()`][root]`)`
+    /// but requires considerably less RAM without impacting runtime performance
+    /// (it neither improves nor worsens). RAM consumption is reduced because
+    /// the tree's internal nodes are discarded as soon as possible. If you
+    /// later want to [prove](MerkleTreeInclusionProof) set-membership of any
+    /// leaf(s), the corresponding internal nodes that make up the
+    /// [authentication structure][auth_struct] will have to be recomputed,
+    /// whereas they can simply be copied if you have access to a full
+    /// [`MerkleTree`].
+    ///
+    /// See [`MerkleTree::sequential_authentication_structure_from_leafs`] for a
+    /// function that computes the authentication structure from the leafs.
+    ///
+    /// See also [`MerkleTree::par_frugal_root`] for a parallel version of this
+    /// function.
+    ///
+    /// [root]: Self::root
+    /// [auth_struct]: MerkleTreeInclusionProof::authentication_structure
+    pub fn sequential_frugal_root(leafs: &[Digest]) -> Result<Digest> {
+        if leafs.is_empty() {
+            return Err(MerkleTreeError::TooFewLeafs);
+        };
+        let peaks = super::mmr::mmr_accumulator::MmrAccumulator::peaks_from_leafs(leafs);
+        let [root] = peaks[..] else {
+            return Err(MerkleTreeError::IncorrectNumberOfLeafs);
+        };
+
+        Ok(root)
+    }
+
+    /// Compute the Merkle root from the given leafs in parallel without
+    /// recording any internal nodes.
+    ///
+    /// This is equivalent to
+    /// [`MerkleTree::par_new`]`(leafs).map(|t| t.`[`root()`][root]`)`
+    /// but requires considerably less RAM. Runtime performance is similar to
+    /// [`MerkleTree::par_new`] and might be faster, depending on your hardware.
+    ///
+    /// See [`MerkleTree::par_authentication_structure_from_leafs`] for a
+    /// function that computes the authentication structure from the leafs.
+    ///
+    /// See also [`MerkleTree::sequential_frugal_root`] for a sequential version
+    /// of this function. It also lists additional benefits and drawbacks that
+    /// are applicable to both the sequential and the parallel version.
+    ///
+    /// Note that the RAM usage of this parallel version depends on
+    /// [`RAYON_NUM_THREADS`](rayon), since each thread requires some RAM. If
+    /// you require the absolute minimum amount of RAM usage, use the
+    /// [sequential version](Self::sequential_frugal_root) instead.
+    ///
+    /// [root]: Self::root
+    pub fn par_frugal_root(leafs: &[Digest]) -> Result<Digest> {
+        if !leafs.len().is_power_of_two() {
+            return Err(MerkleTreeError::IncorrectNumberOfLeafs);
+        }
+
+        // To guarantee that all chunks correspond to trees of the same height,
+        // the number of threads must divide the number of leafs cleanly.
+        let num_threads = rayon::current_num_threads();
+        let num_threads = if num_threads.is_power_of_two() {
+            num_threads
+        } else {
+            num_threads.next_power_of_two() / 2 // previous power of 2
+        };
+        let mut num_threads = num_threads.max(1); // avoid division by 0
+
+        // parallel
+        let mut leafs = Cow::Borrowed(leafs);
+        while leafs.len() >= *PARALLELIZATION_CUTOFF {
+            // If the number of threads is so large that the chunk size is 1
+            // (or even 0), each individual thread performs no work anymore.
+            // In such a case, the most reasonable course of action is to reduce
+            // the effective number of worker threads, which increases the chunk
+            // size.
+            //
+            // The PARALLELIZATION_CUTOFF >= MINIMUM_PARALLELIZATION_CUTOFF == 2
+            // guarantees that leafs.len() / 2 >= 1. Hence, the loop terminates
+            // at latest once num_threads equals 1.
+            while num_threads > leafs.len() / 2 {
+                num_threads /= 2;
+            }
+
+            let chunk_size = leafs.len() / num_threads;
+            let next_layer = (0..num_threads)
+                .into_par_iter()
+                .map(|i| Self::sequential_frugal_root(&leafs[i * chunk_size..(i + 1) * chunk_size]))
+                .collect::<Result<_>>()?;
+            leafs = Cow::Owned(next_layer);
+        }
+
+        // sequential
+        Self::sequential_frugal_root(&leafs)
+    }
+
     /// Helps to kick off Merkle tree construction. Sets up the Merkle tree's
     /// internal nodes if (and only if) it is possible to construct a Merkle
     /// tree with the given leafs.
@@ -255,6 +354,77 @@ impl MerkleTree {
 
         let set_difference = node_is_needed.difference(&node_can_be_computed).copied();
         Ok(set_difference.sorted_unstable().rev())
+    }
+
+    /// Construct an [authentication structure][Self::authentication_structure]
+    /// without access to a full [`MerkleTree`], only the leafs. Particularly
+    /// useful in combination with [RAM-frugal root][frugal] computation.
+    ///
+    /// See also [`MerkleTree::par_authentication_structure_from_leafs`] for a
+    /// parallel version of this function.
+    ///
+    /// [frugal]: Self::sequential_frugal_root
+    pub fn sequential_authentication_structure_from_leafs(
+        leafs: &[Digest],
+        leaf_indices: &[MerkleTreeLeafIndex],
+    ) -> Result<Vec<Digest>> {
+        Self::authentication_structure_node_indices(leafs.len(), leaf_indices)?
+            .map(|node_index| Self::subtree_leafs(leafs, node_index))
+            .map(Self::sequential_frugal_root)
+            .collect()
+    }
+
+    /// Construct an [authentication structure][Self::authentication_structure]
+    /// without access to a full [`MerkleTree`], only the leafs. Particularly
+    /// useful in combination with [RAM-frugal root][frugal] computation.
+    ///
+    /// See also [`MerkleTree::sequential_authentication_structure_from_leafs`]
+    /// for a sequential version of this function.
+    ///
+    /// [frugal]: Self::par_frugal_root
+    pub fn par_authentication_structure_from_leafs(
+        leafs: &[Digest],
+        leaf_indices: &[MerkleTreeLeafIndex],
+    ) -> Result<Vec<Digest>> {
+        Self::authentication_structure_node_indices(leafs.len(), leaf_indices)?
+            .collect_vec()
+            .into_par_iter()
+            .map(|node_index| Self::subtree_leafs(leafs, node_index))
+            .map(Self::par_frugal_root)
+            .collect()
+    }
+
+    /// Given a list of leafs and a [`MerkleTreeNodeIndex`] within the tree
+    /// defined by those leafs, return the leafs that are part of the subtree
+    /// rooted at the given node index.
+    ///
+    /// For example, given 4 leafs and node index 3, returns the leafs with
+    /// node indices 6 and 7:
+    ///
+    /// ```markdown
+    ///         1
+    ///       ╱   ╲
+    ///      2      3
+    ///     ╱ ╲    ╱ ╲
+    ///    4   5  6   7
+    /// ```
+    ///
+    /// Because this is an internal helper function (and only for that reason),
+    /// it's the caller's responsibility to ensure that the arguments are
+    /// integral:
+    /// - the number of `leafs` must be a power of 2
+    /// - the `node_index` must be valid with respect to the tree induced by the
+    ///   `leafs`
+    fn subtree_leafs(leafs: &[Digest], node_index: MerkleTreeNodeIndex) -> &[Digest] {
+        let total_num_leafs = leafs.len();
+        let total_tree_height = total_num_leafs.ilog2();
+
+        let tree_height = total_tree_height - node_index.ilog2();
+        let left_leaf_node_index = node_index * (1 << tree_height);
+        let left_leaf_index = left_leaf_node_index - total_num_leafs;
+        let num_leafs = 1 << tree_height;
+
+        &leafs[left_leaf_index..left_leaf_index + num_leafs]
     }
 
     /// Generate a de-duplicated authentication structure for the given
@@ -736,6 +906,19 @@ pub mod merkle_tree_test {
         prop_assert_eq!(sequential, parallel);
     }
 
+    #[proptest]
+    fn ram_frugal_merkle_root_is_identical_to_full_tree_root(
+        #[strategy(0_usize..10)] _tree_height: usize,
+        #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
+    ) {
+        let hungry = MerkleTree::par_new(&leafs)?.root();
+        let seq_frugal = MerkleTree::sequential_frugal_root(&leafs)?;
+        prop_assert_eq!(seq_frugal, hungry);
+
+        let par_frugal = MerkleTree::par_frugal_root(&leafs)?;
+        prop_assert_eq!(par_frugal, hungry);
+    }
+
     #[proptest(cases = 100)]
     fn accessing_number_of_leafs_and_height_never_panics(
         #[strategy(arb())] merkle_tree: MerkleTree,
@@ -960,6 +1143,59 @@ pub mod merkle_tree_test {
         assert_eq!(auth_path_with_nodes([12, 7, 2]), auth_path_for_leaf(5));
         assert_eq!(auth_path_with_nodes([15, 6, 2]), auth_path_for_leaf(6));
         assert_eq!(auth_path_with_nodes([14, 6, 2]), auth_path_for_leaf(7));
+    }
+
+    #[test]
+    fn authentication_paths_of_very_small_tree_are_identical_when_using_tree_or_only_leafs() {
+        let tree = MerkleTree::test_tree_of_height(3);
+        let leafs = tree.leafs().copied().collect_vec();
+
+        let tree_path = |i| tree.authentication_structure(&[i]).unwrap();
+        let seq_leaf_path =
+            |i| MerkleTree::sequential_authentication_structure_from_leafs(&leafs, &[i]).unwrap();
+        let par_leaf_path =
+            |i| MerkleTree::par_authentication_structure_from_leafs(&leafs, &[i]).unwrap();
+
+        for leaf_idx in 0..tree.num_leafs() {
+            dbg!(leaf_idx);
+            assert_eq!(tree_path(leaf_idx), seq_leaf_path(leaf_idx));
+            assert_eq!(tree_path(leaf_idx), par_leaf_path(leaf_idx));
+        }
+    }
+
+    #[proptest(cases = 100)]
+    fn auth_structure_is_independent_of_compute_method(test_tree: MerkleTreeToTest) {
+        let tree = test_tree.tree;
+        let selected_indices = test_tree.selected_indices;
+        let leafs = tree.leafs().copied().collect_vec();
+
+        let cached_auth_structure = tree.authentication_structure(&selected_indices)?;
+        let seq_auth_structure =
+            MerkleTree::sequential_authentication_structure_from_leafs(&leafs, &selected_indices)?;
+        let par_auth_structure =
+            MerkleTree::par_authentication_structure_from_leafs(&leafs, &selected_indices)?;
+
+        prop_assert_eq!(&cached_auth_structure, &seq_auth_structure);
+        prop_assert_eq!(&cached_auth_structure, &par_auth_structure);
+    }
+
+    #[test]
+    fn subtree_leafs_are_actually_sub_tree_leafs() {
+        let tree = MerkleTree::test_tree_of_height(5);
+        let leafs = tree.leafs().copied().collect_vec();
+        let subtree = |node_idx| MerkleTree::subtree_leafs(&leafs, node_idx);
+
+        // Check all node indices, one level at a time. Going level by level
+        // ensures that the expected subtrees (per level) have the same number
+        // of leafs.
+        for node_indices in [1..2, 2..4, 4..8, 8..16, 16..32, 32..64] {
+            // the expected number of leafs in any subtree at the current level
+            let num_leafs = tree.num_leafs() / node_indices.len();
+            for (i, node_index) in node_indices.enumerate() {
+                let expected_leafs = &leafs[i * num_leafs..(i + 1) * num_leafs];
+                assert_eq!(expected_leafs, subtree(node_index));
+            }
+        }
     }
 
     #[proptest(cases = 10)]
