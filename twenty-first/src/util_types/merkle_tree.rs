@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::hash_map::Entry::*;
 use std::collections::*;
 use std::fmt::Debug;
@@ -203,6 +204,9 @@ impl MerkleTree {
     /// whereas they can simply be copied if you have access to a full
     /// [`MerkleTree`].
     ///
+    /// See also [`MerkleTree::par_frugal_root`] for a parallel version of this
+    /// function.
+    ///
     /// [root]: Self::root
     /// [auth_struct]: MerkleTreeInclusionProof::authentication_structure
     pub fn sequential_frugal_root(leafs: &[Digest]) -> Result<Digest> {
@@ -215,6 +219,67 @@ impl MerkleTree {
         };
 
         Ok(root)
+    }
+
+    /// Compute the Merkle root from the given leafs in parallel without
+    /// recording any internal nodes.
+    ///
+    /// This is equivalent to
+    /// [`MerkleTree::par_new`]`(leafs).map(|t| t.`[`root()`][root]`)`
+    /// but requires considerably less RAM. Runtime performance is similar to
+    /// [`MerkleTree::par_new`] and might be faster, depending on your hardware.
+    ///
+    /// See also [`MerkleTree::sequential_frugal_root`] for a sequential version
+    /// of this function. It also lists additional benefits and drawbacks that
+    /// are applicable to both the sequential and the parallel version.
+    ///
+    /// Note that the RAM usage of this parallel version depends on
+    /// [`RAYON_NUM_THREADS`](rayon), since each thread requires some RAM. If
+    /// you require the absolute minimum amount of RAM usage, use the
+    /// [sequential version](Self::sequential_frugal_root) instead.
+    ///
+    /// [root]: Self::root
+    pub fn par_frugal_root(leafs: &[Digest]) -> Result<Digest> {
+        if !leafs.len().is_power_of_two() {
+            return Err(MerkleTreeError::IncorrectNumberOfLeafs);
+        }
+
+        // To guarantee that all chunks correspond to trees of the same height,
+        // the number of threads must divide the number of leafs cleanly.
+        let num_threads = rayon::current_num_threads();
+        let num_threads = if num_threads.is_power_of_two() {
+            num_threads
+        } else {
+            num_threads.next_power_of_two() / 2 // previous power of 2
+        };
+        let mut num_threads = num_threads.max(1); // avoid division by 0
+
+        // parallel
+        let mut leafs = Cow::Borrowed(leafs);
+        while leafs.len() >= *PARALLELIZATION_CUTOFF {
+            // If the number of threads is so large that the chunk size is 1
+            // (or even 0), each individual thread performs no work anymore.
+            // In such a case, the most reasonable course of action is to reduce
+            // the effective number of worker threads, which increases the chunk
+            // size.
+            //
+            // The PARALLELIZATION_CUTOFF >= MINIMUM_PARALLELIZATION_CUTOFF == 2
+            // guarantees that leafs.len() / 2 >= 1. Hence, the loop terminates
+            // at latest once num_threads equals 1.
+            while num_threads > leafs.len() / 2 {
+                num_threads /= 2;
+            }
+
+            let chunk_size = leafs.len() / num_threads;
+            let next_layer = (0..num_threads)
+                .into_par_iter()
+                .map(|i| Self::sequential_frugal_root(&leafs[i * chunk_size..(i + 1) * chunk_size]))
+                .collect::<Result<_>>()?;
+            leafs = Cow::Owned(next_layer);
+        }
+
+        // sequential
+        Self::sequential_frugal_root(&leafs)
     }
 
     /// Helps to kick off Merkle tree construction. Sets up the Merkle tree's
@@ -765,13 +830,16 @@ pub mod merkle_tree_test {
     }
 
     #[proptest]
-    fn ram_frugal_merke_root_is_identical_to_full_tree_root(
+    fn ram_frugal_merkle_root_is_identical_to_full_tree_root(
         #[strategy(0_usize..10)] _tree_height: usize,
         #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
     ) {
-        let frugal = MerkleTree::sequential_frugal_root(&leafs)?;
         let hungry = MerkleTree::par_new(&leafs)?.root();
-        prop_assert_eq!(frugal, hungry);
+        let seq_frugal = MerkleTree::sequential_frugal_root(&leafs)?;
+        prop_assert_eq!(seq_frugal, hungry);
+
+        let par_frugal = MerkleTree::par_frugal_root(&leafs)?;
+        prop_assert_eq!(par_frugal, hungry);
     }
 
     #[proptest(cases = 100)]
