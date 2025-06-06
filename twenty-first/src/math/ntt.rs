@@ -1,7 +1,6 @@
 use std::ops::MulAssign;
 
 use num_traits::ConstOne;
-use num_traits::ConstZero;
 
 use super::b_field_element::BFieldElement;
 use super::traits::FiniteField;
@@ -95,11 +94,7 @@ where
     //  => `unwrap()` never panics
     let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
     ntt_unchecked(x, omega.inverse(), log2_slice_len);
-
-    let n_inv_or_zero = BFieldElement::from(x.len()).inverse_or_zero();
-    for elem in x.iter_mut() {
-        *elem *= n_inv_or_zero
-    }
+    unscale(x);
 }
 
 /// Like [NTT][self::ntt], but with greater control over the root of unity that
@@ -148,131 +143,16 @@ where
     }
 }
 
-#[inline]
-pub fn bitreverse_usize(mut n: usize, l: usize) -> usize {
-    let mut r = 0;
-    for _ in 0..l {
-        r = (r << 1) | (n & 1);
-        n >>= 1;
-    }
-    r
-}
-
-pub fn bitreverse_order<FF>(array: &mut [FF]) {
-    let mut logn = 0;
-    while (1 << logn) < array.len() {
-        logn += 1;
-    }
-
-    for k in 0..array.len() {
-        let rk = bitreverse_usize(k, logn);
-        if k < rk {
-            array.swap(rk, k);
-        }
-    }
-}
-
-/// Compute the [NTT][self::ntt], but leave the array in
-/// [bitreversed order][self::bitreverse_order].
-///
-/// This method can be expected to outperform regular NTT when
-///  - it is followed up by [INTT][self::intt] (e.g. for fast multiplication)
-///  - the `powers_of_omega_bitreversed` can be precomputed (which is not the
-///    case here).
-///
-/// In that case, be sure to use the matching [`intt_noswap`] and don't forget
-/// to unscale by `n`, e.g. using [`unscale`].
-pub fn ntt_noswap<FF>(x: &mut [FF])
-where
-    FF: FiniteField + MulAssign<BFieldElement>,
-{
-    let n: usize = x.len();
-    debug_assert!(n.is_power_of_two());
-
-    let root_order = n.try_into().unwrap();
-    let omega = BFieldElement::primitive_root_of_unity(root_order).unwrap();
-
-    let mut logn: usize = 0;
-    while (1 << logn) < x.len() {
-        logn += 1;
-    }
-
-    let mut powers_of_omega_bitreversed = vec![BFieldElement::ZERO; n];
-    let mut omegai = BFieldElement::ONE;
-    for i in 0..n / 2 {
-        powers_of_omega_bitreversed[bitreverse_usize(i, logn - 1)] = omegai;
-        omegai *= omega;
-    }
-
-    let mut m: usize = 1;
-    let mut t: usize = n;
-    while m < n {
-        t >>= 1;
-
-        for (i, zeta) in powers_of_omega_bitreversed.iter().enumerate().take(m) {
-            let s = i * t * 2;
-            for j in s..(s + t) {
-                let u = x[j];
-                let mut v = x[j + t];
-                v *= *zeta;
-                x[j] = u + v;
-                x[j + t] = u - v;
-            }
-        }
-
-        m *= 2;
-    }
-}
-
-/// Compute the [inverse NTT][self::intt], assuming that the array is presented
-/// in [bitreversed order][self::bitreverse_order]. Also, don't unscale by `n`
-/// afterward.
-///
-/// See also [`ntt_noswap`].
-pub fn intt_noswap<FF>(x: &mut [FF])
-where
-    FF: FiniteField + MulAssign<BFieldElement>,
-{
-    let n = x.len();
-    debug_assert!(n.is_power_of_two());
-
-    let root_order = n.try_into().unwrap();
-    let omega = BFieldElement::primitive_root_of_unity(root_order).unwrap();
-    let omega_inverse = omega.inverse();
-
-    let mut logn: usize = 0;
-    while (1 << logn) < x.len() {
-        logn += 1;
-    }
-
-    let mut m = 1;
-    for _ in 0..logn {
-        let w_m = omega_inverse.mod_pow_u32((n / (2 * m)).try_into().unwrap());
-        let mut k = 0;
-        while k < n {
-            let mut w = BFieldElement::ONE;
-            for j in 0..m {
-                let u = x[k + j];
-                let mut v = x[k + j + m];
-                v *= w;
-                x[k + j] = u + v;
-                x[k + j + m] = u - v;
-                w *= w_m;
-            }
-
-            k += 2 * m;
-        }
-
-        m *= 2;
-    }
-}
-
 /// Unscale the array by multiplying every element by the
 /// inverse of the array's length. Useful for following up intt.
-pub fn unscale(array: &mut [BFieldElement]) {
-    let ninv = BFieldElement::new(array.len() as u64).inverse();
-    for a in array.iter_mut() {
-        *a *= ninv;
+#[inline]
+fn unscale<FF>(array: &mut [FF])
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let n_inv = BFieldElement::from(array.len()).inverse_or_zero();
+    for elem in array {
+        *elem *= n_inv;
     }
 }
 
@@ -287,8 +167,9 @@ fn bitreverse(mut n: u32, l: u32) -> u32 {
 }
 
 #[cfg(test)]
-mod fast_ntt_attempt_tests {
+mod tests {
     use itertools::Itertools;
+    use num_traits::ConstZero;
     use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -526,29 +407,6 @@ mod fast_ntt_attempt_tests {
                 .collect_vec();
 
             assert_eq!(evals, coefficients);
-        }
-    }
-
-    #[test]
-    fn test_ntt_noswap() {
-        for log_size in 1..8 {
-            let size = 1 << log_size;
-            println!("size: {size}");
-            let a: Vec<BFieldElement> = random_elements(size);
-            let mut a1 = a.clone();
-            ntt(&mut a1);
-            let mut a2 = a.clone();
-            ntt_noswap(&mut a2);
-            bitreverse_order(&mut a2);
-            assert_eq!(a1, a2);
-
-            intt(&mut a1);
-            bitreverse_order(&mut a2);
-            intt_noswap(&mut a2);
-            for a2e in a2.iter_mut() {
-                *a2e *= BFieldElement::new(size.try_into().unwrap()).inverse();
-            }
-            assert_eq!(a1, a2);
         }
     }
 }
