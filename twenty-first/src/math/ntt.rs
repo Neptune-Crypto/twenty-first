@@ -1,7 +1,8 @@
 use std::ops::MulAssign;
 
 use num_traits::ConstOne;
-use num_traits::ConstZero;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelIterator;
 
 use super::b_field_element::BFieldElement;
 use super::traits::FiniteField;
@@ -102,6 +103,82 @@ where
     }
 }
 
+pub struct NttPrecalculatedValues {
+    bitreverse_indices: Vec<u32>,
+    w_powerss: Vec<Vec<BFieldElement>>,
+}
+
+pub fn precalculate_ntt_values(log2_slice_len: u32) -> NttPrecalculatedValues {
+    debug_assert!(log2_slice_len < 32, "Slice length may not exceed 2**31");
+    let slice_len = 1u32 << log2_slice_len;
+
+    let bitreverse_indices = (0..slice_len)
+        .into_par_iter()
+        .map(|k| bitreverse(k, log2_slice_len))
+        .collect();
+
+    // TODO: Parallelize this loop!
+    // `slice_len` is a power of two => unwrap never panics.
+    let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
+    let w_powerss = (0..log2_slice_len)
+        .into_par_iter()
+        .map(|i| {
+            let m = 1 << i;
+            let w_m = omega.mod_pow_u32(slice_len / (2 * m));
+            let mut w_powers = vec![BFieldElement::ONE; m as usize];
+            for j in 1..m as usize {
+                w_powers[j] = w_powers[j - 1] * w_m;
+            }
+
+            w_powers
+        })
+        .collect();
+
+    NttPrecalculatedValues {
+        bitreverse_indices,
+        w_powerss,
+    }
+}
+
+pub fn ntt_with_precalculated_values<FF>(
+    x: &mut [FF],
+    precalculated_values: &NttPrecalculatedValues,
+) where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let slice_len = x.len() as u32;
+    let log2_slice_len = slice_len.ilog2();
+
+    let bitreverse_indices = &precalculated_values.bitreverse_indices;
+    for k in 0..slice_len {
+        let rk = bitreverse_indices[k as usize];
+        if k < rk {
+            x.swap(rk as usize, k as usize);
+        }
+    }
+
+    let w_powers = &precalculated_values.w_powerss;
+    let mut m = 1;
+    for i in 0..log2_slice_len {
+        let mut k = 0;
+        while k < slice_len {
+            for j in 0..m {
+                let idx1 = (k + j) as usize;
+                let idx2 = (k + j + m) as usize;
+                let u = x[idx1];
+                let mut v = x[idx2];
+                v *= w_powers[i as usize][j as usize];
+                x[idx1] = u + v;
+                x[idx2] = u - v;
+            }
+
+            k += 2 * m;
+        }
+
+        m *= 2;
+    }
+}
+
 /// Like [NTT][self::ntt], but with greater control over the root of unity that
 /// is to be used.
 ///
@@ -129,135 +206,21 @@ where
     let mut m = 1;
     for _ in 0..log2_slice_len {
         let w_m = omega.mod_pow_u32(slice_len / (2 * m));
+        let mut w_powers = vec![BFieldElement::ONE; m as usize];
+        // Precompute twiddle factors
+        for j in 1..m as usize {
+            w_powers[j] = w_powers[j - 1] * w_m;
+        }
         let mut k = 0;
         while k < slice_len {
-            let mut w = BFieldElement::ONE;
             for j in 0..m {
-                let u = x[(k + j) as usize];
-                let mut v = x[(k + j + m) as usize];
-                v *= w;
-                x[(k + j) as usize] = u + v;
-                x[(k + j + m) as usize] = u - v;
-                w *= w_m;
-            }
-
-            k += 2 * m;
-        }
-
-        m *= 2;
-    }
-}
-
-#[inline]
-pub fn bitreverse_usize(mut n: usize, l: usize) -> usize {
-    let mut r = 0;
-    for _ in 0..l {
-        r = (r << 1) | (n & 1);
-        n >>= 1;
-    }
-    r
-}
-
-pub fn bitreverse_order<FF>(array: &mut [FF]) {
-    let mut logn = 0;
-    while (1 << logn) < array.len() {
-        logn += 1;
-    }
-
-    for k in 0..array.len() {
-        let rk = bitreverse_usize(k, logn);
-        if k < rk {
-            array.swap(rk, k);
-        }
-    }
-}
-
-/// Compute the [NTT][self::ntt], but leave the array in
-/// [bitreversed order][self::bitreverse_order].
-///
-/// This method can be expected to outperform regular NTT when
-///  - it is followed up by [INTT][self::intt] (e.g. for fast multiplication)
-///  - the `powers_of_omega_bitreversed` can be precomputed (which is not the
-///    case here).
-///
-/// In that case, be sure to use the matching [`intt_noswap`] and don't forget
-/// to unscale by `n`, e.g. using [`unscale`].
-pub fn ntt_noswap<FF>(x: &mut [FF])
-where
-    FF: FiniteField + MulAssign<BFieldElement>,
-{
-    let n: usize = x.len();
-    debug_assert!(n.is_power_of_two());
-
-    let root_order = n.try_into().unwrap();
-    let omega = BFieldElement::primitive_root_of_unity(root_order).unwrap();
-
-    let mut logn: usize = 0;
-    while (1 << logn) < x.len() {
-        logn += 1;
-    }
-
-    let mut powers_of_omega_bitreversed = vec![BFieldElement::ZERO; n];
-    let mut omegai = BFieldElement::ONE;
-    for i in 0..n / 2 {
-        powers_of_omega_bitreversed[bitreverse_usize(i, logn - 1)] = omegai;
-        omegai *= omega;
-    }
-
-    let mut m: usize = 1;
-    let mut t: usize = n;
-    while m < n {
-        t >>= 1;
-
-        for (i, zeta) in powers_of_omega_bitreversed.iter().enumerate().take(m) {
-            let s = i * t * 2;
-            for j in s..(s + t) {
-                let u = x[j];
-                let mut v = x[j + t];
-                v *= *zeta;
-                x[j] = u + v;
-                x[j + t] = u - v;
-            }
-        }
-
-        m *= 2;
-    }
-}
-
-/// Compute the [inverse NTT][self::intt], assuming that the array is presented
-/// in [bitreversed order][self::bitreverse_order]. Also, don't unscale by `n`
-/// afterward.
-///
-/// See also [`ntt_noswap`].
-pub fn intt_noswap<FF>(x: &mut [FF])
-where
-    FF: FiniteField + MulAssign<BFieldElement>,
-{
-    let n = x.len();
-    debug_assert!(n.is_power_of_two());
-
-    let root_order = n.try_into().unwrap();
-    let omega = BFieldElement::primitive_root_of_unity(root_order).unwrap();
-    let omega_inverse = omega.inverse();
-
-    let mut logn: usize = 0;
-    while (1 << logn) < x.len() {
-        logn += 1;
-    }
-
-    let mut m = 1;
-    for _ in 0..logn {
-        let w_m = omega_inverse.mod_pow_u32((n / (2 * m)).try_into().unwrap());
-        let mut k = 0;
-        while k < n {
-            let mut w = BFieldElement::ONE;
-            for j in 0..m {
-                let u = x[k + j];
-                let mut v = x[k + j + m];
-                v *= w;
-                x[k + j] = u + v;
-                x[k + j + m] = u - v;
-                w *= w_m;
+                let idx1 = (k + j) as usize;
+                let idx2 = (k + j + m) as usize;
+                let u = x[idx1];
+                let mut v = x[idx2];
+                v *= w_powers[j as usize];
+                x[idx1] = u + v;
+                x[idx2] = u - v;
             }
 
             k += 2 * m;
@@ -276,19 +239,20 @@ pub fn unscale(array: &mut [BFieldElement]) {
     }
 }
 
-#[inline]
-fn bitreverse(mut n: u32, l: u32) -> u32 {
-    let mut r = 0;
-    for _ in 0..l {
-        r = (r << 1) | (n & 1);
-        n >>= 1;
-    }
-    r
+#[inline(always)]
+fn bitreverse(mut k: u32, log2_n: u32) -> u32 {
+    k = ((k & 0x55555555) << 1) | ((k & 0xaaaaaaaa) >> 1);
+    k = ((k & 0x33333333) << 2) | ((k & 0xcccccccc) >> 2);
+    k = ((k & 0x0f0f0f0f) << 4) | ((k & 0xf0f0f0f0) >> 4);
+    k = ((k & 0x00ff00ff) << 8) | ((k & 0xff00ff00) >> 8);
+    k = k.rotate_right(16);
+    k >> ((32 - log2_n) & 0x1f)
 }
 
 #[cfg(test)]
 mod fast_ntt_attempt_tests {
     use itertools::Itertools;
+    use num_traits::ConstZero;
     use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -351,6 +315,40 @@ mod fast_ntt_attempt_tests {
                 intt::<XFieldElement>(&mut values);
                 assert_eq!(original_values_with_max_element, values);
             }
+        }
+    }
+
+    #[test]
+    fn precalculating_values_gives_same_result_bfe() {
+        for log_2_n in 1..10 {
+            let n = 1 << log_2_n;
+            let values = random_elements(n);
+
+            let mut with_precalculation = values.clone();
+            let mut no_precalculation = values.clone();
+
+            let precalculated = precalculate_ntt_values(log_2_n);
+            ntt_with_precalculated_values(&mut with_precalculation, &precalculated);
+            ntt::<BFieldElement>(&mut no_precalculation);
+
+            assert_eq!(no_precalculation, with_precalculation);
+        }
+    }
+
+    #[test]
+    fn precalculating_values_gives_same_result_xfe() {
+        for log_2_n in 1..10 {
+            let n = 1 << log_2_n;
+            let values = random_elements(n);
+
+            let mut with_precalculation = values.clone();
+            let mut no_precalculation = values.clone();
+
+            let precalculated = precalculate_ntt_values(log_2_n);
+            ntt_with_precalculated_values(&mut with_precalculation, &precalculated);
+            ntt::<XFieldElement>(&mut no_precalculation);
+
+            assert_eq!(no_precalculation, with_precalculation);
         }
     }
 
@@ -526,29 +524,6 @@ mod fast_ntt_attempt_tests {
                 .collect_vec();
 
             assert_eq!(evals, coefficients);
-        }
-    }
-
-    #[test]
-    fn test_ntt_noswap() {
-        for log_size in 1..8 {
-            let size = 1 << log_size;
-            println!("size: {size}");
-            let a: Vec<BFieldElement> = random_elements(size);
-            let mut a1 = a.clone();
-            ntt(&mut a1);
-            let mut a2 = a.clone();
-            ntt_noswap(&mut a2);
-            bitreverse_order(&mut a2);
-            assert_eq!(a1, a2);
-
-            intt(&mut a1);
-            bitreverse_order(&mut a2);
-            intt_noswap(&mut a2);
-            for a2e in a2.iter_mut() {
-                *a2e *= BFieldElement::new(size.try_into().unwrap()).inverse();
-            }
-            assert_eq!(a1, a2);
         }
     }
 }
