@@ -54,9 +54,17 @@ pub fn ntt<FF>(x: &mut [FF])
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
+    static ALL_TWIDDLE_FACTORS: [OnceLock<Vec<Vec<BFieldElement>>>; NUM_DOMAINS] =
+        [const { OnceLock::new() }; NUM_DOMAINS];
+
     let slice_len = slice_len(x);
-    let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
-    ntt_unchecked(x, omega);
+    let twiddle_factors = ALL_TWIDDLE_FACTORS[slice_len.checked_ilog2().unwrap_or(0) as usize]
+        .get_or_init(|| {
+            let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
+            twiddle_factors(slice_len, omega)
+        });
+
+    ntt_unchecked(x, twiddle_factors);
 }
 
 /// ## Perform INTT on slices of prime-field elements
@@ -88,9 +96,17 @@ pub fn intt<FF>(x: &mut [FF])
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
+    static ALL_TWIDDLE_FACTORS: [OnceLock<Vec<Vec<BFieldElement>>>; NUM_DOMAINS] =
+        [const { OnceLock::new() }; NUM_DOMAINS];
+
     let slice_len = slice_len(x);
-    let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
-    ntt_unchecked(x, omega.inverse());
+    let twiddle_factors = ALL_TWIDDLE_FACTORS[slice_len.checked_ilog2().unwrap_or(0) as usize]
+        .get_or_init(|| {
+            let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
+            twiddle_factors(slice_len, omega.inverse())
+        });
+
+    ntt_unchecked(x, twiddle_factors);
     unscale(x);
 }
 
@@ -112,8 +128,7 @@ fn slice_len<FF>(x: &[FF]) -> u32 {
 /// Internal helper function for [NTT][self::ntt] and [iNTT][self::intt].
 ///
 /// Assumes that
-/// - the passed-in root of unity is a primitive root of unity of the
-///   appropriate order,
+/// - the passed-in twiddle factors are correct for the length of the slice,
 /// - the length of the slice is a power of two, and
 /// - the length of the slice is smaller than [`u32::MAX`].
 ///
@@ -121,7 +136,7 @@ fn slice_len<FF>(x: &[FF]) -> u32 {
 /// produce incorrect results.
 #[expect(clippy::many_single_char_names)]
 #[inline]
-fn ntt_unchecked<FF>(x: &mut [FF], omega: BFieldElement)
+fn ntt_unchecked<FF>(x: &mut [FF], twiddle_factors: &[Vec<BFieldElement>])
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
@@ -162,18 +177,17 @@ where
 
     let slice_len = slice_len as u32;
     let mut m = 1;
-    for _ in 0..log2_slice_len {
-        let w_m = omega.mod_pow_u32(slice_len / (2 * m));
+    for twiddles in twiddle_factors {
         let mut k = 0;
         while k < slice_len {
-            let mut w = BFieldElement::ONE;
             for j in 0..m {
-                let u = x[(k + j) as usize];
-                let mut v = x[(k + j + m) as usize];
-                v *= w;
-                x[(k + j) as usize] = u + v;
-                x[(k + j + m) as usize] = u - v;
-                w *= w_m;
+                let idx1 = (k + j) as usize;
+                let idx2 = (k + j + m) as usize;
+                let u = x[idx1];
+                let mut v = x[idx2];
+                v *= twiddles[j as usize];
+                x[idx1] = u + v;
+                x[idx2] = u - v;
             }
 
             k += 2 * m;
@@ -248,6 +262,46 @@ pub fn swap_indices(len: usize) -> Vec<Option<NonZeroUsize>> {
 
             // 0 >= bitreverse(0, log_2_len) == 0 => unwrap is fine
             ((k as u32) < rev_k).then(|| NonZeroUsize::new(rev_k as usize).unwrap())
+        })
+        .collect()
+}
+
+/// Internal helper function to (pre-) compute the twiddle factors for use in
+/// [NTT][ntt] and [iNTT][intt].
+///
+/// Assumes that the given root of unity and the slice length match.
+//
+// The runtime of this function, especially when seen in the larger context,
+// could potentially still be improved. Since this function is run at most twice
+// per slice length (once for NTT, once for iNTT), any runtime savings are
+// amortized pretty quickly. Saving RAM might be more interesting.
+//
+// One difference to the Longa+Naehrig paper [0] is the return value of
+// Vec<Vec<_>> instead of a single Vec<_>.
+// Also note that the twiddle factors for smaller domains are a subset of those
+// for larger domains. In order to save both space and time, what can be shared,
+// should be shared. I think the engineering work to get this working with the
+// current OnceLock-based lazy-initialization is non-trivial, considering that
+// OnceLocks must not be re-entrantly initialized. I could be wrong and it's
+// actually easy.
+//
+// [0] <https://eprint.iacr.org/2016/504.pdf>
+//
+// Only public for benchmarking purposes.
+#[doc(hidden)]
+pub fn twiddle_factors(slice_len: u32, root_of_unity: BFieldElement) -> Vec<Vec<BFieldElement>> {
+    // For an explanation of why this is not parallelized, see `swap_indices`.
+    (0..slice_len.checked_ilog2().unwrap_or(0))
+        .map(|i| {
+            let m = 1 << i;
+            let exponent = slice_len / (2 * m);
+            let w_m = root_of_unity.mod_pow_u32(exponent);
+            let mut w_powers = vec![BFieldElement::ONE; m as usize];
+            for j in 1..m as usize {
+                w_powers[j] = w_powers[j - 1] * w_m;
+            }
+
+            w_powers
         })
         .collect()
 }
@@ -501,6 +555,16 @@ mod tests {
         // exponential growth is powerful; cap the number of domains
         for log_size in 0..NUM_DOMAINS - 2 {
             swap_indices(1 << log_size);
+        }
+    }
+
+    #[test]
+    fn twiddle_factors_can_be_computed() {
+        // exponential growth is powerful; cap the number of domains
+        for log_size in 0..NUM_DOMAINS - 5 {
+            let size = 1 << log_size;
+            let root = BFieldElement::primitive_root_of_unity(size.into()).unwrap();
+            twiddle_factors(size, root);
         }
     }
 }
