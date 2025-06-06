@@ -136,11 +136,13 @@ where
         let mut k = 0;
         while k < slice_len {
             for j in 0..m {
-                let u = x[(k + j) as usize];
-                let mut v = x[(k + j + m) as usize];
+                let idx1 = (k + j) as usize;
+                let idx2 = (k + j + m) as usize;
+                let u = x[idx1];
+                let mut v = x[idx2];
                 v *= w_powers[j as usize];
-                x[(k + j) as usize] = u + v;
-                x[(k + j + m) as usize] = u - v;
+                x[idx1] = u + v;
+                x[idx2] = u - v;
             }
 
             k += 2 * m;
