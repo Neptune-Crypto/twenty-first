@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::hash_map::Entry::*;
 use std::collections::*;
 use std::fmt::Debug;
+use std::mem::MaybeUninit;
 use std::result;
 
 use arbitrary::*;
@@ -398,7 +399,21 @@ impl MerkleTree {
         nodes
             .try_reserve_exact(num_nodes)
             .map_err(|_| MerkleTreeError::TreeTooHigh)?;
-        nodes.resize(num_nodes, Digest::default());
+
+        // Parallel initialization is slower for small trees, but faster for
+        // tall trees. If the slowdown is deemed too big for small trees, this
+        // is the place to change it.
+        nodes
+            .spare_capacity_mut()
+            .par_iter_mut()
+            .take(num_nodes)
+            .for_each(|n| *n = const { MaybeUninit::new(Digest::ALL_ZERO) });
+
+        // SAFETY:
+        // - the requested capacity is num_nodes, and so is the new length
+        // - the first num_nodes elements are initialized to Digest::ALL_ZERO
+        unsafe { nodes.set_len(num_nodes) };
+
         nodes[num_leafs..].copy_from_slice(leafs);
 
         Ok(nodes)
