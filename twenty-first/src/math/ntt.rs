@@ -128,16 +128,19 @@ where
     let mut m = 1;
     for _ in 0..log2_slice_len {
         let w_m = omega.mod_pow_u32(slice_len / (2 * m));
+        let mut w_powers = vec![BFieldElement::ONE; m as usize];
+        // Precompute twiddle factors
+        for j in 1..m as usize {
+            w_powers[j] = w_powers[j - 1] * w_m;
+        }
         let mut k = 0;
         while k < slice_len {
-            let mut w = BFieldElement::ONE;
             for j in 0..m {
                 let u = x[(k + j) as usize];
                 let mut v = x[(k + j + m) as usize];
-                v *= w;
+                v *= w_powers[j as usize];
                 x[(k + j) as usize] = u + v;
                 x[(k + j + m) as usize] = u - v;
-                w *= w_m;
             }
 
             k += 2 * m;
