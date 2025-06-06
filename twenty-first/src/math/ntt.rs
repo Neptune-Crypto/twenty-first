@@ -1,6 +1,8 @@
 use std::ops::MulAssign;
 
 use num_traits::ConstOne;
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelIterator;
 
 use super::b_field_element::BFieldElement;
 use super::traits::FiniteField;
@@ -98,6 +100,82 @@ where
     let n_inv_or_zero = BFieldElement::from(x.len()).inverse_or_zero();
     for elem in x.iter_mut() {
         *elem *= n_inv_or_zero
+    }
+}
+
+pub struct NttPrecalculatedValues {
+    bitreverse_indices: Vec<u32>,
+    w_powerss: Vec<Vec<BFieldElement>>,
+}
+
+pub fn precalculate_ntt_values(log2_slice_len: u32) -> NttPrecalculatedValues {
+    debug_assert!(log2_slice_len < 32, "Slice length may not exceed 2**31");
+    let slice_len = 1u32 << log2_slice_len;
+
+    let bitreverse_indices = (0..slice_len)
+        .into_par_iter()
+        .map(|k| bitreverse(k, log2_slice_len))
+        .collect();
+
+    // TODO: Parallelize this loop!
+    // `slice_len` is a power of two => unwrap never panics.
+    let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
+    let w_powerss = (0..log2_slice_len)
+        .into_par_iter()
+        .map(|i| {
+            let m = 1 << i;
+            let w_m = omega.mod_pow_u32(slice_len / (2 * m));
+            let mut w_powers = vec![BFieldElement::ONE; m as usize];
+            for j in 1..m as usize {
+                w_powers[j] = w_powers[j - 1] * w_m;
+            }
+
+            w_powers
+        })
+        .collect();
+
+    NttPrecalculatedValues {
+        bitreverse_indices,
+        w_powerss,
+    }
+}
+
+pub fn ntt_with_precalculated_values<FF>(
+    x: &mut [FF],
+    precalculated_values: &NttPrecalculatedValues,
+) where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let slice_len = x.len() as u32;
+    let log2_slice_len = slice_len.ilog2();
+
+    let bitreverse_indices = &precalculated_values.bitreverse_indices;
+    for k in 0..slice_len {
+        let rk = bitreverse_indices[k as usize];
+        if k < rk {
+            x.swap(rk as usize, k as usize);
+        }
+    }
+
+    let w_powers = &precalculated_values.w_powerss;
+    let mut m = 1;
+    for i in 0..log2_slice_len {
+        let mut k = 0;
+        while k < slice_len {
+            for j in 0..m {
+                let idx1 = (k + j) as usize;
+                let idx2 = (k + j + m) as usize;
+                let u = x[idx1];
+                let mut v = x[idx2];
+                v *= w_powers[i as usize][j as usize];
+                x[idx1] = u + v;
+                x[idx2] = u - v;
+            }
+
+            k += 2 * m;
+        }
+
+        m *= 2;
     }
 }
 
@@ -237,6 +315,40 @@ mod fast_ntt_attempt_tests {
                 intt::<XFieldElement>(&mut values);
                 assert_eq!(original_values_with_max_element, values);
             }
+        }
+    }
+
+    #[test]
+    fn precalculating_values_gives_same_result_bfe() {
+        for log_2_n in 1..10 {
+            let n = 1 << log_2_n;
+            let values = random_elements(n);
+
+            let mut with_precalculation = values.clone();
+            let mut no_precalculation = values.clone();
+
+            let precalculated = precalculate_ntt_values(log_2_n);
+            ntt_with_precalculated_values(&mut with_precalculation, &precalculated);
+            ntt::<BFieldElement>(&mut no_precalculation);
+
+            assert_eq!(no_precalculation, with_precalculation);
+        }
+    }
+
+    #[test]
+    fn precalculating_values_gives_same_result_xfe() {
+        for log_2_n in 1..10 {
+            let n = 1 << log_2_n;
+            let values = random_elements(n);
+
+            let mut with_precalculation = values.clone();
+            let mut no_precalculation = values.clone();
+
+            let precalculated = precalculate_ntt_values(log_2_n);
+            ntt_with_precalculated_values(&mut with_precalculation, &precalculated);
+            ntt::<XFieldElement>(&mut no_precalculation);
+
+            assert_eq!(no_precalculation, with_precalculation);
         }
     }
 

@@ -67,6 +67,10 @@ name = "ntt_forward"
 harness = false
 
 [[bench]]
+name = "ntt_par"
+harness = false
+
+[[bench]]
 name = "evaluation"
 harness = false
 
