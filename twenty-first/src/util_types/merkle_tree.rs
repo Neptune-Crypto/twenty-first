@@ -6,28 +6,10 @@ use std::result;
 
 use arbitrary::*;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use rayon::prelude::*;
 use thiserror::Error;
 
 use crate::prelude::*;
-
-const DEFAULT_PARALLELIZATION_CUTOFF: usize = 512;
-
-/// Parallelizing work with fewer than 2 elements
-/// 1. leads to infinite iteration in [`MerkleTree::par_new`] and
-///    [`MerkleTree::par_frugal_root`], and
-/// 2. does not make sense.
-const MINIMUM_PARALLELIZATION_CUTOFF: usize = 2;
-
-lazy_static! {
-    static ref PARALLELIZATION_CUTOFF: usize =
-        std::env::var("TWENTY_FIRST_MERKLE_TREE_PARALLELIZATION_CUTOFF")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(DEFAULT_PARALLELIZATION_CUTOFF)
-            .max(MINIMUM_PARALLELIZATION_CUTOFF);
-}
 
 /// Indexes internal nodes of a [`MerkleTree`].
 ///
@@ -178,7 +160,7 @@ impl MerkleTree {
 
         // parallel
         let mut num_nodes_on_this_level = leafs.len();
-        while num_nodes_on_this_level >= *PARALLELIZATION_CUTOFF {
+        while num_nodes_on_this_level >= crate::config::merkle_tree_parallelization_cutoff() {
             num_nodes_on_this_level /= 2;
             let node_indices_on_this_level = num_nodes_on_this_level..2 * num_nodes_on_this_level;
             let nodes_on_this_level = node_indices_on_this_level
@@ -270,16 +252,16 @@ impl MerkleTree {
 
         // parallel
         let mut leafs = Cow::Borrowed(leafs);
-        while leafs.len() >= *PARALLELIZATION_CUTOFF {
+        while leafs.len() >= crate::config::merkle_tree_parallelization_cutoff() {
             // If the number of threads is so large that the chunk size is 1
             // (or even 0), each individual thread performs no work anymore.
             // In such a case, the most reasonable course of action is to reduce
             // the effective number of worker threads, which increases the chunk
             // size.
             //
-            // The PARALLELIZATION_CUTOFF >= MINIMUM_PARALLELIZATION_CUTOFF == 2
-            // guarantees that leafs.len() / 2 >= 1. Hence, the loop terminates
-            // at latest once num_threads equals 1.
+            // Since parallelization_cutoff >= 2, it follows that
+            // leafs.len() / 2 >= 1. Hence, the loop terminates at latest once
+            // num_threads equals 1.
             while num_threads > leafs.len() / 2 {
                 num_threads /= 2;
             }
@@ -919,6 +901,19 @@ pub mod merkle_tree_test {
     }
 
     #[proptest]
+    fn merkle_tree_construction_strategies_are_independent_of_parallelization_cutoff(
+        #[strategy(0_usize..10)] _tree_height: usize,
+        #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
+        cutoff: usize,
+    ) {
+        crate::config::set_merkle_tree_parallelization_cutoff(cutoff);
+
+        let sequential = MerkleTree::sequential_new(&leafs)?;
+        let parallel = MerkleTree::par_new(&leafs)?;
+        prop_assert_eq!(sequential, parallel);
+    }
+
+    #[proptest]
     fn ram_frugal_merkle_root_is_identical_to_full_tree_root(
         #[strategy(0_usize..10)] _tree_height: usize,
         #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
@@ -929,6 +924,34 @@ pub mod merkle_tree_test {
 
         let par_frugal = MerkleTree::par_frugal_root(&leafs)?;
         prop_assert_eq!(par_frugal, hungry);
+    }
+
+    #[proptest]
+    fn ram_frugal_merkle_root_is_independent_of_parallelization_cutoff(
+        #[strategy(0_usize..10)] _tree_height: usize,
+        #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
+        cutoff: usize,
+    ) {
+        crate::config::set_merkle_tree_parallelization_cutoff(cutoff);
+
+        let hungry = MerkleTree::par_new(&leafs)?.root();
+        let seq_frugal = MerkleTree::sequential_frugal_root(&leafs)?;
+        prop_assert_eq!(seq_frugal, hungry);
+
+        let par_frugal = MerkleTree::par_frugal_root(&leafs)?;
+        prop_assert_eq!(par_frugal, hungry);
+    }
+
+    #[proptest(cases = 100)]
+    fn various_small_parallelization_cutoffs_dont_cause_infinite_iterations(
+        #[strategy(0_usize..10)] _tree_height: usize,
+        #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
+    ) {
+        for cutoff in 0..=16 {
+            crate::config::set_merkle_tree_parallelization_cutoff(cutoff);
+            let _tree = MerkleTree::par_new(&leafs);
+            let _root = MerkleTree::par_frugal_root(&leafs);
+        }
     }
 
     #[proptest(cases = 100)]
