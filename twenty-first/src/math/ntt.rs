@@ -156,14 +156,14 @@ pub fn unscale(array: &mut [BFieldElement]) {
     }
 }
 
-#[inline]
-fn bitreverse(mut n: u32, l: u32) -> u32 {
-    let mut r = 0;
-    for _ in 0..l {
-        r = (r << 1) | (n & 1);
-        n >>= 1;
-    }
-    r
+#[inline(always)]
+fn bitreverse(mut k: u32, log2_n: u32) -> u32 {
+    k = ((k & 0x55555555) << 1) | ((k & 0xaaaaaaaa) >> 1);
+    k = ((k & 0x33333333) << 2) | ((k & 0xcccccccc) >> 2);
+    k = ((k & 0x0f0f0f0f) << 4) | ((k & 0xf0f0f0f0) >> 4);
+    k = ((k & 0x00ff00ff) << 8) | ((k & 0xff00ff00) >> 8);
+    k = k.rotate_right(16);
+    k >> ((32 - log2_n) & 0x1f)
 }
 
 #[cfg(test)]
