@@ -2,32 +2,16 @@ use std::borrow::Cow;
 use std::collections::hash_map::Entry::*;
 use std::collections::*;
 use std::fmt::Debug;
+use std::mem::MaybeUninit;
 use std::result;
 
 use arbitrary::*;
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use rayon::prelude::*;
 use thiserror::Error;
 
+use crate::error::U32_TO_USIZE_ERR;
 use crate::prelude::*;
-
-const DEFAULT_PARALLELIZATION_CUTOFF: usize = 512;
-
-/// Parallelizing work with fewer than 2 elements
-/// 1. leads to infinite iteration in [`MerkleTree::par_new`] and
-///    [`MerkleTree::par_frugal_root`], and
-/// 2. does not make sense.
-const MINIMUM_PARALLELIZATION_CUTOFF: usize = 2;
-
-lazy_static! {
-    static ref PARALLELIZATION_CUTOFF: usize =
-        std::env::var("TWENTY_FIRST_MERKLE_TREE_PARALLELIZATION_CUTOFF")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(DEFAULT_PARALLELIZATION_CUTOFF)
-            .max(MINIMUM_PARALLELIZATION_CUTOFF);
-}
 
 /// Indexes internal nodes of a [`MerkleTree`].
 ///
@@ -154,13 +138,9 @@ impl MerkleTree {
     /// - If the number of leafs is zero.
     /// - If the number of leafs is not a power of two.
     pub fn sequential_new(leafs: &[Digest]) -> Result<Self> {
-        let mut nodes = Self::initialize_merkle_tree_nodes(leafs)?;
-
-        for i in (ROOT_INDEX..leafs.len()).rev() {
-            nodes[i] = Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
-        }
-
-        Ok(MerkleTree { nodes })
+        let nodes = Self::initialize_merkle_tree_nodes(leafs)?;
+        let num_remaining_nodes = leafs.len();
+        Self::sequentially_fill_tree(nodes, num_remaining_nodes)
     }
 
     /// Build a MerkleTree with the given leafs.
@@ -177,25 +157,112 @@ impl MerkleTree {
         let mut nodes = Self::initialize_merkle_tree_nodes(leafs)?;
 
         // parallel
-        let mut num_nodes_on_this_level = leafs.len();
-        while num_nodes_on_this_level >= *PARALLELIZATION_CUTOFF {
-            num_nodes_on_this_level /= 2;
-            let node_indices_on_this_level = num_nodes_on_this_level..2 * num_nodes_on_this_level;
-            let nodes_on_this_level = node_indices_on_this_level
-                .clone()
-                .into_par_iter()
-                .map(|i| Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]))
-                .collect::<Vec<_>>();
-            nodes[node_indices_on_this_level].copy_from_slice(&nodes_on_this_level);
+        let mut num_remaining_nodes = leafs.len();
+        let mut num_threads = Self::num_threads();
+        while num_remaining_nodes >= crate::config::merkle_tree_parallelization_cutoff() {
+            // If the number of threads is so large that the chunk size is 1
+            // (or even 0), each individual thread performs no work anymore.
+            // In such a case, the most reasonable course of action is to reduce
+            // the effective number of worker threads, which increases the chunk
+            // size.
+            //
+            // Since parallelization_cutoff >= 2, it follows that
+            // num_nodes_missing / 2 >= 1. Hence, the loop terminates at latest
+            // once num_threads equals 1.
+            while num_threads > num_remaining_nodes / 2 {
+                num_threads /= 2;
+            }
+
+            // re-slice to only include
+            // 1. the nodes that need to be computed and
+            // 2. exactly those nodes required to compute them.
+            let nodes = &mut nodes[..2 * num_remaining_nodes];
+            let subtrees = Self::subtrees_mut(nodes, num_threads);
+            subtrees.into_par_iter().for_each(|mut tree_layers| {
+                debug_assert!(tree_layers.len() > 1, "internal error: infinite iteration");
+                let mut previous_layer = tree_layers.pop().unwrap();
+                for next_layer in tree_layers.into_iter().rev() {
+                    for (node, (&left, &right)) in
+                        next_layer.iter_mut().zip(previous_layer.iter().tuples())
+                    {
+                        *node = Tip5::hash_pair(left, right);
+                    }
+                    previous_layer = next_layer;
+                }
+            });
+
+            // Update the number of remaining nodes by subtracting the number of
+            // freshly computed nodes. Equivalently, record that the tree has
+            // grown by subtree_height many layers.
+            let current_tree_height = num_remaining_nodes.ilog2();
+            let subtree_height = current_tree_height - num_threads.ilog2();
+            num_remaining_nodes >>= subtree_height;
         }
 
-        // sequential
-        let num_remaining_nodes = num_nodes_on_this_level;
+        Self::sequentially_fill_tree(nodes, num_remaining_nodes)
+    }
+
+    /// Internal helper function to de-duplicate code between
+    /// [`Self::sequential_new`] and [`Self::par_new`].
+    fn sequentially_fill_tree(mut nodes: Vec<Digest>, num_remaining_nodes: usize) -> Result<Self> {
         for i in (ROOT_INDEX..num_remaining_nodes).rev() {
             nodes[i] = Tip5::hash_pair(nodes[i * 2], nodes[i * 2 + 1]);
         }
 
         Ok(MerkleTree { nodes })
+    }
+
+    /// Divides the given, contiguous slice into `num_trees` subtrees.
+    ///
+    /// The passed-in slice must represent a complete Merkle tree. Each subtree
+    /// is returned as a number of mutable slices, where each such slice
+    /// represents one layer in the subtree. The first slice contains only one
+    /// element, the subtree's root, the next slice contains two elements, the
+    /// root's children, and so on.
+    ///
+    /// In general, the top-most nodes of the complete tree will not be covered
+    /// by the returned subtrees. For example, when requesting 2 subtrees, the
+    /// complete tree's root will not be covered; when requesting 4 subtrees,
+    /// the root and its direct children will not be covered; and so on.
+    ///
+    /// The number of subtrees must be a power of two, and must not exceed the
+    /// number of leafs in the complete Merkle tree represented by the given
+    /// slice.
+    ///
+    /// Because this is an internal helper function (and only for that reason),
+    /// it's the caller's responsibility to ensure that the arguments are
+    /// integral. To recap:
+    /// - the number of `nodes` must be a power of 2
+    /// - the number of `num_trees` must be a power of 2
+    /// - the number of `nodes` must be at least `2 * num_trees`
+    fn subtrees_mut<T>(nodes: &mut [T], num_trees: usize) -> Vec<Vec<&mut [T]>> {
+        let num_leafs = nodes.len() / 2;
+        let total_tree_height = num_leafs.ilog2();
+        let sub_tree_height =
+            usize::try_from(total_tree_height - num_trees.ilog2()).expect(U32_TO_USIZE_ERR);
+
+        // a tree's “height” is the number of layers excluding the root,
+        // but we want to include the root
+        let num_layers = sub_tree_height + 1;
+        let mut subtrees = (0..num_trees)
+            .map(|_| Vec::with_capacity(num_layers))
+            .collect_vec();
+
+        // the number of nodes to skip includes the dummy node at index 0
+        let nodes_to_skip = num_trees;
+        let (_, mut nodes) = nodes.split_at_mut(nodes_to_skip);
+
+        for layer_idx in 0..num_layers {
+            let nodes_at_this_layer = 1 << layer_idx;
+            for tree in &mut subtrees {
+                let (layer, rest) = nodes.split_at_mut(nodes_at_this_layer);
+                tree.push(layer);
+                nodes = rest;
+            }
+        }
+        debug_assert!(nodes.is_empty());
+
+        subtrees
     }
 
     /// Compute the Merkle root from the given leafs without recording any
@@ -258,28 +325,19 @@ impl MerkleTree {
             return Err(MerkleTreeError::IncorrectNumberOfLeafs);
         }
 
-        // To guarantee that all chunks correspond to trees of the same height,
-        // the number of threads must divide the number of leafs cleanly.
-        let num_threads = rayon::current_num_threads();
-        let num_threads = if num_threads.is_power_of_two() {
-            num_threads
-        } else {
-            num_threads.next_power_of_two() / 2 // previous power of 2
-        };
-        let mut num_threads = num_threads.max(1); // avoid division by 0
-
         // parallel
+        let mut num_threads = Self::num_threads();
         let mut leafs = Cow::Borrowed(leafs);
-        while leafs.len() >= *PARALLELIZATION_CUTOFF {
+        while leafs.len() >= crate::config::merkle_tree_parallelization_cutoff() {
             // If the number of threads is so large that the chunk size is 1
             // (or even 0), each individual thread performs no work anymore.
             // In such a case, the most reasonable course of action is to reduce
             // the effective number of worker threads, which increases the chunk
             // size.
             //
-            // The PARALLELIZATION_CUTOFF >= MINIMUM_PARALLELIZATION_CUTOFF == 2
-            // guarantees that leafs.len() / 2 >= 1. Hence, the loop terminates
-            // at latest once num_threads equals 1.
+            // Since parallelization_cutoff >= 2, it follows that
+            // leafs.len() / 2 >= 1. Hence, the loop terminates at latest once
+            // num_threads equals 1.
             while num_threads > leafs.len() / 2 {
                 num_threads /= 2;
             }
@@ -294,6 +352,30 @@ impl MerkleTree {
 
         // sequential
         Self::sequential_frugal_root(&leafs)
+    }
+
+    /// Internal helper function to determine the number of threads to use for
+    /// parallel Merkle tree construction.
+    ///
+    /// Can be used to figure out the number of chunks to split the work into,
+    /// but take care that each chunk contains at least 2 nodes, else no
+    /// meaningful work will be done and your iteration might run forever.
+    ///
+    /// Guaranteed to be a power of two.
+    ///
+    /// Respects the [`RAYON_NUM_THREADS`][rayon] environment variable, if set.
+    fn num_threads() -> usize {
+        // To guarantee that all chunks correspond to trees of the same height,
+        // the number of threads must divide the number of leafs cleanly.
+        let num_threads = rayon::current_num_threads();
+        let num_threads = if num_threads.is_power_of_two() {
+            num_threads
+        } else {
+            num_threads.next_power_of_two() / 2 // previous power of 2
+        };
+
+        // avoid division by 0
+        num_threads.max(1)
     }
 
     /// Helps to kick off Merkle tree construction. Sets up the Merkle tree's
@@ -317,7 +399,21 @@ impl MerkleTree {
         nodes
             .try_reserve_exact(num_nodes)
             .map_err(|_| MerkleTreeError::TreeTooHigh)?;
-        nodes.resize(num_nodes, Digest::default());
+
+        // Parallel initialization is slower for small trees, but faster for
+        // tall trees. If the slowdown is deemed too big for small trees, this
+        // is the place to change it.
+        nodes
+            .spare_capacity_mut()
+            .par_iter_mut()
+            .take(num_nodes)
+            .for_each(|n| *n = const { MaybeUninit::new(Digest::ALL_ZERO) });
+
+        // SAFETY:
+        // - the requested capacity is num_nodes, and so is the new length
+        // - the first num_nodes elements are initialized to Digest::ALL_ZERO
+        unsafe { nodes.set_len(num_nodes) };
+
         nodes[num_leafs..].copy_from_slice(leafs);
 
         Ok(nodes)
@@ -919,6 +1015,19 @@ pub mod merkle_tree_test {
     }
 
     #[proptest]
+    fn merkle_tree_construction_strategies_are_independent_of_parallelization_cutoff(
+        #[strategy(0_usize..10)] _tree_height: usize,
+        #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
+        cutoff: usize,
+    ) {
+        crate::config::set_merkle_tree_parallelization_cutoff(cutoff);
+
+        let sequential = MerkleTree::sequential_new(&leafs)?;
+        let parallel = MerkleTree::par_new(&leafs)?;
+        prop_assert_eq!(sequential, parallel);
+    }
+
+    #[proptest]
     fn ram_frugal_merkle_root_is_identical_to_full_tree_root(
         #[strategy(0_usize..10)] _tree_height: usize,
         #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
@@ -929,6 +1038,34 @@ pub mod merkle_tree_test {
 
         let par_frugal = MerkleTree::par_frugal_root(&leafs)?;
         prop_assert_eq!(par_frugal, hungry);
+    }
+
+    #[proptest]
+    fn ram_frugal_merkle_root_is_independent_of_parallelization_cutoff(
+        #[strategy(0_usize..10)] _tree_height: usize,
+        #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
+        cutoff: usize,
+    ) {
+        crate::config::set_merkle_tree_parallelization_cutoff(cutoff);
+
+        let hungry = MerkleTree::par_new(&leafs)?.root();
+        let seq_frugal = MerkleTree::sequential_frugal_root(&leafs)?;
+        prop_assert_eq!(seq_frugal, hungry);
+
+        let par_frugal = MerkleTree::par_frugal_root(&leafs)?;
+        prop_assert_eq!(par_frugal, hungry);
+    }
+
+    #[proptest(cases = 100)]
+    fn various_small_parallelization_cutoffs_dont_cause_infinite_iterations(
+        #[strategy(0_usize..10)] _tree_height: usize,
+        #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
+    ) {
+        for cutoff in 0..=16 {
+            crate::config::set_merkle_tree_parallelization_cutoff(cutoff);
+            let _tree = MerkleTree::par_new(&leafs);
+            let _root = MerkleTree::par_frugal_root(&leafs);
+        }
     }
 
     #[proptest(cases = 100)]
@@ -1336,5 +1473,63 @@ pub mod merkle_tree_test {
         let expected_paths = vec![expected_path_0, expected_path_1];
 
         assert_eq!(expected_paths, auth_paths);
+    }
+
+    #[test]
+    fn merkle_subtrees_are_sliced_correctly() {
+        const TREE_HEIGHT: usize = 5;
+        const NUM_LEAFS: u32 = 1 << TREE_HEIGHT;
+        const NUM_NODES: u32 = 2 * NUM_LEAFS;
+        debug_assert_eq!(64, NUM_NODES);
+
+        let mut nodes = (0..NUM_NODES).collect_vec();
+
+        let all_nodes = MerkleTree::subtrees_mut(&mut nodes, 1);
+        assert_eq!(1, all_nodes.len());
+        let subtree = &all_nodes[0];
+        assert_eq!([1], subtree[0]);
+        assert_eq!([2, 3], subtree[1]);
+        assert_eq!((4..8).collect_vec().as_slice(), subtree[2]);
+        assert_eq!((8..16).collect_vec().as_slice(), subtree[3]);
+        assert_eq!((16..32).collect_vec().as_slice(), subtree[4]);
+        assert_eq!((32..64).collect_vec().as_slice(), subtree[5]);
+
+        let two_trees = MerkleTree::subtrees_mut(&mut nodes, 2);
+        assert_eq!(2, two_trees.len());
+        let left_tree = &two_trees[0];
+        assert_eq!([2], left_tree[0]);
+        assert_eq!([4, 5], left_tree[1]);
+        assert_eq!((8..12).collect_vec().as_slice(), left_tree[2]);
+        assert_eq!((16..24).collect_vec().as_slice(), left_tree[3]);
+        assert_eq!((32..48).collect_vec().as_slice(), left_tree[4]);
+        let right_tree = &two_trees[1];
+        assert_eq!([3], right_tree[0]);
+        assert_eq!([6, 7], right_tree[1]);
+        assert_eq!((12..16).collect_vec().as_slice(), right_tree[2]);
+        assert_eq!((24..32).collect_vec().as_slice(), right_tree[3]);
+        assert_eq!((48..64).collect_vec().as_slice(), right_tree[4]);
+
+        let four_trees = MerkleTree::subtrees_mut(&mut nodes, 4);
+        assert_eq!(4, four_trees.len());
+        let left_left_tree = &four_trees[0];
+        assert_eq!([4], left_left_tree[0]);
+        assert_eq!([8, 9], left_left_tree[1]);
+        assert_eq!((16..20).collect_vec().as_slice(), left_left_tree[2]);
+        assert_eq!((32..40).collect_vec().as_slice(), left_left_tree[3]);
+        let left_right_tree = &four_trees[1];
+        assert_eq!([5], left_right_tree[0]);
+        assert_eq!([10, 11], left_right_tree[1]);
+        assert_eq!((20..24).collect_vec().as_slice(), left_right_tree[2]);
+        assert_eq!((40..48).collect_vec().as_slice(), left_right_tree[3]);
+        let right_left_tree = &four_trees[2];
+        assert_eq!([6], right_left_tree[0]);
+        assert_eq!([12, 13], right_left_tree[1]);
+        assert_eq!((24..28).collect_vec().as_slice(), right_left_tree[2]);
+        assert_eq!((48..56).collect_vec().as_slice(), right_left_tree[3]);
+        let right_right_tree = &four_trees[3];
+        assert_eq!([7], right_right_tree[0]);
+        assert_eq!([14, 15], right_right_tree[1]);
+        assert_eq!((28..32).collect_vec().as_slice(), right_right_tree[2]);
+        assert_eq!((56..64).collect_vec().as_slice(), right_right_tree[3]);
     }
 }
