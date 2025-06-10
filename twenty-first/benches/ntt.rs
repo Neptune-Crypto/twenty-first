@@ -11,7 +11,9 @@ criterion_main!(benches);
 criterion_group!(
     name = benches;
     config = Criterion::default().sample_size(10);
-    targets = bfe_ntt::<{ 1 << 7 }>,
+    targets = pre_compute_swap_indices::<{ 1 << 20 }>,
+              pre_compute_swap_indices::<{ 1 << 26 }>,
+              bfe_ntt::<{ 1 << 7 }>,
               bfe_ntt::<{ 1 << 18 }>,
               bfe_ntt::<{ 1 << 23 }>,
               xfe_ntt::<{ 1 << 7 }>,
@@ -24,6 +26,13 @@ criterion_group!(
               xfe_intt::<{ 1 << 18 }>,
               xfe_intt::<{ 1 << 23 }>,
 );
+
+fn pre_compute_swap_indices<const LEN: usize>(c: &mut Criterion) {
+    c.benchmark_group("compute_swap_indices")
+        .bench_function(BenchmarkId::new("len", LEN.ilog2()), |b| {
+            b.iter(|| twenty_first::math::ntt::swap_indices(LEN))
+        });
+}
 
 fn bfe_ntt<const LEN: usize>(c: &mut Criterion) {
     let mut xs = random_elements::<BFieldElement>(LEN);

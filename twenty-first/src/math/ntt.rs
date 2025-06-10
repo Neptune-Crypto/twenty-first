@@ -1,4 +1,6 @@
+use std::num::NonZeroUsize;
 use std::ops::MulAssign;
+use std::sync::OnceLock;
 
 use num_traits::ConstOne;
 
@@ -7,6 +9,13 @@ use super::traits::FiniteField;
 use super::traits::Inverse;
 use super::traits::ModPowU32;
 use super::traits::PrimitiveRootOfUnity;
+
+/// The number of different domains over which this library can compute (i)NTT.
+///
+/// In particular, the maximum slice length for both [NTT][ntt] and [iNTT][intt]
+/// supported by this library is 2^31. All domains of length some power of 2
+/// smaller than this, plus the empty domain, are supported as well.
+const NUM_DOMAINS: usize = 32;
 
 /// ## Perform NTT on slices of prime-field elements
 ///
@@ -112,15 +121,41 @@ fn ntt_unchecked<FF>(x: &mut [FF], omega: BFieldElement, log2_slice_len: u32)
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    let slice_len = x.len() as u32;
+    // It is possible to pre-compute all swap indices at compile time, but that
+    // would incur a big compile time penalty.
+    //
+    // The type here is quite the mouthful. A short explainer is in order.
+    // - `OnceLock` is used to ensure that the swap indices are computed only
+    //   once per slice length, and that the computation is thread-safe. This
+    //   cache significantly speeds up the computation.
+    // - For the remaining `Vec<Option<NonZeroUsize>>`, see the documentation of
+    //   `swap_indices`.
+    static ALL_SWAP_INDICES: [OnceLock<Vec<Option<NonZeroUsize>>>; NUM_DOMAINS] =
+        [const { OnceLock::new() }; NUM_DOMAINS];
 
-    for k in 0..slice_len {
-        let rk = bitreverse(k, log2_slice_len);
-        if k < rk {
-            x.swap(rk as usize, k as usize);
+    let slice_len = x.len();
+    let swap_indices =
+        ALL_SWAP_INDICES[log2_slice_len as usize].get_or_init(|| swap_indices(slice_len));
+    debug_assert_eq!(swap_indices.len(), slice_len);
+
+    // This is the most performant version of the code I can produce.
+    // Things I've tried:
+    // - swap_indices: Vec<(usize, usize)>, where each element in the vector
+    //   is a pair of indices to swap. This vector is shorter than x, and the
+    //   body of the loop is branch-free (at least on our end) so it seems like
+    //   it should be faster, but I couldn't measure any difference.
+    // - swap_indices: Vec<usize>, where the element equals its index for those
+    //   indices that do not need to be swapped. Since core::slice::swap
+    //   guarantees that elements don't get swapped if its two arguments are
+    //   equal, the behavior is unchanged and removes the branching in the loop
+    //   body, but resulted in a slowdown.
+    for (k, maybe_rev_k) in swap_indices.iter().enumerate() {
+        if let Some(rev_k) = maybe_rev_k {
+            x.swap(k, rev_k.get());
         }
     }
 
+    let slice_len = slice_len as u32;
     let mut m = 1;
     for _ in 0..log2_slice_len {
         let w_m = omega.mod_pow_u32(slice_len / (2 * m));
@@ -156,14 +191,60 @@ where
     }
 }
 
-#[inline]
-fn bitreverse(mut n: u32, l: u32) -> u32 {
-    let mut r = 0;
-    for _ in 0..l {
-        r = (r << 1) | (n & 1);
-        n >>= 1;
+/// A list of options, where the `i`-th element is `Some(j)` if and only if
+/// `i` and `j` are indices that should be swapped in the NTT.
+//
+// `Option<NonZeroUsize>` makes use of niche optimization, which means that
+// the return value takes the same amount of space as a `Vec<usize>`, but
+// allows us to use `None` as a marker for the case where no swap is needed.
+//
+// Only public for benchmarking purposes.
+#[doc(hidden)]
+pub fn swap_indices(len: usize) -> Vec<Option<NonZeroUsize>> {
+    #[inline(always)]
+    const fn bitreverse(mut k: u32, log2_n: u32) -> u32 {
+        k = ((k & 0x55555555) << 1) | ((k & 0xaaaaaaaa) >> 1);
+        k = ((k & 0x33333333) << 2) | ((k & 0xcccccccc) >> 2);
+        k = ((k & 0x0f0f0f0f) << 4) | ((k & 0xf0f0f0f0) >> 4);
+        k = ((k & 0x00ff00ff) << 8) | ((k & 0xff00ff00) >> 8);
+        k = k.rotate_right(16);
+        k >> ((32 - log2_n) & 0x1f)
     }
-    r
+
+    // For large enough `len`, the computation benefits from parallelization.
+    // However, if NTT is also being called from within a rayon-parallel
+    // context, the potential parallelization here can lead to a deadlock.
+    // The relevant issue is <https://github.com/rayon-rs/rayon/issues/592>.
+    //
+    // As a short summary, consider the following scenario.
+    // 1. Some task on some rayon thread calls NTT's OnceLock::get_or_init.
+    // 2. The initialization task, i.e., execution of swap_indices, is also done
+    //    in parallel. Some of that work is stolen by other rayon threads.
+    // 3. The task that originally called OnceLock::get_or_init finishes its
+    //    work and starts looking for more work.
+    // 4. It steals part of the _outer_ parallelization effort, which just so
+    //    happens to be a call to an NTT with the same slice length.
+    // 5. It calls OnceLock::get_or_init on the _same_ OnceLock.
+    // 6. This, implicitly, is re-entrant initialization of the OnceLock, which
+    //    is documented as resulting in a deadlock.
+    //
+    // While parallel initialization would benefit runtime, a deadlock clearly
+    // does not. Because it's a reasonable assumption that NTT is being called
+    // in a rayon-parallelized context, we avoid parallelization here for now.
+    // Potential ways forward are:
+    // - use <https://github.com/rayon-rs/rayon/pull/1175> once that is merged
+    // - use a parallelization approach that does not perform or allow
+    //   work-stealing, like <https://crates.io/crates/chili> (though this
+    //   particular crate might not be the best fit – do some research first 🙂)
+    let log_2_len = len.checked_ilog2().unwrap_or(0);
+    (0..len)
+        .map(|k| {
+            let rev_k = bitreverse(k as u32, log_2_len);
+
+            // 0 >= bitreverse(0, log_2_len) == 0 => unwrap is fine
+            ((k as u32) < rev_k).then(|| NonZeroUsize::new(rev_k as usize).unwrap())
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -407,6 +488,14 @@ mod tests {
                 .collect_vec();
 
             assert_eq!(evals, coefficients);
+        }
+    }
+
+    #[test]
+    fn swap_indices_can_be_computed() {
+        // exponential growth is powerful; cap the number of domains
+        for log_size in 0..NUM_DOMAINS - 2 {
+            swap_indices(1 << log_size);
         }
     }
 }
