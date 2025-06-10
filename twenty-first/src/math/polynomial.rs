@@ -12,7 +12,6 @@ use std::ops::MulAssign;
 use std::ops::Neg;
 use std::ops::Rem;
 use std::ops::Sub;
-use std::thread::available_parallelism;
 
 use arbitrary::Arbitrary;
 use arbitrary::Unstructured;
@@ -22,6 +21,7 @@ use num_traits::ConstOne;
 use num_traits::ConstZero;
 use num_traits::One;
 use num_traits::Zero;
+use rayon::current_num_threads;
 use rayon::prelude::*;
 
 use super::traits::PrimitiveRootOfUnity;
@@ -860,9 +860,7 @@ where
         if factors.is_empty() {
             return Polynomial::one();
         }
-        let num_threads = available_parallelism()
-            .map(|non_zero_usize| non_zero_usize.get())
-            .unwrap_or(1);
+        let num_threads = current_num_threads().max(1);
         let mut products = factors.to_vec();
         while products.len() != 1 {
             let chunk_size = usize::max(2, products.len() / num_threads);
@@ -1333,9 +1331,7 @@ where
         if roots.is_empty() {
             return Polynomial::one();
         }
-        let num_threads = available_parallelism()
-            .map(|non_zero_usize| non_zero_usize.get())
-            .unwrap_or(1);
+        let num_threads = current_num_threads().max(1);
         let chunk_size = roots
             .len()
             .div_ceil(num_threads)
@@ -1751,9 +1747,7 @@ where
         if domain.is_empty() || self.is_zero() {
             return vec![FF::ZERO; domain.len()];
         }
-        let num_threads = available_parallelism()
-            .map(|non_zero_usize| non_zero_usize.get())
-            .unwrap_or(1);
+        let num_threads = current_num_threads().max(1);
         let chunk_size = domain.len().div_ceil(num_threads);
         domain
             .par_chunks(chunk_size)
