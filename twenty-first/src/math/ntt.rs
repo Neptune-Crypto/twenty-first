@@ -158,6 +158,17 @@ where
         ALL_SWAP_INDICES[log2_slice_len as usize].get_or_init(|| swap_indices(slice_len));
     debug_assert_eq!(swap_indices.len(), slice_len);
 
+    // This is the most performant version of the code I can produce.
+    // Things I've tried:
+    // - swap_indices: Vec<(usize, usize)>, where each element in the vector
+    //   is a pair of indices to swap. This vector is shorter than x, and the
+    //   body of the loop is branch-free (at least on our end) so it seems like
+    //   it should be faster, but I couldn't measure any difference.
+    // - swap_indices: Vec<usize>, where the element equals its index for those
+    //   indices that do not need to be swapped. Since core::slice::swap
+    //   guarantees that elements don't get swapped if its two arguments are
+    //   equal, the behavior is unchanged and removes the branching in the loop
+    //   body, but resulted in a slowdown.
     for (k, maybe_rev_k) in swap_indices.iter().enumerate() {
         if let Some(rev_k) = maybe_rev_k {
             x.swap(k, rev_k.get());
