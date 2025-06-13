@@ -54,15 +54,9 @@ pub fn ntt<FF>(x: &mut [FF])
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    let slice_len = u32::try_from(x.len()).expect("slice should be no longer than u32::MAX");
-
-    assert!(slice_len == 0 || slice_len.is_power_of_two());
-    let log2_slice_len = slice_len.checked_ilog2().unwrap_or(0);
-
-    // `slice_len` is 0 or a power of two smaller than u32::MAX
-    //  => `unwrap()` never panics
+    let slice_len = slice_len(x);
     let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
-    ntt_unchecked(x, omega, log2_slice_len);
+    ntt_unchecked(x, omega);
 }
 
 /// ## Perform INTT on slices of prime-field elements
@@ -94,30 +88,40 @@ pub fn intt<FF>(x: &mut [FF])
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    let slice_len = u32::try_from(x.len()).expect("slice should be no longer than u32::MAX");
-
-    assert!(slice_len == 0 || slice_len.is_power_of_two());
-    let log2_slice_len = slice_len.checked_ilog2().unwrap_or(0);
-
-    // `slice_len` is 0 or a power of two smaller than u32::MAX
-    //  => `unwrap()` never panics
+    let slice_len = slice_len(x);
     let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
-    ntt_unchecked(x, omega.inverse(), log2_slice_len);
+    ntt_unchecked(x, omega.inverse());
     unscale(x);
 }
 
-/// Like [NTT][self::ntt], but with greater control over the root of unity that
-/// is to be used.
+/// Internal helper function to assert that the slice for [NTT][self::ntt] or
+/// [iNTT][self::intt] is of a correct length.
 ///
-/// Does _not_ check whether
-/// - the passed-in root of unity is indeed a primitive root of unity of the
-///   appropriate order, or whether
-/// - the passed-in log₂ of the slice length matches.
+/// # Panics
 ///
-/// Use [NTT][self::ntt] if you want a nicer interface.
+/// Panics if the slice length is
+/// - neither 0 nor a power of two, or
+/// - larger than [`u32::MAX`].
+fn slice_len<FF>(x: &[FF]) -> u32 {
+    let slice_len = u32::try_from(x.len()).expect("slice should be no longer than u32::MAX");
+    assert!(slice_len == 0 || slice_len.is_power_of_two());
+
+    slice_len
+}
+
+/// Internal helper function for [NTT][self::ntt] and [iNTT][self::intt].
+///
+/// Assumes that
+/// - the passed-in root of unity is a primitive root of unity of the
+///   appropriate order,
+/// - the length of the slice is a power of two, and
+/// - the length of the slice is smaller than [`u32::MAX`].
+///
+/// If any of the above assumptions are violated, the function may panic or
+/// produce incorrect results.
 #[expect(clippy::many_single_char_names)]
 #[inline]
-fn ntt_unchecked<FF>(x: &mut [FF], omega: BFieldElement, log2_slice_len: u32)
+fn ntt_unchecked<FF>(x: &mut [FF], omega: BFieldElement)
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
@@ -134,6 +138,7 @@ where
         [const { OnceLock::new() }; NUM_DOMAINS];
 
     let slice_len = x.len();
+    let log2_slice_len = slice_len.checked_ilog2().unwrap_or(0);
     let swap_indices =
         ALL_SWAP_INDICES[log2_slice_len as usize].get_or_init(|| swap_indices(slice_len));
     debug_assert_eq!(swap_indices.len(), slice_len);
