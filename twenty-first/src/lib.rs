@@ -6,9 +6,6 @@ pub mod math;
 pub mod prelude;
 pub mod util_types;
 
-#[cfg(any(test, feature = "mock"))]
-pub mod mock;
-
 // This is needed for `#[derive(BFieldCodec)]` macro to work consistently across crates.
 // Specifically:
 // From inside the `twenty-first` crate, we need to refer to `twenty-first` by `crate`.
@@ -64,7 +61,6 @@ pub(crate) mod tests {
         implements_usual_auto_traits::<math::lattice::kem::SecretKey>();
         implements_usual_auto_traits::<math::lattice::kem::PublicKey>();
         implements_usual_auto_traits::<math::lattice::kem::Ciphertext>();
-        implements_usual_auto_traits::<mock::mmr::MockMmr>();
         implements_usual_auto_traits::<util_types::sponge::Domain>();
         implements_usual_auto_traits::<util_types::mmr::mmr_accumulator::MmrAccumulator>();
         implements_usual_auto_traits::<math::zerofier_tree::Branch<BFieldElement>>();

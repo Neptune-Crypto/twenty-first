@@ -562,23 +562,17 @@ mod accumulator_mmr_tests {
     use test_strategy::proptest;
 
     use super::*;
-    use crate::math::b_field_element::BFieldElement;
     use crate::math::other::random_elements;
-    use crate::math::tip5::Tip5;
-    use crate::mock::mmr::MockMmr;
-    use crate::mock::mmr::get_mock_ammr_from_digests;
+    use crate::util_types::mmr::archival_mmr::ArchivalMmr;
 
-    impl From<MockMmr> for MmrAccumulator {
-        fn from(ammr: MockMmr) -> Self {
-            MmrAccumulator {
-                leaf_count: ammr.num_leafs(),
-                peaks: ammr.peaks(),
-            }
+    impl From<ArchivalMmr> for MmrAccumulator {
+        fn from(ammr: ArchivalMmr) -> Self {
+            (&ammr).into()
         }
     }
 
-    impl From<&MockMmr> for MmrAccumulator {
-        fn from(ammr: &MockMmr) -> Self {
+    impl From<&ArchivalMmr> for MmrAccumulator {
+        fn from(ammr: &ArchivalMmr) -> Self {
             MmrAccumulator {
                 leaf_count: ammr.num_leafs(),
                 peaks: ammr.peaks(),
@@ -588,16 +582,16 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn conversion_test() {
-        let leaf_hashes: Vec<Digest> = random_elements(3);
-        let mock_mmr: MockMmr = get_mock_ammr_from_digests(leaf_hashes);
-        let accumulator_mmr = MmrAccumulator::from(mock_mmr.clone());
+        let leaf_hashes = random_elements(3);
+        let ammr = ArchivalMmr::new_from_leafs(leaf_hashes);
+        let mmra = MmrAccumulator::from(&ammr);
 
-        assert_eq!(mock_mmr.peaks(), accumulator_mmr.peaks());
-        assert_eq!(mock_mmr.bag_peaks(), accumulator_mmr.bag_peaks());
-        assert_eq!(mock_mmr.is_empty(), accumulator_mmr.is_empty());
-        assert!(!mock_mmr.is_empty());
-        assert_eq!(mock_mmr.num_leafs(), accumulator_mmr.num_leafs());
-        assert_eq!(3, accumulator_mmr.num_leafs());
+        assert_eq!(ammr.peaks(), mmra.peaks());
+        assert_eq!(ammr.bag_peaks(), mmra.bag_peaks());
+        assert_eq!(ammr.is_empty(), mmra.is_empty());
+        assert!(!ammr.is_empty());
+        assert_eq!(ammr.num_leafs(), mmra.num_leafs());
+        assert_eq!(3, mmra.num_leafs());
     }
 
     #[test]
@@ -610,7 +604,7 @@ mod accumulator_mmr_tests {
 
         let accumulator_mmr_start: MmrAccumulator =
             MmrAccumulator::new_from_leafs(leaf_hashes_start);
-        let accumulator_mmr_end: MmrAccumulator = MmrAccumulator::new_from_leafs(leaf_hashes_end);
+        let accumulator_mmr_end = MmrAccumulator::new_from_leafs(leaf_hashes_end);
 
         let leafs_were_appended = accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.peaks(),
@@ -632,10 +626,10 @@ mod accumulator_mmr_tests {
 
         let accumulator_mmr_start: MmrAccumulator =
             MmrAccumulator::new_from_leafs(leaf_hashes_start.clone());
-        let archive_mmr_start: MockMmr = get_mock_ammr_from_digests(leaf_hashes_start);
+        let archive_mmr_start = ArchivalMmr::new_from_leafs(leaf_hashes_start);
         let leaf_index_3 = 3;
         let membership_proof = archive_mmr_start.prove_membership(leaf_index_3);
-        let accumulator_mmr_end: MmrAccumulator = MmrAccumulator::new_from_leafs(leaf_hashes_end);
+        let accumulator_mmr_end = MmrAccumulator::new_from_leafs(leaf_hashes_end);
 
         {
             let appended_leafs = [];
@@ -673,7 +667,7 @@ mod accumulator_mmr_tests {
             [leaf_hashes_start.clone(), appended_leafs.clone()].concat();
         let accumulator_mmr_start: MmrAccumulator =
             MmrAccumulator::new_from_leafs(leaf_hashes_start);
-        let accumulator_mmr_end: MmrAccumulator = MmrAccumulator::new_from_leafs(leaf_hashes_end);
+        let accumulator_mmr_end = MmrAccumulator::new_from_leafs(leaf_hashes_end);
 
         let leafs_were_appended = accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.peaks(),
@@ -692,21 +686,21 @@ mod accumulator_mmr_tests {
         let leaf20: Digest = random();
         let leaf21: Digest = random();
 
-        let leaf_hashes_start: Vec<Digest> = vec![leaf14, leaf15, leaf16, leaf17];
-        let leaf_hashes_end: Vec<Digest> = vec![leaf14, leaf20, leaf16, leaf21];
+        let leaf_hashes_start = vec![leaf14, leaf15, leaf16, leaf17];
+        let leaf_hashes_end = vec![leaf14, leaf20, leaf16, leaf21];
 
-        let accumulator_mmr_start: MmrAccumulator =
-            MmrAccumulator::new_from_leafs(leaf_hashes_start.clone());
-        let archive_mmr_start: MockMmr = get_mock_ammr_from_digests(leaf_hashes_start);
+        let accumulator_mmr_start = MmrAccumulator::new_from_leafs(leaf_hashes_start.clone());
+        let archival_mmr_start = ArchivalMmr::new_from_leafs(leaf_hashes_start);
         let leaf_index_1 = 1;
         let leaf_index_3 = 3;
-        let membership_proof1 = archive_mmr_start.prove_membership(leaf_index_1);
-        let membership_proof3 = archive_mmr_start.prove_membership(leaf_index_3);
-        let accumulator_mmr_end: MmrAccumulator = MmrAccumulator::new_from_leafs(leaf_hashes_end);
+        let membership_proof1 = archival_mmr_start.prove_membership(leaf_index_1);
+        let membership_proof3 = archival_mmr_start.prove_membership(leaf_index_3);
+        let accumulator_mmr_end = MmrAccumulator::new_from_leafs(leaf_hashes_end);
         let leaf_mutations = vec![
             LeafMutation::new(leaf_index_1, leaf20, membership_proof1),
             LeafMutation::new(leaf_index_3, leaf21, membership_proof3),
         ];
+
         assert!(accumulator_mmr_start.verify_batch_update(
             &accumulator_mmr_end.peaks(),
             &[],
@@ -719,11 +713,9 @@ mod accumulator_mmr_tests {
         let mut rng = rand::rng();
         for mmr_leaf_count in 1..100 {
             let initial_leaf_digests: Vec<Digest> = random_elements(mmr_leaf_count);
-
-            let mut mmra: MmrAccumulator =
-                MmrAccumulator::new_from_leafs(initial_leaf_digests.clone());
-            let mut ammr: MockMmr = get_mock_ammr_from_digests(initial_leaf_digests.clone());
-            let mut ammr_copy: MockMmr = get_mock_ammr_from_digests(initial_leaf_digests.clone());
+            let mut mmra = MmrAccumulator::new_from_leafs(initial_leaf_digests.clone());
+            let mut ammr = ArchivalMmr::new_from_leafs(initial_leaf_digests.clone());
+            let mut ammr_copy = ArchivalMmr::new_from_leafs(initial_leaf_digests.clone());
 
             let mutated_leaf_count = rng.random_range(0..mmr_leaf_count);
             let all_indices: Vec<u64> = (0..mmr_leaf_count as u64).collect();
@@ -820,7 +812,7 @@ mod accumulator_mmr_tests {
                 assert_ne!(ammr_copy.peaks(), ammr.peaks());
             }
             for mutation in mutation_data {
-                ammr_copy.mutate_leaf_raw(mutation.leaf_index, mutation.new_leaf);
+                ammr_copy.mutate_leaf_unchecked(mutation.leaf_index, mutation.new_leaf);
             }
             assert_eq!(ammr_copy.peaks(), ammr.peaks());
         }
@@ -828,23 +820,22 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn verify_batch_update_pbt() {
-        type H = Tip5;
-
         for start_size in 1..18 {
             let leaf_hashes_start: Vec<Digest> = random_elements(start_size);
 
-            let local_hash = |x: u128| H::hash_varlen(&[BFieldElement::new(x as u64)]);
+            let local_hash = |x: u128| Tip5::hash_varlen(&[BFieldElement::new(x as u64)]);
 
             let bad_digests: Vec<Digest> = (12..12 + start_size)
                 .map(|x| local_hash(x as u128))
                 .collect();
 
-            let bad_mmr: MockMmr = get_mock_ammr_from_digests(bad_digests.clone());
-            let bad_membership_proof: MmrMembershipProof = bad_mmr.prove_membership(0);
+            let leafs = bad_digests.clone();
+            let bad_ammr = ArchivalMmr::new_from_leafs(leafs);
+            let bad_membership_proof: MmrMembershipProof = bad_ammr.prove_membership(0);
             let bad_membership_proof_digest = bad_digests[0];
             let bad_leaf: Digest = local_hash(8765432165123u128);
-            let mock_mmr_init: MockMmr = get_mock_ammr_from_digests(leaf_hashes_start.clone());
-            let accumulator_mmr = MmrAccumulator::new_from_leafs(leaf_hashes_start.clone());
+            let ammr_init = ArchivalMmr::new_from_leafs(leaf_hashes_start.clone());
+            let mmra = MmrAccumulator::new_from_leafs(leaf_hashes_start.clone());
 
             for append_size in 0..18 {
                 let appends: Vec<Digest> = (2000..2000 + append_size).map(local_hash).collect();
@@ -873,14 +864,10 @@ mod accumulator_mmr_tests {
                         leaf_hashes_mutated.push(appended_digest.to_owned());
                     }
 
-                    // let mutated_mock_mmr =
-                    //     MockMmr::<Hasher>::new(leaf_hashes_mutated.clone());
-                    let mutated_mock_mmr: MockMmr =
-                        get_mock_ammr_from_digests(leaf_hashes_mutated.clone());
-                    let mutated_accumulator_mmr =
-                        MmrAccumulator::new_from_leafs(leaf_hashes_mutated);
-                    let expected_new_peaks_from_archival = mutated_mock_mmr.peaks();
-                    let expected_new_peaks_from_accumulator = mutated_accumulator_mmr.peaks();
+                    let expected_new_peaks_from_archival =
+                        ArchivalMmr::new_from_leafs(leaf_hashes_mutated.clone()).peaks();
+                    let expected_new_peaks_from_accumulator =
+                        MmrAccumulator::new_from_leafs(leaf_hashes_mutated).peaks();
                     assert_eq!(
                         expected_new_peaks_from_archival,
                         expected_new_peaks_from_accumulator
@@ -889,7 +876,7 @@ mod accumulator_mmr_tests {
                     // Create the inputs to the method call
                     let all_mps = mutated_indices
                         .iter()
-                        .map(|i| mock_mmr_init.prove_membership(*i))
+                        .map(|i| ammr_init.prove_membership(*i))
                         .collect_vec();
                     let mut leaf_mutations: Vec<LeafMutation> = new_leaf_values
                         .clone()
@@ -900,12 +887,12 @@ mod accumulator_mmr_tests {
                             LeafMutation::new(*leaf_index, leaf, mp.clone())
                         })
                         .collect_vec();
-                    assert!(accumulator_mmr.verify_batch_update(
+                    assert!(mmra.verify_batch_update(
                         &expected_new_peaks_from_accumulator,
                         &appends,
                         leaf_mutations.clone()
                     ));
-                    assert!(mock_mmr_init.verify_batch_update(
+                    assert!(ammr_init.verify_batch_update(
                         &expected_new_peaks_from_accumulator,
                         &appends,
                         leaf_mutations.clone()
@@ -916,7 +903,7 @@ mod accumulator_mmr_tests {
                     if append_size > 0 && mutate_size > 0 {
                         // bad append vector
                         bad_appends[(mutated_indices[0] % append_size as u64) as usize] = bad_leaf;
-                        assert!(!accumulator_mmr.verify_batch_update(
+                        assert!(!mmra.verify_batch_update(
                             &expected_new_peaks_from_accumulator,
                             &bad_appends,
                             leaf_mutations.clone()
@@ -925,14 +912,14 @@ mod accumulator_mmr_tests {
                         // Bad membership proof
                         let bad_index = mutated_indices[0] as usize % mutated_indices.len();
                         leaf_mutations[bad_index].new_leaf = bad_membership_proof_digest;
-                        assert!(!accumulator_mmr.verify_batch_update(
+                        assert!(!mmra.verify_batch_update(
                             &expected_new_peaks_from_accumulator,
                             &appends,
                             leaf_mutations.clone()
                         ));
                         leaf_mutations[mutated_indices[0] as usize % mutated_indices.len()]
                             .membership_proof = bad_membership_proof.clone();
-                        assert!(!accumulator_mmr.verify_batch_update(
+                        assert!(!mmra.verify_batch_update(
                             &expected_new_peaks_from_accumulator,
                             &appends,
                             leaf_mutations
@@ -948,24 +935,21 @@ mod accumulator_mmr_tests {
         // You could argue that this test doesn't belong here, as it tests the behavior of
         // an imported library. I included it here, though, because the setup seems a bit clumsy
         // to me so far.
-        type H = Tip5;
-        type Mmr = MmrAccumulator;
-        let mut mmra: Mmr = MmrAccumulator::new_from_leafs(vec![]);
-        mmra.append(H::hash(&BFieldElement::ZERO));
+
+        let mut mmra = MmrAccumulator::new_from_leafs(vec![]);
+        mmra.append(Tip5::hash(&BFieldElement::ZERO));
 
         let json = serde_json::to_string(&mmra).unwrap();
-        let s_back = serde_json::from_str::<Mmr>(&json).unwrap();
+        let s_back = serde_json::from_str::<MmrAccumulator>(&json).unwrap();
         assert_eq!(mmra.bag_peaks(), s_back.bag_peaks());
         assert_eq!(1, mmra.num_leafs());
     }
 
     #[test]
     fn get_size_test() {
-        type Mmr = MmrAccumulator;
-
         // 10 digests produces an MMRA with two peaks
         let digests: Vec<Digest> = random_elements(10);
-        let mmra: Mmr = MmrAccumulator::new_from_leafs(digests);
+        let mmra = MmrAccumulator::new_from_leafs(digests);
 
         println!("mmra.get_size() =  {}", mmra.get_size());
 
@@ -1001,7 +985,7 @@ mod accumulator_mmr_tests {
         let membership_proof_leaf_indices = vec![1, 2, 3];
 
         // This should trigger the panic due to the lengths mismatch
-        let mut mmra: MmrAccumulator = MmrAccumulator::new_from_leafs(vec![]);
+        let mut mmra = MmrAccumulator::new_from_leafs(vec![]);
         mmra.batch_mutate_leaf_and_update_mps(
             mock_membership_proofs
                 .iter_mut()

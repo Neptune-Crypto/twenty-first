@@ -5,5 +5,8 @@ pub mod mmr_trait;
 pub mod shared_advanced;
 pub mod shared_basic;
 
+#[cfg(test)]
+pub(crate) mod archival_mmr;
+
 const TOO_MANY_LEAFS_ERR: &str =
     "internal error: Merkle Mountain Ranges should have at most 2^63 leafs";

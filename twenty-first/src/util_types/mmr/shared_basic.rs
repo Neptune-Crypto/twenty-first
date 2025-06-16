@@ -138,7 +138,7 @@ pub fn calculate_new_peaks_from_leaf_mutation(
 }
 
 #[cfg(test)]
-mod mmr_test {
+mod tests {
     use proptest::collection::vec;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
