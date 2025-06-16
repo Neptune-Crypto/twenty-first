@@ -1,13 +1,21 @@
+use std::num::NonZeroUsize;
 use std::ops::MulAssign;
+use std::sync::OnceLock;
 
 use num_traits::ConstOne;
-use num_traits::ConstZero;
 
 use super::b_field_element::BFieldElement;
 use super::traits::FiniteField;
 use super::traits::Inverse;
 use super::traits::ModPowU32;
 use super::traits::PrimitiveRootOfUnity;
+
+/// The number of different domains over which this library can compute (i)NTT.
+///
+/// In particular, the maximum slice length for both [NTT][ntt] and [iNTT][intt]
+/// supported by this library is 2^31. All domains of length some power of 2
+/// smaller than this, plus the empty domain, are supported as well.
+const NUM_DOMAINS: usize = 32;
 
 /// ## Perform NTT on slices of prime-field elements
 ///
@@ -46,15 +54,17 @@ pub fn ntt<FF>(x: &mut [FF])
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    let slice_len = u32::try_from(x.len()).expect("slice should be no longer than u32::MAX");
+    static ALL_TWIDDLE_FACTORS: [OnceLock<Vec<Vec<BFieldElement>>>; NUM_DOMAINS] =
+        [const { OnceLock::new() }; NUM_DOMAINS];
 
-    assert!(slice_len == 0 || slice_len.is_power_of_two());
-    let log2_slice_len = slice_len.checked_ilog2().unwrap_or(0);
+    let slice_len = slice_len(x);
+    let twiddle_factors = ALL_TWIDDLE_FACTORS[slice_len.checked_ilog2().unwrap_or(0) as usize]
+        .get_or_init(|| {
+            let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
+            twiddle_factors(slice_len, omega)
+        });
 
-    // `slice_len` is 0 or a power of two smaller than u32::MAX
-    //  => `unwrap()` never panics
-    let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
-    ntt_unchecked(x, omega, log2_slice_len);
+    ntt_unchecked(x, twiddle_factors);
 }
 
 /// ## Perform INTT on slices of prime-field elements
@@ -86,178 +96,98 @@ pub fn intt<FF>(x: &mut [FF])
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    let slice_len = u32::try_from(x.len()).expect("slice should be no longer than u32::MAX");
+    static ALL_TWIDDLE_FACTORS: [OnceLock<Vec<Vec<BFieldElement>>>; NUM_DOMAINS] =
+        [const { OnceLock::new() }; NUM_DOMAINS];
 
-    assert!(slice_len == 0 || slice_len.is_power_of_two());
-    let log2_slice_len = slice_len.checked_ilog2().unwrap_or(0);
+    let slice_len = slice_len(x);
+    let twiddle_factors = ALL_TWIDDLE_FACTORS[slice_len.checked_ilog2().unwrap_or(0) as usize]
+        .get_or_init(|| {
+            let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
+            twiddle_factors(slice_len, omega.inverse())
+        });
 
-    // `slice_len` is 0 or a power of two smaller than u32::MAX
-    //  => `unwrap()` never panics
-    let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
-    ntt_unchecked(x, omega.inverse(), log2_slice_len);
-
-    let n_inv_or_zero = BFieldElement::from(x.len()).inverse_or_zero();
-    for elem in x.iter_mut() {
-        *elem *= n_inv_or_zero
-    }
+    ntt_unchecked(x, twiddle_factors);
+    unscale(x);
 }
 
-/// Like [NTT][self::ntt], but with greater control over the root of unity that
-/// is to be used.
+/// Internal helper function to assert that the slice for [NTT][self::ntt] or
+/// [iNTT][self::intt] is of a correct length.
 ///
-/// Does _not_ check whether
-/// - the passed-in root of unity is indeed a primitive root of unity of the
-///   appropriate order, or whether
-/// - the passed-in log₂ of the slice length matches.
+/// # Panics
 ///
-/// Use [NTT][self::ntt] if you want a nicer interface.
+/// Panics if the slice length is
+/// - neither 0 nor a power of two, or
+/// - larger than [`u32::MAX`].
+fn slice_len<FF>(x: &[FF]) -> u32 {
+    let slice_len = u32::try_from(x.len()).expect("slice should be no longer than u32::MAX");
+    assert!(slice_len == 0 || slice_len.is_power_of_two());
+
+    slice_len
+}
+
+/// Internal helper function for [NTT][self::ntt] and [iNTT][self::intt].
+///
+/// Assumes that
+/// - the passed-in twiddle factors are correct for the length of the slice,
+/// - the length of the slice is a power of two, and
+/// - the length of the slice is smaller than [`u32::MAX`].
+///
+/// If any of the above assumptions are violated, the function may panic or
+/// produce incorrect results.
 #[expect(clippy::many_single_char_names)]
 #[inline]
-fn ntt_unchecked<FF>(x: &mut [FF], omega: BFieldElement, log2_slice_len: u32)
+fn ntt_unchecked<FF>(x: &mut [FF], twiddle_factors: &[Vec<BFieldElement>])
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    let slice_len = x.len() as u32;
+    // It is possible to pre-compute all swap indices at compile time, but that
+    // would incur a big compile time penalty.
+    //
+    // The type here is quite the mouthful. A short explainer is in order.
+    // - `OnceLock` is used to ensure that the swap indices are computed only
+    //   once per slice length, and that the computation is thread-safe. This
+    //   cache significantly speeds up the computation.
+    // - For the remaining `Vec<Option<NonZeroUsize>>`, see the documentation of
+    //   `swap_indices`.
+    static ALL_SWAP_INDICES: [OnceLock<Vec<Option<NonZeroUsize>>>; NUM_DOMAINS] =
+        [const { OnceLock::new() }; NUM_DOMAINS];
 
-    for k in 0..slice_len {
-        let rk = bitreverse(k, log2_slice_len);
-        if k < rk {
-            x.swap(rk as usize, k as usize);
+    let slice_len = x.len();
+    let log2_slice_len = slice_len.checked_ilog2().unwrap_or(0);
+    let swap_indices =
+        ALL_SWAP_INDICES[log2_slice_len as usize].get_or_init(|| swap_indices(slice_len));
+    debug_assert_eq!(swap_indices.len(), slice_len);
+
+    // This is the most performant version of the code I can produce.
+    // Things I've tried:
+    // - swap_indices: Vec<(usize, usize)>, where each element in the vector
+    //   is a pair of indices to swap. This vector is shorter than x, and the
+    //   body of the loop is branch-free (at least on our end) so it seems like
+    //   it should be faster, but I couldn't measure any difference.
+    // - swap_indices: Vec<usize>, where the element equals its index for those
+    //   indices that do not need to be swapped. Since core::slice::swap
+    //   guarantees that elements don't get swapped if its two arguments are
+    //   equal, the behavior is unchanged and removes the branching in the loop
+    //   body, but resulted in a slowdown.
+    for (k, maybe_rev_k) in swap_indices.iter().enumerate() {
+        if let Some(rev_k) = maybe_rev_k {
+            x.swap(k, rev_k.get());
         }
     }
 
+    let slice_len = slice_len as u32;
     let mut m = 1;
-    for _ in 0..log2_slice_len {
-        let w_m = omega.mod_pow_u32(slice_len / (2 * m));
+    for twiddles in twiddle_factors {
         let mut k = 0;
         while k < slice_len {
-            let mut w = BFieldElement::ONE;
             for j in 0..m {
-                let u = x[(k + j) as usize];
-                let mut v = x[(k + j + m) as usize];
-                v *= w;
-                x[(k + j) as usize] = u + v;
-                x[(k + j + m) as usize] = u - v;
-                w *= w_m;
-            }
-
-            k += 2 * m;
-        }
-
-        m *= 2;
-    }
-}
-
-#[inline]
-pub fn bitreverse_usize(mut n: usize, l: usize) -> usize {
-    let mut r = 0;
-    for _ in 0..l {
-        r = (r << 1) | (n & 1);
-        n >>= 1;
-    }
-    r
-}
-
-pub fn bitreverse_order<FF>(array: &mut [FF]) {
-    let mut logn = 0;
-    while (1 << logn) < array.len() {
-        logn += 1;
-    }
-
-    for k in 0..array.len() {
-        let rk = bitreverse_usize(k, logn);
-        if k < rk {
-            array.swap(rk, k);
-        }
-    }
-}
-
-/// Compute the [NTT][self::ntt], but leave the array in
-/// [bitreversed order][self::bitreverse_order].
-///
-/// This method can be expected to outperform regular NTT when
-///  - it is followed up by [INTT][self::intt] (e.g. for fast multiplication)
-///  - the `powers_of_omega_bitreversed` can be precomputed (which is not the
-///    case here).
-///
-/// In that case, be sure to use the matching [`intt_noswap`] and don't forget
-/// to unscale by `n`, e.g. using [`unscale`].
-pub fn ntt_noswap<FF>(x: &mut [FF])
-where
-    FF: FiniteField + MulAssign<BFieldElement>,
-{
-    let n: usize = x.len();
-    debug_assert!(n.is_power_of_two());
-
-    let root_order = n.try_into().unwrap();
-    let omega = BFieldElement::primitive_root_of_unity(root_order).unwrap();
-
-    let mut logn: usize = 0;
-    while (1 << logn) < x.len() {
-        logn += 1;
-    }
-
-    let mut powers_of_omega_bitreversed = vec![BFieldElement::ZERO; n];
-    let mut omegai = BFieldElement::ONE;
-    for i in 0..n / 2 {
-        powers_of_omega_bitreversed[bitreverse_usize(i, logn - 1)] = omegai;
-        omegai *= omega;
-    }
-
-    let mut m: usize = 1;
-    let mut t: usize = n;
-    while m < n {
-        t >>= 1;
-
-        for (i, zeta) in powers_of_omega_bitreversed.iter().enumerate().take(m) {
-            let s = i * t * 2;
-            for j in s..(s + t) {
-                let u = x[j];
-                let mut v = x[j + t];
-                v *= *zeta;
-                x[j] = u + v;
-                x[j + t] = u - v;
-            }
-        }
-
-        m *= 2;
-    }
-}
-
-/// Compute the [inverse NTT][self::intt], assuming that the array is presented
-/// in [bitreversed order][self::bitreverse_order]. Also, don't unscale by `n`
-/// afterward.
-///
-/// See also [`ntt_noswap`].
-pub fn intt_noswap<FF>(x: &mut [FF])
-where
-    FF: FiniteField + MulAssign<BFieldElement>,
-{
-    let n = x.len();
-    debug_assert!(n.is_power_of_two());
-
-    let root_order = n.try_into().unwrap();
-    let omega = BFieldElement::primitive_root_of_unity(root_order).unwrap();
-    let omega_inverse = omega.inverse();
-
-    let mut logn: usize = 0;
-    while (1 << logn) < x.len() {
-        logn += 1;
-    }
-
-    let mut m = 1;
-    for _ in 0..logn {
-        let w_m = omega_inverse.mod_pow_u32((n / (2 * m)).try_into().unwrap());
-        let mut k = 0;
-        while k < n {
-            let mut w = BFieldElement::ONE;
-            for j in 0..m {
-                let u = x[k + j];
-                let mut v = x[k + j + m];
-                v *= w;
-                x[k + j] = u + v;
-                x[k + j + m] = u - v;
-                w *= w_m;
+                let idx1 = (k + j) as usize;
+                let idx2 = (k + j + m) as usize;
+                let u = x[idx1];
+                let mut v = x[idx2];
+                v *= twiddles[j as usize];
+                x[idx1] = u + v;
+                x[idx2] = u - v;
             }
 
             k += 2 * m;
@@ -269,26 +199,117 @@ where
 
 /// Unscale the array by multiplying every element by the
 /// inverse of the array's length. Useful for following up intt.
-pub fn unscale(array: &mut [BFieldElement]) {
-    let ninv = BFieldElement::new(array.len() as u64).inverse();
-    for a in array.iter_mut() {
-        *a *= ninv;
+#[inline]
+fn unscale<FF>(array: &mut [FF])
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let n_inv = BFieldElement::from(array.len()).inverse_or_zero();
+    for elem in array {
+        *elem *= n_inv;
     }
 }
 
-#[inline]
-fn bitreverse(mut n: u32, l: u32) -> u32 {
-    let mut r = 0;
-    for _ in 0..l {
-        r = (r << 1) | (n & 1);
-        n >>= 1;
+/// A list of options, where the `i`-th element is `Some(j)` if and only if
+/// `i` and `j` are indices that should be swapped in the NTT.
+//
+// `Option<NonZeroUsize>` makes use of niche optimization, which means that
+// the return value takes the same amount of space as a `Vec<usize>`, but
+// allows us to use `None` as a marker for the case where no swap is needed.
+//
+// Only public for benchmarking purposes.
+#[doc(hidden)]
+pub fn swap_indices(len: usize) -> Vec<Option<NonZeroUsize>> {
+    #[inline(always)]
+    const fn bitreverse(mut k: u32, log2_n: u32) -> u32 {
+        k = ((k & 0x55555555) << 1) | ((k & 0xaaaaaaaa) >> 1);
+        k = ((k & 0x33333333) << 2) | ((k & 0xcccccccc) >> 2);
+        k = ((k & 0x0f0f0f0f) << 4) | ((k & 0xf0f0f0f0) >> 4);
+        k = ((k & 0x00ff00ff) << 8) | ((k & 0xff00ff00) >> 8);
+        k = k.rotate_right(16);
+        k >> ((32 - log2_n) & 0x1f)
     }
-    r
+
+    // For large enough `len`, the computation benefits from parallelization.
+    // However, if NTT is also being called from within a rayon-parallel
+    // context, the potential parallelization here can lead to a deadlock.
+    // The relevant issue is <https://github.com/rayon-rs/rayon/issues/592>.
+    //
+    // As a short summary, consider the following scenario.
+    // 1. Some task on some rayon thread calls NTT's OnceLock::get_or_init.
+    // 2. The initialization task, i.e., execution of swap_indices, is also done
+    //    in parallel. Some of that work is stolen by other rayon threads.
+    // 3. The task that originally called OnceLock::get_or_init finishes its
+    //    work and starts looking for more work.
+    // 4. It steals part of the _outer_ parallelization effort, which just so
+    //    happens to be a call to an NTT with the same slice length.
+    // 5. It calls OnceLock::get_or_init on the _same_ OnceLock.
+    // 6. This, implicitly, is re-entrant initialization of the OnceLock, which
+    //    is documented as resulting in a deadlock.
+    //
+    // While parallel initialization would benefit runtime, a deadlock clearly
+    // does not. Because it's a reasonable assumption that NTT is being called
+    // in a rayon-parallelized context, we avoid parallelization here for now.
+    // Potential ways forward are:
+    // - use <https://github.com/rayon-rs/rayon/pull/1175> once that is merged
+    // - use a parallelization approach that does not perform or allow
+    //   work-stealing, like <https://crates.io/crates/chili> (though this
+    //   particular crate might not be the best fit – do some research first 🙂)
+    let log_2_len = len.checked_ilog2().unwrap_or(0);
+    (0..len)
+        .map(|k| {
+            let rev_k = bitreverse(k as u32, log_2_len);
+
+            // 0 >= bitreverse(0, log_2_len) == 0 => unwrap is fine
+            ((k as u32) < rev_k).then(|| NonZeroUsize::new(rev_k as usize).unwrap())
+        })
+        .collect()
+}
+
+/// Internal helper function to (pre-) compute the twiddle factors for use in
+/// [NTT][ntt] and [iNTT][intt].
+///
+/// Assumes that the given root of unity and the slice length match.
+//
+// The runtime of this function, especially when seen in the larger context,
+// could potentially still be improved. Since this function is run at most twice
+// per slice length (once for NTT, once for iNTT), any runtime savings are
+// amortized pretty quickly. Saving RAM might be more interesting.
+//
+// One difference to the Longa+Naehrig paper [0] is the return value of
+// Vec<Vec<_>> instead of a single Vec<_>.
+// Also note that the twiddle factors for smaller domains are a subset of those
+// for larger domains. In order to save both space and time, what can be shared,
+// should be shared. I think the engineering work to get this working with the
+// current OnceLock-based lazy-initialization is non-trivial, considering that
+// OnceLocks must not be re-entrantly initialized. I could be wrong and it's
+// actually easy.
+//
+// [0] <https://eprint.iacr.org/2016/504.pdf>
+//
+// Only public for benchmarking purposes.
+#[doc(hidden)]
+pub fn twiddle_factors(slice_len: u32, root_of_unity: BFieldElement) -> Vec<Vec<BFieldElement>> {
+    // For an explanation of why this is not parallelized, see `swap_indices`.
+    (0..slice_len.checked_ilog2().unwrap_or(0))
+        .map(|i| {
+            let m = 1 << i;
+            let exponent = slice_len / (2 * m);
+            let w_m = root_of_unity.mod_pow_u32(exponent);
+            let mut w_powers = vec![BFieldElement::ONE; m as usize];
+            for j in 1..m as usize {
+                w_powers[j] = w_powers[j - 1] * w_m;
+            }
+
+            w_powers
+        })
+        .collect()
 }
 
 #[cfg(test)]
-mod fast_ntt_attempt_tests {
+mod tests {
     use itertools::Itertools;
+    use num_traits::ConstZero;
     use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -530,25 +551,20 @@ mod fast_ntt_attempt_tests {
     }
 
     #[test]
-    fn test_ntt_noswap() {
-        for log_size in 1..8 {
-            let size = 1 << log_size;
-            println!("size: {size}");
-            let a: Vec<BFieldElement> = random_elements(size);
-            let mut a1 = a.clone();
-            ntt(&mut a1);
-            let mut a2 = a.clone();
-            ntt_noswap(&mut a2);
-            bitreverse_order(&mut a2);
-            assert_eq!(a1, a2);
+    fn swap_indices_can_be_computed() {
+        // exponential growth is powerful; cap the number of domains
+        for log_size in 0..NUM_DOMAINS - 2 {
+            swap_indices(1 << log_size);
+        }
+    }
 
-            intt(&mut a1);
-            bitreverse_order(&mut a2);
-            intt_noswap(&mut a2);
-            for a2e in a2.iter_mut() {
-                *a2e *= BFieldElement::new(size.try_into().unwrap()).inverse();
-            }
-            assert_eq!(a1, a2);
+    #[test]
+    fn twiddle_factors_can_be_computed() {
+        // exponential growth is powerful; cap the number of domains
+        for log_size in 0..NUM_DOMAINS - 5 {
+            let size = 1 << log_size;
+            let root = BFieldElement::primitive_root_of_unity(size.into()).unwrap();
+            twiddle_factors(size, root);
         }
     }
 }
