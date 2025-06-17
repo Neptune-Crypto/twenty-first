@@ -254,17 +254,6 @@ where
         self.evaluate::<FF, FF>(x)
     }
 
-    pub fn are_colinear_3(p0: (FF, FF), p1: (FF, FF), p2: (FF, FF)) -> bool {
-        if p0.0 == p1.0 || p1.0 == p2.0 || p2.0 == p0.0 {
-            return false;
-        }
-
-        let dy = p0.1 - p1.1;
-        let dx = p0.0 - p1.0;
-
-        dx * (p2.1 - p0.1) == dy * (p2.0 - p0.0)
-    }
-
     pub fn are_colinear(points: &[(FF, FF)]) -> bool {
         if points.len() < 3 {
             return false;
@@ -2887,7 +2876,7 @@ mod test_polynomials {
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
         let p2 = (p2_x, line.evaluate(p2_x));
-        prop_assert!(Polynomial::are_colinear_3(p0, p1, p2));
+        prop_assert!(Polynomial::are_colinear(&[p0, p1, p2]));
     }
 
     #[proptest]
@@ -2899,7 +2888,7 @@ mod test_polynomials {
     ) {
         let line = Polynomial::lagrange_interpolate_zipped(&[p0, p1]);
         let p2 = (p2_x, line.evaluate_in_same_field(p2_x) + disturbance);
-        prop_assert!(!Polynomial::are_colinear_3(p0, p1, p2));
+        prop_assert!(!Polynomial::are_colinear(&[p0, p1, p2]));
     }
 
     #[proptest]
