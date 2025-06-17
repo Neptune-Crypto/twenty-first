@@ -1,3 +1,5 @@
+//! Univariate polynomials over [finite fields](FiniteField).
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -65,12 +67,18 @@ pub struct ModularInterpolationPreprocessingData<'coeffs, FF: FiniteField> {
     pub tail_length: usize,
 }
 
-/// A univariate polynomial with coefficients in a [finite field](FiniteField), in monomial form.
+/// A univariate polynomial with coefficients in a [finite field](FiniteField),
+/// in monomial form.
+///
+/// The polynomial can either own its coefficients ([Polynomial::new]) or borrow
+/// them ([Polynomial::new_borrowed]). The former is usually more convenient,
+/// but might require an expensive duplication of the polynomial's coefficients.
 #[derive(Clone)]
 pub struct Polynomial<'coeffs, FF: FiniteField> {
-    /// The polynomial's coefficients, in order of increasing degree. That is, the
-    /// leading coefficient is `coefficients.last()`. See [`Polynomial::normalize`]
-    /// and [`Polynomial::coefficients`] for caveats of that statement.
+    /// The polynomial's coefficients, in order of increasing degree. That is,
+    /// the leading coefficient is `coefficients.last()`. See
+    /// [`Polynomial::normalize`] and [`Polynomial::coefficients`] for caveats
+    /// of that statement.
     coefficients: Cow<'coeffs, [FF]>,
 }
 
@@ -148,6 +156,17 @@ impl<FF> Polynomial<'_, FF>
 where
     FF: FiniteField,
 {
+    /// The degree of the polynomial, with -1 for the zero-polynomial.
+    ///
+    /// ```
+    /// # use num_traits::Zero;
+    /// # use twenty_first::prelude::*;
+    /// assert_eq!(2, Polynomial::new(bfe_vec![2, 3, 4]).degree());
+    /// assert_eq!(0, Polynomial::new(xfe_vec![42]).degree());
+    ///
+    /// // special treatment for the zero-polynomial
+    /// assert_eq!(-1, Polynomial::<BFieldElement>::zero().degree());
+    /// ```
     pub fn degree(&self) -> isize {
         let mut deg = self.coefficients.len() as isize - 1;
         while deg >= 0 && self.coefficients[deg as usize].is_zero() {
@@ -157,8 +176,8 @@ where
         deg // -1 for the zero polynomial
     }
 
-    /// The polynomial's coefficients, in order of increasing degree. That is, the
-    /// leading coefficient is the slice's last element.
+    /// The polynomial's coefficients, in order of increasing degree. That is,
+    /// the leading coefficient is the slice's last element.
     ///
     /// The leading coefficient is guaranteed to be non-zero. Consequently, the
     /// zero-polynomial is the empty slice.
@@ -192,8 +211,8 @@ where
         }
     }
 
-    /// The coefficient of the polynomial's term of highest power. `None` if (and only if) `self`
-    /// [is zero](Self::is_zero).
+    /// The coefficient of the polynomial's term of highest power. `None` if
+    /// (and only if) `self` [is zero](Self::is_zero).
     ///
     /// Furthermore, is never `Some(FF::ZERO)`.
     ///
@@ -213,12 +232,38 @@ where
         }
     }
 
+    /// Whether `self` is equal to the single monomial `x` with coefficient 1.
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// // the easiest way to get `x`
+    /// assert!(Polynomial::<BFieldElement>::x_to_the(1).is_x());
+    /// assert!(!Polynomial::<BFieldElement>::x_to_the(2).is_x());
+    ///
+    /// // it's also possible to get `x` more manually
+    /// let coefficients_for_x = bfe_vec![0, 1];
+    /// assert!(Polynomial::new_borrowed(&coefficients_for_x).is_x());
+    /// ```
     pub fn is_x(&self) -> bool {
         self.degree() == 1 && self.coefficients[0].is_zero() && self.coefficients[1].is_one()
     }
 
+    /// The [formal derivative](https://en.wikipedia.org/wiki/Formal_derivative)
+    /// of this polynomial.
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// // 1 + 2·x¹ + 3·x² + 4·x³
+    /// let polynomial = Polynomial::new(bfe_vec![1, 2, 3, 4]);
+    ///
+    /// // 2 + 6·x¹ + 12·x²
+    /// let derivative = polynomial.formal_derivative();
+    ///
+    /// assert_eq!(bfe_vec![2, 6, 12], derivative.into_coefficients());
+    /// ```
     pub fn formal_derivative(&self) -> Polynomial<'static, FF> {
-        // not `enumerate()`ing: `FiniteField` is trait-bound to `From<u64>` but not `From<usize>`
+        // not `enumerate()`ing: `FiniteField` is trait-bound to `From<u64>` but
+        // not `From<usize>`
         let coefficients = (0..)
             .zip(self.coefficients.iter())
             .map(|(i, &coefficient)| FF::from(i) * coefficient)
@@ -230,8 +275,26 @@ where
 
     /// Evaluate `self` in an indeterminate.
     ///
+    /// The indeterminate must come from a field that is compatible with the
+    /// field over which the polynomial is defined, but it does not have to be
+    /// the same field.
+    ///
     /// For a specialized version, with fewer type annotations needed, see
     /// [`Self::evaluate_in_same_field`].
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// // 2 + 5·x + 12·x²
+    /// let polynomial = Polynomial::<BFieldElement>::new(bfe_vec![2, 5, 12]);
+    /// let at_1: BFieldElement = polynomial.evaluate(bfe![1]);
+    /// assert_eq!(bfe!(19), at_1);
+    ///
+    /// // `at_2` is an element of the extension field even though `polynomial`
+    /// // is defined over the base field and the indeterminate is an element
+    /// // of the base field
+    /// let at_2: XFieldElement = polynomial.evaluate(bfe![2]);
+    /// assert_eq!(xfe!(60), at_2);
+    /// ```
     pub fn evaluate<Ind, Eval>(&self, x: Ind) -> Eval
     where
         Ind: Clone,
@@ -254,6 +317,23 @@ where
         self.evaluate::<FF, FF>(x)
     }
 
+    /// Check whether all the given points lie on the same line.
+    ///
+    /// A point is a tuple of (x, y)-coordinates.
+    ///
+    /// Returns `false` if any two points lie on a line that is parallel to the
+    /// y-axis.
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let to_bfe_tuple = |(x, y)| (bfe!(x), bfe!(y));
+    ///
+    /// let on_line = [(0, 0), (1, 1), (2, 2)].map(to_bfe_tuple);
+    /// assert!(Polynomial::are_colinear(&on_line));
+    ///
+    /// let off_line = [(0, 0), (1, 1), (2, 3)].map(to_bfe_tuple);
+    /// assert!(!Polynomial::are_colinear(&off_line));
+    ///```
     pub fn are_colinear(points: &[(FF, FF)]) -> bool {
         if points.len() < 3 {
             return false;
@@ -272,6 +352,26 @@ where
         points.iter().skip(2).all(|&(x, y)| a * x + b == y)
     }
 
+    /// Given two points and a third x-coordinate, return the corresponding
+    /// y-coordinate such that the third point lies on the line defined by the
+    /// first two points.
+    ///
+    /// ### Panics
+    ///
+    /// Panics if any two x-coordinates are identical.
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let point_0 = (bfe!(0), bfe!(0));
+    /// let point_1 = (bfe!(2), bfe!(4));
+    /// let point_2_x = bfe!(1);
+    ///
+    /// let point_2_y = Polynomial::get_colinear_y(point_0, point_1, point_2_x);
+    /// assert_eq!(bfe!(2), point_2_y);
+    ///
+    /// let point_2 = (point_2_x, point_2_y);
+    /// assert!(Polynomial::are_colinear(&[point_0, point_1, point_2]));
+    /// ```
     pub fn get_colinear_y(p0: (FF, FF), p1: (FF, FF), p2_x: FF) -> FF {
         assert_ne!(p0.0, p1.0, "Line must not be parallel to y-axis");
         let dy = p0.1 - p1.1;
@@ -282,25 +382,24 @@ where
         p2_y_times_dx / dx
     }
 
-    /// Slow square implementation that does not use NTT
+    /// Slow square implementation that does not use NTT.
+    ///
+    /// If your trait bounds allow it, use the faster [Polynomial::square]
+    /// instead.
     #[must_use]
     pub fn slow_square(&self) -> Polynomial<'static, FF> {
-        let degree = self.degree();
-        if degree == -1 {
+        if self.degree() < 0 {
             return Polynomial::zero();
         }
 
         let squared_coefficient_len = self.degree() as usize * 2 + 1;
-        let zero = FF::ZERO;
-        let one = FF::ONE;
-        let two = one + one;
-        let mut squared_coefficients = vec![zero; squared_coefficient_len];
+        let mut squared_coefficients = vec![FF::ZERO; squared_coefficient_len];
 
+        let two = FF::ONE + FF::ONE;
         for i in 0..self.coefficients.len() {
             let ci = self.coefficients[i];
             squared_coefficients[2 * i] += ci * ci;
 
-            // TODO: Review.
             for j in i + 1..self.coefficients.len() {
                 let cj = self.coefficients[j];
                 squared_coefficients[i + j] += two * ci * cj;
@@ -529,7 +628,8 @@ where
             b1 = d;
         }
 
-        // normalize result to ensure the gcd, _i.e._, `x` has leading coefficient 1
+        // normalize result to ensure the gcd, _i.e._, `x` has leading
+        // coefficient 1
         let lc = x.leading_coefficient().unwrap_or(FF::ONE);
         let normalize = |poly: Self| poly.scalar_mul(lc.inverse());
 
@@ -593,13 +693,15 @@ where
     const FAST_MULTIPLY_CUTOFF_THRESHOLD: isize = 1 << 8;
 
     /// [Fast interpolation](Self::fast_interpolate) is slower than
-    /// [Lagrange interpolation](Self::lagrange_interpolate) below this threshold.
+    /// [Lagrange interpolation](Self::lagrange_interpolate) below this
+    /// threshold.
     ///
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
     const FAST_INTERPOLATE_CUTOFF_THRESHOLD_SEQUENTIAL: usize = 1 << 12;
 
     /// [Parallel Fast interpolation](Self::par_fast_interpolate) is slower than
-    /// [Lagrange interpolation](Self::lagrange_interpolate) below this threshold.
+    /// [Lagrange interpolation](Self::lagrange_interpolate) below this
+    /// threshold.
     ///
     /// Extracted from `cargo bench --bench interpolation` on mjolnir.
     const FAST_INTERPOLATE_CUTOFF_THRESHOLD_PARALLEL: usize = 1 << 8;
@@ -641,8 +743,8 @@ where
 
     /// Return the polynomial which corresponds to the transformation `x → α·x`.
     ///
-    /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then corresponds to
-    /// evaluating P(α·x).
+    /// Given a polynomial P(x), produce P'(x) := P(α·x). Evaluating P'(x) then
+    /// corresponds to evaluating P(α·x).
     #[must_use]
     pub fn scale<S, XF>(&self, alpha: S) -> Polynomial<'static, XF>
     where
@@ -659,44 +761,49 @@ where
         Polynomial::new(return_coefficients)
     }
 
-    /// It is the caller's responsibility that this function is called with sufficiently large input
-    /// to be safe and to be faster than `square`.
+    /// Square `self`.
+    ///
+    /// It is the caller's responsibility that this function is called with
+    /// sufficiently large input to be faster than [`Polynomial::square`].
     #[must_use]
     pub fn fast_square(&self) -> Polynomial<'static, FF> {
-        let degree = self.degree();
-        if degree == -1 {
-            return Polynomial::zero();
-        }
-        if degree == 0 {
-            return Polynomial::from_constant(self.coefficients[0] * self.coefficients[0]);
-        }
-
-        let result_degree: u64 = 2 * self.degree() as u64;
-        let order = (result_degree + 1).next_power_of_two();
+        let result_degree = match self.degree() {
+            -1 => return Polynomial::zero(),
+            0 => return Polynomial::from_constant(self.coefficients[0] * self.coefficients[0]),
+            d => 2 * d as u64 + 1,
+        };
+        let ntt_size = result_degree.next_power_of_two();
 
         let mut coefficients = self.coefficients.to_vec();
-        coefficients.resize(order as usize, FF::ZERO);
-        ntt::<FF>(&mut coefficients);
-
-        for element in coefficients.iter_mut() {
-            *element = element.to_owned() * element.to_owned();
+        coefficients.resize(ntt_size as usize, FF::ZERO);
+        ntt(&mut coefficients);
+        for element in &mut coefficients {
+            *element = *element * *element;
         }
-
-        intt::<FF>(&mut coefficients);
-        coefficients.truncate(result_degree as usize + 1);
+        intt(&mut coefficients);
+        coefficients.truncate(result_degree as usize);
 
         Polynomial::new(coefficients)
     }
 
+    /// Square `self`.
+    ///
+    /// This is the recommended method for polynomial squaring.
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// let polynomial = Polynomial::new(bfe_vec![2, 3]);
+    /// let square = Polynomial::new(bfe_vec![4, 12, 9]);
+    /// assert_eq!(square, polynomial.square());
+    /// ```
     #[must_use]
     pub fn square(&self) -> Polynomial<'static, FF> {
-        let degree = self.degree();
-        if degree == -1 {
+        if self.degree() == -1 {
             return Polynomial::zero();
         }
 
-        // A benchmark run on sword_smith's PC revealed that `fast_square` was faster when the input
-        // size exceeds a length of 64.
+        // A benchmark run on sword_smith's PC revealed that `fast_square` was
+        // faster when the input size exceeds a length of 64.
         let squared_coefficient_len = self.degree() as usize * 2 + 1;
         if squared_coefficient_len > 64 {
             return self.fast_square();
@@ -707,7 +814,6 @@ where
         let two = one + one;
         let mut squared_coefficients = vec![zero; squared_coefficient_len];
 
-        // TODO: Review.
         for i in 0..self.coefficients.len() {
             let ci = self.coefficients[i];
             squared_coefficients[2 * i] += ci * ci;
@@ -750,8 +856,8 @@ where
 
     /// Multiply `self` by `other`.
     ///
-    /// Prefer this over [`self * other`](Self::mul) since it chooses the fastest multiplication
-    /// strategy.
+    /// Prefer this over [`self * other`](Self::mul) since it chooses the
+    /// fastest multiplication strategy.
     #[must_use]
     pub fn multiply<FF2>(
         &self,
@@ -769,14 +875,16 @@ where
         }
     }
 
-    /// Use [Self::multiply] instead. Only `pub` to allow benchmarking; not considered part of the
-    /// public API.
+    /// Use [Self::multiply] instead. Only `pub` to allow benchmarking; not
+    /// considered part of the public API.
     ///
-    /// This method is asymptotically faster than [naive multiplication](Self::naive_multiply). For
+    /// This method is asymptotically faster than [naive
+    /// multiplication](Self::naive_multiply). For
     /// small instances, _i.e._, polynomials of low degree, it is slower.
     ///
-    /// The time complexity of this method is in O(n·log(n)), where `n` is the sum of the degrees
-    /// of the operands. The time complexity of the naive multiplication is in O(n^2).
+    /// The time complexity of this method is in O(n·log(n)), where `n` is the
+    /// sum of the degrees of the operands. The time complexity of the naive
+    /// multiplication is in O(n^2).
     #[doc(hidden)]
     pub fn fast_multiply<FF2>(
         &self,
@@ -814,11 +922,11 @@ where
 
     /// Multiply a bunch of polynomials together.
     pub fn batch_multiply(factors: &[Self]) -> Polynomial<'static, FF> {
-        // Build a tree-like structure of multiplications to keep the degrees of the
-        // factors roughly equal throughout the process. This makes efficient use of
-        // the `.multiply()` dispatcher.
-        // In contrast, using a simple `.reduce()`, the accumulator polynomial would
-        // have a much higher degree than the individual factors.
+        // Build a tree-like structure of multiplications to keep the degrees of
+        // the factors roughly equal throughout the process. This makes
+        // efficient use of the `.multiply()` dispatcher.
+        // In contrast, using a simple `.reduce()`, the accumulator polynomial
+        // would have a much higher degree than the individual factors.
         // todo: benchmark the current approach against the “reduce” approach.
 
         if factors.is_empty() {
@@ -836,10 +944,11 @@ where
                 .collect();
         }
 
-        // If any multiplications happened, `into_owned()` will not clone anything.
-        // If no multiplications happened,
+        // If any multiplications happened, `into_owned()` will not clone
+        // anything. If no multiplications happened,
         //   a) what is the caller doing?
-        //   b) a `'static` lifetime needs to be guaranteed, requiring `into_owned()`.
+        //   b) a `'static` lifetime needs to be guaranteed, requiring
+        //      `into_owned()`.
         let product_coeffs = products.pop().unwrap().coefficients.into_owned();
         Polynomial::new(product_coeffs)
     }
@@ -1213,7 +1322,8 @@ where
         // use degree to track when domain-changes are necessary
         let mut f_degree = f.degree();
 
-        // allocate enough space for f and set initial values of elements used later to zero
+        // allocate enough space for f and set initial values of elements used
+        // later to zero
         let mut f_ntt = f.coefficients.into_owned();
         f_ntt.resize(full_domain_length, FF::ZERO);
         ntt(&mut f_ntt[..current_domain_length]);
@@ -1239,7 +1349,8 @@ where
         Polynomial::new(f_ntt)
     }
 
-    /// Fast evaluate on a coset domain, which is the group generated by `generator^i * offset`.
+    /// Fast evaluate on a coset domain, which is the group generated by
+    /// `generator^i * offset`.
     ///
     /// # Performance
     ///
@@ -1247,19 +1358,21 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if the order of the domain generated by the `generator` is smaller than or equal to
-    /// the degree of `self`.
+    /// Panics if the order of the domain generated by the `generator` is
+    /// smaller than or equal to the degree of `self`.
     pub fn fast_coset_evaluate<S>(&self, offset: S, order: usize) -> Vec<FF>
     where
         S: Clone + One,
         FF: Mul<S, Output = FF> + 'static,
     {
-        // NTT's input and output are of the same size. For domains of an order that is larger than
-        // or equal to the number of coefficients of the polynomial, padding with leading zeros
-        // (a no-op to the polynomial) achieves this requirement. However, if the order is smaller
-        // than the number of coefficients in the polynomial, this would mean chopping off leading
-        // coefficients, which changes the polynomial. Therefore, this method is currently limited
-        // to domain orders greater than the degree of the polynomial.
+        // NTT's input and output are of the same size. For domains of an order
+        // that is larger than or equal to the number of coefficients of the
+        // polynomial, padding with leading zeros (a no-op to the polynomial)
+        // achieves this requirement. However, if the order is smaller than the
+        // number of coefficients in the polynomial, this would mean chopping
+        // off leading coefficients, which changes the polynomial. Therefore,
+        // this method is currently limited to domain orders greater than the
+        // degree of the polynomial.
         // todo: move Triton VM's solution for above issue in here
         assert!(
             (order as isize) > self.degree(),
@@ -1279,9 +1392,10 @@ impl<FF> Polynomial<'static, FF>
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    /// Computing the [fast zerofier][fast] is slower than computing the [smart zerofier][smart] for
-    /// domain sizes smaller than this threshold. The [naïve zerofier][naive] is always slower to
-    /// compute than the [smart zerofier][smart] for domain sizes smaller than the threshold.
+    /// Computing the [fast zerofier][fast] is slower than computing the
+    /// [smart zerofier][smart] for domain sizes smaller than this threshold.
+    /// The [naïve zerofier][naive] is always slower to compute than the
+    /// [smart zerofier][smart] for domain sizes smaller than the threshold.
     ///
     /// Extracted from `cargo bench --bench zerofier`.
     ///
@@ -1417,9 +1531,9 @@ where
         }
     }
 
-    /// Any fast interpolation will use NTT, so this is mainly used for testing/integrity
-    /// purposes. This also means that it is not pivotal that this function has an optimal
-    /// runtime.
+    /// Any fast interpolation will use NTT, so this is mainly used for
+    /// testing & integrity purposes. This also means that it is not pivotal
+    /// that this function has an optimal runtime.
     #[doc(hidden)]
     pub fn lagrange_interpolate_zipped(points: &[(FF, FF)]) -> Self {
         assert!(
@@ -1447,9 +1561,9 @@ where
         let zero = FF::ZERO;
         let zerofier = Self::zerofier(domain).coefficients;
 
-        // In each iteration of this loop, accumulate into the sum one polynomial that evaluates
-        // to some abscis (y-value) in the given ordinate (domain point), and to zero in all other
-        // ordinates.
+        // In each iteration of this loop, accumulate into the sum one
+        // polynomial that evaluates to some abscis (y-value) in the given
+        // ordinate (domain point), and to zero in all other ordinates.
         let mut lagrange_sum_array = vec![zero; domain.len()];
         let mut summand_array = vec![zero; domain.len()];
         for (i, &abscis) in values.iter().enumerate() {
@@ -1468,7 +1582,8 @@ where
             summand_array[0] = leading_coefficient;
             summand_eval = summand_eval * domain[i] + leading_coefficient;
 
-            // summand does not necessarily evaluate to 1 in domain[i]: correct for this value
+            // summand does not necessarily evaluate to 1 in domain[i]: correct
+            // for this value
             let corrected_abscis = abscis / summand_eval;
 
             // accumulate term
@@ -1610,8 +1725,8 @@ where
         zerofier_dictionary: &mut HashMap<(FF, FF), Polynomial<'static, FF>>,
         offset_inverse_dictionary: &mut HashMap<(FF, FF), Vec<FF>>,
     ) -> Vec<Self> {
-        // This value of 16 was found to be optimal through a benchmark on sword_smith's
-        // machine.
+        // This value of 16 was found to be optimal through a benchmark on
+        // sword_smith's machine.
         const OPTIMAL_CUTOFF_POINT_FOR_BATCHED_INTERPOLATION: usize = 16;
         if domain.len() < OPTIMAL_CUTOFF_POINT_FOR_BATCHED_INTERPOLATION {
             return values_matrix
@@ -1744,7 +1859,8 @@ where
             .collect()
     }
 
-    /// Only marked `pub` for benchmarking; not considered part of the public API.
+    /// Only marked `pub` for benchmarking; not considered part of the public
+    /// API.
     #[doc(hidden)]
     pub fn iterative_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
         domain.iter().map(|&p| self.evaluate(p)).collect()
@@ -1790,10 +1906,13 @@ where
         poly.scale(offset.inverse())
     }
 
-    /// The degree-`k` polynomial with the same `k + 1` leading coefficients as `self`. To be more
-    /// precise: The degree of the result will be the minimum of `k` and [`Self::degree()`]. This
-    /// implies, among other things, that if `self` [is zero](Self::is_zero()), the result will also
-    /// be zero, independent of `k`.
+    /// The degree-`k` polynomial with the same `k + 1` leading coefficients as
+    /// `self`.
+    ///
+    /// To be more precise: The degree of the result will be the minimum of `k`
+    /// and [`Self::degree()`]. This implies, among other things, that if `self`
+    /// [is zero](Self::is_zero()), the result will also be zero, independent
+    /// of `k`.
     ///
     /// # Examples
     ///
@@ -2200,22 +2319,25 @@ where
 }
 
 impl Polynomial<'_, BFieldElement> {
-    /// [Clean division](Self::clean_divide) is slower than [naïve division](Self::naive_divide) for
-    /// polynomials of degree less than this threshold.
+    /// [Clean division](Self::clean_divide) is slower than [naïve
+    /// division](Self::naive_divide) for polynomials of degree less than this
+    /// threshold.
     ///
     /// Extracted from `cargo bench --bench poly_clean_div` on mjolnir.
     const CLEAN_DIVIDE_CUTOFF_THRESHOLD: isize = { if cfg!(test) { 0 } else { 1 << 9 } };
 
-    /// A fast way of dividing two polynomials. Only works if division is clean, _i.e._, if the
-    /// remainder of polynomial long division is [zero]. This **must** be known ahead of time. If
-    /// division is unclean, this method might panic or produce a wrong result.
-    /// Use [`Polynomial::divide`] for more generality.
+    /// A fast way of dividing two polynomials. Only works if division is clean,
+    /// _i.e._, if the remainder of polynomial long division is [zero]. This
+    /// **must** be known ahead of time. If division is unclean, this method
+    /// might panic or produce a wrong result. Use [`Polynomial::divide`] for
+    /// more generality.
     ///
     /// # Panics
     ///
     /// Panics if
     /// - the divisor is [zero], or
-    /// - division is not clean, _i.e._, if polynomial long division leaves some non-zero remainder.
+    /// - division is not clean, _i.e._, if polynomial long division leaves some
+    ///   non-zero remainder.
     ///
     /// [zero]: Polynomial::is_zero
     #[must_use]
@@ -2228,7 +2350,8 @@ impl Polynomial<'_, BFieldElement> {
             return quotient;
         }
 
-        // Incompleteness workaround: Manually check whether 0 is a root of the divisor.
+        // Incompleteness workaround: Manually check whether 0 is a root of the
+        // divisor.
         // f(0) == 0 <=> f's constant term is 0
         let mut dividend_coefficients = dividend.coefficients.into_owned();
         let mut divisor_coefficients = divisor.coefficients.into_owned();
@@ -2241,7 +2364,8 @@ impl Polynomial<'_, BFieldElement> {
         let dividend = Polynomial::new(dividend_coefficients);
         let divisor = Polynomial::new(divisor_coefficients);
 
-        // Incompleteness workaround: Move both dividend and divisor to an extension field.
+        // Incompleteness workaround: Move both dividend and divisor to an
+        // extension field.
         let offset = XFieldElement::from([0, 1, 0]);
         let mut dividend_coefficients = dividend.scale(offset).coefficients.into_owned();
         let mut divisor_coefficients = divisor.scale(offset).coefficients.into_owned();
@@ -2266,7 +2390,8 @@ impl Polynomial<'_, BFieldElement> {
         intt(&mut quotient_codeword);
         let quotient = Polynomial::new(quotient_codeword);
 
-        // If the division was clean, “unscaling” brings all coefficients back to the base field.
+        // If the division was clean, “unscaling” brings all coefficients back
+        // to the base field.
         let Cow::Owned(coeffs) = quotient.scale(offset.inverse()).coefficients else {
             unreachable!();
         };
@@ -2314,8 +2439,9 @@ impl<FF> Polynomial<'static, FF>
 where
     FF: FiniteField,
 {
-    /// Create a new polynomial with the given coefficients. The first coefficient
-    /// is the constant term, the last coefficient has the highest degree.
+    /// Create a new polynomial with the given coefficients. The first
+    /// coefficient is the constant term, the last coefficient has the highest
+    /// degree.
     ///
     /// See also [`Self::new_borrowed`].
     pub fn new(coefficients: Vec<FF>) -> Self {
@@ -2323,13 +2449,17 @@ where
         Self { coefficients }
     }
 
-    /// `x^n`
+    /// Create a new polynomial that corresponds to the single monomial `x^n`
+    /// with coefficient 1, where `n` is the provided argument.
     pub fn x_to_the(n: usize) -> Self {
         let mut coefficients = vec![FF::ZERO; n + 1];
         coefficients[n] = FF::ONE;
         Self::new(coefficients)
     }
 
+    /// Create a new polynomial that corresponds to the provided constant.
+    ///
+    /// In particular, the degree of the new polynomial is 0.
     pub fn from_constant(constant: FF) -> Self {
         Self::new(vec![constant])
     }
@@ -2563,7 +2693,7 @@ where
     fn neg(mut self) -> Self::Output {
         self.scalar_mul_mut(-FF::ONE);
 
-        // communicate the cloning that has already happened in `scalar_mul_mut()`
+        // communicate the cloning that has already happened in scalar_mul_mut()
         self.into_owned()
     }
 }
@@ -3142,8 +3272,9 @@ mod test_polynomials {
 
     #[test]
     fn leading_zeros_dont_affect_polynomial_division() {
-        // This test was used to catch a bug where the polynomial division was wrong when the
-        // divisor has a leading zero coefficient, i.e. when it was not normalized
+        // This test was used to catch a bug where the polynomial division was
+        // wrong when the divisor has a leading zero coefficient, i.e. when it
+        // was not normalized
 
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
             Polynomial::new(coeffs.map(BFieldElement::new).to_vec())
@@ -3609,7 +3740,7 @@ mod test_polynomials {
         #[filter(#divisor_root_indices.iter().all_unique())]
         divisor_root_indices: Vec<usize>,
     ) {
-        // ensure clean division: make divisor's roots a subset of dividend's roots
+        // ensure clean division: make divisor's roots a subset of dividend's
         let mut divisor_roots = divisor_root_indices
             .into_iter()
             .map(|i| dividend_roots[i])
@@ -4204,15 +4335,16 @@ mod test_polynomials {
         // didactics, and do not reflect an on-going bug hunt anymore.
         let mut failures = vec![];
         for i in 1..100 {
-            // Is this setup convoluted? Maybe. It's the only way I've managed to trigger
-            // the discrepancy so far.
-            // The historic context of finding Bezout coefficients shimmers through. :)
+            // Is this setup convoluted? Maybe. It's the only way I've managed
+            // to trigger the discrepancy so far. The historic context of
+            // finding Bezout coefficients shimmers through. :)
             let roots = (0..i).map(BFieldElement::new).collect_vec();
             let dividend = Polynomial::zerofier(&roots).formal_derivative();
 
-            // Fractions of 1/4th, 1/5th, 1/6th, and so on trigger the failure. Fraction
-            // 1/5th seems to trigger both a failure for the smallest `i` (10) and the most
-            // failures (90 out of 100). Fractions 1/2 or 1/3rd don't trigger the failure.
+            // Fractions of 1/4th, 1/5th, 1/6th, and so on trigger the failure.
+            // Fraction 1/5th seems to trigger both a failure for the smallest
+            // `i` (10) and the most failures (90 out of 100). Fractions 1/2 or
+            // 1/3rd don't trigger the failure.
             let divisor_roots = &roots[..roots.len() / 5];
             let divisor = Polynomial::zerofier(divisor_roots);
 
