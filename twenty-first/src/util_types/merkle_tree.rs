@@ -2,11 +2,19 @@ use std::borrow::Cow;
 use std::collections::hash_map::Entry::*;
 use std::collections::*;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::mem::MaybeUninit;
+use std::ops::Add;
+use std::ops::BitAnd;
+use std::ops::BitXor;
+use std::ops::Div;
+use std::ops::Sub;
 use std::result;
 
 use arbitrary::*;
 use itertools::Itertools;
+use num_traits::ConstOne;
+use num_traits::ConstZero;
 use rayon::prelude::*;
 use thiserror::Error;
 
@@ -425,38 +433,68 @@ impl MerkleTree {
     /// exactly those nodes that are needed to prove (or verify) that the
     /// indicated leafs are in the Merkle tree.
     ///
+    /// For an explanation of the term “authentication structure”, please refer
+    /// to [`authentication_structure`][Self::authentication_structure].
+    ///
     /// Returns an error if any of the leaf indices is bigger than or equal to
-    /// the total number of leafs in the tree.
-    pub fn authentication_structure_node_indices(
-        num_leafs: MerkleTreeLeafIndex,
-        leaf_indices: &[MerkleTreeLeafIndex],
-    ) -> Result<impl ExactSizeIterator<Item = MerkleTreeNodeIndex> + use<>> {
-        if !num_leafs.is_power_of_two() {
+    /// the total number of leafs in the tree, or if the total number of leafs
+    /// is not a power of two.
+    //
+    // The implementation is this generic to allow using it with type `usize` in
+    // this crate as well as type `u64` in a downstream dependency.
+    //
+    // Reducing the number of trait bounds (without sacrificing performance) is
+    // a desirable goal.
+    pub fn authentication_structure_node_indices<I>(
+        num_leafs: I,
+        leaf_indices: &[I],
+    ) -> Result<impl ExactSizeIterator<Item = I> + use<I>>
+    where
+        I: Copy
+            + Hash
+            + Ord
+            + Add<Output = I>
+            + Sub<Output = I>
+            + Div<Output = I>
+            + BitAnd<Output = I>
+            + BitXor<Output = I>
+            + ConstZero
+            + ConstOne,
+    {
+        // The number of leafs must be a power of 2. Because the method
+        // `is_power_of_two()` is not part of any trait, rely on some
+        // bit twiddling hacks instead.
+        // <https://graphics.stanford.edu/~seander/bithacks.html>
+        if num_leafs == I::ZERO || ((num_leafs - I::ONE) & num_leafs) != I::ZERO {
             return Err(MerkleTreeError::IncorrectNumberOfLeafs);
         }
 
-        // The set of indices of nodes that need to be included in the authentications
-        // structure. In principle, every node of every authentication path is needed.
-        // The root is never needed. Hence, it is not considered below.
+        // The set of indices of nodes that need to be included in the
+        // authentication structure. In principle, every node of every
+        // authentication path is needed. The root is never needed. Hence, it is
+        // not considered below.
         let mut node_is_needed = HashSet::new();
 
-        // The set of indices of nodes that can be computed from other nodes in the
-        // authentication structure or the leafs that are explicitly supplied during
-        // verification. Every node on the direct path from the leaf to the root can
-        // be computed by the very nature of “authentication path”.
+        // The set of indices of nodes that can be computed from other nodes in
+        // the authentication structure or the leafs that are explicitly
+        // supplied during verification. Every node on the direct path from the
+        // leaf to the root can be computed by the very nature of
+        // “authentication path”.
         let mut node_can_be_computed = HashSet::new();
 
+        let two = I::ONE + I::ONE; // cannot be `const` because of `+`
         for &leaf_index in leaf_indices {
             if leaf_index >= num_leafs {
-                return Err(MerkleTreeError::LeafIndexInvalid { num_leafs });
+                return Err(MerkleTreeError::LeafIndexInvalid);
             }
 
+            let root_index = const { I::ONE };
             let mut node_index = leaf_index + num_leafs;
-            while node_index > ROOT_INDEX {
-                let sibling_index = node_index ^ 1;
+            while node_index > root_index {
+                let sibling_index = node_index ^ I::ONE;
                 node_can_be_computed.insert(node_index);
                 node_is_needed.insert(sibling_index);
-                node_index /= 2;
+                node_index = node_index / two;
             }
         }
 
@@ -627,8 +665,7 @@ impl MerkleTree {
         &self,
         indices: &[MerkleTreeLeafIndex],
     ) -> Result<Vec<(MerkleTreeLeafIndex, Digest)>> {
-        let num_leafs = self.num_leafs();
-        let invalid_index = MerkleTreeError::LeafIndexInvalid { num_leafs };
+        let invalid_index = MerkleTreeError::LeafIndexInvalid;
         let maybe_indexed_leaf = |&i| self.leaf(i).ok_or(invalid_index).map(|leaf| (i, leaf));
 
         indices.iter().map(maybe_indexed_leaf).collect()
@@ -847,7 +884,7 @@ impl TryFrom<MerkleTreeInclusionProof> for PartialMerkleTree {
 
         let num_leafs = partial_tree.num_leafs()?;
         if partial_tree.leaf_indices.iter().any(|&i| i >= num_leafs) {
-            return Err(MerkleTreeError::LeafIndexInvalid { num_leafs });
+            return Err(MerkleTreeError::LeafIndexInvalid);
         }
 
         let node_indices = MerkleTree::authentication_structure_node_indices(
@@ -879,8 +916,8 @@ impl TryFrom<MerkleTreeInclusionProof> for PartialMerkleTree {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum MerkleTreeError {
-    #[error("All leaf indices must be valid, i.e., less than {num_leafs}.")]
-    LeafIndexInvalid { num_leafs: MerkleTreeLeafIndex },
+    #[error("All leaf indices must be valid, i.e., less than the number of leafs.")]
+    LeafIndexInvalid,
 
     #[error("The length of the supplied authentication structure must match the expected length.")]
     AuthenticationStructureLengthMismatch,
@@ -1243,8 +1280,7 @@ pub mod merkle_tree_test {
         let maybe_proof = tree.inclusion_proof_for_leaf_indices(&leaf_indices);
         let err = maybe_proof.unwrap_err();
 
-        let num_leafs = tree.num_leafs();
-        assert_eq!(MerkleTreeError::LeafIndexInvalid { num_leafs }, err);
+        assert_eq!(MerkleTreeError::LeafIndexInvalid, err);
     }
 
     #[test]
@@ -1531,5 +1567,22 @@ pub mod merkle_tree_test {
         assert_eq!([14, 15], right_right_tree[1]);
         assert_eq!((28..32).collect_vec().as_slice(), right_right_tree[2]);
         assert_eq!((56..64).collect_vec().as_slice(), right_right_tree[3]);
+    }
+
+    #[test]
+    fn auth_structure_node_indices_can_be_computed_with_different_types() -> Result<()> {
+        let u32_indices: Vec<u32> =
+            MerkleTree::authentication_structure_node_indices(8, &[0_u32, 1])?.collect();
+        assert_eq!(vec![5, 3], u32_indices);
+
+        let u64_indices: Vec<u64> =
+            MerkleTree::authentication_structure_node_indices(8, &[0_u64, 2])?.collect();
+        assert_eq!(vec![11, 9, 3], u64_indices);
+
+        let usize_indices: Vec<usize> =
+            MerkleTree::authentication_structure_node_indices(8, &[4_usize, 5, 6, 7])?.collect();
+        assert_eq!(vec![2], usize_indices);
+
+        Ok(())
     }
 }
