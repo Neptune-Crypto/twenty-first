@@ -1,5 +1,4 @@
 #![deny(clippy::shadow_unrelated)]
-pub mod amount;
 pub mod config;
 pub mod error;
 pub mod math;
@@ -42,7 +41,6 @@ pub(crate) mod tests {
 
     #[test]
     fn types_in_prelude_implement_the_usual_auto_traits() {
-        implements_usual_auto_traits::<U32s<42>>();
         implements_usual_auto_traits::<BFieldElement>();
         implements_usual_auto_traits::<Polynomial<BFieldElement>>();
         implements_usual_auto_traits::<Polynomial<XFieldElement>>();

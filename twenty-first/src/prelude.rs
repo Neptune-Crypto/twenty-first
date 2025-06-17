@@ -1,4 +1,3 @@
-pub use crate::amount::u32s::U32s;
 pub use crate::bfe;
 pub use crate::bfe_array;
 pub use crate::bfe_vec;
