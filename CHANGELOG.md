@@ -3,6 +3,57 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.49.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.48.0..0.49.0) – 2025-06-18
+
+### ✨ Features
+
+- Impl Zeroize for SecretKey ([47853c00](https://github.com/Neptune-Crypto/twenty-first/commit/47853c00))
+- (!) MerkleTree-specific Type Aliases ([fb6bb691](https://github.com/Neptune-Crypto/twenty-first/commit/fb6bb691))
+- Compute Merkle root with minimal RAM usage ([ddc93cc7](https://github.com/Neptune-Crypto/twenty-first/commit/ddc93cc7))
+- Build RAM-frugal Merkle root in parallel ([fbd308ae](https://github.com/Neptune-Crypto/twenty-first/commit/fbd308ae))
+- Compute authentication structure from leafs ([4cfdf535](https://github.com/Neptune-Crypto/twenty-first/commit/4cfdf535))
+- Compute Merkle root with little RAM ([360a2963](https://github.com/Neptune-Crypto/twenty-first/commit/360a2963))
+- Set configuration programatically ([e9fae6aa](https://github.com/Neptune-Crypto/twenty-first/commit/e9fae6aa))
+
+### 🐛 Bug Fixes
+
+- (!) Correctly parse “negative” `BFieldElement`s ([85a6b307](https://github.com/Neptune-Crypto/twenty-first/commit/85a6b307))
+- Avoid infinite iteration edge case ([27a4c826](https://github.com/Neptune-Crypto/twenty-first/commit/27a4c826))
+- Validate auth struct node index parameters ([20a6827b](https://github.com/Neptune-Crypto/twenty-first/commit/20a6827b))
+- Respect rayon's number of threads ([b4379e83](https://github.com/Neptune-Crypto/twenty-first/commit/b4379e83))
+
+### ⚡️ Performance
+
+- *(tip5)* Avoid one permutation in `hash_varlen` ([8c942b44](https://github.com/Neptune-Crypto/twenty-first/commit/8c942b44))
+- *(MMR)* Use less RAM on MMR initialization ([048008fe](https://github.com/Neptune-Crypto/twenty-first/commit/048008fe))
+- *(MerkleTre)* Parallelize over subtrees ([02720bef](https://github.com/Neptune-Crypto/twenty-first/commit/02720bef))
+- *(MerkleTree)* Initialize in parallel ([9e96e848](https://github.com/Neptune-Crypto/twenty-first/commit/9e96e848))
+- Speed up (i)NTT ([a72ff379](https://github.com/Neptune-Crypto/twenty-first/commit/a72ff379))
+
+### 📚 Documentation
+
+- Improve documentation for the various `hash_*` methods ([27a4325a](https://github.com/Neptune-Crypto/twenty-first/commit/27a4325a))
+- *(polynomial)* Document public functions ([53c4b699](https://github.com/Neptune-Crypto/twenty-first/commit/53c4b699))
+
+### ⚙️ Miscellaneous
+
+- (!) Upgrade to rust edition 2024 ([23068289](https://github.com/Neptune-Crypto/twenty-first/commit/23068289))
+- Upgrade dependencies ([cb2ff66c](https://github.com/Neptune-Crypto/twenty-first/commit/cb2ff66c))
+- (!) *(ntt)* Delete unused code ([912d33ad](https://github.com/Neptune-Crypto/twenty-first/commit/912d33ad))
+- (!) Remove feature `mock` ([4b5000ee](https://github.com/Neptune-Crypto/twenty-first/commit/4b5000ee))
+- (!) Remove module `amounts` ([a5cbc605](https://github.com/Neptune-Crypto/twenty-first/commit/a5cbc605))
+- (!) *(polynomial)* Remove fn `are_colinear_3` ([a39b6e67](https://github.com/Neptune-Crypto/twenty-first/commit/a39b6e67))
+
+### ♻️ Refactor
+
+- (!) *(merkle_tree)* Make helper method generic ([d5b94749](https://github.com/Neptune-Crypto/twenty-first/commit/d5b94749))
+
+### ⏱️ Benchmark
+
+- Bench all ways of computing a Merkle root ([29c312f5](https://github.com/Neptune-Crypto/twenty-first/commit/29c312f5))
+- Bench authentication struct recomputation ([ee39add5](https://github.com/Neptune-Crypto/twenty-first/commit/ee39add5))
+- *(ntt)* Refactor NTT benchmark ([11c0abf1](https://github.com/Neptune-Crypto/twenty-first/commit/11c0abf1))
+
 ## [0.48.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.45.0..v0.48.0) – 2025-02-11
 
 ### ✨ Features
