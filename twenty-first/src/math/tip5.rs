@@ -1164,7 +1164,7 @@ pub(crate) mod tip5_tests {
         );
     }
 
-    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+    // note: test disabled for wasm32 due to use of assert_snapshot()
     #[test]
     fn tip5_hasher_trait_test() {
         let mut hasher = Tip5::init();
