@@ -13,9 +13,23 @@ use super::traits::PrimitiveRootOfUnity;
 /// The number of different domains over which this library can compute (i)NTT.
 ///
 /// In particular, the maximum slice length for both [NTT][ntt] and [iNTT][intt]
-/// supported by this library is 2^31. All domains of length some power of 2
-/// smaller than this, plus the empty domain, are supported as well.
-const NUM_DOMAINS: usize = 32;
+/// supported by this library is 2^31 on 64-bit systems and 2^28 on 32-bit
+/// systems. All domains of length some power of 2 smaller than this, plus the
+/// empty domain, are supported as well.
+const NUM_DOMAINS: usize = {
+    #[cfg(target_pointer_width = "16")]
+    compile_error!("pointer width 16 is not supported");
+
+    #[cfg(target_pointer_width = "32")]
+    {
+        29 // avoid isize::MAX overflow.
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    {
+        32 // NTT currently relies on `usize` to `u32` `as`-casting
+    }
+};
 
 /// ## Perform NTT on slices of prime-field elements
 ///
