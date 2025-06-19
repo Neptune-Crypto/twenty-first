@@ -744,6 +744,8 @@ pub(crate) mod tip5_tests {
     use rayon::prelude::IntoParallelIterator;
     use rayon::prelude::ParallelIterator;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::math::other::random_elements;
@@ -758,6 +760,7 @@ pub(crate) mod tip5_tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn get_size_test() {
         assert_eq!(
@@ -766,6 +769,7 @@ pub(crate) mod tip5_tests {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn lookup_table_is_correct() {
         let table: [u8; 256] = (0..256)
@@ -787,6 +791,7 @@ pub(crate) mod tip5_tests {
         });
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn round_constants_are_correct() {
         let to_int = |bytes: &[u8]| {
@@ -819,6 +824,7 @@ pub(crate) mod tip5_tests {
         });
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_fermat_cube_map_is_permutation() {
         let mut touched = [false; 256];
@@ -830,6 +836,7 @@ pub(crate) mod tip5_tests {
         assert_eq!(Tip5::offset_fermat_cube_map(255), 255);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn calculate_differential_uniformity() {
         // cargo test calculate_differential_uniformity -- --include-ignored --nocapture
@@ -890,6 +897,7 @@ pub(crate) mod tip5_tests {
         println!("bitwise differential uniformity for fermat cube map: {du_fermat_bitwise}");
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn calculate_approximation_quality() {
         let mut fermat_cubed = [0u16; 65536];
@@ -907,6 +915,7 @@ pub(crate) mod tip5_tests {
         println!("agreement with low-degree function: {equal_count}");
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn hash10_test_vectors() {
         let mut preimage = [BFieldElement::ZERO; RATE];
@@ -943,6 +952,7 @@ pub(crate) mod tip5_tests {
         )
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn hash_varlen_test_vectors() {
         let mut digest_sum = [BFieldElement::ZERO; Digest::LEN];
@@ -988,6 +998,7 @@ pub(crate) mod tip5_tests {
         Digest::new((&squeeze_result[..Digest::LEN]).try_into().unwrap())
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn hash_var_len_equivalence_corner_cases() {
         for preimage_length in 0..=11 {
@@ -999,6 +1010,7 @@ pub(crate) mod tip5_tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn hash_var_len_equivalence(#[strategy(arb())] preimage: Vec<BFieldElement>) {
         let hash_varlen_digest = Tip5::hash_varlen(&preimage);
@@ -1006,6 +1018,7 @@ pub(crate) mod tip5_tests {
         prop_assert_eq!(digest_through_pad_squeeze_absorb, hash_varlen_digest);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_linearity_of_mds() {
         type SpongeState = [BFieldElement; STATE_SIZE];
@@ -1037,6 +1050,7 @@ pub(crate) mod tip5_tests {
         assert_eq!(w, w_);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_mds_circulancy() {
         let mut sponge = Tip5::init();
@@ -1073,6 +1087,7 @@ pub(crate) mod tip5_tests {
         assert_eq!(sponge_2.state, mv);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_complex_karatsuba() {
         const N: usize = 4;
@@ -1091,6 +1106,7 @@ pub(crate) mod tip5_tests {
         assert_eq!(h0, h1);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_complex_product() {
         let mut rng = rand::rng();
@@ -1104,6 +1120,7 @@ pub(crate) mod tip5_tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn sample_scalars_test() {
         let mut sponge = Tip5::randomly_seeded();
@@ -1118,6 +1135,7 @@ pub(crate) mod tip5_tests {
         assert_ne!(product, XFieldElement::ZERO); // false failure with prob ~2^{-192}
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_mds_agree() {
         let mut rng = rand::rng();
@@ -1146,6 +1164,7 @@ pub(crate) mod tip5_tests {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn tip5_hasher_trait_test() {
         let mut hasher = Tip5::init();
@@ -1154,6 +1173,7 @@ pub(crate) mod tip5_tests {
         assert_snapshot!(hasher.finish(), @"2267905471610932299");
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn tip5_hasher_consumes_small_data(#[filter(!#bytes.is_empty())] bytes: Vec<u8>) {
         let mut hasher = Tip5::init();
@@ -1162,6 +1182,7 @@ pub(crate) mod tip5_tests {
         prop_assert_ne!(Tip5::init().finish(), hasher.finish());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn appending_small_data_to_big_data_changes_tip5_hash(
         #[any(size_range(2_000..8_000).lift())] big_data: Vec<u8>,
@@ -1178,6 +1199,7 @@ pub(crate) mod tip5_tests {
         prop_assert_ne!(big_data_hash, all_data_hash);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn tip5_trace_starts_with_initial_state_and_is_equivalent_to_permutation(
         #[strategy(arb())] mut tip5: Tip5,

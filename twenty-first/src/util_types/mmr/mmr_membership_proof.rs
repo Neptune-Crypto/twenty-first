@@ -636,6 +636,8 @@ mod mmr_membership_proof_test {
     use rand::Rng;
     use rand::random;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::math::b_field_element::BFieldElement;
@@ -647,6 +649,7 @@ mod mmr_membership_proof_test {
     use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
     use crate::util_types::mmr::mmr_trait::Mmr;
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn equality_and_hash_test() {
         let mut rng = rand::rng();
@@ -685,6 +688,7 @@ mod mmr_membership_proof_test {
         assert_ne!(Tip5::hash(&mp4), Tip5::hash(&mp5));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn get_node_indices_simple_test() {
         const LEAF_INDEX: u64 = 4;
@@ -701,6 +705,7 @@ mod mmr_membership_proof_test {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn get_peak_index_simple_test() {
         let mut mmr_size = 7;
@@ -759,6 +764,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 10)]
     fn mmr_verification_if_leaf_index_is_out_of_bounds(
         #[strategy(0..=121usize)] leaf_count: usize,
@@ -776,12 +782,14 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mmr_verify_does_not_crash_on_too_short_peaks_list_unit() {
         let mmr_mp = MmrMembershipProof::new(vec![Default::default()]);
         assert!(!mmr_mp.verify(0, Default::default(), &[], 2));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 10)]
     fn mmr_verification_with_wrong_length_of_peak_list(
         #[strategy(0..=1_000_000u64)] leaf_count: u64,
@@ -805,6 +813,7 @@ mod mmr_membership_proof_test {
         assert!(!mp.verify(leaf_index, leaf, &one_too_many, leaf_count));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn update_batch_membership_proofs_from_leaf_mutations_new_test() {
         let total_leaf_count = 8;
@@ -850,6 +859,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn batch_update_from_batch_leaf_mutation_total_replacement_test() {
         let total_leaf_count = 268;
@@ -899,6 +909,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn batch_update_from_batch_leaf_mutation_test() {
         let total_leaf_count = 34;
@@ -979,6 +990,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn batch_update_from_leaf_mutation_no_change_return_value_test() {
         // This test verifies that the return value indicating changed membership proofs is empty
@@ -1045,6 +1057,7 @@ mod mmr_membership_proof_test {
         (leaf_hashes, membership_proofs)
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn update_batch_membership_proofs_from_batch_leaf_mutations_test() {
         let total_leaf_count = 8;
@@ -1091,6 +1104,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn update_membership_proof_from_leaf_mutation_test() {
         let leaf_hashes: Vec<Digest> = random_elements(8);
@@ -1223,6 +1237,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn update_membership_proof_from_leaf_mutation_big_test() {
         // Build MMR from leaf count 0 to 22, and loop through *each*
@@ -1287,6 +1302,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn update_membership_proof_from_append_simple_with_bit_mmra() {
         let original_leaf_count = (1 << 35) + (1 << 7) - 1;
@@ -1333,6 +1349,7 @@ mod mmr_membership_proof_test {
         assert!(all_proofs_are_valid);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn update_membership_proof_from_append_simple() {
         let leaf_count = 7;
@@ -1376,6 +1393,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn update_membership_proof_from_append_big_tests() {
         for leaf_count in 0..68u64 {
@@ -1509,6 +1527,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn update_membership_proof_from_append_big_tip5() {
         // Build MMR from leaf count 0 to 9, and loop through *each*
@@ -1561,6 +1580,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn serialization_test() {
         // You could argue that this test doesn't belong here, as it tests the behavior of
@@ -1582,6 +1602,7 @@ mod mmr_membership_proof_test {
         ));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_decode_mmr_membership_proof() {
         let mut rng = rand::rng();
@@ -1597,6 +1618,7 @@ mod mmr_membership_proof_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "Lists must have same length. Got: 0 and 3")]
     fn test_diff_len_lists_batch_update_from_append() {
@@ -1616,6 +1638,7 @@ mod mmr_membership_proof_test {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "Lists must have same length. Got: 0 and 3")]
     fn test_diff_len_lists_batch_update_from_leaf_mutation() {
@@ -1637,6 +1660,7 @@ mod mmr_membership_proof_test {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "Lists must have same length. Got: 0 and 3")]
     fn test_diff_len_lists_batch_update_from_batch_leaf_mutation() {

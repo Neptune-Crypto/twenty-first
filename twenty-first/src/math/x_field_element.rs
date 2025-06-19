@@ -591,6 +591,8 @@ mod tests {
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use crate::bfe;
     use crate::math::b_field_element::*;
@@ -609,6 +611,7 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn one_zero_test() {
         let one = XFieldElement::one();
@@ -646,6 +649,7 @@ mod tests {
         assert!(!one_as_constant_term_1.is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn x_field_random_element_generation_test() {
         let rand_xs: Vec<XFieldElement> = random_elements(14);
@@ -655,6 +659,7 @@ mod tests {
         assert!(rand_xs.into_iter().all_unique());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn incr_decr_test() {
         let one_const = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
@@ -716,6 +721,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn x_field_add_test() {
         let poly1 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
@@ -749,6 +755,7 @@ mod tests {
         assert_eq!(poly_sum, poly9 + poly10);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn x_field_sub_test() {
         let poly1 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
@@ -782,6 +789,7 @@ mod tests {
         assert_eq!(poly_diff, poly10 - poly9);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn x_field_mul_test() {
         let poly1 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
@@ -825,6 +833,7 @@ mod tests {
         assert_eq!(poly1112_product, poly11 * poly12);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn x_field_overloaded_arithmetic_test() {
         let mut rng = rand::rng();
@@ -855,6 +864,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn x_field_into_test() {
         let zero_poly: XFieldElement = Polynomial::<BFieldElement>::new(vec![]).into();
@@ -868,6 +878,7 @@ mod tests {
         assert!(neg_shah_zero.is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn x_field_xgcp_test() {
         // Verify expected properties of XGCP: symmetry and that gcd is always
@@ -933,6 +944,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn x_field_inv_test() {
         let one = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
@@ -987,6 +999,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn field_element_inversion(
         #[filter(!#x.is_zero())] x: XFieldElement,
@@ -1000,6 +1013,7 @@ mod tests {
         prop_assert_ne!(XFieldElement::ONE, x * not_x.inverse());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn field_element_batch_inversion(
         #[filter(!#xs.iter().any(|x| x.is_zero()))] xs: Vec<XFieldElement>,
@@ -1010,6 +1024,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mul_xfe_with_bfe_pbt() {
         let test_iterations = 100;
@@ -1028,6 +1043,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 1_000)]
     fn x_field_division_mul_pbt(a: XFieldElement, b: XFieldElement) {
         let a_b = a * b;
@@ -1092,6 +1108,7 @@ mod tests {
         prop_assert_eq!(a_minus_b_field_b_as_b, a_minus_b_field_b_as_x);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn xfe_mod_pow_zero() {
         assert!(XFieldElement::ZERO.mod_pow_u32(0).is_one());
@@ -1100,6 +1117,7 @@ mod tests {
         assert!(XFieldElement::ONE.mod_pow_u64(0).is_one());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn xfe_mod_pow(base: XFieldElement, #[strategy(0_u32..200)] exponent: u32) {
         let mut acc = XFieldElement::ONE;
@@ -1109,6 +1127,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn xfe_mod_pow_static() {
         let three_to_the_n = |n| xfe!(3).mod_pow_u64(n);
@@ -1117,6 +1136,7 @@ mod tests {
         assert_eq!(expected, actual);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 100)]
     fn xfe_intt_is_inverse_of_xfe_ntt(
         #[strategy(1..=11)]
@@ -1130,6 +1150,7 @@ mod tests {
         prop_assert_eq!(inputs, rv);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 40)]
     fn xfe_ntt_corresponds_to_polynomial_evaluation(
         #[strategy(1..=11)]
@@ -1147,12 +1168,14 @@ mod tests {
         prop_assert_eq!(evaluations, rv);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn inverse_or_zero_of_zero_is_zero() {
         let zero = XFieldElement::ZERO;
         assert_eq!(zero, zero.inverse_or_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn inverse_or_zero_of_non_zero_is_inverse(#[filter(!#xfe.is_zero())] xfe: XFieldElement) {
         let inv = xfe.inverse_or_zero();
@@ -1160,6 +1183,7 @@ mod tests {
         prop_assert_eq!(XFieldElement::ONE, xfe * inv);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "Cannot invert the zero element in the extension field.")]
     fn multiplicative_inverse_of_zero() {
@@ -1167,6 +1191,7 @@ mod tests {
         let _ = zero.inverse();
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn xfe_to_digest_to_xfe_is_invariant(xfe: XFieldElement) {
         let digest: Digest = xfe.into();
@@ -1174,6 +1199,7 @@ mod tests {
         assert_eq!(xfe, xfe2);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn converting_random_digest_to_xfield_element_fails(digest: Digest) {
         if XFieldElement::try_from(digest).is_ok() {
@@ -1182,6 +1208,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn xfe_macro_can_be_used() {
         let x = xfe!(42);
@@ -1201,12 +1228,14 @@ mod tests {
         assert_eq!(m.to_vec(), n);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn xfe_macro_produces_same_result_as_calling_new(coeffs: [BFieldElement; EXTENSION_DEGREE]) {
         let xfe = XFieldElement::new(coeffs);
         prop_assert_eq!(xfe, xfe!(coeffs));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn xfe_macro_produces_same_result_as_calling_new_const(scalar: BFieldElement) {
         let xfe = XFieldElement::new_const(scalar);

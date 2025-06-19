@@ -602,6 +602,8 @@ mod tests {
     use proptest::test_runner::TestCaseResult;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::prelude::*;
@@ -710,6 +712,7 @@ mod tests {
 
     macro_rules! test_case {
         (fn $fn_name:ident for $t:ty: $static_len:expr) => {
+            #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
             #[proptest]
             fn $fn_name(test_data: BFieldCodecPropertyTestData<$t>) {
                 prop_assert_eq!($static_len, <$t as BFieldCodec>::static_length());
@@ -720,6 +723,7 @@ mod tests {
 
     macro_rules! neg_test_case {
         (fn $fn_name:ident for $t:ty) => {
+            #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
             #[proptest]
             fn $fn_name(random_encoding: Vec<BFieldElement>) {
                 let decoding = <$t as BFieldCodec>::decode(&random_encoding);
@@ -781,6 +785,7 @@ mod tests {
     neg_test_case! { fn poly_of_bfe_neg for Polynomial<BFieldElement> }
     neg_test_case! { fn poly_of_xfe_neg for Polynomial<XFieldElement> }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn encoding_tuple_puts_fields_in_expected_order() {
         let encoding = (1_u8, 2_u16, 3_u32, 4_u64, true).encode();
@@ -788,18 +793,21 @@ mod tests {
         assert_eq!(expected, encoding);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn leading_zero_coefficient_have_no_effect_on_encoding_empty_poly_bfe() {
         let empty_poly = Polynomial::<BFieldElement>::new(vec![]);
         assert_eq!(empty_poly.encode(), Polynomial::new(bfe_vec![0]).encode());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn leading_zero_coefficients_have_no_effect_on_encoding_empty_poly_xfe() {
         let empty_poly = Polynomial::<XFieldElement>::new(vec![]);
         assert_eq!(empty_poly.encode(), Polynomial::new(xfe_vec![0]).encode());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn leading_zero_coefficients_have_no_effect_on_encoding_poly_bfe_pbt(
         polynomial: Polynomial<'static, BFieldElement>,
@@ -814,6 +822,7 @@ mod tests {
         prop_assert_eq!(encoded, poly_w_leading_zeros.encode());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn leading_zero_coefficients_have_no_effect_on_encoding_poly_xfe_pbt(
         polynomial: Polynomial<'static, XFieldElement>,
@@ -860,6 +869,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn disallow_trailing_zeros_in_poly_encoding_bfe(
         polynomial: Polynomial<'static, BFieldElement>,
@@ -873,6 +883,7 @@ mod tests {
         )?
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn disallow_trailing_zeros_in_poly_encoding_xfe(
         polynomial: Polynomial<'static, XFieldElement>,
@@ -898,6 +909,8 @@ mod tests {
     pub mod derive_tests {
         use arbitrary::Arbitrary;
         use num_traits::Zero;
+        #[cfg(target_arch = "wasm32")]
+        use wasm_bindgen_test::*;
 
         use super::*;
         use crate::math::digest::Digest;
@@ -1163,6 +1176,7 @@ mod tests {
             b: usize,
         }
 
+        #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
         #[proptest]
         fn unsupported_fields_can_be_ignored_test(#[strategy(arb())] my_struct: UnsupportedFields) {
             let encoded = my_struct.encode();
@@ -1316,6 +1330,7 @@ mod tests {
             fn enum_with_generics_and_where_clause for EnumWithGenericsAndWhereClause<u32>: None
         }
 
+        #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
         #[test]
         fn enums_bfield_codec_discriminant_can_be_accessed() {
             let a = EnumWithGenericsAndWhereClause::<u32>::A;
@@ -1349,6 +1364,7 @@ mod tests {
             coefficients: Vec<T>,
         }
 
+        #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
         #[proptest]
         fn manual_poly_encoding_implementation_is_consistent_with_derived_bfe(
             #[strategy(arb())] coefficients: Vec<BFieldElement>,
@@ -1356,6 +1372,7 @@ mod tests {
             manual_poly_encoding_implementation_is_consistent_with_derived(coefficients)?;
         }
 
+        #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
         #[proptest]
         fn manual_poly_encoding_implementation_is_consistent_with_derived_xfe(
             #[strategy(arb())] coefficients: Vec<XFieldElement>,

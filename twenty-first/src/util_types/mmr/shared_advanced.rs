@@ -282,11 +282,14 @@ mod mmr_test {
     use proptest::prop_assert_eq;
     use rand::RngCore;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::prelude::Digest;
     use crate::prelude::MmrMembershipProof;
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn leaf_index_to_node_index_test() {
         assert_eq!(1, leaf_index_to_node_index(0));
@@ -313,6 +316,7 @@ mod mmr_test {
         assert_eq!(40, leaf_index_to_node_index(21));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn node_indices_added_by_append_test() {
         assert_eq!(vec![1], node_indices_added_by_append(0));
@@ -342,6 +346,7 @@ mod mmr_test {
         assert_eq!(vec![64], node_indices_added_by_append(32));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn leaf_index_node_index_pbt() {
         let mut rng = rand::rng();
@@ -353,6 +358,7 @@ mod mmr_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn right_ancestor_count_test() {
         assert_eq!((0, 0), right_lineage_length_and_own_height(1)); // 0b1 => 0
@@ -416,6 +422,7 @@ mod mmr_test {
         assert_eq!((0, 62), right_lineage_length_and_own_height(u64::MAX / 2)); // 0b111...11 => 0
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn right_lineage_length_property(#[strategy(0u64..(1<<63))] leaf_index: u64) {
         let rll = right_lineage_length_from_leaf_index(leaf_index);
@@ -423,6 +430,7 @@ mod mmr_test {
         prop_assert_eq!(rac, rll);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn leftmost_ancestor_test() {
         assert_eq!((1, 0), leftmost_ancestor(1));
@@ -443,6 +451,7 @@ mod mmr_test {
         assert_eq!((31, 4), leftmost_ancestor(16));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn left_sibling_test() {
         assert_eq!(3, left_sibling(6, 1));
@@ -453,6 +462,7 @@ mod mmr_test {
         assert_eq!(7, left_sibling(14, 2));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn node_index_to_leaf_index_test() {
         assert_eq!(Some(0), node_index_to_leaf_index(1));
@@ -479,6 +489,7 @@ mod mmr_test {
         assert_eq!(None, node_index_to_leaf_index(22));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn leaf_count_to_node_count_test() {
         let node_counts: Vec<u64> = vec![
@@ -490,6 +501,7 @@ mod mmr_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn get_peak_heights_and_peak_node_indices_test() {
         type TestCase = (u64, (Vec<u32>, Vec<u64>));
@@ -525,6 +537,7 @@ mod mmr_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn get_authentication_path_node_indices_test() {
         type Interval = (u64, u64, u64);
@@ -547,12 +560,14 @@ mod mmr_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "Leaf index out-of-bounds: 5/5")]
     fn auth_path_indices_out_of_bounds_unit_test() {
         auth_path_node_indices(5, 5);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn auth_path_indices_prop(
         #[strategy(0u64..(u64::MAX>>1))] _num_leafs: u64,
@@ -565,6 +580,7 @@ mod mmr_test {
         prop_assert_eq!(mp.get_node_indices(leaf_index), node_indices);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn auth_path_indices_unit_test() {
         assert_eq!(vec![2, 6, 14, 30], auth_path_node_indices(16, 0));
@@ -599,16 +615,19 @@ mod mmr_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn right_lineage_length_from_node_index_does_not_crash(node_index: u64) {
         right_lineage_length_from_node_index(node_index);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn leftmost_ancestor_does_not_crash(node_index: u64) {
         leftmost_ancestor(node_index);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn right_lineage_length_and_own_height_does_not_crash(node_index: u64) {
         right_lineage_length_and_own_height(node_index);

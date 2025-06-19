@@ -2706,6 +2706,8 @@ mod test_polynomials {
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::prelude::*;
@@ -2736,12 +2738,14 @@ mod test_polynomials {
         type Strategy = BoxedStrategy<Self>;
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn polynomial_can_be_debug_printed() {
         let polynomial = Polynomial::new(bfe_vec![1, 2, 3]);
         println!("{polynomial:?}");
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn unequal_hash_implies_unequal_polynomials(poly_0: BfePoly, poly_1: BfePoly) {
         let hash = |poly: &Polynomial<_>| {
@@ -2760,6 +2764,7 @@ mod test_polynomials {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn polynomial_display_test() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
@@ -2785,6 +2790,7 @@ mod test_polynomials {
         assert_eq!("2x^4 + 1", polynomial([1, 0, 0, 0, 2]).to_string());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn leading_coefficient_of_zero_polynomial_is_none(#[strategy(0usize..30)] num_zeros: usize) {
         let coefficients = vec![BFieldElement::ZERO; num_zeros];
@@ -2792,6 +2798,7 @@ mod test_polynomials {
         prop_assert!(polynomial.leading_coefficient().is_none());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn leading_coefficient_of_non_zero_polynomial_is_some(
         polynomial: BfePoly,
@@ -2808,6 +2815,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn normalizing_canonical_zero_polynomial_has_no_effect() {
         let mut zero_polynomial = Polynomial::<BFieldElement>::zero();
@@ -2815,6 +2823,7 @@ mod test_polynomials {
         assert_eq!(Polynomial::zero(), zero_polynomial);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn spurious_leading_zeros_dont_affect_equality(
         polynomial: BfePoly,
@@ -2827,6 +2836,7 @@ mod test_polynomials {
         prop_assert_eq!(polynomial, polynomial_with_leading_zeros);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn normalizing_removes_spurious_leading_zeros(
         polynomial: BfePoly,
@@ -2846,6 +2856,7 @@ mod test_polynomials {
         prop_assert_eq!(expected_num_coefficients, num_coefficients);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn accessing_coefficients_of_empty_polynomial_gives_empty_slice() {
         let poly = BfePoly::new(vec![]);
@@ -2853,6 +2864,7 @@ mod test_polynomials {
         assert!(poly.into_coefficients().is_empty());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn accessing_coefficients_of_polynomial_with_only_zero_coefficients_gives_empty_slice(
         #[strategy(0_usize..30)] num_zeros: usize,
@@ -2862,6 +2874,7 @@ mod test_polynomials {
         prop_assert!(poly.into_coefficients().is_empty());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn accessing_the_coefficients_is_equivalent_to_normalizing_then_raw_access(
         mut coefficients: Vec<BFieldElement>,
@@ -2880,18 +2893,21 @@ mod test_polynomials {
         prop_assert_eq!(&raw_coefficients, &accessed_coefficients_owned);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn x_to_the_0_is_constant_1() {
         assert!(Polynomial::<BFieldElement>::x_to_the(0).is_one());
         assert!(Polynomial::<XFieldElement>::x_to_the(0).is_one());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn x_to_the_1_is_x() {
         assert!(Polynomial::<BFieldElement>::x_to_the(1).is_x());
         assert!(Polynomial::<XFieldElement>::x_to_the(1).is_x());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn x_to_the_n_to_the_m_is_homomorphic(
         #[strategy(0_usize..50)] n: usize,
@@ -2902,6 +2918,7 @@ mod test_polynomials {
         prop_assert_eq!(to_the_n_times_m, to_the_n_then_to_the_m);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn scaling_a_polynomial_works_with_different_fields_as_the_offset() {
         let bfe_poly = Polynomial::new(bfe_vec![0, 1, 2]);
@@ -2913,6 +2930,7 @@ mod test_polynomials {
         let _ = xfe_poly.scale(xfe!(42));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_scaling_is_equivalent_in_extension_field(
         bfe_polynomial: BfePoly,
@@ -2927,6 +2945,7 @@ mod test_polynomials {
         prop_assert_eq!(xfe_poly_bfe_scalar, bfe_poly_xfe_scalar);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn evaluating_scaled_polynomial_is_equivalent_to_evaluating_original_in_offset_point(
         polynomial: BfePoly,
@@ -2940,6 +2959,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_multiplication_with_scalar_is_equivalent_for_the_two_methods(
         mut polynomial: BfePoly,
@@ -2950,6 +2970,7 @@ mod test_polynomials {
         prop_assert_eq!(polynomial, new_polynomial);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_multiplication_with_scalar_is_equivalent_for_all_mul_traits(
         polynomial: BfePoly,
@@ -2966,6 +2987,7 @@ mod test_polynomials {
         prop_assert_eq!(bfe_lhs * XFieldElement::ONE, xfe_lhs);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn polynomial_multiplication_with_scalar_works_for_various_types() {
         let bfe_poly = Polynomial::new(bfe_vec![0, 1, 2]);
@@ -2984,6 +3006,7 @@ mod test_polynomials {
         xfe_poly.scalar_mul_mut(xfe!(42));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn slow_lagrange_interpolation(
         polynomial: BfePoly,
@@ -2998,6 +3021,7 @@ mod test_polynomials {
         prop_assert_eq!(polynomial, interpolation_polynomial);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn three_colinear_points_are_colinear(
         p0: (BFieldElement, BFieldElement),
@@ -3009,6 +3033,7 @@ mod test_polynomials {
         prop_assert!(Polynomial::are_colinear(&[p0, p1, p2]));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn three_non_colinear_points_are_not_colinear(
         p0: (BFieldElement, BFieldElement),
@@ -3021,6 +3046,7 @@ mod test_polynomials {
         prop_assert!(!Polynomial::are_colinear(&[p0, p1, p2]));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn colinearity_check_needs_at_least_three_points(
         p0: (BFieldElement, BFieldElement),
@@ -3031,6 +3057,7 @@ mod test_polynomials {
         prop_assert!(!Polynomial::are_colinear(&[p0, p1]));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn colinearity_check_with_repeated_points_fails(
         p0: (BFieldElement, BFieldElement),
@@ -3039,6 +3066,7 @@ mod test_polynomials {
         prop_assert!(!Polynomial::are_colinear(&[p0, p1, p1]));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn colinear_points_are_colinear(
         p0: (BFieldElement, BFieldElement),
@@ -3058,6 +3086,7 @@ mod test_polynomials {
         prop_assert!(Polynomial::are_colinear(&all_points));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "Line must not be parallel to y-axis")]
     fn getting_point_on_invalid_line_fails() {
@@ -3067,6 +3096,7 @@ mod test_polynomials {
         Polynomial::<BFieldElement>::get_colinear_y((one, one), (one, three), two);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn point_on_line_and_colinear_point_are_identical(
         p0: (BFieldElement, BFieldElement),
@@ -3079,6 +3109,7 @@ mod test_polynomials {
         prop_assert_eq!(y, y_from_get_point_on_line);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn point_on_line_and_colinear_point_are_identical_in_extension_field(
         p0: (XFieldElement, XFieldElement),
@@ -3091,11 +3122,13 @@ mod test_polynomials {
         prop_assert_eq!(y, y_from_get_point_on_line);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn shifting_polynomial_coefficients_by_zero_is_the_same_as_not_shifting_it(poly: BfePoly) {
         prop_assert_eq!(poly.clone(), poly.shift_coefficients(0));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn shifting_polynomial_one_is_equivalent_to_raising_polynomial_x_to_the_power_of_the_shift(
         #[strategy(0usize..30)] shift: usize,
@@ -3105,6 +3138,7 @@ mod test_polynomials {
         prop_assert_eq!(shifted_one, x_to_the_shift);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn polynomial_shift_test() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
@@ -3135,6 +3169,7 @@ mod test_polynomials {
         assert_eq!(polynomial([0, 0, 0, 0, 17, 14]), poly_shift_4);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn shifting_a_polynomial_means_prepending_zeros_to_its_coefficients(
         poly: BfePoly,
@@ -3146,24 +3181,28 @@ mod test_polynomials {
         prop_assert_eq!(expected_coefficients, shifted_poly.coefficients.to_vec());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn any_polynomial_to_the_power_of_zero_is_one(poly: BfePoly) {
         let poly_to_the_zero = poly.pow(0);
         prop_assert_eq!(Polynomial::one(), poly_to_the_zero);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn any_polynomial_to_the_power_one_is_itself(poly: BfePoly) {
         let poly_to_the_one = poly.pow(1);
         prop_assert_eq!(poly, poly_to_the_one);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_one_to_any_power_is_one(#[strategy(0u32..30)] exponent: u32) {
         let one_to_the_exponent = Polynomial::<BFieldElement>::one().pow(exponent);
         prop_assert_eq!(Polynomial::one(), one_to_the_exponent);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn pow_test() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
@@ -3185,6 +3224,7 @@ mod test_polynomials {
         assert_eq!(parabola_squared, parabola.pow(2));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn pow_arbitrary_test(poly: BfePoly, #[strategy(0u32..15)] exponent: u32) {
         let actual = poly.pow(exponent);
@@ -3198,18 +3238,21 @@ mod test_polynomials {
         prop_assert_eq!(expected, fast_actual);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_zero_is_neutral_element_for_addition(a: BfePoly) {
         prop_assert_eq!(a.clone() + Polynomial::zero(), a.clone());
         prop_assert_eq!(Polynomial::zero() + a.clone(), a);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_one_is_neutral_element_for_multiplication(a: BfePoly) {
         prop_assert_eq!(a.clone() * Polynomial::<BFieldElement>::one(), a.clone());
         prop_assert_eq!(Polynomial::<BFieldElement>::one() * a.clone(), a);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn multiplication_by_zero_is_zero(a: BfePoly) {
         let zero = Polynomial::<BFieldElement>::zero();
@@ -3218,26 +3261,31 @@ mod test_polynomials {
         prop_assert_eq!(Polynomial::zero(), zero * a);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_addition_is_commutative(a: BfePoly, b: BfePoly) {
         prop_assert_eq!(a.clone() + b.clone(), b + a);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_multiplication_is_commutative(a: BfePoly, b: BfePoly) {
         prop_assert_eq!(a.clone() * b.clone(), b * a);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_addition_is_associative(a: BfePoly, b: BfePoly, c: BfePoly) {
         prop_assert_eq!((a.clone() + b.clone()) + c.clone(), a + (b + c));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_multiplication_is_associative(a: BfePoly, b: BfePoly, c: BfePoly) {
         prop_assert_eq!((a.clone() * b.clone()) * c.clone(), a * (b * c));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_multiplication_is_distributive(a: BfePoly, b: BfePoly, c: BfePoly) {
         prop_assert_eq!(
@@ -3246,21 +3294,25 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_subtraction_of_self_is_zero(a: BfePoly) {
         prop_assert_eq!(Polynomial::zero(), a.clone() - a);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_division_by_self_is_one(#[filter(!#a.is_zero())] a: BfePoly) {
         prop_assert_eq!(Polynomial::one(), a.clone() / a);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_division_removes_common_factors(a: BfePoly, #[filter(!#b.is_zero())] b: BfePoly) {
         prop_assert_eq!(a.clone(), a * b.clone() / b);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_multiplication_raises_degree_at_maximum_to_sum_of_degrees(
         a: BfePoly,
@@ -3270,6 +3322,7 @@ mod test_polynomials {
         prop_assert!((a * b).degree() <= sum_of_degrees);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn leading_zeros_dont_affect_polynomial_division() {
         // This test was used to catch a bug where the polynomial division was
@@ -3307,6 +3360,7 @@ mod test_polynomials {
         assert_eq!(expected, res_numerator_not_normalized_2);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn leading_coefficient_of_truncated_polynomial_is_same_as_original_leading_coefficient(
         poly: BfePoly,
@@ -3324,6 +3378,7 @@ mod test_polynomials {
         prop_assert_eq!(lc, trunc_lc);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn truncated_polynomial_is_of_degree_min_of_truncation_point_and_poly_degree(
         poly: BfePoly,
@@ -3333,6 +3388,7 @@ mod test_polynomials {
         prop_assert_eq!(expected_degree, poly.truncate(truncation_point).degree());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn truncating_zero_polynomial_gives_zero_polynomial(
         #[strategy(..50_usize)] truncation_point: usize,
@@ -3341,6 +3397,7 @@ mod test_polynomials {
         prop_assert!(poly.is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn truncation_negates_degree_shifting(
         #[strategy(0_usize..30)] shift: usize,
@@ -3353,12 +3410,14 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn zero_polynomial_mod_any_power_of_x_is_zero_polynomial(power: usize) {
         let must_be_zero = Polynomial::<BFieldElement>::zero().mod_x_to_the_n(power);
         prop_assert!(must_be_zero.is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_mod_some_power_of_x_results_in_polynomial_of_degree_one_less_than_power(
         #[filter(!#poly.is_zero())] poly: BfePoly,
@@ -3368,6 +3427,7 @@ mod test_polynomials {
         prop_assert_eq!(isize::try_from(power).unwrap() - 1, remainder.degree());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_mod_some_power_of_x_shares_low_degree_terms_coefficients_with_original_polynomial(
         #[filter(!#poly.is_zero())] poly: BfePoly,
@@ -3381,29 +3441,34 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn fast_multiplication_by_zero_gives_zero(poly: BfePoly) {
         let product = poly.fast_multiply(&Polynomial::<BFieldElement>::zero());
         prop_assert_eq!(Polynomial::zero(), product);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn fast_multiplication_by_one_gives_self(poly: BfePoly) {
         let product = poly.fast_multiply(&Polynomial::<BFieldElement>::one());
         prop_assert_eq!(poly, product);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn fast_multiplication_is_commutative(a: BfePoly, b: BfePoly) {
         prop_assert_eq!(a.fast_multiply(&b), b.fast_multiply(&a));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn fast_multiplication_and_normal_multiplication_are_equivalent(a: BfePoly, b: BfePoly) {
         let product = a.fast_multiply(&b);
         prop_assert_eq!(a * b, product);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn batch_multiply_agrees_with_iterative_multiply(a: Vec<BfePoly>) {
         let mut acc = Polynomial::one();
@@ -3413,6 +3478,7 @@ mod test_polynomials {
         prop_assert_eq!(acc, Polynomial::batch_multiply(&a));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn par_batch_multiply_agrees_with_batch_multiply(a: Vec<BfePoly>) {
         prop_assert_eq!(
@@ -3421,6 +3487,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 50)]
     fn naive_zerofier_and_fast_zerofier_are_identical(
         #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
@@ -3431,6 +3498,7 @@ mod test_polynomials {
         prop_assert_eq!(naive_zerofier, fast_zerofier);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 50)]
     fn smart_zerofier_and_fast_zerofier_are_identical(
         #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
@@ -3441,6 +3509,7 @@ mod test_polynomials {
         prop_assert_eq!(smart_zerofier, fast_zerofier);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 50)]
     fn zerofier_and_naive_zerofier_are_identical(
         #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
@@ -3451,6 +3520,7 @@ mod test_polynomials {
         prop_assert_eq!(zerofier, naive_zerofier);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 50)]
     fn zerofier_is_zero_only_on_domain(
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
@@ -3466,11 +3536,13 @@ mod test_polynomials {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn zerofier_has_leading_coefficient_one(domain: Vec<BFieldElement>) {
         let zerofier = Polynomial::zerofier(&domain);
         prop_assert_eq!(BFieldElement::ONE, zerofier.leading_coefficient().unwrap());
     }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn par_zerofier_agrees_with_zerofier(domain: Vec<BFieldElement>) {
         prop_assert_eq!(
@@ -3479,6 +3551,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn fast_evaluate_on_hardcoded_domain_and_polynomial() {
         let domain = bfe_array![6, 12];
@@ -3489,6 +3562,7 @@ mod test_polynomials {
         assert_eq!(manual_evaluations, fast_evaluations);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn slow_and_fast_polynomial_evaluation_are_equivalent(
         poly: BfePoly,
@@ -3502,30 +3576,35 @@ mod test_polynomials {
         prop_assert_eq!(evaluations, fast_evaluations);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "zero points")]
     fn interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::interpolate(&[], &[]);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "zero points")]
     fn lagrange_interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::lagrange_interpolate(&[], &[]);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "zero points")]
     fn zipped_lagrange_interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::lagrange_interpolate_zipped(&[]);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "zero points")]
     fn fast_interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::fast_interpolate(&[], &[]);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "equal length")]
     fn interpolation_with_domain_size_different_from_number_of_points_is_impossible() {
@@ -3534,6 +3613,7 @@ mod test_polynomials {
         let _ = Polynomial::interpolate(&domain, &points);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "Repeated")]
     fn zipped_lagrange_interpolate_using_repeated_domain_points_is_impossible() {
@@ -3543,6 +3623,7 @@ mod test_polynomials {
         let _ = Polynomial::lagrange_interpolate_zipped(&zipped);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn interpolating_through_one_point_gives_constant_polynomial(
         x: BFieldElement,
@@ -3553,6 +3634,7 @@ mod test_polynomials {
         prop_assert_eq!(polynomial, interpolant);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 10)]
     fn lagrange_and_fast_interpolation_are_identical(
         #[any(size_range(1..2048).lift())]
@@ -3565,6 +3647,7 @@ mod test_polynomials {
         prop_assert_eq!(lagrange_interpolant, fast_interpolant);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 10)]
     fn par_fast_interpolate_and_fast_interpolation_are_identical(
         #[any(size_range(1..2048).lift())]
@@ -3577,12 +3660,14 @@ mod test_polynomials {
         prop_assert_eq!(par_fast_interpolant, fast_interpolant);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn fast_interpolation_through_a_single_point_succeeds() {
         let zero_arr = bfe_array![0];
         let _ = Polynomial::fast_interpolate(&zero_arr, &zero_arr);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 20)]
     fn interpolation_then_evaluation_is_identity(
         #[any(size_range(1..2048).lift())]
@@ -3595,6 +3680,7 @@ mod test_polynomials {
         prop_assert_eq!(values, evaluations);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 1)]
     fn fast_batch_interpolation_is_equivalent_to_fast_interpolation(
         #[any(size_range(1..2048).lift())]
@@ -3627,6 +3713,7 @@ mod test_polynomials {
         domain
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn fast_coset_evaluation_and_fast_evaluation_on_coset_are_identical(
         polynomial: BfePoly,
@@ -3646,6 +3733,7 @@ mod test_polynomials {
         prop_assert_eq!(fast_values, fast_coset_values);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn fast_coset_interpolation_and_and_fast_interpolation_on_coset_are_identical(
         #[filter(!#offset.is_zero())] offset: BFieldElement,
@@ -3663,6 +3751,7 @@ mod test_polynomials {
         prop_assert_eq!(fast_interpolant, fast_coset_interpolant);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn naive_division_gives_quotient_and_remainder_with_expected_properties(
         a: BfePoly,
@@ -3673,6 +3762,7 @@ mod test_polynomials {
         prop_assert_eq!(a, quot * b + rem);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn clean_naive_division_gives_quotient_and_remainder_with_expected_properties(
         #[filter(!#a_roots.is_empty())] a_roots: Vec<BFieldElement>,
@@ -3688,6 +3778,7 @@ mod test_polynomials {
         prop_assert_eq!(a, quot * b);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn clean_division_agrees_with_divide_on_clean_division(
         #[strategy(arb())] a: BfePoly,
@@ -3703,6 +3794,7 @@ mod test_polynomials {
         prop_assert_eq!(Polynomial::<BFieldElement>::zero(), naive_remainder);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn clean_division_agrees_with_division_if_divisor_has_only_0_as_root(
         #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
@@ -3717,6 +3809,7 @@ mod test_polynomials {
         prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn clean_division_agrees_with_division_if_divisor_has_only_0_as_multiple_root(
         #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
@@ -3733,6 +3826,7 @@ mod test_polynomials {
         prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn clean_division_agrees_with_division_if_divisor_has_0_as_root(
         #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
@@ -3756,6 +3850,7 @@ mod test_polynomials {
         prop_assert_eq!(dividend / divisor, quotient);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn clean_division_agrees_with_division_if_divisor_has_0_through_9_as_roots(
         #[strategy(arb())] additional_dividend_roots: Vec<BFieldElement>,
@@ -3770,6 +3865,7 @@ mod test_polynomials {
         prop_assert_eq!(dividend / divisor, quotient);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn clean_division_gives_quotient_and_remainder_with_expected_properties(
         #[filter(!#a_roots.is_empty())] a_roots: Vec<BFieldElement>,
@@ -3784,6 +3880,7 @@ mod test_polynomials {
         prop_assert_eq!(a, quotient * b);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn dividing_constant_polynomials_is_equivalent_to_dividing_constants(
         a: BFieldElement,
@@ -3795,6 +3892,7 @@ mod test_polynomials {
         prop_assert_eq!(expected_quotient, a_poly / b_poly);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn dividing_any_polynomial_by_a_constant_polynomial_results_in_remainder_zero(
         a: BfePoly,
@@ -3805,6 +3903,7 @@ mod test_polynomials {
         prop_assert_eq!(Polynomial::zero(), remainder);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn polynomial_division_by_and_with_shah_polynomial() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
@@ -3829,6 +3928,7 @@ mod test_polynomials {
         assert_eq!(expected_rem, x_to_the_6_mod_shah);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn xgcd_does_not_panic_on_input_zero() {
         let zero = Polynomial::<BFieldElement>::zero;
@@ -3838,6 +3938,7 @@ mod test_polynomials {
         println!("b = {b}");
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn xgcd_b_field_pol_test(x: BfePoly, y: BfePoly) {
         let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
@@ -3845,6 +3946,7 @@ mod test_polynomials {
         prop_assert_eq!(gcd, a * x + b * y);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn xgcd_x_field_pol_test(x: XfePoly, y: XfePoly) {
         let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
@@ -3852,6 +3954,7 @@ mod test_polynomials {
         prop_assert_eq!(gcd, a * x + b * y);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn add_assign_is_equivalent_to_adding_and_assigning(a: BfePoly, b: BfePoly) {
         let mut c = a.clone();
@@ -3859,6 +3962,7 @@ mod test_polynomials {
         prop_assert_eq!(a + b, c);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn only_monic_polynomial_of_degree_1_is_x() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
@@ -3877,6 +3981,7 @@ mod test_polynomials {
         assert!(!polynomial([0, 0, 1]).is_x());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn hardcoded_polynomial_squaring() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
@@ -3899,21 +4004,25 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn polynomial_squaring_is_equivalent_to_multiplication_with_self(poly: BfePoly) {
         prop_assert_eq!(poly.clone() * poly.clone(), poly.square());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn slow_and_normal_squaring_are_equivalent(poly: BfePoly) {
         prop_assert_eq!(poly.slow_square(), poly.square());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn normal_and_fast_squaring_are_equivalent(poly: BfePoly) {
         prop_assert_eq!(poly.square(), poly.fast_square());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn constant_zero_eq_constant_zero() {
         let zero_polynomial1 = Polynomial::<BFieldElement>::zero();
@@ -3922,12 +4031,14 @@ mod test_polynomials {
         assert_eq!(zero_polynomial1, zero_polynomial2)
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn zero_polynomial_is_zero() {
         assert!(Polynomial::<BFieldElement>::zero().is_zero());
         assert!(Polynomial::<XFieldElement>::zero().is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn zero_polynomial_is_zero_independent_of_spurious_leading_zeros(
         #[strategy(..500usize)] num_zeros: usize,
@@ -3939,6 +4050,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn no_constant_polynomial_with_non_zero_coefficient_is_zero(
         #[filter(!#constant.is_zero())] constant: BFieldElement,
@@ -3947,6 +4059,7 @@ mod test_polynomials {
         prop_assert!(!constant_polynomial.is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn constant_one_eq_constant_one() {
         let one_polynomial1 = Polynomial::<BFieldElement>::one();
@@ -3955,12 +4068,14 @@ mod test_polynomials {
         assert_eq!(one_polynomial1, one_polynomial2)
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn one_polynomial_is_one() {
         assert!(Polynomial::<BFieldElement>::one().is_one());
         assert!(Polynomial::<XFieldElement>::one().is_one());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn one_polynomial_is_one_independent_of_spurious_leading_zeros(
         #[strategy(..500usize)] num_leading_zeros: usize,
@@ -3974,6 +4089,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn no_constant_polynomial_with_non_one_coefficient_is_one(
         #[filter(!#constant.is_one())] constant: BFieldElement,
@@ -3982,6 +4098,7 @@ mod test_polynomials {
         prop_assert!(!constant_polynomial.is_one());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn formal_derivative_of_zero_is_zero() {
         let bfe_0_poly = Polynomial::<BFieldElement>::zero();
@@ -3991,12 +4108,14 @@ mod test_polynomials {
         assert!(xfe_0_poly.formal_derivative().is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn formal_derivative_of_constant_polynomial_is_zero(constant: BFieldElement) {
         let formal_derivative = Polynomial::from_constant(constant).formal_derivative();
         prop_assert!(formal_derivative.is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn formal_derivative_of_non_zero_polynomial_is_of_degree_one_less_than_the_polynomial(
         #[filter(!#poly.is_zero())] poly: BfePoly,
@@ -4004,6 +4123,7 @@ mod test_polynomials {
         prop_assert_eq!(poly.degree() - 1, poly.formal_derivative().degree());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn formal_derivative_of_product_adheres_to_the_leibniz_product_rule(a: BfePoly, b: BfePoly) {
         let product_formal_derivative = (a.clone() * b.clone()).formal_derivative();
@@ -4011,12 +4131,14 @@ mod test_polynomials {
         prop_assert_eq!(product_rule, product_formal_derivative);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn zero_is_zero() {
         let f = Polynomial::new(vec![BFieldElement::new(0)]);
         assert!(f.is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn formal_power_series_inverse_newton(
         #[strategy(2usize..20)] precision: usize,
@@ -4033,6 +4155,7 @@ mod test_polynomials {
         prop_assert!(remainder.is_one());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn formal_power_series_inverse_newton_concrete() {
         let f = Polynomial::new(vec![
@@ -4054,6 +4177,7 @@ mod test_polynomials {
         assert!(remainder.is_one());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn formal_power_series_inverse_minimal(
         #[strategy(2usize..20)] precision: usize,
@@ -4075,6 +4199,7 @@ mod test_polynomials {
         prop_assert!(g.degree() <= precision as isize);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn structured_multiple_is_multiple(
         #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
@@ -4087,6 +4212,7 @@ mod test_polynomials {
         prop_assert!(remainder.is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn structured_multiple_of_modulus_with_trailing_zeros_is_multiple(
         #[filter(!#raw_modulus.is_zero())] raw_modulus: BfePoly,
@@ -4097,6 +4223,7 @@ mod test_polynomials {
         prop_assert!(multiple.reduce_long_division(&modulus).is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn structured_multiple_generates_structure(
         #[filter(#coefficients.iter().filter(|c|!c.is_zero()).count() >= 3)]
@@ -4120,6 +4247,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn structured_multiple_generates_structure_concrete() {
         let polynomial = Polynomial::new(
@@ -4143,6 +4271,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn structured_multiple_of_degree_is_multiple(
         #[strategy(2usize..100)] n: usize,
@@ -4156,6 +4285,7 @@ mod test_polynomials {
         prop_assert!(remainder.is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn structured_multiple_of_degree_generates_structure(
         #[strategy(4usize..100)] n: usize,
@@ -4183,6 +4313,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn structured_multiple_of_degree_has_given_degree(
         #[strategy(2usize..100)] n: usize,
@@ -4201,12 +4332,14 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn reverse_polynomial_with_nonzero_constant_term_twice_gives_original_back(f: BfePoly) {
         let fx_plus_1 = f.shift_coefficients(1) + Polynomial::from_constant(bfe!(1));
         prop_assert_eq!(fx_plus_1.clone(), fx_plus_1.reverse().reverse());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn reverse_polynomial_with_zero_constant_term_twice_gives_shift_back(
         #[filter(!#f.is_zero())] f: BfePoly,
@@ -4219,6 +4352,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn reduce_by_structured_modulus_and_reduce_long_division_agree(
         #[strategy(1usize..10)] n: usize,
@@ -4239,6 +4373,7 @@ mod test_polynomials {
         prop_assert_eq!(long_remainder, structured_remainder);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn reduce_by_structured_modulus_and_reduce_agree_long_division_concrete() {
         let a = Polynomial::new(
@@ -4264,6 +4399,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn reduce_by_ntt_friendly_modulus_and_reduce_long_division_agree(
         #[strategy(1usize..10)] m: usize,
@@ -4292,6 +4428,7 @@ mod test_polynomials {
         prop_assert_eq!(long_remainder, structured_remainder);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn reduce_by_ntt_friendly_modulus_and_reduce_agree_concrete() {
         let m = 1;
@@ -4317,6 +4454,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn reduce_fast_and_reduce_long_division_agree(
         numerator: BfePoly,
@@ -4328,6 +4466,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn reduce_and_fast_reduce_long_division_agree_on_fixed_input() {
         // The bug exhibited by this minimal failing test case has since been
@@ -4359,6 +4498,7 @@ mod test_polynomials {
         assert_eq!(0, failures.len(), "failures at indices: {failures:?}");
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn reduce_long_division_and_fast_reduce_agree_simple_fixed() {
         let roots = (0..10).map(BFieldElement::new).collect_vec();
@@ -4381,6 +4521,7 @@ mod test_polynomials {
         assert_eq!(long_div_remainder, preprocessed_remainder);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 100)]
     fn batch_evaluate_methods_are_equivalent(
         #[strategy(vec(arb(), (1<<10)..(1<<11)))] coefficients: Vec<BFieldElement>,
@@ -4396,11 +4537,13 @@ mod test_polynomials {
         prop_assert_eq!(evaluations_iterative, evaluations_reduce_then);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn reduce_agrees_with_division(a: BfePoly, #[filter(!#b.is_zero())] b: BfePoly) {
         prop_assert_eq!(a.divide(&b).1, a.reduce(&b));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn structured_multiple_of_monomial_term_is_actually_multiple_and_of_right_degree(
         #[strategy(1usize..1000)] degree: usize,
@@ -4414,6 +4557,7 @@ mod test_polynomials {
         prop_assert_eq!(multiple.degree() as usize, target_degree);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn monomial_term_divided_by_smaller_monomial_term_gives_clean_division(
         #[strategy(100usize..102)] high_degree: usize,
@@ -4435,6 +4579,7 @@ mod test_polynomials {
         prop_assert_eq!(Polynomial::zero(), remainder);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce_property(
         #[filter(!#modulus.is_zero())] modulus: BfePoly,
@@ -4457,6 +4602,7 @@ mod test_polynomials {
         )
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce_concrete() {
         let logn = 8;
@@ -4477,6 +4623,7 @@ mod test_polynomials {
         )
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 100)]
     fn coset_extrapolation_methods_agree_with_interpolate_then_evaluate(
         #[strategy(0usize..10)] _logn: usize,
@@ -4502,6 +4649,7 @@ mod test_polynomials {
         prop_assert_eq!(fast_coset_extrapolation, interpolation_then_evaluation);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn coset_extrapolate_and_batch_coset_extrapolate_agree(
         #[strategy(1usize..10)] _logn: usize,
@@ -4544,6 +4692,7 @@ mod test_polynomials {
         prop_assert_eq!(one_by_one_naive, par_batched_naive);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn fast_modular_coset_interpolate_thresholds_relate_properly() {
         type BfePoly = Polynomial<'static, BFieldElement>;
@@ -4553,6 +4702,7 @@ mod test_polynomials {
         assert!(intt > lagrange);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn interpolate_and_par_interpolate_agree(
         #[filter(!#points.is_empty())] points: Vec<BFieldElement>,
@@ -4563,6 +4713,7 @@ mod test_polynomials {
         prop_assert_eq!(expected_interpolant, observed_interpolant);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn batch_evaluate_agrees_with_par_batch_evalaute(
         polynomial: BfePoly,
@@ -4574,6 +4725,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 20)]
     fn polynomial_evaluation_and_barycentric_evaluation_are_equivalent(
         #[strategy(1_usize..8)] _log_num_coefficients: usize,
@@ -4599,6 +4751,7 @@ mod test_polynomials {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn regular_evaluation_works_with_various_types() {
         let bfe_poly = Polynomial::new(bfe_vec![1]);
@@ -4611,6 +4764,7 @@ mod test_polynomials {
         let _: XFieldElement = xfe_poly.evaluate(xfe!(0));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn barycentric_evaluation_works_with_many_types() {
         let bfe_codeword = bfe_array![1];
@@ -4622,6 +4776,7 @@ mod test_polynomials {
         let _ = barycentric_evaluate(&xfe_codeword, xfe!(0));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn various_multiplications_work_with_various_types() {
         let b = Polynomial::<BFieldElement>::zero;
@@ -4648,6 +4803,7 @@ mod test_polynomials {
         let _ = x().fast_multiply(&x());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn evaluating_polynomial_with_borrowed_coefficients_leaves_coefficients_borrowed() {
         let coefficients = bfe_vec![4, 5, 6];

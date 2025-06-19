@@ -560,6 +560,8 @@ mod accumulator_mmr_tests {
     use rand::prelude::*;
     use rand::random;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::math::other::random_elements;
@@ -580,6 +582,7 @@ mod accumulator_mmr_tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn conversion_test() {
         let leaf_hashes = random_elements(3);
@@ -594,6 +597,7 @@ mod accumulator_mmr_tests {
         assert_eq!(3, mmra.num_leafs());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn verify_batch_update_single_append_test() {
         let leaf_hashes_start: Vec<Digest> = random_elements(3);
@@ -614,6 +618,7 @@ mod accumulator_mmr_tests {
         assert!(leafs_were_appended);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn verify_batch_update_single_mutate_test() {
         let leaf0: Digest = random();
@@ -659,6 +664,7 @@ mod accumulator_mmr_tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn verify_batch_update_two_append_test() {
         let leaf_hashes_start: Vec<Digest> = random_elements(3);
@@ -677,6 +683,7 @@ mod accumulator_mmr_tests {
         assert!(leafs_were_appended);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn verify_batch_update_two_mutate_test() {
         let leaf14: Digest = random();
@@ -708,6 +715,7 @@ mod accumulator_mmr_tests {
         ));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn batch_mutate_leaf_and_update_mps_test() {
         let mut rng = rand::rng();
@@ -818,6 +826,7 @@ mod accumulator_mmr_tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn verify_batch_update_pbt() {
         for start_size in 1..18 {
@@ -930,6 +939,7 @@ mod accumulator_mmr_tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mmra_serialization_test() {
         // You could argue that this test doesn't belong here, as it tests the behavior of
@@ -945,6 +955,7 @@ mod accumulator_mmr_tests {
         assert_eq!(1, mmra.num_leafs());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn get_size_test() {
         // 10 digests produces an MMRA with two peaks
@@ -963,6 +974,7 @@ mod accumulator_mmr_tests {
         assert!(mmra.get_size() < 100 * std::mem::size_of::<Digest>());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_mmr_accumulator_decode() {
         for _ in 0..100 {
@@ -975,6 +987,7 @@ mod accumulator_mmr_tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "Lists must have same length. Got: 0 and 3")]
     fn test_diff_len_lists_batch_mutate_leaf_and_update_mps() {
@@ -996,6 +1009,7 @@ mod accumulator_mmr_tests {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn arbitrary_mmra_has_consistent_num_leafs_and_peaks(
         #[strategy(arb::<MmrAccumulator>())] mmra: MmrAccumulator,
@@ -1003,6 +1017,7 @@ mod accumulator_mmr_tests {
         prop_assert_eq!(mmra.peaks().len(), mmra.num_leafs().count_ones() as usize);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 20)]
     fn mmra_with_mps_produces_valid_output(
         #[strategy(0..u64::MAX / 2)] mmr_leaf_count: u64,
@@ -1022,11 +1037,13 @@ mod accumulator_mmr_tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn computing_mmr_root_for_no_leafs_produces_some_digest() {
         MmrAccumulator::new_from_leafs(vec![]).bag_peaks();
     }
 
+    // note: snapshot not supported for wasm32 target.
     #[test]
     fn bag_peaks_snapshot() {
         let mut rng = StdRng::seed_from_u64(0x92ca758afeec6d29);
