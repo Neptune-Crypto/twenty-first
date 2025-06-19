@@ -61,6 +61,8 @@ mod tests {
     use rand::Rng;
     use rand::distr::Distribution;
     use rand::distr::StandardUniform;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::math::digest::Digest;
@@ -90,6 +92,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn to_sequence_test() {
         // bool
@@ -124,6 +127,7 @@ mod tests {
         assert!(indices.into_iter().all(|index| index < max));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn sample_indices_test() {
         let cases = [
@@ -143,6 +147,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn sample_scalars_test() {
         let amounts = [0, 1, 2, 3, 4];

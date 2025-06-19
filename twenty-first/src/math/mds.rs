@@ -499,9 +499,12 @@ pub fn generated_function(input: &[u64]) -> [u64; 16] {
 mod tests {
     use itertools::Itertools;
     use rand::RngCore;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_karatsuba() {
         let mut rng = rand::rng();
@@ -522,6 +525,7 @@ mod tests {
         println!("{}", c_karatsuba.iter().map(|x| x.to_string()).join(","));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_negacyclic_mul() {
         let mut rng = rand::rng();
@@ -545,6 +549,7 @@ mod tests {
         println!("{}", c_karatsuba.iter().map(|x| x.to_string()).join(","));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_recursive_cyclic_mul() {
         let mut rng = rand::rng();

@@ -21,6 +21,8 @@ pub use bfieldcodec_derive;
 #[cfg(test)]
 pub(crate) mod tests {
     use prelude::*;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
 
@@ -39,6 +41,7 @@ pub(crate) mod tests {
     /// Inspired by “Rust for Rustaceans” by Jon Gjengset.
     pub fn implements_usual_auto_traits<T: Sized + Send + Sync + Unpin>() {}
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn types_in_prelude_implement_the_usual_auto_traits() {
         implements_usual_auto_traits::<BFieldElement>();
@@ -52,6 +55,7 @@ pub(crate) mod tests {
         implements_usual_auto_traits::<MmrMembershipProof>();
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn public_types_implement_the_usual_auto_traits() {
         implements_usual_auto_traits::<math::lattice::CyclotomicRingElement>();
@@ -69,6 +73,7 @@ pub(crate) mod tests {
         >();
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn errors_implement_the_usual_auto_traits() {
         implements_usual_auto_traits::<error::BFieldCodecError>();

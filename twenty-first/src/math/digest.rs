@@ -293,6 +293,8 @@ pub(crate) mod digest_tests {
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::error::ParseBFieldElementError;
@@ -333,6 +335,7 @@ pub(crate) mod digest_tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn digest_corruptor_rejects_uncorrupting_corruption() {
         let digest = Digest(bfe_array![1, 2, 3, 4, 5]);
@@ -344,6 +347,7 @@ pub(crate) mod digest_tests {
         assert!(matches!(err, TestCaseError::Reject(_)));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn get_size() {
         let stack = Digest::get_stack_size();
@@ -357,6 +361,7 @@ pub(crate) mod digest_tests {
         assert_eq!(stack + heap, total)
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn digest_from_str() {
         let valid_digest_string = "12063201067205522823,\
@@ -376,11 +381,13 @@ pub(crate) mod digest_tests {
         assert!(second_invalid_digest.is_err());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn test_reversed_involution(digest: Digest) {
         prop_assert_eq!(digest, digest.reversed().reversed())
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn digest_biguint_conversion_simple_test() {
         let fourteen: BigUint = 14u128.into();
@@ -445,6 +452,7 @@ pub(crate) mod digest_tests {
         assert_eq!(two_pow_315, two_pow_315_converted_expected.into());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn digest_biguint_conversion_pbt(components_0: [u64; 4], component_1: u32) {
         let big_uint = components_0
@@ -457,6 +465,7 @@ pub(crate) mod digest_tests {
         prop_assert_eq!(big_uint, big_uint_again);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn digest_ordering() {
         let val0 = Digest::new(bfe_array![0; Digest::LEN]);
@@ -479,6 +488,7 @@ pub(crate) mod digest_tests {
         assert!(val4 > val0);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn digest_biguint_overflow_test() {
         let mut two_pow_384: BigUint = (1u128 << 96).into();
@@ -488,6 +498,7 @@ pub(crate) mod digest_tests {
         assert_eq!(TryFromDigestError::Overflow, err);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn forty_bytes_can_be_converted_to_digest(bytes: [u8; Digest::BYTES]) {
         let digest = Digest::try_from(bytes).unwrap();
@@ -496,6 +507,7 @@ pub(crate) mod digest_tests {
     }
 
     // note: for background on this test, see issue 195
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn try_from_bytes_not_canonical() -> Result<(), TryFromDigestError> {
         let bytes: [u8; Digest::BYTES] = [255; Digest::BYTES];
@@ -509,6 +521,7 @@ pub(crate) mod digest_tests {
     }
 
     // note: for background on this test, see issue 195
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn from_str_not_canonical() -> Result<(), TryFromDigestError> {
         let str = format!("0,0,0,0,{}", u64::MAX);
@@ -521,6 +534,7 @@ pub(crate) mod digest_tests {
         Ok(())
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn bytes_in_matches_bytes_out() -> Result<(), TryFromDigestError> {
         let bytes1: [u8; Digest::BYTES] = [254; Digest::BYTES];
@@ -563,6 +577,7 @@ pub(crate) mod digest_tests {
             ]
         }
 
+        #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
         #[test]
         fn digest_to_hex() {
             for (digest, hex) in hex_examples() {
@@ -570,6 +585,7 @@ pub(crate) mod digest_tests {
             }
         }
 
+        #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
         #[proptest]
         fn to_hex_and_from_hex_are_reciprocal_proptest(bytes: [u8; Digest::BYTES]) {
             let digest = Digest::try_from(bytes).unwrap();
@@ -588,6 +604,7 @@ pub(crate) mod digest_tests {
             prop_assert_eq!(digest, digest_from_upper_hex);
         }
 
+        #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
         #[test]
         fn to_hex_and_from_hex_are_reciprocal() -> Result<(), TryFromHexDigestError> {
             let hex_vals = vec![
@@ -604,6 +621,7 @@ pub(crate) mod digest_tests {
             Ok(())
         }
 
+        #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
         #[test]
         fn digest_from_hex() -> Result<(), TryFromHexDigestError> {
             for (digest, hex) in hex_examples() {
@@ -613,6 +631,7 @@ pub(crate) mod digest_tests {
             Ok(())
         }
 
+        #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
         #[test]
         fn digest_from_invalid_hex_errors() {
             use hex::FromHexError;
@@ -652,6 +671,7 @@ pub(crate) mod digest_tests {
         mod json_test {
             use super::*;
 
+            #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
             #[test]
             fn serialize() -> Result<(), serde_json::Error> {
                 for (digest, hex) in hex_examples() {
@@ -660,6 +680,7 @@ pub(crate) mod digest_tests {
                 Ok(())
             }
 
+            #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
             #[test]
             fn deserialize() -> Result<(), serde_json::Error> {
                 for (digest, hex) in hex_examples() {
@@ -687,6 +708,7 @@ pub(crate) mod digest_tests {
                 ]
             }
 
+            #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
             #[test]
             fn serialize() {
                 for (digest, bytes) in bincode_examples() {
@@ -694,6 +716,7 @@ pub(crate) mod digest_tests {
                 }
             }
 
+            #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
             #[test]
             fn deserialize() {
                 for (digest, bytes) in bincode_examples() {

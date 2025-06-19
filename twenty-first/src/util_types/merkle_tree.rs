@@ -950,6 +950,8 @@ pub mod merkle_tree_test {
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::math::digest::digest_tests::DigestCorruptor;
@@ -1000,6 +1002,7 @@ pub mod merkle_tree_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn building_merkle_tree_from_empty_list_of_digests_fails_with_expected_error() {
         let maybe_tree = MerkleTree::par_new(&[]);
@@ -1007,6 +1010,7 @@ pub mod merkle_tree_test {
         assert_eq!(MerkleTreeError::TooFewLeafs, err);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn merkle_tree_with_one_leaf_has_expected_height_and_number_of_leafs() {
         let digest = Digest::default();
@@ -1015,12 +1019,14 @@ pub mod merkle_tree_test {
         assert_eq!(0, tree.height());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn building_merkle_tree_from_one_digest_makes_that_digest_the_root(digest: Digest) {
         let tree = MerkleTree::par_new(&[digest]).unwrap();
         assert_eq!(digest, tree.root());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn building_merkle_tree_from_list_of_digests_with_incorrect_number_of_leafs_fails(
         #[filter(!#num_leafs.is_power_of_two())]
@@ -1034,6 +1040,7 @@ pub mod merkle_tree_test {
         assert_eq!(MerkleTreeError::IncorrectNumberOfLeafs, err);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn merkle_tree_construction_strategies_behave_identically_on_random_input(leafs: Vec<Digest>) {
         let sequential = MerkleTree::sequential_new(&leafs);
@@ -1041,6 +1048,7 @@ pub mod merkle_tree_test {
         prop_assert_eq!(sequential, parallel);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn merkle_tree_construction_strategies_produce_identical_trees(
         #[strategy(0_usize..10)] _tree_height: usize,
@@ -1051,6 +1059,7 @@ pub mod merkle_tree_test {
         prop_assert_eq!(sequential, parallel);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn merkle_tree_construction_strategies_are_independent_of_parallelization_cutoff(
         #[strategy(0_usize..10)] _tree_height: usize,
@@ -1064,6 +1073,7 @@ pub mod merkle_tree_test {
         prop_assert_eq!(sequential, parallel);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn ram_frugal_merkle_root_is_identical_to_full_tree_root(
         #[strategy(0_usize..10)] _tree_height: usize,
@@ -1077,6 +1087,7 @@ pub mod merkle_tree_test {
         prop_assert_eq!(par_frugal, hungry);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn ram_frugal_merkle_root_is_independent_of_parallelization_cutoff(
         #[strategy(0_usize..10)] _tree_height: usize,
@@ -1093,6 +1104,7 @@ pub mod merkle_tree_test {
         prop_assert_eq!(par_frugal, hungry);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 100)]
     fn various_small_parallelization_cutoffs_dont_cause_infinite_iterations(
         #[strategy(0_usize..10)] _tree_height: usize,
@@ -1105,6 +1117,7 @@ pub mod merkle_tree_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 100)]
     fn accessing_number_of_leafs_and_height_never_panics(
         #[strategy(arb())] merkle_tree: MerkleTree,
@@ -1113,6 +1126,7 @@ pub mod merkle_tree_test {
         let _ = merkle_tree.height();
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 50)]
     fn trivial_proof_can_be_verified(#[strategy(arb())] merkle_tree: MerkleTree) {
         let proof = merkle_tree.inclusion_proof_for_leaf_indices(&[]).unwrap();
@@ -1121,6 +1135,7 @@ pub mod merkle_tree_test {
         prop_assert!(verdict);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 40)]
     fn honestly_generated_authentication_structure_can_be_verified(test_tree: MerkleTreeToTest) {
         let proof = test_tree.proof();
@@ -1128,6 +1143,7 @@ pub mod merkle_tree_test {
         prop_assert!(verdict);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 30)]
     fn corrupt_root_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
@@ -1139,6 +1155,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verdict);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 20)]
     fn corrupt_authentication_structure_leads_to_verification_failure(
         #[filter(!#test_tree.proof().authentication_structure.is_empty())]
@@ -1164,6 +1181,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verdict);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 30)]
     fn corrupt_leaf_digests_lead_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
@@ -1188,6 +1206,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verdict);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 30)]
     fn removing_leafs_from_proof_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
@@ -1211,6 +1230,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verdict);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 30)]
     fn checking_set_inclusion_of_items_not_in_set_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
@@ -1229,6 +1249,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verdict);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 30)]
     fn honestly_generated_proof_with_duplicate_leafs_can_be_verified(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
@@ -1245,6 +1266,7 @@ pub mod merkle_tree_test {
         prop_assert!(verdict);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 40)]
     fn incorrect_tree_height_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
@@ -1258,6 +1280,7 @@ pub mod merkle_tree_test {
         prop_assert!(!verdict);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 20)]
     fn honestly_generated_proof_with_all_leafs_revealed_can_be_verified(
         #[strategy(arb())] tree: MerkleTree,
@@ -1270,6 +1293,7 @@ pub mod merkle_tree_test {
         prop_assert!(verdict);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 30)]
     fn requesting_inclusion_proof_for_nonexistent_leaf_fails_with_expected_error(
         #[strategy(arb())] tree: MerkleTree,
@@ -1283,6 +1307,7 @@ pub mod merkle_tree_test {
         assert_eq!(MerkleTreeError::LeafIndexInvalid, err);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn authentication_paths_of_extremely_small_tree_use_expected_digests() {
         //     _ 1_
@@ -1303,6 +1328,7 @@ pub mod merkle_tree_test {
         assert_eq!(auth_path_with_nodes([6, 2]), auth_path_for_leaf(3));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn authentication_paths_of_very_small_tree_use_expected_digests() {
         //         ──── 1 ────
@@ -1330,6 +1356,7 @@ pub mod merkle_tree_test {
         assert_eq!(auth_path_with_nodes([14, 6, 2]), auth_path_for_leaf(7));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn authentication_paths_of_very_small_tree_are_identical_when_using_tree_or_only_leafs() {
         let tree = MerkleTree::test_tree_of_height(3);
@@ -1348,6 +1375,7 @@ pub mod merkle_tree_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 100)]
     fn auth_structure_is_independent_of_compute_method(test_tree: MerkleTreeToTest) {
         let tree = test_tree.tree;
@@ -1364,6 +1392,7 @@ pub mod merkle_tree_test {
         prop_assert_eq!(&cached_auth_structure, &par_auth_structure);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn subtree_leafs_are_actually_sub_tree_leafs() {
         let tree = MerkleTree::test_tree_of_height(5);
@@ -1383,6 +1412,7 @@ pub mod merkle_tree_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 10)]
     fn each_leaf_can_be_verified_individually(test_tree: MerkleTreeToTest) {
         let tree = test_tree.tree;
@@ -1398,6 +1428,7 @@ pub mod merkle_tree_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn partial_merkle_tree_built_from_authentication_structure_contains_expected_nodes() {
         let merkle_tree = MerkleTree::test_tree_of_height(3);
@@ -1422,6 +1453,7 @@ pub mod merkle_tree_test {
         assert_eq!(expected_node_indices, node_indices);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn manually_constructed_partial_tree_can_be_filled() {
         //         ──── _ ───
@@ -1444,6 +1476,7 @@ pub mod merkle_tree_test {
         partial_tree.fill().unwrap();
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn trying_to_compute_root_of_partial_tree_with_necessary_node_missing_gives_expected_error() {
         //         ──── _ ────
@@ -1468,6 +1501,7 @@ pub mod merkle_tree_test {
         assert_eq!(MerkleTreeError::MissingNodeIndex(3), err);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn trying_to_compute_root_of_partial_tree_with_redundant_node_gives_expected_error() {
         //         ──── _ ────
@@ -1492,6 +1526,7 @@ pub mod merkle_tree_test {
         assert_eq!(MerkleTreeError::SpuriousNodeIndex(2), err);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn converting_authentication_structure_to_authentication_paths_results_in_expected_paths() {
         const TREE_HEIGHT: MerkleTreeHeight = 3;
@@ -1511,6 +1546,7 @@ pub mod merkle_tree_test {
         assert_eq!(expected_paths, auth_paths);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn merkle_subtrees_are_sliced_correctly() {
         const TREE_HEIGHT: usize = 5;
@@ -1569,6 +1605,7 @@ pub mod merkle_tree_test {
         assert_eq!((56..64).collect_vec().as_slice(), right_right_tree[3]);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn auth_structure_node_indices_can_be_computed_with_different_types() -> Result<()> {
         let u32_indices: Vec<u32> =

@@ -312,11 +312,14 @@ impl ArchivalMmr {
 }
 
 mod tests {
+    use std::collections::HashSet;
+
     use itertools::Itertools;
     use itertools::izip;
     use rand::Rng;
     use rand::random;
-    use std::collections::HashSet;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::math::b_field_element::BFieldElement;
@@ -324,6 +327,7 @@ mod tests {
     use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
     use crate::util_types::mmr::shared_advanced::get_peak_heights_and_peak_node_indices;
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn empty_mmr_behavior_test() {
         let mut archival_mmr = ArchivalMmr::default();
@@ -393,6 +397,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn verify_against_correct_peak_test() {
         // This test addresses a bug that was discovered late in the development
@@ -430,6 +435,7 @@ mod tests {
         ));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mutate_leaf_archival_test() {
         let leaf_count: u64 = 3;
@@ -498,6 +504,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn bagging_peaks_is_equivalent_for_archival_and_accumulator_mmrs() {
         let leaf_digests: Vec<Digest> = random_elements(3);
@@ -518,6 +525,7 @@ mod tests {
         assert!(no_peak_is_bag);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn accumulator_mmr_mutate_leaf_test() {
         // Verify that updating leafs in archival and in accumulator MMR results
@@ -545,6 +553,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mmr_prove_verify_leaf_mutation_test() {
         for size in 1..150 {
@@ -582,6 +591,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mmr_append_test() {
         // Verify that building an MMR iteratively or in *one* function call
@@ -639,6 +649,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn one_input_mmr_test() {
         let input_hash = Tip5::hash(&BFieldElement::new(14));
@@ -705,6 +716,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn two_input_mmr_test() {
         let num_leafs: u64 = 3;
@@ -751,6 +763,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn variable_size_tip5_mmr_test() {
         let leaf_counts = (1..34).collect_vec();
@@ -816,6 +829,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn variable_size_mmr_test() {
         let node_counts = [
@@ -895,12 +909,14 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic]
     fn disallow_repeated_leaf_indices_in_construction() {
         mmra_with_mps(14, vec![(0, random()), (0, random())]);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mmra_and_mps_construct_test_cornercases() {
         let mut rng = rand::rng();
@@ -940,6 +956,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mmra_and_mps_construct_test_small() {
         let mut rng = rand::rng();
@@ -951,6 +968,7 @@ mod tests {
         assert!(mps[1].verify(14, digest_leaf_idx14, &mmra.peaks(), mmra.num_leafs()));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mmra_and_mps_construct_test_pbt() {
         let mut rng = rand::rng();
@@ -976,6 +994,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mmra_and_mps_construct_test_big() {
         let mut rng = rand::rng();

@@ -261,6 +261,8 @@ mod test {
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::math::digest::digest_tests::DigestCorruptor;
@@ -318,6 +320,7 @@ mod test {
         type Strategy = BoxedStrategy<Self>;
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn append_nothing_to_empty_mmra() {
         let relation = MmrSuccessorRelation::new_with_numbered_leafs(0, 0);
@@ -325,6 +328,7 @@ mod test {
         relation.verify().unwrap();
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn append_one_thing_to_empty_mmra() {
         let relation = MmrSuccessorRelation::new_with_numbered_leafs(0, 1);
@@ -332,6 +336,7 @@ mod test {
         relation.verify().unwrap();
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn append_leafs_without_influence_on_existing_peaks() {
         let relation = MmrSuccessorRelation::new_with_numbered_leafs(1 << 3, 3);
@@ -355,6 +360,7 @@ mod test {
     ///         ╭─┴─╮   ╭─┴─╮   ╭─┴─╮   ╭─┴─╮   ╭─┴─╮   ╭─┴─╮   ·━┻━x   ┏━┻━┓
     ///        ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ┏┻┓ ┏┻┓ ┏┻┓ ┏┻┓
     /// ```
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn append_8_leafs_to_mmra_with_42_leafs() {
         let relation = MmrSuccessorRelation::new_with_numbered_leafs(42, 8);
@@ -371,6 +377,7 @@ mod test {
         relation.verify().unwrap();
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn unit_tests() {
         for (n, m) in (0..18).cartesian_product(0..18) {
@@ -380,11 +387,13 @@ mod test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn arbitrary_mmr_successor_relation_holds(relation: MmrSuccessorRelation) {
         relation.verify()?;
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn verification_fails_if_old_mmr_is_inconsistent(
         mut relation: MmrSuccessorRelation,
@@ -395,6 +404,7 @@ mod test {
         prop_assert_eq!(Err(Error::InconsistentOldMmr), relation.verify());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn verification_fails_if_new_mmr_is_inconsistent(
         mut relation: MmrSuccessorRelation,
@@ -405,6 +415,7 @@ mod test {
         prop_assert_eq!(Err(Error::InconsistentNewMmr), relation.verify());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn verification_fails_if_old_mmra_has_more_leafs_than_new_mmra(
         #[filter(#relation.old != #relation.new)] mut relation: MmrSuccessorRelation,
@@ -413,6 +424,7 @@ mod test {
         prop_assert_eq!(Err(Error::OldHasMoreLeafsThanNew), relation.verify());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn verification_fails_if_old_mmra_has_swapped_peaks(
         #[filter(#relation.old.peaks().len() >= 2)] mut relation: MmrSuccessorRelation,
@@ -434,6 +446,7 @@ mod test {
     /// relation, it is impossible to swap arbitrary peaks and guarantee a
     /// verification failure. However, if the old MMRA is non-empty, the first
     /// peak of the new MMRA is always relevant.
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn verification_fails_if_new_mmra_has_first_peak_swapped_out(
         #[filter(#relation.old.num_leafs() > 0)]
@@ -451,6 +464,7 @@ mod test {
         ));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 50)]
     fn verification_fails_if_authentication_path_is_corrupt(
         #[filter(!#relation.proof.paths.is_empty())] mut relation: MmrSuccessorRelation,
@@ -466,6 +480,7 @@ mod test {
         ));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn verification_fails_if_authentication_path_has_too_few_elements(
         #[filter(!#relation.proof.paths.is_empty())] mut relation: MmrSuccessorRelation,
@@ -475,6 +490,7 @@ mod test {
         prop_assert_eq!(Err(Error::AuthenticationPathTooShort), relation.verify());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn verification_fails_if_authentication_path_has_too_many_elements(
         mut relation: MmrSuccessorRelation,
