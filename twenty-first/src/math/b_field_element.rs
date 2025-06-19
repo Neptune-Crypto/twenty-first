@@ -811,6 +811,8 @@ mod b_prime_field_element_test {
     use proptest_arbitrary_interop::arb;
     use rand::random;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use crate::math::b_field_element::*;
     use crate::math::other::random_elements;
@@ -826,11 +828,13 @@ mod b_prime_field_element_test {
         type Strategy = BoxedStrategy<Self>;
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn get_size(bfe: BFieldElement) {
         prop_assert_eq!(8, bfe.get_size());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn serialization_and_deserialization_to_and_from_json_is_identity(bfe: BFieldElement) {
         let serialized = serde_json::to_string(&bfe).unwrap();
@@ -838,6 +842,7 @@ mod b_prime_field_element_test {
         prop_assert_eq!(bfe, deserialized);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn deserializing_u64_is_like_calling_new(#[strategy(0..=BFieldElement::MAX)] value: u64) {
         let bfe = BFieldElement::new(value);
@@ -845,6 +850,7 @@ mod b_prime_field_element_test {
         prop_assert_eq!(bfe, deserialized);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn parsing_interval_is_open_minus_p_to_p() {
         let p = i128::from(BFieldElement::P);
@@ -856,6 +862,7 @@ mod b_prime_field_element_test {
         assert!(display_then_parse(p).is_err());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn parsing_string_representing_canonical_negative_integer_gives_correct_bfield_element(
         #[strategy(0..=BFieldElement::MAX)] v: u64,
@@ -864,6 +871,7 @@ mod b_prime_field_element_test {
         prop_assert_eq!(BFieldElement::P - v, bfe.value());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn parsing_string_representing_canonical_positive_integer_gives_correct_bfield_element(
         #[strategy(0..=BFieldElement::MAX)] v: u64,
@@ -872,6 +880,7 @@ mod b_prime_field_element_test {
         prop_assert_eq!(v, bfe.value());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn parsing_string_representing_too_big_positive_integer_as_bfield_element_gives_error(
         #[strategy(i128::from(BFieldElement::P)..)] v: i128,
@@ -880,6 +889,7 @@ mod b_prime_field_element_test {
         prop_assert_eq!(ParseBFieldElementError::NotCanonical(v), err);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn parsing_string_representing_too_small_negative_integer_as_bfield_element_gives_error(
         #[strategy(..=i128::from(BFieldElement::P))] v: i128,
@@ -888,28 +898,33 @@ mod b_prime_field_element_test {
         prop_assert_eq!(ParseBFieldElementError::NotCanonical(v), err);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn zero_is_neutral_element_for_addition(bfe: BFieldElement) {
         let zero = BFieldElement::ZERO;
         prop_assert_eq!(bfe + zero, bfe);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn one_is_neutral_element_for_multiplication(bfe: BFieldElement) {
         let one = BFieldElement::ONE;
         prop_assert_eq!(bfe * one, bfe);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn addition_is_commutative(element_0: BFieldElement, element_1: BFieldElement) {
         prop_assert_eq!(element_0 + element_1, element_1 + element_0);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn multiplication_is_commutative(element_0: BFieldElement, element_1: BFieldElement) {
         prop_assert_eq!(element_0 * element_1, element_1 * element_0);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
 
     fn addition_is_associative(
@@ -923,6 +938,7 @@ mod b_prime_field_element_test {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn multiplication_is_associative(
         element_0: BFieldElement,
@@ -935,6 +951,7 @@ mod b_prime_field_element_test {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn multiplication_distributes_over_addition(
         element_0: BFieldElement,
@@ -947,16 +964,19 @@ mod b_prime_field_element_test {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn multiplication_with_inverse_gives_identity(#[filter(!#bfe.is_zero())] bfe: BFieldElement) {
         prop_assert!((bfe.inverse() * bfe).is_one());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn division_by_self_gives_identity(#[filter(!#bfe.is_zero())] bfe: BFieldElement) {
         prop_assert!((bfe / bfe).is_one());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn values_larger_than_modulus_are_handled_correctly(
         #[strategy(BFieldElement::P..)] large_value: u64,
@@ -966,6 +986,7 @@ mod b_prime_field_element_test {
         prop_assert_eq!(expected_value, bfe.value());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn display_test() {
         let seven: BFieldElement = BFieldElement::new(7);
@@ -978,6 +999,7 @@ mod b_prime_field_element_test {
         assert_eq!("-15", format!("{minus_fifteen}"));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn display_and_from_str_are_reciprocal_unit_test() {
         for bfe in bfe_array![
@@ -988,12 +1010,14 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn display_and_from_str_are_reciprocal_prop_test(bfe: BFieldElement) {
         let bfe_again = bfe.to_string().parse()?;
         prop_assert_eq!(bfe, bfe_again);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn zero_is_zero() {
         let zero = BFieldElement::zero();
@@ -1001,6 +1025,7 @@ mod b_prime_field_element_test {
         assert_eq!(zero, BFieldElement::ZERO);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn not_zero_is_nonzero(bfe: BFieldElement) {
         if bfe.value() == 0 {
@@ -1009,6 +1034,7 @@ mod b_prime_field_element_test {
         prop_assert!(!bfe.is_zero());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn one_is_one() {
         let one = BFieldElement::one();
@@ -1016,6 +1042,7 @@ mod b_prime_field_element_test {
         assert_eq!(one, BFieldElement::ONE);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn not_one_is_not_one(bfe: BFieldElement) {
         if bfe.value() == 1 {
@@ -1024,6 +1051,7 @@ mod b_prime_field_element_test {
         prop_assert!(!bfe.is_one());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn one_unequal_zero() {
         let one = BFieldElement::ONE;
@@ -1031,6 +1059,7 @@ mod b_prime_field_element_test {
         assert_ne!(one, zero);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn byte_array_of_small_field_elements_is_zero_at_high_indices(value: u8) {
         let bfe = BFieldElement::new(value as u64);
@@ -1042,6 +1071,7 @@ mod b_prime_field_element_test {
         });
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn byte_array_conversion(bfe: BFieldElement) {
         let array: [u8; 8] = bfe.into();
@@ -1049,17 +1079,20 @@ mod b_prime_field_element_test {
         prop_assert_eq!(bfe, bfe_recalculated);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn byte_array_outside_range_is_not_accepted(#[strategy(BFieldElement::P..)] value: u64) {
         let byte_array = value.to_le_bytes();
         prop_assert!(BFieldElement::try_from(byte_array).is_err());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn value_is_preserved(#[strategy(0..BFieldElement::P)] value: u64) {
         prop_assert_eq!(value, BFieldElement::new(value).value());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn supposed_generator_is_generator() {
         let generator = BFieldElement::generator();
@@ -1071,11 +1104,13 @@ mod b_prime_field_element_test {
         assert_ne!(BFieldElement::ONE, generator_pow_p_half);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn lift_then_unlift_preserves_element(bfe: BFieldElement) {
         prop_assert_eq!(Some(bfe), bfe.lift().unlift());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn increment(mut bfe: BFieldElement) {
         let old_value = bfe.value();
@@ -1084,6 +1119,7 @@ mod b_prime_field_element_test {
         prop_assert_eq!(expected_value, bfe.value());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn incrementing_max_value_wraps_around() {
         let mut bfe = BFieldElement::new(BFieldElement::MAX);
@@ -1091,6 +1127,7 @@ mod b_prime_field_element_test {
         assert_eq!(0, bfe.value());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn decrement(mut bfe: BFieldElement) {
         let old_value = bfe.value();
@@ -1099,6 +1136,7 @@ mod b_prime_field_element_test {
         prop_assert_eq!(expected_value, bfe.value());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn decrementing_min_value_wraps_around() {
         let mut bfe = BFieldElement::ZERO;
@@ -1106,12 +1144,14 @@ mod b_prime_field_element_test {
         assert_eq!(BFieldElement::MAX, bfe.value());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn empty_batch_inversion() {
         let empty_inv = BFieldElement::batch_inversion(vec![]);
         assert!(empty_inv.is_empty());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn batch_inversion(bfes: Vec<BFieldElement>) {
         let bfes_inv = BFieldElement::batch_inversion(bfes.clone());
@@ -1121,6 +1161,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn power_accumulator_simple_test() {
         let input_a = [
@@ -1142,6 +1183,7 @@ mod b_prime_field_element_test {
         assert_eq!(BFieldElement::new(8), powers[3]);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mul_div_plus_minus_neg_property_based_test() {
         let elements: Vec<BFieldElement> = random_elements(300);
@@ -1202,6 +1244,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mul_div_pbt() {
         // Verify that the mul result is sane
@@ -1219,6 +1262,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn add_sub_wrap_around_test() {
         // Ensure that something that exceeds P but is smaller than $2^64$
@@ -1232,6 +1276,7 @@ mod b_prime_field_element_test {
         assert_eq!(BFieldElement::new(BFieldElement::MAX), diff);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn neg_test() {
         assert_eq!(-BFieldElement::ZERO, BFieldElement::ZERO);
@@ -1246,6 +1291,7 @@ mod b_prime_field_element_test {
         assert_eq!(max, -max_plus_two);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn equality_and_hash_test() {
         assert_eq!(BFieldElement::ZERO, BFieldElement::ZERO);
@@ -1280,6 +1326,7 @@ mod b_prime_field_element_test {
         assert_eq!(hasher_a.finish(), hasher_b.finish());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn create_polynomial_test() {
         let a = Polynomial::from([1, 3, 7]);
@@ -1289,6 +1336,7 @@ mod b_prime_field_element_test {
         assert_eq!(expected, a + b);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mod_pow_test_powers_of_two() {
         let two = BFieldElement::new(2);
@@ -1298,6 +1346,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mod_pow_test_powers_of_three() {
         let three = BFieldElement::new(3);
@@ -1307,6 +1356,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn mod_pow_test() {
         // These values were found by finding primitive roots of unity and verifying
@@ -1323,6 +1373,7 @@ mod b_prime_field_element_test {
         assert!(BFieldElement::new(0).mod_pow(0).is_one());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn get_primitive_root_of_unity_test() {
         for i in 1..33 {
@@ -1338,6 +1389,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     #[should_panic(expected = "Attempted to find the multiplicative inverse of zero.")]
     fn multiplicative_inverse_of_zero() {
@@ -1345,6 +1397,7 @@ mod b_prime_field_element_test {
         let _ = zero.inverse();
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn u32_conversion() {
         let val = BFieldElement::new(u32::MAX as u64);
@@ -1358,6 +1411,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn inverse_or_zero_bfe() {
         let zero = BFieldElement::ZERO;
@@ -1373,6 +1427,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_random_squares() {
         let mut rng = rand::rng();
@@ -1391,6 +1446,7 @@ mod b_prime_field_element_test {
         assert_eq!(one, one * one);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn equals() {
         let a = BFieldElement::ONE;
@@ -1401,6 +1457,7 @@ mod b_prime_field_element_test {
         assert_eq!(a.value(), b.value());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_random_raw() {
         let mut rng = rand::rng();
@@ -1428,6 +1485,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_fixed_inverse() {
         // (8561862112314395584, 17307602810081694772)
@@ -1439,6 +1497,7 @@ mod b_prime_field_element_test {
         assert_eq!(a_inv, expected);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_fixed_modpow() {
         let exponent = 16608971246357572739u64;
@@ -1447,6 +1506,7 @@ mod b_prime_field_element_test {
         assert_eq!(base.mod_pow_u64(exponent), expected);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_fixed_mul() {
         {
@@ -1466,6 +1526,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn conversion_from_i32_to_bfe_is_correct(v: i32) {
         let bfe = BFieldElement::from(v);
@@ -1475,6 +1536,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn conversion_from_isize_to_bfe_is_correct(v: isize) {
         let bfe = BFieldElement::from(v);
@@ -1484,6 +1546,7 @@ mod b_prime_field_element_test {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn bfield_element_can_be_converted_to_and_from_many_types() {
         let _ = BFieldElement::from(0_u8);
@@ -1515,6 +1578,7 @@ mod b_prime_field_element_test {
         let _ = i128::from(max);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn bfield_conversion_works_for_types_min_and_max() {
         let _ = BFieldElement::from(u8::MIN);
@@ -1541,6 +1605,7 @@ mod b_prime_field_element_test {
         let _ = BFieldElement::from(isize::MAX);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn naive_and_actual_conversion_from_u128_agree(v: u128) {
         fn naive_conversion(x: u128) -> BFieldElement {
@@ -1552,6 +1617,7 @@ mod b_prime_field_element_test {
         prop_assert_eq!(naive_conversion(v), BFieldElement::from(v));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn naive_and_actual_conversion_from_i64_agree(v: i64) {
         fn naive_conversion(x: i64) -> BFieldElement {
@@ -1563,6 +1629,7 @@ mod b_prime_field_element_test {
         prop_assert_eq!(naive_conversion(v), BFieldElement::from(v));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn bfe_macro_can_be_used() {
         let b = bfe!(42);
@@ -1578,11 +1645,13 @@ mod b_prime_field_element_test {
         assert_eq!(c, d);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn bfe_macro_produces_same_result_as_calling_new(value: u64) {
         prop_assert_eq!(BFieldElement::new(value), bfe!(value));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn const_minus_two_inverse_is_really_minus_two_inverse() {
         assert_eq!(bfe!(-2).inverse(), BFieldElement::MINUS_TWO_INVERSE);

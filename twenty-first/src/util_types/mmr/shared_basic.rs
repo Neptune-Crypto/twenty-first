@@ -142,9 +142,12 @@ mod tests {
     use proptest::collection::vec;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn right_lineage_length_from_leaf_index_test() {
         assert_eq!(0, right_lineage_length_from_leaf_index(0));
@@ -162,6 +165,7 @@ mod tests {
         assert_eq!(63, right_lineage_length_from_leaf_index((1 << 63) - 1));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn leaf_index_to_mt_index_test() {
         // 1 leaf
@@ -267,6 +271,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn peak_index_test() {
         let peak_index = |leaf_index, num_leafs| {
@@ -315,12 +320,14 @@ mod tests {
         assert_eq!(2, peak_index((0b0111 << 29) - 1, (0b1000 << 29) - 1));
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn merkle_tree_and_peak_indices_can_be_computed_for_large_mmrs() {
         leaf_index_to_mt_index_and_peak_index(0, u64::MAX);
         leaf_index_to_mt_index_and_peak_index(u64::MAX - 1, u64::MAX);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn right_lineage_length_from_leaf_index_does_not_crash(
         #[strategy(0..=u64::MAX >> 1)] leaf_index: u64,
@@ -328,6 +335,7 @@ mod tests {
         right_lineage_length_from_leaf_index(leaf_index);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn calculate_new_peaks_from_append_does_not_crash(
         #[strategy(0..u64::MAX >> 1)] old_num_leafs: u64,
@@ -337,6 +345,7 @@ mod tests {
         calculate_new_peaks_from_append(old_num_leafs, old_peaks, new_leaf);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn calculate_new_peaks_from_append_to_empty_mmra_does_not_crash() {
         calculate_new_peaks_from_append(0, vec![], rand::random());

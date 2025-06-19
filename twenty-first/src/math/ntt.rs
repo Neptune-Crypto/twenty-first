@@ -315,6 +315,8 @@ mod tests {
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::*;
     use crate::math::other::random_elements;
@@ -323,6 +325,7 @@ mod tests {
     use crate::prelude::*;
     use crate::xfe;
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn chu_ntt_b_field_prop_test() {
         for log_2_n in 1..10 {
@@ -345,6 +348,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn chu_ntt_x_field_prop_test() {
         for log_2_n in 1..10 {
@@ -375,6 +379,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn xfield_basic_test_of_chu_ntt() {
         let mut input_output = vec![
@@ -401,6 +406,7 @@ mod tests {
         assert_eq!(original_input, input_output);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn bfield_basic_test_of_chu_ntt() {
         let mut input_output = vec![
@@ -425,6 +431,7 @@ mod tests {
         assert_eq!(original_input, input_output);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn bfield_max_value_test_of_chu_ntt() {
         let mut input_output = vec![
@@ -449,6 +456,7 @@ mod tests {
         assert_eq!(original_input, input_output);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn ntt_on_empty_input() {
         let mut input_output = vec![];
@@ -462,6 +470,7 @@ mod tests {
         assert_eq!(original_input, input_output);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn ntt_on_input_of_length_one(bfe: BFieldElement) {
         let mut test_vector = vec![bfe];
@@ -469,6 +478,7 @@ mod tests {
         assert_eq!(vec![bfe], test_vector);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest(cases = 10)]
     fn ntt_then_intt_is_identity_operation(
         #[strategy((0_usize..18).prop_map(|l| 1 << l))] _vector_length: usize,
@@ -480,6 +490,7 @@ mod tests {
         assert_eq!(original_input, input);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn b_field_ntt_with_length_32() {
         let mut input_output = bfe_vec![
@@ -531,6 +542,7 @@ mod tests {
         assert_eq!(original_input, input_output);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_compare_ntt_to_eval() {
         for log_size in 1..10 {
@@ -550,6 +562,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn swap_indices_can_be_computed() {
         // exponential growth is powerful; cap the number of domains
@@ -558,6 +571,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn twiddle_factors_can_be_computed() {
         // exponential growth is powerful; cap the number of domains
