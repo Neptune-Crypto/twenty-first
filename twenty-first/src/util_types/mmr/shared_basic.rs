@@ -142,11 +142,12 @@ pub fn calculate_new_peaks_from_leaf_mutation(
 mod tests {
     use proptest::collection::vec;
     use proptest_arbitrary_interop::arb;
-    use test_strategy::proptest;
 
     use super::*;
+    use crate::tests::proptest;
+    use crate::tests::test;
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn right_lineage_length_from_leaf_index_test() {
         assert_eq!(0, right_lineage_length_from_leaf_index(0));
         assert_eq!(1, right_lineage_length_from_leaf_index(1));
@@ -163,7 +164,7 @@ mod tests {
         assert_eq!(63, right_lineage_length_from_leaf_index((1 << 63) - 1));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn leaf_index_to_mt_index_test() {
         // 1 leaf
         assert_eq!((1, 0), leaf_index_to_mt_index_and_peak_index(0, 1));
@@ -268,7 +269,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn peak_index_test() {
         let peak_index = |leaf_index, num_leafs| {
             let (_, peak_index) = leaf_index_to_mt_index_and_peak_index(leaf_index, num_leafs);
@@ -316,20 +317,20 @@ mod tests {
         assert_eq!(2, peak_index((0b0111 << 29) - 1, (0b1000 << 29) - 1));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn merkle_tree_and_peak_indices_can_be_computed_for_large_mmrs() {
         leaf_index_to_mt_index_and_peak_index(0, u64::MAX);
         leaf_index_to_mt_index_and_peak_index(u64::MAX - 1, u64::MAX);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn right_lineage_length_from_leaf_index_does_not_crash(
         #[strategy(0..=u64::MAX >> 1)] leaf_index: u64,
     ) {
         right_lineage_length_from_leaf_index(leaf_index);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn calculate_new_peaks_from_append_does_not_crash(
         #[strategy(0..u64::MAX >> 1)] old_num_leafs: u64,
         #[strategy(vec(arb(), #old_num_leafs.count_ones() as usize))] old_peaks: Vec<Digest>,
@@ -338,7 +339,7 @@ mod tests {
         calculate_new_peaks_from_append(old_num_leafs, old_peaks, new_leaf);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn calculate_new_peaks_from_append_to_empty_mmra_does_not_crash() {
         calculate_new_peaks_from_append(0, vec![], rand::random());
     }

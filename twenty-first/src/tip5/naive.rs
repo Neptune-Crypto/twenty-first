@@ -84,13 +84,13 @@ impl PartialEq<Tip5> for NaiveTip5 {
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
-    use test_strategy::proptest;
 
     use super::*;
+    use crate::tests::proptest;
 
     /// The entire point of this module: test the naïve against the optimized
     /// Tip5 implementation.
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn tip5_corresponds_to_naive_tip5(
         state: [BFieldElement; STATE_SIZE],
         #[strategy(0..NUM_ROUNDS)] round_no: usize,

@@ -2708,10 +2708,11 @@ mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::prelude::*;
+    use crate::tests::proptest;
+    use crate::tests::test;
 
     /// A type alias exclusive to the test module.
     type BfePoly = Polynomial<'static, BFieldElement>;
@@ -2739,13 +2740,13 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn polynomial_can_be_debug_printed() {
         let polynomial = Polynomial::new(bfe_vec![1, 2, 3]);
         println!("{polynomial:?}");
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn unequal_hash_implies_unequal_polynomials(poly_0: BfePoly, poly_1: BfePoly) {
         let hash = |poly: &Polynomial<_>| {
             let mut hasher = std::hash::DefaultHasher::new();
@@ -2763,7 +2764,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn polynomial_display_test() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
             Polynomial::new(coeffs.map(BFieldElement::new).to_vec())
@@ -2788,14 +2789,14 @@ mod tests {
         assert_eq!("2x^4 + 1", polynomial([1, 0, 0, 0, 2]).to_string());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn leading_coefficient_of_zero_polynomial_is_none(#[strategy(0usize..30)] num_zeros: usize) {
         let coefficients = vec![BFieldElement::ZERO; num_zeros];
         let polynomial = Polynomial::new(coefficients);
         prop_assert!(polynomial.leading_coefficient().is_none());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn leading_coefficient_of_non_zero_polynomial_is_some(
         polynomial: BfePoly,
         leading_coefficient: BFieldElement,
@@ -2811,14 +2812,14 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn normalizing_canonical_zero_polynomial_has_no_effect() {
         let mut zero_polynomial = Polynomial::<BFieldElement>::zero();
         zero_polynomial.normalize();
         assert_eq!(Polynomial::zero(), zero_polynomial);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn spurious_leading_zeros_dont_affect_equality(
         polynomial: BfePoly,
         #[strategy(0usize..30)] num_leading_zeros: usize,
@@ -2830,7 +2831,7 @@ mod tests {
         prop_assert_eq!(polynomial, polynomial_with_leading_zeros);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn normalizing_removes_spurious_leading_zeros(
         polynomial: BfePoly,
         #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
@@ -2849,14 +2850,14 @@ mod tests {
         prop_assert_eq!(expected_num_coefficients, num_coefficients);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn accessing_coefficients_of_empty_polynomial_gives_empty_slice() {
         let poly = BfePoly::new(vec![]);
         assert!(poly.coefficients().is_empty());
         assert!(poly.into_coefficients().is_empty());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn accessing_coefficients_of_polynomial_with_only_zero_coefficients_gives_empty_slice(
         #[strategy(0_usize..30)] num_zeros: usize,
     ) {
@@ -2865,7 +2866,7 @@ mod tests {
         prop_assert!(poly.into_coefficients().is_empty());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn accessing_the_coefficients_is_equivalent_to_normalizing_then_raw_access(
         mut coefficients: Vec<BFieldElement>,
         #[strategy(0_usize..30)] num_leading_zeros: usize,
@@ -2883,19 +2884,19 @@ mod tests {
         prop_assert_eq!(&raw_coefficients, &accessed_coefficients_owned);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn x_to_the_0_is_constant_1() {
         assert!(Polynomial::<BFieldElement>::x_to_the(0).is_one());
         assert!(Polynomial::<XFieldElement>::x_to_the(0).is_one());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn x_to_the_1_is_x() {
         assert!(Polynomial::<BFieldElement>::x_to_the(1).is_x());
         assert!(Polynomial::<XFieldElement>::x_to_the(1).is_x());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn x_to_the_n_to_the_m_is_homomorphic(
         #[strategy(0_usize..50)] n: usize,
         #[strategy(0_usize..50)] m: usize,
@@ -2905,7 +2906,7 @@ mod tests {
         prop_assert_eq!(to_the_n_times_m, to_the_n_then_to_the_m);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn scaling_a_polynomial_works_with_different_fields_as_the_offset() {
         let bfe_poly = Polynomial::new(bfe_vec![0, 1, 2]);
         let _ = bfe_poly.scale(bfe!(42));
@@ -2916,7 +2917,7 @@ mod tests {
         let _ = xfe_poly.scale(xfe!(42));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_scaling_is_equivalent_in_extension_field(
         bfe_polynomial: BfePoly,
         alpha: BFieldElement,
@@ -2930,7 +2931,7 @@ mod tests {
         prop_assert_eq!(xfe_poly_bfe_scalar, bfe_poly_xfe_scalar);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn evaluating_scaled_polynomial_is_equivalent_to_evaluating_original_in_offset_point(
         polynomial: BfePoly,
         alpha: BFieldElement,
@@ -2943,7 +2944,7 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_multiplication_with_scalar_is_equivalent_for_the_two_methods(
         mut polynomial: BfePoly,
         scalar: BFieldElement,
@@ -2953,7 +2954,7 @@ mod tests {
         prop_assert_eq!(polynomial, new_polynomial);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_multiplication_with_scalar_is_equivalent_for_all_mul_traits(
         polynomial: BfePoly,
         scalar: BFieldElement,
@@ -2969,7 +2970,7 @@ mod tests {
         prop_assert_eq!(bfe_lhs * XFieldElement::ONE, xfe_lhs);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn polynomial_multiplication_with_scalar_works_for_various_types() {
         let bfe_poly = Polynomial::new(bfe_vec![0, 1, 2]);
         let _: Polynomial<BFieldElement> = bfe_poly.scalar_mul(bfe!(42));
@@ -2987,7 +2988,7 @@ mod tests {
         xfe_poly.scalar_mul_mut(xfe!(42));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn slow_lagrange_interpolation(
         polynomial: BfePoly,
         #[strategy(Just(#polynomial.coefficients.len().max(1)))] _min_points: usize,
@@ -3001,7 +3002,7 @@ mod tests {
         prop_assert_eq!(polynomial, interpolation_polynomial);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn three_colinear_points_are_colinear(
         p0: (BFieldElement, BFieldElement),
         #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
@@ -3012,7 +3013,7 @@ mod tests {
         prop_assert!(Polynomial::are_colinear(&[p0, p1, p2]));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn three_non_colinear_points_are_not_colinear(
         p0: (BFieldElement, BFieldElement),
         #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
@@ -3024,7 +3025,7 @@ mod tests {
         prop_assert!(!Polynomial::are_colinear(&[p0, p1, p2]));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn colinearity_check_needs_at_least_three_points(
         p0: (BFieldElement, BFieldElement),
         #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
@@ -3034,7 +3035,7 @@ mod tests {
         prop_assert!(!Polynomial::are_colinear(&[p0, p1]));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn colinearity_check_with_repeated_points_fails(
         p0: (BFieldElement, BFieldElement),
         #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
@@ -3042,7 +3043,7 @@ mod tests {
         prop_assert!(!Polynomial::are_colinear(&[p0, p1, p1]));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn colinear_points_are_colinear(
         p0: (BFieldElement, BFieldElement),
         #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
@@ -3061,7 +3062,7 @@ mod tests {
         prop_assert!(Polynomial::are_colinear(&all_points));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "Line must not be parallel to y-axis")]
     fn getting_point_on_invalid_line_fails() {
         let one = BFieldElement::ONE;
@@ -3070,7 +3071,7 @@ mod tests {
         Polynomial::<BFieldElement>::get_colinear_y((one, one), (one, three), two);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn point_on_line_and_colinear_point_are_identical(
         p0: (BFieldElement, BFieldElement),
         #[filter(#p0.0 != #p1.0)] p1: (BFieldElement, BFieldElement),
@@ -3082,7 +3083,7 @@ mod tests {
         prop_assert_eq!(y, y_from_get_point_on_line);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn point_on_line_and_colinear_point_are_identical_in_extension_field(
         p0: (XFieldElement, XFieldElement),
         #[filter(#p0.0 != #p1.0)] p1: (XFieldElement, XFieldElement),
@@ -3094,12 +3095,12 @@ mod tests {
         prop_assert_eq!(y, y_from_get_point_on_line);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn shifting_polynomial_coefficients_by_zero_is_the_same_as_not_shifting_it(poly: BfePoly) {
         prop_assert_eq!(poly.clone(), poly.shift_coefficients(0));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn shifting_polynomial_one_is_equivalent_to_raising_polynomial_x_to_the_power_of_the_shift(
         #[strategy(0usize..30)] shift: usize,
     ) {
@@ -3108,7 +3109,7 @@ mod tests {
         prop_assert_eq!(shifted_one, x_to_the_shift);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn polynomial_shift_test() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
             Polynomial::new(coeffs.map(BFieldElement::new).to_vec())
@@ -3138,7 +3139,7 @@ mod tests {
         assert_eq!(polynomial([0, 0, 0, 0, 17, 14]), poly_shift_4);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn shifting_a_polynomial_means_prepending_zeros_to_its_coefficients(
         poly: BfePoly,
         #[strategy(0usize..30)] shift: usize,
@@ -3149,25 +3150,25 @@ mod tests {
         prop_assert_eq!(expected_coefficients, shifted_poly.coefficients.to_vec());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn any_polynomial_to_the_power_of_zero_is_one(poly: BfePoly) {
         let poly_to_the_zero = poly.pow(0);
         prop_assert_eq!(Polynomial::one(), poly_to_the_zero);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn any_polynomial_to_the_power_one_is_itself(poly: BfePoly) {
         let poly_to_the_one = poly.pow(1);
         prop_assert_eq!(poly, poly_to_the_one);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_one_to_any_power_is_one(#[strategy(0u32..30)] exponent: u32) {
         let one_to_the_exponent = Polynomial::<BFieldElement>::one().pow(exponent);
         prop_assert_eq!(Polynomial::one(), one_to_the_exponent);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn pow_test() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
             Polynomial::new(coeffs.map(BFieldElement::new).to_vec())
@@ -3188,7 +3189,7 @@ mod tests {
         assert_eq!(parabola_squared, parabola.pow(2));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn pow_arbitrary_test(poly: BfePoly, #[strategy(0u32..15)] exponent: u32) {
         let actual = poly.pow(exponent);
         let fast_actual = poly.fast_pow(exponent);
@@ -3201,19 +3202,19 @@ mod tests {
         prop_assert_eq!(expected, fast_actual);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_zero_is_neutral_element_for_addition(a: BfePoly) {
         prop_assert_eq!(a.clone() + Polynomial::zero(), a.clone());
         prop_assert_eq!(Polynomial::zero() + a.clone(), a);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_one_is_neutral_element_for_multiplication(a: BfePoly) {
         prop_assert_eq!(a.clone() * Polynomial::<BFieldElement>::one(), a.clone());
         prop_assert_eq!(Polynomial::<BFieldElement>::one() * a.clone(), a);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn multiplication_by_zero_is_zero(a: BfePoly) {
         let zero = Polynomial::<BFieldElement>::zero();
 
@@ -3221,27 +3222,27 @@ mod tests {
         prop_assert_eq!(Polynomial::zero(), zero * a);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_addition_is_commutative(a: BfePoly, b: BfePoly) {
         prop_assert_eq!(a.clone() + b.clone(), b + a);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_multiplication_is_commutative(a: BfePoly, b: BfePoly) {
         prop_assert_eq!(a.clone() * b.clone(), b * a);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_addition_is_associative(a: BfePoly, b: BfePoly, c: BfePoly) {
         prop_assert_eq!((a.clone() + b.clone()) + c.clone(), a + (b + c));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_multiplication_is_associative(a: BfePoly, b: BfePoly, c: BfePoly) {
         prop_assert_eq!((a.clone() * b.clone()) * c.clone(), a * (b * c));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_multiplication_is_distributive(a: BfePoly, b: BfePoly, c: BfePoly) {
         prop_assert_eq!(
             (a.clone() + b.clone()) * c.clone(),
@@ -3249,22 +3250,22 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_subtraction_of_self_is_zero(a: BfePoly) {
         prop_assert_eq!(Polynomial::zero(), a.clone() - a);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_division_by_self_is_one(#[filter(!#a.is_zero())] a: BfePoly) {
         prop_assert_eq!(Polynomial::one(), a.clone() / a);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_division_removes_common_factors(a: BfePoly, #[filter(!#b.is_zero())] b: BfePoly) {
         prop_assert_eq!(a.clone(), a * b.clone() / b);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_multiplication_raises_degree_at_maximum_to_sum_of_degrees(
         a: BfePoly,
         b: BfePoly,
@@ -3273,7 +3274,7 @@ mod tests {
         prop_assert!((a * b).degree() <= sum_of_degrees);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn leading_zeros_dont_affect_polynomial_division() {
         // This test was used to catch a bug where the polynomial division was
         // wrong when the divisor has a leading zero coefficient, i.e. when it
@@ -3310,7 +3311,7 @@ mod tests {
         assert_eq!(expected, res_numerator_not_normalized_2);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn leading_coefficient_of_truncated_polynomial_is_same_as_original_leading_coefficient(
         poly: BfePoly,
         #[strategy(..50_usize)] truncation_point: usize,
@@ -3327,7 +3328,7 @@ mod tests {
         prop_assert_eq!(lc, trunc_lc);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn truncated_polynomial_is_of_degree_min_of_truncation_point_and_poly_degree(
         poly: BfePoly,
         #[strategy(..50_usize)] truncation_point: usize,
@@ -3336,7 +3337,7 @@ mod tests {
         prop_assert_eq!(expected_degree, poly.truncate(truncation_point).degree());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn truncating_zero_polynomial_gives_zero_polynomial(
         #[strategy(..50_usize)] truncation_point: usize,
     ) {
@@ -3344,7 +3345,7 @@ mod tests {
         prop_assert!(poly.is_zero());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn truncation_negates_degree_shifting(
         #[strategy(0_usize..30)] shift: usize,
         #[strategy(..50_usize)] truncation_point: usize,
@@ -3356,13 +3357,13 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn zero_polynomial_mod_any_power_of_x_is_zero_polynomial(power: usize) {
         let must_be_zero = Polynomial::<BFieldElement>::zero().mod_x_to_the_n(power);
         prop_assert!(must_be_zero.is_zero());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_mod_some_power_of_x_results_in_polynomial_of_degree_one_less_than_power(
         #[filter(!#poly.is_zero())] poly: BfePoly,
         #[strategy(..=usize::try_from(#poly.degree()).unwrap())] power: usize,
@@ -3371,7 +3372,7 @@ mod tests {
         prop_assert_eq!(isize::try_from(power).unwrap() - 1, remainder.degree());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_mod_some_power_of_x_shares_low_degree_terms_coefficients_with_original_polynomial(
         #[filter(!#poly.is_zero())] poly: BfePoly,
         power: usize,
@@ -3384,30 +3385,30 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn fast_multiplication_by_zero_gives_zero(poly: BfePoly) {
         let product = poly.fast_multiply(&Polynomial::<BFieldElement>::zero());
         prop_assert_eq!(Polynomial::zero(), product);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn fast_multiplication_by_one_gives_self(poly: BfePoly) {
         let product = poly.fast_multiply(&Polynomial::<BFieldElement>::one());
         prop_assert_eq!(poly, product);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn fast_multiplication_is_commutative(a: BfePoly, b: BfePoly) {
         prop_assert_eq!(a.fast_multiply(&b), b.fast_multiply(&a));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn fast_multiplication_and_normal_multiplication_are_equivalent(a: BfePoly, b: BfePoly) {
         let product = a.fast_multiply(&b);
         prop_assert_eq!(a * b, product);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn batch_multiply_agrees_with_iterative_multiply(a: Vec<BfePoly>) {
         let mut acc = Polynomial::one();
         for factor in &a {
@@ -3416,7 +3417,7 @@ mod tests {
         prop_assert_eq!(acc, Polynomial::batch_multiply(&a));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn par_batch_multiply_agrees_with_batch_multiply(a: Vec<BfePoly>) {
         prop_assert_eq!(
             Polynomial::batch_multiply(&a),
@@ -3424,7 +3425,7 @@ mod tests {
         );
     }
 
-    #[proptest(cases = 50)]
+    #[macro_rules_attr::apply(proptest(cases = 50))]
     fn naive_zerofier_and_fast_zerofier_are_identical(
         #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
         roots: Vec<BFieldElement>,
@@ -3434,7 +3435,7 @@ mod tests {
         prop_assert_eq!(naive_zerofier, fast_zerofier);
     }
 
-    #[proptest(cases = 50)]
+    #[macro_rules_attr::apply(proptest(cases = 50))]
     fn smart_zerofier_and_fast_zerofier_are_identical(
         #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
         roots: Vec<BFieldElement>,
@@ -3444,7 +3445,7 @@ mod tests {
         prop_assert_eq!(smart_zerofier, fast_zerofier);
     }
 
-    #[proptest(cases = 50)]
+    #[macro_rules_attr::apply(proptest(cases = 50))]
     fn zerofier_and_naive_zerofier_are_identical(
         #[any(size_range(..Polynomial::<BFieldElement>::FAST_ZEROFIER_CUTOFF_THRESHOLD * 2).lift())]
         roots: Vec<BFieldElement>,
@@ -3454,7 +3455,7 @@ mod tests {
         prop_assert_eq!(zerofier, naive_zerofier);
     }
 
-    #[proptest(cases = 50)]
+    #[macro_rules_attr::apply(proptest(cases = 50))]
     fn zerofier_is_zero_only_on_domain(
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
         #[filter(#out_of_domain_points.iter().all(|p| !#domain.contains(p)))]
@@ -3469,12 +3470,12 @@ mod tests {
         }
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn zerofier_has_leading_coefficient_one(domain: Vec<BFieldElement>) {
         let zerofier = Polynomial::zerofier(&domain);
         prop_assert_eq!(BFieldElement::ONE, zerofier.leading_coefficient().unwrap());
     }
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn par_zerofier_agrees_with_zerofier(domain: Vec<BFieldElement>) {
         prop_assert_eq!(
             Polynomial::zerofier(&domain),
@@ -3482,7 +3483,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn fast_evaluate_on_hardcoded_domain_and_polynomial() {
         let domain = bfe_array![6, 12];
         let x_to_the_5_plus_x_to_the_3 = Polynomial::new(bfe_vec![0, 0, 0, 1, 0, 1]);
@@ -3492,7 +3493,7 @@ mod tests {
         assert_eq!(manual_evaluations, fast_evaluations);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn slow_and_fast_polynomial_evaluation_are_equivalent(
         poly: BfePoly,
         #[any(size_range(..1024).lift())] domain: Vec<BFieldElement>,
@@ -3505,31 +3506,31 @@ mod tests {
         prop_assert_eq!(evaluations, fast_evaluations);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "zero points")]
     fn interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::interpolate(&[], &[]);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "zero points")]
     fn lagrange_interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::lagrange_interpolate(&[], &[]);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "zero points")]
     fn zipped_lagrange_interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::lagrange_interpolate_zipped(&[]);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "zero points")]
     fn fast_interpolation_through_no_points_is_impossible() {
         let _ = Polynomial::<BFieldElement>::fast_interpolate(&[], &[]);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "equal length")]
     fn interpolation_with_domain_size_different_from_number_of_points_is_impossible() {
         let domain = bfe_array![1, 2, 3];
@@ -3537,7 +3538,7 @@ mod tests {
         let _ = Polynomial::interpolate(&domain, &points);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "Repeated")]
     fn zipped_lagrange_interpolate_using_repeated_domain_points_is_impossible() {
         let domain = bfe_array![1, 1, 2];
@@ -3546,7 +3547,7 @@ mod tests {
         let _ = Polynomial::lagrange_interpolate_zipped(&zipped);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn interpolating_through_one_point_gives_constant_polynomial(
         x: BFieldElement,
         y: BFieldElement,
@@ -3556,7 +3557,7 @@ mod tests {
         prop_assert_eq!(polynomial, interpolant);
     }
 
-    #[proptest(cases = 10)]
+    #[macro_rules_attr::apply(proptest(cases = 10))]
     fn lagrange_and_fast_interpolation_are_identical(
         #[any(size_range(1..2048).lift())]
         #[filter(#domain.iter().all_unique())]
@@ -3568,7 +3569,7 @@ mod tests {
         prop_assert_eq!(lagrange_interpolant, fast_interpolant);
     }
 
-    #[proptest(cases = 10)]
+    #[macro_rules_attr::apply(proptest(cases = 10))]
     fn par_fast_interpolate_and_fast_interpolation_are_identical(
         #[any(size_range(1..2048).lift())]
         #[filter(#domain.iter().all_unique())]
@@ -3580,13 +3581,13 @@ mod tests {
         prop_assert_eq!(par_fast_interpolant, fast_interpolant);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn fast_interpolation_through_a_single_point_succeeds() {
         let zero_arr = bfe_array![0];
         let _ = Polynomial::fast_interpolate(&zero_arr, &zero_arr);
     }
 
-    #[proptest(cases = 20)]
+    #[macro_rules_attr::apply(proptest(cases = 20))]
     fn interpolation_then_evaluation_is_identity(
         #[any(size_range(1..2048).lift())]
         #[filter(#domain.iter().all_unique())]
@@ -3598,7 +3599,7 @@ mod tests {
         prop_assert_eq!(values, evaluations);
     }
 
-    #[proptest(cases = 1)]
+    #[macro_rules_attr::apply(proptest(cases = 1))]
     fn fast_batch_interpolation_is_equivalent_to_fast_interpolation(
         #[any(size_range(1..2048).lift())]
         #[filter(#domain.iter().all_unique())]
@@ -3630,7 +3631,7 @@ mod tests {
         domain
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn fast_coset_evaluation_and_fast_evaluation_on_coset_are_identical(
         polynomial: BfePoly,
         offset: BFieldElement,
@@ -3649,7 +3650,7 @@ mod tests {
         prop_assert_eq!(fast_values, fast_coset_values);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn fast_coset_interpolation_and_and_fast_interpolation_on_coset_are_identical(
         #[filter(!#offset.is_zero())] offset: BFieldElement,
         #[strategy(1..8usize)]
@@ -3666,7 +3667,7 @@ mod tests {
         prop_assert_eq!(fast_interpolant, fast_coset_interpolant);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn naive_division_gives_quotient_and_remainder_with_expected_properties(
         a: BfePoly,
         #[filter(!#b.is_zero())] b: BfePoly,
@@ -3676,7 +3677,7 @@ mod tests {
         prop_assert_eq!(a, quot * b + rem);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn clean_naive_division_gives_quotient_and_remainder_with_expected_properties(
         #[filter(!#a_roots.is_empty())] a_roots: Vec<BFieldElement>,
         #[strategy(vec(0..#a_roots.len(), 1..=#a_roots.len()))]
@@ -3691,7 +3692,7 @@ mod tests {
         prop_assert_eq!(a, quot * b);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn clean_division_agrees_with_divide_on_clean_division(
         #[strategy(arb())] a: BfePoly,
         #[strategy(arb())]
@@ -3706,7 +3707,7 @@ mod tests {
         prop_assert_eq!(Polynomial::<BFieldElement>::zero(), naive_remainder);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn clean_division_agrees_with_division_if_divisor_has_only_0_as_root(
         #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
     ) {
@@ -3720,7 +3721,7 @@ mod tests {
         prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn clean_division_agrees_with_division_if_divisor_has_only_0_as_multiple_root(
         #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
         #[strategy(0_usize..300)] num_roots: usize,
@@ -3736,7 +3737,7 @@ mod tests {
         prop_assert_eq!(Polynomial::<BFieldElement>::zero(), remainder);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn clean_division_agrees_with_division_if_divisor_has_0_as_root(
         #[strategy(arb())] mut dividend_roots: Vec<BFieldElement>,
         #[strategy(vec(0..#dividend_roots.len(), 0..=#dividend_roots.len()))]
@@ -3759,7 +3760,7 @@ mod tests {
         prop_assert_eq!(dividend / divisor, quotient);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn clean_division_agrees_with_division_if_divisor_has_0_through_9_as_roots(
         #[strategy(arb())] additional_dividend_roots: Vec<BFieldElement>,
     ) {
@@ -3773,7 +3774,7 @@ mod tests {
         prop_assert_eq!(dividend / divisor, quotient);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn clean_division_gives_quotient_and_remainder_with_expected_properties(
         #[filter(!#a_roots.is_empty())] a_roots: Vec<BFieldElement>,
         #[strategy(vec(0..#a_roots.len(), 1..=#a_roots.len()))]
@@ -3787,7 +3788,7 @@ mod tests {
         prop_assert_eq!(a, quotient * b);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn dividing_constant_polynomials_is_equivalent_to_dividing_constants(
         a: BFieldElement,
         #[filter(!#b.is_zero())] b: BFieldElement,
@@ -3798,7 +3799,7 @@ mod tests {
         prop_assert_eq!(expected_quotient, a_poly / b_poly);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn dividing_any_polynomial_by_a_constant_polynomial_results_in_remainder_zero(
         a: BfePoly,
         #[filter(!#b.is_zero())] b: BFieldElement,
@@ -3808,7 +3809,7 @@ mod tests {
         prop_assert_eq!(Polynomial::zero(), remainder);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn polynomial_division_by_and_with_shah_polynomial() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
             Polynomial::new(coeffs.map(BFieldElement::new).to_vec())
@@ -3832,7 +3833,7 @@ mod tests {
         assert_eq!(expected_rem, x_to_the_6_mod_shah);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn xgcd_does_not_panic_on_input_zero() {
         let zero = Polynomial::<BFieldElement>::zero;
         let (gcd, a, b) = Polynomial::xgcd(zero(), zero());
@@ -3841,28 +3842,28 @@ mod tests {
         println!("b = {b}");
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn xgcd_b_field_pol_test(x: BfePoly, y: BfePoly) {
         let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
         // Bezout relation
         prop_assert_eq!(gcd, a * x + b * y);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn xgcd_x_field_pol_test(x: XfePoly, y: XfePoly) {
         let (gcd, a, b) = Polynomial::xgcd(x.clone(), y.clone());
         // Bezout relation
         prop_assert_eq!(gcd, a * x + b * y);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn add_assign_is_equivalent_to_adding_and_assigning(a: BfePoly, b: BfePoly) {
         let mut c = a.clone();
         c += b.clone();
         prop_assert_eq!(a + b, c);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn only_monic_polynomial_of_degree_1_is_x() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
             Polynomial::new(coeffs.map(BFieldElement::new).to_vec())
@@ -3880,7 +3881,7 @@ mod tests {
         assert!(!polynomial([0, 0, 1]).is_x());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn hardcoded_polynomial_squaring() {
         fn polynomial<const N: usize>(coeffs: [u64; N]) -> BfePoly {
             Polynomial::new(coeffs.map(BFieldElement::new).to_vec())
@@ -3902,22 +3903,22 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn polynomial_squaring_is_equivalent_to_multiplication_with_self(poly: BfePoly) {
         prop_assert_eq!(poly.clone() * poly.clone(), poly.square());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn slow_and_normal_squaring_are_equivalent(poly: BfePoly) {
         prop_assert_eq!(poly.slow_square(), poly.square());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn normal_and_fast_squaring_are_equivalent(poly: BfePoly) {
         prop_assert_eq!(poly.square(), poly.fast_square());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn constant_zero_eq_constant_zero() {
         let zero_polynomial1 = Polynomial::<BFieldElement>::zero();
         let zero_polynomial2 = Polynomial::<BFieldElement>::zero();
@@ -3925,13 +3926,13 @@ mod tests {
         assert_eq!(zero_polynomial1, zero_polynomial2)
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn zero_polynomial_is_zero() {
         assert!(Polynomial::<BFieldElement>::zero().is_zero());
         assert!(Polynomial::<XFieldElement>::zero().is_zero());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn zero_polynomial_is_zero_independent_of_spurious_leading_zeros(
         #[strategy(..500usize)] num_zeros: usize,
     ) {
@@ -3942,7 +3943,7 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn no_constant_polynomial_with_non_zero_coefficient_is_zero(
         #[filter(!#constant.is_zero())] constant: BFieldElement,
     ) {
@@ -3950,7 +3951,7 @@ mod tests {
         prop_assert!(!constant_polynomial.is_zero());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn constant_one_eq_constant_one() {
         let one_polynomial1 = Polynomial::<BFieldElement>::one();
         let one_polynomial2 = Polynomial::<BFieldElement>::one();
@@ -3958,13 +3959,13 @@ mod tests {
         assert_eq!(one_polynomial1, one_polynomial2)
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn one_polynomial_is_one() {
         assert!(Polynomial::<BFieldElement>::one().is_one());
         assert!(Polynomial::<XFieldElement>::one().is_one());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn one_polynomial_is_one_independent_of_spurious_leading_zeros(
         #[strategy(..500usize)] num_leading_zeros: usize,
     ) {
@@ -3977,7 +3978,7 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn no_constant_polynomial_with_non_one_coefficient_is_one(
         #[filter(!#constant.is_one())] constant: BFieldElement,
     ) {
@@ -3985,7 +3986,7 @@ mod tests {
         prop_assert!(!constant_polynomial.is_one());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn formal_derivative_of_zero_is_zero() {
         let bfe_0_poly = Polynomial::<BFieldElement>::zero();
         assert!(bfe_0_poly.formal_derivative().is_zero());
@@ -3994,33 +3995,33 @@ mod tests {
         assert!(xfe_0_poly.formal_derivative().is_zero());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn formal_derivative_of_constant_polynomial_is_zero(constant: BFieldElement) {
         let formal_derivative = Polynomial::from_constant(constant).formal_derivative();
         prop_assert!(formal_derivative.is_zero());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn formal_derivative_of_non_zero_polynomial_is_of_degree_one_less_than_the_polynomial(
         #[filter(!#poly.is_zero())] poly: BfePoly,
     ) {
         prop_assert_eq!(poly.degree() - 1, poly.formal_derivative().degree());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn formal_derivative_of_product_adheres_to_the_leibniz_product_rule(a: BfePoly, b: BfePoly) {
         let product_formal_derivative = (a.clone() * b.clone()).formal_derivative();
         let product_rule = a.formal_derivative() * b.clone() + a * b.formal_derivative();
         prop_assert_eq!(product_rule, product_formal_derivative);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn zero_is_zero() {
         let f = Polynomial::new(vec![BFieldElement::new(0)]);
         assert!(f.is_zero());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn formal_power_series_inverse_newton(
         #[strategy(2usize..20)] precision: usize,
         #[filter(!#f.coefficients.is_empty())]
@@ -4036,7 +4037,7 @@ mod tests {
         prop_assert!(remainder.is_one());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn formal_power_series_inverse_newton_concrete() {
         let f = Polynomial::new(vec![
             BFieldElement::new(3618372803227210457),
@@ -4057,7 +4058,7 @@ mod tests {
         assert!(remainder.is_one());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn formal_power_series_inverse_minimal(
         #[strategy(2usize..20)] precision: usize,
         #[filter(!#f.coefficients.is_empty())]
@@ -4078,7 +4079,7 @@ mod tests {
         prop_assert!(g.degree() <= precision as isize);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn structured_multiple_is_multiple(
         #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
         #[strategy(vec(arb(), 1..30))]
@@ -4090,7 +4091,7 @@ mod tests {
         prop_assert!(remainder.is_zero());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn structured_multiple_of_modulus_with_trailing_zeros_is_multiple(
         #[filter(!#raw_modulus.is_zero())] raw_modulus: BfePoly,
         #[strategy(0usize..100)] num_trailing_zeros: usize,
@@ -4100,7 +4101,7 @@ mod tests {
         prop_assert!(multiple.reduce_long_division(&modulus).is_zero());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn structured_multiple_generates_structure(
         #[filter(#coefficients.iter().filter(|c|!c.is_zero()).count() >= 3)]
         #[strategy(vec(arb(), 1..30))]
@@ -4123,7 +4124,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn structured_multiple_generates_structure_concrete() {
         let polynomial = Polynomial::new(
             [884763262770, 0, 51539607540, 14563891882495327437]
@@ -4146,7 +4147,7 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn structured_multiple_of_degree_is_multiple(
         #[strategy(2usize..100)] n: usize,
         #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
@@ -4159,7 +4160,7 @@ mod tests {
         prop_assert!(remainder.is_zero());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn structured_multiple_of_degree_generates_structure(
         #[strategy(4usize..100)] n: usize,
         #[strategy(vec(arb(), 3..usize::min(30, #n)))] mut coefficients: Vec<BFieldElement>,
@@ -4186,7 +4187,7 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn structured_multiple_of_degree_has_given_degree(
         #[strategy(2usize..100)] n: usize,
         #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
@@ -4204,13 +4205,13 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn reverse_polynomial_with_nonzero_constant_term_twice_gives_original_back(f: BfePoly) {
         let fx_plus_1 = f.shift_coefficients(1) + Polynomial::from_constant(bfe!(1));
         prop_assert_eq!(fx_plus_1.clone(), fx_plus_1.reverse().reverse());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn reverse_polynomial_with_zero_constant_term_twice_gives_shift_back(
         #[filter(!#f.is_zero())] f: BfePoly,
     ) {
@@ -4222,7 +4223,7 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn reduce_by_structured_modulus_and_reduce_long_division_agree(
         #[strategy(1usize..10)] n: usize,
         #[strategy(1usize..10)] m: usize,
@@ -4242,7 +4243,7 @@ mod tests {
         prop_assert_eq!(long_remainder, structured_remainder);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn reduce_by_structured_modulus_and_reduce_agree_long_division_concrete() {
         let a = Polynomial::new(
             [1, 0, 0, 3, 4, 3, 1, 5, 1, 0, 1, 2, 9, 2, 0, 3, 1]
@@ -4267,7 +4268,7 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn reduce_by_ntt_friendly_modulus_and_reduce_long_division_agree(
         #[strategy(1usize..10)] m: usize,
         #[strategy(vec(arb(), #m))] b_coefficients: Vec<BFieldElement>,
@@ -4295,7 +4296,7 @@ mod tests {
         prop_assert_eq!(long_remainder, structured_remainder);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn reduce_by_ntt_friendly_modulus_and_reduce_agree_concrete() {
         let m = 1;
         let a_coefficients = bfe_vec![0, 0, 75944580];
@@ -4320,7 +4321,7 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn reduce_fast_and_reduce_long_division_agree(
         numerator: BfePoly,
         #[filter(!#modulus.is_zero())] modulus: BfePoly,
@@ -4331,7 +4332,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn reduce_and_fast_reduce_long_division_agree_on_fixed_input() {
         // The bug exhibited by this minimal failing test case has since been
         // fixed. The comments are kept as-is for historical accuracy and
@@ -4362,7 +4363,7 @@ mod tests {
         assert_eq!(0, failures.len(), "failures at indices: {failures:?}");
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn reduce_long_division_and_fast_reduce_agree_simple_fixed() {
         let roots = (0..10).map(BFieldElement::new).collect_vec();
         let numerator = Polynomial::zerofier(&roots).formal_derivative();
@@ -4384,7 +4385,7 @@ mod tests {
         assert_eq!(long_div_remainder, preprocessed_remainder);
     }
 
-    #[proptest(cases = 100)]
+    #[macro_rules_attr::apply(proptest(cases = 100))]
     fn batch_evaluate_methods_are_equivalent(
         #[strategy(vec(arb(), (1<<10)..(1<<11)))] coefficients: Vec<BFieldElement>,
         #[strategy(vec(arb(), (1<<5)..(1<<7)))] domain: Vec<BFieldElement>,
@@ -4399,12 +4400,12 @@ mod tests {
         prop_assert_eq!(evaluations_iterative, evaluations_reduce_then);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn reduce_agrees_with_division(a: BfePoly, #[filter(!#b.is_zero())] b: BfePoly) {
         prop_assert_eq!(a.divide(&b).1, a.reduce(&b));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn structured_multiple_of_monomial_term_is_actually_multiple_and_of_right_degree(
         #[strategy(1usize..1000)] degree: usize,
         #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
@@ -4417,7 +4418,7 @@ mod tests {
         prop_assert_eq!(multiple.degree() as usize, target_degree);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn monomial_term_divided_by_smaller_monomial_term_gives_clean_division(
         #[strategy(100usize..102)] high_degree: usize,
         #[filter(!#high_lc.is_zero())] high_lc: BFieldElement,
@@ -4438,7 +4439,7 @@ mod tests {
         prop_assert_eq!(Polynomial::zero(), remainder);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce_property(
         #[filter(!#modulus.is_zero())] modulus: BfePoly,
         #[strategy(0usize..10)] _logn: usize,
@@ -4460,7 +4461,7 @@ mod tests {
         )
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn fast_modular_coset_interpolate_agrees_with_interpolate_then_reduce_concrete() {
         let logn = 8;
         let n = 1u64 << logn;
@@ -4480,7 +4481,7 @@ mod tests {
         )
     }
 
-    #[proptest(cases = 100)]
+    #[macro_rules_attr::apply(proptest(cases = 100))]
     fn coset_extrapolation_methods_agree_with_interpolate_then_evaluate(
         #[strategy(0usize..10)] _logn: usize,
         #[strategy(Just(1 << #_logn))] n: usize,
@@ -4505,7 +4506,7 @@ mod tests {
         prop_assert_eq!(fast_coset_extrapolation, interpolation_then_evaluation);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn coset_extrapolate_and_batch_coset_extrapolate_agree(
         #[strategy(1usize..10)] _logn: usize,
         #[strategy(Just(1<<#_logn))] n: usize,
@@ -4547,7 +4548,7 @@ mod tests {
         prop_assert_eq!(one_by_one_naive, par_batched_naive);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn fast_modular_coset_interpolate_thresholds_relate_properly() {
         type BfePoly = Polynomial<'static, BFieldElement>;
 
@@ -4556,7 +4557,7 @@ mod tests {
         assert!(intt > lagrange);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn interpolate_and_par_interpolate_agree(
         #[filter(!#points.is_empty())] points: Vec<BFieldElement>,
         #[strategy(vec(arb(), #points.len()))] domain: Vec<BFieldElement>,
@@ -4566,7 +4567,7 @@ mod tests {
         prop_assert_eq!(expected_interpolant, observed_interpolant);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn batch_evaluate_agrees_with_par_batch_evalaute(
         polynomial: BfePoly,
         points: Vec<BFieldElement>,
@@ -4577,7 +4578,7 @@ mod tests {
         );
     }
 
-    #[proptest(cases = 20)]
+    #[macro_rules_attr::apply(proptest(cases = 20))]
     fn polynomial_evaluation_and_barycentric_evaluation_are_equivalent(
         #[strategy(1_usize..8)] _log_num_coefficients: usize,
         #[strategy(1_usize..6)] log_expansion_factor: usize,
@@ -4602,7 +4603,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn regular_evaluation_works_with_various_types() {
         let bfe_poly = Polynomial::new(bfe_vec![1]);
         let _: BFieldElement = bfe_poly.evaluate(bfe!(0));
@@ -4614,7 +4615,7 @@ mod tests {
         let _: XFieldElement = xfe_poly.evaluate(xfe!(0));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn barycentric_evaluation_works_with_many_types() {
         let bfe_codeword = bfe_array![1];
         let _ = barycentric_evaluate(&bfe_codeword, bfe!(0));
@@ -4625,7 +4626,7 @@ mod tests {
         let _ = barycentric_evaluate(&xfe_codeword, xfe!(0));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn various_multiplications_work_with_various_types() {
         let b = Polynomial::<BFieldElement>::zero;
         let x = Polynomial::<XFieldElement>::zero;
@@ -4651,7 +4652,7 @@ mod tests {
         let _ = x().fast_multiply(&x());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn evaluating_polynomial_with_borrowed_coefficients_leaves_coefficients_borrowed() {
         let coefficients = bfe_vec![4, 5, 6];
         let poly = Polynomial::new_borrowed(&coefficients);

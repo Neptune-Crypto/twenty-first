@@ -732,11 +732,12 @@ pub(crate) mod tests {
     use rand::RngCore;
     use rayon::prelude::IntoParallelIterator;
     use rayon::prelude::ParallelIterator;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::math::other::random_elements;
     use crate::math::x_field_element::XFieldElement;
+    use crate::tests::proptest;
+    use crate::tests::test;
 
     impl proptest::arbitrary::Arbitrary for Tip5 {
         type Parameters = ();
@@ -1025,12 +1026,12 @@ pub(crate) mod tests {
         }
     }
 
-    #[proptest(cases = 10)]
+    #[macro_rules_attr::apply(proptest)]
     fn get_size(tip5: Tip5) {
         assert_eq!(STATE_SIZE * BFieldElement::ZERO.get_size(), tip5.get_size());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn lookup_table_is_correct() {
         let table: [u8; 256] = (0..256)
             .map(|t| Tip5::offset_fermat_cube_map(t as u16) as u8)
@@ -1051,7 +1052,7 @@ pub(crate) mod tests {
         });
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn round_constants_are_correct() {
         let to_int = |bytes: &[u8]| {
             bytes
@@ -1083,7 +1084,7 @@ pub(crate) mod tests {
         });
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_fermat_cube_map_is_permutation() {
         let mut touched = [false; 256];
         for i in 0..256 {
@@ -1118,7 +1119,7 @@ pub(crate) mod tests {
     /// sure that all round constants have the required property.
     ///
     /// See also: https://www.hyrumslaw.com/. Sorry about that.
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn adding_degenerate_lhs_and_small_enough_rhs_makes_sum_non_degenerate(
         #[strategy(BFieldElement::P..)] raw_a: u64,
         #[strategy(0..BFieldElement::P + 2 - (1 << 32))] raw_b: u64,
@@ -1133,7 +1134,7 @@ pub(crate) mod tests {
     ///
     /// [`adding_degenerate_lhs_and_small_enough_rhs_makes_sum_non_degenerate`]
     /// explains the requirement in greater detail.
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn round_constants_correct_degenerate_lhs_when_adding() {
         for constant in ROUND_CONSTANTS {
             assert!(constant.raw_u64() < BFieldElement::P + 2 - (1 << 32));
@@ -1141,7 +1142,7 @@ pub(crate) mod tests {
     }
 
     /// Ensure that the claims made in [`Tip5::mds_generated`] are true.
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn tip5_recovers_from_degenerate_field_element_representations() {
         let state = [
             0x1063_c4bf_5d8b_b0dd,
@@ -1204,7 +1205,7 @@ pub(crate) mod tests {
         assert_eq!(expected, naive.state);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn calculate_differential_uniformity() {
         // cargo test calculate_differential_uniformity -- --include-ignored --nocapture
         // addition-differential
@@ -1264,7 +1265,7 @@ pub(crate) mod tests {
         println!("bitwise differential uniformity for fermat cube map: {du_fermat_bitwise}");
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn calculate_approximation_quality() {
         let mut fermat_cubed = [0u16; 65536];
         let mut bfield_cubed = [0u16; 65536];
@@ -1293,7 +1294,7 @@ pub(crate) mod tests {
     const MAGIC_SNAPSHOT_HEX: &str =
         "109cc2fe453bd9962f754b96d8f5b919b60af030940a275f5540da195fef65ee651c1b6fa19b2c6a";
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn hash10_test_vectors_snapshot() {
         let mut preimage = [BFieldElement::ZERO; RATE];
         for i in 0..6 {
@@ -1304,7 +1305,7 @@ pub(crate) mod tests {
         assert_eq!(MAGIC_SNAPSHOT_HEX, final_digest);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn hash_varlen_test_vectors() {
         let mut digest_sum = [BFieldElement::ZERO; Digest::LEN];
         for i in 0..20 {
@@ -1323,7 +1324,7 @@ pub(crate) mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn snapshot() {
         let state = [
             0x0000_000f_ffff_fff0,
@@ -1368,7 +1369,7 @@ pub(crate) mod tests {
         Digest::new((&squeeze_result[..Digest::LEN]).try_into().unwrap())
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn hash_var_len_equivalence_edge_cases() {
         for preimage_length in 0..=11 {
             let preimage = vec![BFieldElement::new(42); preimage_length];
@@ -1379,14 +1380,14 @@ pub(crate) mod tests {
         }
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn hash_var_len_equivalence(#[strategy(arb())] preimage: Vec<BFieldElement>) {
         let hash_varlen_digest = Tip5::hash_varlen(&preimage);
         let digest_through_pad_squeeze_absorb = manual_hash_varlen(&preimage);
         prop_assert_eq!(digest_through_pad_squeeze_absorb, hash_varlen_digest);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_linearity_of_mds() {
         type SpongeState = [BFieldElement; STATE_SIZE];
 
@@ -1417,7 +1418,7 @@ pub(crate) mod tests {
         assert_eq!(w, w_);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_mds_circulancy() {
         let mut sponge = Tip5::init();
         sponge.state = [BFieldElement::ZERO; STATE_SIZE];
@@ -1453,7 +1454,7 @@ pub(crate) mod tests {
         assert_eq!(sponge_2.state, mv);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_complex_karatsuba() {
         const N: usize = 4;
         let mut f = [(0i64, 0i64); N];
@@ -1471,7 +1472,7 @@ pub(crate) mod tests {
         assert_eq!(h0, h1);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_complex_product() {
         let mut rng = rand::rng();
         let mut random_small_i64 = || (rng.next_u32() % (1 << 16)) as i64;
@@ -1484,7 +1485,7 @@ pub(crate) mod tests {
         }
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn sample_scalars(mut tip5: Tip5, #[strategy(0_usize..=100)] num_scalars: usize) {
         tip5.permutation(); // remove any 0s that exist due to shrinking
 
@@ -1504,7 +1505,7 @@ pub(crate) mod tests {
         target_feature = "avx512bw",
         target_feature = "avx512vbmi"
     )))]
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn test_mds_matrix_mul_methods_agree(state: [BFieldElement; STATE_SIZE]) {
         let mut sponge_cyclomut = Tip5 { state };
         let mut sponge_generated = Tip5 { state };
@@ -1521,7 +1522,7 @@ pub(crate) mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn tip5_hasher_trait_snapshot_test() {
         let mut hasher = Tip5::init();
         let data = b"hello world";
@@ -1529,7 +1530,7 @@ pub(crate) mod tests {
         assert_eq!(hasher.finish(), 2267905471610932299);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn tip5_hasher_consumes_small_data(#[filter(!#bytes.is_empty())] bytes: Vec<u8>) {
         let mut hasher = Tip5::init();
         bytes.hash(&mut hasher);
@@ -1537,7 +1538,7 @@ pub(crate) mod tests {
         prop_assert_ne!(Tip5::init().finish(), hasher.finish());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn appending_small_data_to_big_data_changes_tip5_hash(
         #[any(size_range(2_000..8_000).lift())] big_data: Vec<u8>,
         #[filter(!#small_data.is_empty())] small_data: Vec<u8>,
@@ -1553,7 +1554,7 @@ pub(crate) mod tests {
         prop_assert_ne!(big_data_hash, all_data_hash);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn tip5_trace_starts_with_initial_state_and_is_equivalent_to_permutation(mut tip5: Tip5) {
         let [first, .., last] = tip5.clone().trace();
         prop_assert_eq!(first, tip5.state);

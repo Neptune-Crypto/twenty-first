@@ -280,11 +280,12 @@ pub(crate) mod tests {
     use proptest::prelude::Arbitrary as ProptestArbitrary;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::error::ParseBFieldElementError;
     use crate::prelude::*;
+    use crate::tests::proptest;
+    use crate::tests::test;
 
     impl ProptestArbitrary for Digest {
         type Parameters = ();
@@ -321,7 +322,7 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn digest_corruptor_rejects_uncorrupting_corruption() {
         let digest = Digest(bfe_array![1, 2, 3, 4, 5]);
         let corruptor = DigestCorruptor {
@@ -332,7 +333,7 @@ pub(crate) mod tests {
         assert!(matches!(err, TestCaseError::Reject(_)));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn display_is_as_expected() {
         let digest = Digest::new(bfe_array![1, 2, 3, 4, 5]);
         assert_eq!("1,2,3,4,5", format!("{digest}"));
@@ -342,7 +343,7 @@ pub(crate) mod tests {
         assert_eq!(hex_digest, format!("{digest:x}"));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn get_size() {
         let stack = Digest::get_stack_size();
 
@@ -355,7 +356,7 @@ pub(crate) mod tests {
         assert_eq!(stack + heap, total)
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn digest_from_str() {
         let valid_digest_string = "12063201067205522823,\
             1529663126377206632,\
@@ -374,12 +375,12 @@ pub(crate) mod tests {
         assert!(second_invalid_digest.is_err());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn test_reversed_involution(digest: Digest) {
         prop_assert_eq!(digest, digest.reversed().reversed())
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn digest_biguint_conversion_simple_test() {
         let fourteen: BigUint = 14u128.into();
         let fourteen_converted_expected = Digest(bfe_array![14, 0, 0, 0, 0]);
@@ -443,7 +444,7 @@ pub(crate) mod tests {
         assert_eq!(two_pow_315, two_pow_315_converted_expected.into());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn digest_biguint_conversion_pbt(components_0: [u64; 4], component_1: u32) {
         let big_uint = components_0
             .into_iter()
@@ -455,7 +456,7 @@ pub(crate) mod tests {
         prop_assert_eq!(big_uint, big_uint_again);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn digest_ordering() {
         let val0 = Digest::new(bfe_array![0; Digest::LEN]);
         let val1 = Digest::new(bfe_array![14, 0, 0, 0, 0]);
@@ -477,7 +478,7 @@ pub(crate) mod tests {
         assert!(val4 > val0);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn digest_biguint_overflow_test() {
         let mut two_pow_384: BigUint = (1u128 << 96).into();
         two_pow_384 = two_pow_384.pow(4);
@@ -486,14 +487,14 @@ pub(crate) mod tests {
         assert_eq!(TryFromDigestError::Overflow, err);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn digest_to_bfe_vector_involution(digest: Digest) {
         let bfes = <Vec<BFieldElement>>::from(digest);
         let digest_again = Digest::try_from(bfes)?;
         prop_assert_eq!(digest, digest_again);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn bfe_vector_of_incorrect_length_cannot_become_a_digest(
         #[filter(#bfes.len() != Digest::LEN)] bfes: Vec<BFieldElement>,
     ) {
@@ -504,7 +505,7 @@ pub(crate) mod tests {
         prop_assert_eq!(bfes_len, len);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn forty_bytes_can_be_converted_to_digest(bytes: [u8; Digest::BYTES]) {
         let digest = Digest::try_from(bytes).unwrap();
         let bytes_again: [u8; Digest::BYTES] = digest.into();
@@ -512,7 +513,7 @@ pub(crate) mod tests {
     }
 
     // note: for background on this test, see issue 195
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn try_from_bytes_not_canonical() -> Result<(), TryFromDigestError> {
         let bytes: [u8; Digest::BYTES] = [255; Digest::BYTES];
 
@@ -525,7 +526,7 @@ pub(crate) mod tests {
     }
 
     // note: for background on this test, see issue 195
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn from_str_not_canonical() -> Result<(), TryFromDigestError> {
         let str = format!("0,0,0,0,{}", u64::MAX);
 
@@ -537,7 +538,7 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn bytes_in_matches_bytes_out() -> Result<(), TryFromDigestError> {
         let bytes1: [u8; Digest::BYTES] = [254; Digest::BYTES];
         let d1 = Digest::try_from(bytes1)?;
@@ -551,13 +552,15 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn any_digest_can_be_hashed(digest: Digest) {
         digest.hash();
     }
 
     mod hex_test {
         use super::*;
+        use crate::tests::proptest;
+        use crate::tests::test;
 
         pub(super) fn hex_examples() -> Vec<(Digest, &'static str)> {
             vec![
@@ -584,14 +587,14 @@ pub(crate) mod tests {
             ]
         }
 
-        #[test]
+        #[macro_rules_attr::apply(test)]
         fn digest_to_hex() {
             for (digest, hex) in hex_examples() {
                 assert_eq!(&digest.to_hex(), hex);
             }
         }
 
-        #[proptest]
+        #[macro_rules_attr::apply(proptest)]
         fn to_hex_and_from_hex_are_reciprocal_proptest(bytes: [u8; Digest::BYTES]) {
             let digest = Digest::try_from(bytes).unwrap();
             let hex = digest.to_hex();
@@ -609,7 +612,7 @@ pub(crate) mod tests {
             prop_assert_eq!(digest, digest_from_upper_hex);
         }
 
-        #[test]
+        #[macro_rules_attr::apply(test)]
         fn to_hex_and_from_hex_are_reciprocal() -> Result<(), TryFromHexDigestError> {
             let hex_vals = vec![
                 "00000000000000000000000000000000000000000000000000000000000000000000000000000000",
@@ -625,7 +628,7 @@ pub(crate) mod tests {
             Ok(())
         }
 
-        #[test]
+        #[macro_rules_attr::apply(test)]
         fn digest_from_hex() -> Result<(), TryFromHexDigestError> {
             for (digest, hex) in hex_examples() {
                 assert_eq!(digest, Digest::try_from_hex(hex)?);
@@ -634,7 +637,7 @@ pub(crate) mod tests {
             Ok(())
         }
 
-        #[test]
+        #[macro_rules_attr::apply(test)]
         fn digest_from_invalid_hex_errors() {
             use hex::FromHexError;
 
@@ -672,8 +675,9 @@ pub(crate) mod tests {
 
         mod json_test {
             use super::*;
+            use crate::tests::test;
 
-            #[test]
+            #[macro_rules_attr::apply(test)]
             fn serialize() -> Result<(), serde_json::Error> {
                 for (digest, hex) in hex_examples() {
                     assert_eq!(serde_json::to_string(&digest)?, format!("\"{hex}\""));
@@ -681,7 +685,7 @@ pub(crate) mod tests {
                 Ok(())
             }
 
-            #[test]
+            #[macro_rules_attr::apply(test)]
             fn deserialize() -> Result<(), serde_json::Error> {
                 for (digest, hex) in hex_examples() {
                     let json_hex = format!("\"{hex}\"");
@@ -694,6 +698,7 @@ pub(crate) mod tests {
 
         mod bincode_test {
             use super::*;
+            use crate::tests::test;
 
             fn bincode_examples() -> Vec<(Digest, [u8; Digest::BYTES])> {
                 vec![
@@ -708,14 +713,14 @@ pub(crate) mod tests {
                 ]
             }
 
-            #[test]
+            #[macro_rules_attr::apply(test)]
             fn serialize() {
                 for (digest, bytes) in bincode_examples() {
                     assert_eq!(bincode::serialize(&digest).unwrap(), bytes);
                 }
             }
 
-            #[test]
+            #[macro_rules_attr::apply(test)]
             fn deserialize() {
                 for (digest, bytes) in bincode_examples() {
                     assert_eq!(bincode::deserialize::<Digest>(&bytes).unwrap(), digest);

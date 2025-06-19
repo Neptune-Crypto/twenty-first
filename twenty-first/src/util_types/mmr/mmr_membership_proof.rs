@@ -636,11 +636,12 @@ mod tests {
     use proptest_arbitrary_interop::arb;
     use rand::Rng;
     use rand::random;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::other::random_elements;
+    use crate::tests::proptest;
+    use crate::tests::test;
     use crate::tip5::Digest;
     use crate::tip5::Tip5;
     use crate::util_types::mmr::archival_mmr::ArchivalMmr;
@@ -648,7 +649,7 @@ mod tests {
     use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
     use crate::util_types::mmr::mmr_trait::Mmr;
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn equality_and_hash_test() {
         let mut rng = rand::rng();
         let some_digest: Digest = rng.random();
@@ -686,7 +687,7 @@ mod tests {
         assert_ne!(Tip5::hash(&mp4), Tip5::hash(&mp5));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn get_node_indices_simple_test() {
         const LEAF_INDEX: u64 = 4;
         let leaf_hashes: Vec<Digest> = random_elements(8);
@@ -702,7 +703,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn get_peak_index_simple_test() {
         let mut mmr_size = 7;
         let leaf_digests: Vec<Digest> = random_elements(mmr_size);
@@ -760,7 +761,7 @@ mod tests {
         }
     }
 
-    #[proptest(cases = 10)]
+    #[macro_rules_attr::apply(proptest(cases = 10))]
     fn mmr_verification_if_leaf_index_is_out_of_bounds(
         #[strategy(0..=121usize)] leaf_count: usize,
     ) {
@@ -777,13 +778,13 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mmr_verify_does_not_crash_on_too_short_peaks_list_unit() {
         let mmr_mp = MmrMembershipProof::new(vec![Default::default()]);
         assert!(!mmr_mp.verify(0, Default::default(), &[], 2));
     }
 
-    #[proptest(cases = 10)]
+    #[macro_rules_attr::apply(proptest(cases = 10))]
     fn mmr_verification_with_wrong_length_of_peak_list(
         #[strategy(0..=1_000_000u64)] leaf_count: u64,
         #[strategy(0..=#leaf_count)] leaf_index: u64,
@@ -806,7 +807,7 @@ mod tests {
         assert!(!mp.verify(leaf_index, leaf, &one_too_many, leaf_count));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn update_batch_membership_proofs_from_leaf_mutations_new_test() {
         let total_leaf_count = 8;
         let leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
@@ -851,7 +852,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn batch_update_from_batch_leaf_mutation_total_replacement_test() {
         let total_leaf_count = 268;
         let leaf_hashes_init: Vec<Digest> = random_elements(total_leaf_count);
@@ -900,7 +901,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn batch_update_from_batch_leaf_mutation_test() {
         let total_leaf_count = 34;
         let mut leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
@@ -980,7 +981,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn batch_update_from_leaf_mutation_no_change_return_value_test() {
         // This test verifies that the return value indicating changed membership proofs is empty
         // even though the mutations affect the membership proofs. The reason it is empty is that
@@ -1046,7 +1047,7 @@ mod tests {
         (leaf_hashes, membership_proofs)
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn update_batch_membership_proofs_from_batch_leaf_mutations_test() {
         let total_leaf_count = 8;
         let leaf_hashes: Vec<Digest> = random_elements(total_leaf_count);
@@ -1092,7 +1093,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn update_membership_proof_from_leaf_mutation_test() {
         let leaf_hashes: Vec<Digest> = random_elements(8);
         let new_leaf: Digest = Tip5::hash(&133337u64);
@@ -1224,7 +1225,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn update_membership_proof_from_leaf_mutation_big_test() {
         // Build MMR from leaf count 0 to 22, and loop through *each*
         // leaf index for MMR, modifying its membership proof with a
@@ -1288,7 +1289,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn update_membership_proof_from_append_simple_with_bit_mmra() {
         let original_leaf_count = (1 << 35) + (1 << 7) - 1;
 
@@ -1334,7 +1335,7 @@ mod tests {
         assert!(all_proofs_are_valid);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn update_membership_proof_from_append_simple() {
         let leaf_count = 7;
         let leaf_hashes: Vec<Digest> = random_elements(leaf_count);
@@ -1377,7 +1378,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn update_membership_proof_from_append_big_tests() {
         for leaf_count in 0..68u64 {
             // 1. Build an ArchivalMmr with a variable amount of leafs
@@ -1510,7 +1511,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn update_membership_proof_from_append_big_tip5() {
         // Build MMR from leaf count 0 to 9, and loop through *each*
         // leaf index for MMR, modifying its membership proof with an
@@ -1562,7 +1563,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn serialization_test() {
         // You could argue that this test doesn't belong here, as it tests the behavior of
         // an imported library. I included it here, though, because the setup seems a bit clumsy
@@ -1583,7 +1584,7 @@ mod tests {
         ));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_decode_mmr_membership_proof() {
         let mut rng = rand::rng();
         for _ in 0..100 {
@@ -1598,7 +1599,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "Lists must have same length. Got: 0 and 3")]
     fn test_diff_len_lists_batch_update_from_append() {
         // Checks that batch_update_from_append() panics when passed differing length lists
@@ -1617,7 +1618,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "Lists must have same length. Got: 0 and 3")]
     fn test_diff_len_lists_batch_update_from_leaf_mutation() {
         // Checks that batch_update_from_leaf_mutation() panics when passed differing length lists
@@ -1638,7 +1639,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "Lists must have same length. Got: 0 and 3")]
     fn test_diff_len_lists_batch_update_from_batch_leaf_mutation() {
         // Checks that batch_update_from_batch_leaf_mutation() panics when passed

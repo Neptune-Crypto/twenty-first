@@ -822,11 +822,12 @@ mod tests {
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
     use rand::random;
-    use test_strategy::proptest;
 
     use crate::math::b_field_element::*;
     use crate::math::other::random_elements;
     use crate::math::polynomial::Polynomial;
+    use crate::tests::proptest;
+    use crate::tests::test;
 
     impl proptest::arbitrary::Arbitrary for BFieldElement {
         type Parameters = ();
@@ -838,26 +839,26 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn get_size(bfe: BFieldElement) {
         prop_assert_eq!(8, bfe.get_size());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn serialization_and_deserialization_to_and_from_json_is_identity(bfe: BFieldElement) {
         let serialized = serde_json::to_string(&bfe).unwrap();
         let deserialized: BFieldElement = serde_json::from_str(&serialized).unwrap();
         prop_assert_eq!(bfe, deserialized);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn deserializing_u64_is_like_calling_new(#[strategy(0..=BFieldElement::MAX)] value: u64) {
         let bfe = BFieldElement::new(value);
         let deserialized: BFieldElement = serde_json::from_str(&value.to_string()).unwrap();
         prop_assert_eq!(bfe, deserialized);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn parsing_interval_is_open_minus_p_to_p() {
         let p = i128::from(BFieldElement::P);
         let display_then_parse = |v: i128| BFieldElement::from_str(&v.to_string());
@@ -868,7 +869,7 @@ mod tests {
         assert!(display_then_parse(p).is_err());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn parsing_string_representing_canonical_negative_integer_gives_correct_bfield_element(
         #[strategy(0..=BFieldElement::MAX)] v: u64,
     ) {
@@ -876,7 +877,7 @@ mod tests {
         prop_assert_eq!(BFieldElement::P - v, bfe.value());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn parsing_string_representing_canonical_positive_integer_gives_correct_bfield_element(
         #[strategy(0..=BFieldElement::MAX)] v: u64,
     ) {
@@ -884,7 +885,7 @@ mod tests {
         prop_assert_eq!(v, bfe.value());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn parsing_string_representing_too_big_positive_integer_as_bfield_element_gives_error(
         #[strategy(i128::from(BFieldElement::P)..)] v: i128,
     ) {
@@ -892,7 +893,7 @@ mod tests {
         prop_assert_eq!(ParseBFieldElementError::NotCanonical(v), err);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn parsing_string_representing_too_small_negative_integer_as_bfield_element_gives_error(
         #[strategy(..=i128::from(BFieldElement::P))] v: i128,
     ) {
@@ -900,29 +901,29 @@ mod tests {
         prop_assert_eq!(ParseBFieldElementError::NotCanonical(v), err);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn zero_is_neutral_element_for_addition(bfe: BFieldElement) {
         let zero = BFieldElement::ZERO;
         prop_assert_eq!(bfe + zero, bfe);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn one_is_neutral_element_for_multiplication(bfe: BFieldElement) {
         let one = BFieldElement::ONE;
         prop_assert_eq!(bfe * one, bfe);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn addition_is_commutative(element_0: BFieldElement, element_1: BFieldElement) {
         prop_assert_eq!(element_0 + element_1, element_1 + element_0);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn multiplication_is_commutative(element_0: BFieldElement, element_1: BFieldElement) {
         prop_assert_eq!(element_0 * element_1, element_1 * element_0);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
 
     fn addition_is_associative(
         element_0: BFieldElement,
@@ -935,7 +936,7 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn multiplication_is_associative(
         element_0: BFieldElement,
         element_1: BFieldElement,
@@ -947,7 +948,7 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn multiplication_distributes_over_addition(
         element_0: BFieldElement,
         element_1: BFieldElement,
@@ -959,17 +960,17 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn multiplication_with_inverse_gives_identity(#[filter(!#bfe.is_zero())] bfe: BFieldElement) {
         prop_assert!((bfe.inverse() * bfe).is_one());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn division_by_self_gives_identity(#[filter(!#bfe.is_zero())] bfe: BFieldElement) {
         prop_assert!((bfe / bfe).is_one());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn values_larger_than_modulus_are_handled_correctly(
         #[strategy(BFieldElement::P..)] large_value: u64,
     ) {
@@ -978,7 +979,7 @@ mod tests {
         prop_assert_eq!(expected_value, bfe.value());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn display_test() {
         let seven = BFieldElement::new(7);
         assert_eq!("7", format!("{seven}"));
@@ -1019,7 +1020,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn display_and_from_str_are_reciprocal_unit_test() {
         for bfe in bfe_array![
             -1000, -500, -200, -100, -10, -1, 0, 1, 10, 100, 200, 500, 1000
@@ -1029,20 +1030,20 @@ mod tests {
         }
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn display_and_from_str_are_reciprocal_prop_test(bfe: BFieldElement) {
         let bfe_again = bfe.to_string().parse()?;
         prop_assert_eq!(bfe, bfe_again);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn zero_is_zero() {
         let zero = BFieldElement::zero();
         assert!(zero.is_zero());
         assert_eq!(zero, BFieldElement::ZERO);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn not_zero_is_nonzero(bfe: BFieldElement) {
         if bfe.value() == 0 {
             return Ok(());
@@ -1050,14 +1051,14 @@ mod tests {
         prop_assert!(!bfe.is_zero());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn one_is_one() {
         let one = BFieldElement::one();
         assert!(one.is_one());
         assert_eq!(one, BFieldElement::ONE);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn not_one_is_not_one(bfe: BFieldElement) {
         if bfe.value() == 1 {
             return Ok(());
@@ -1065,14 +1066,14 @@ mod tests {
         prop_assert!(!bfe.is_one());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn one_unequal_zero() {
         let one = BFieldElement::ONE;
         let zero = BFieldElement::ZERO;
         assert_ne!(one, zero);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn byte_array_of_small_field_elements_is_zero_at_high_indices(value: u8) {
         let bfe = BFieldElement::new(value as u64);
         let byte_array: [u8; 8] = bfe.into();
@@ -1083,25 +1084,25 @@ mod tests {
         });
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn byte_array_conversion(bfe: BFieldElement) {
         let array: [u8; 8] = bfe.into();
         let bfe_recalculated: BFieldElement = array.try_into()?;
         prop_assert_eq!(bfe, bfe_recalculated);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn byte_array_outside_range_is_not_accepted(#[strategy(BFieldElement::P..)] value: u64) {
         let byte_array = value.to_le_bytes();
         prop_assert!(BFieldElement::try_from(byte_array).is_err());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn value_is_preserved(#[strategy(0..BFieldElement::P)] value: u64) {
         prop_assert_eq!(value, BFieldElement::new(value).value());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn supposed_generator_is_generator() {
         let generator = BFieldElement::generator();
         let largest_meaningful_power = BFieldElement::P - 1;
@@ -1112,12 +1113,12 @@ mod tests {
         assert_ne!(BFieldElement::ONE, generator_pow_p_half);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn lift_then_unlift_preserves_element(bfe: BFieldElement) {
         prop_assert_eq!(Some(bfe), bfe.lift().unlift());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn increment(mut bfe: BFieldElement) {
         let old_value = bfe.value();
         bfe.increment();
@@ -1125,14 +1126,14 @@ mod tests {
         prop_assert_eq!(expected_value, bfe.value());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn incrementing_max_value_wraps_around() {
         let mut bfe = BFieldElement::new(BFieldElement::MAX);
         bfe.increment();
         assert_eq!(0, bfe.value());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn decrement(mut bfe: BFieldElement) {
         let old_value = bfe.value();
         bfe.decrement();
@@ -1140,20 +1141,20 @@ mod tests {
         prop_assert_eq!(expected_value, bfe.value());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn decrementing_min_value_wraps_around() {
         let mut bfe = BFieldElement::ZERO;
         bfe.decrement();
         assert_eq!(BFieldElement::MAX, bfe.value());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn empty_batch_inversion() {
         let empty_inv = BFieldElement::batch_inversion(vec![]);
         assert!(empty_inv.is_empty());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn batch_inversion(bfes: Vec<BFieldElement>) {
         let bfes_inv = BFieldElement::batch_inversion(bfes.clone());
         prop_assert_eq!(bfes.len(), bfes_inv.len());
@@ -1162,7 +1163,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn power_accumulator_simple_test() {
         let input_a = [
             BFieldElement::new(10),
@@ -1183,7 +1184,7 @@ mod tests {
         assert_eq!(BFieldElement::new(8), powers[3]);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mul_div_plus_minus_neg_property_based_test() {
         let elements: Vec<BFieldElement> = random_elements(300);
         let power_input_b: [BFieldElement; 6] = random();
@@ -1243,7 +1244,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mul_div_pbt() {
         // Verify that the mul result is sane
         let rands: Vec<BFieldElement> = random_elements(100);
@@ -1260,7 +1261,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn add_sub_wrap_around_test() {
         // Ensure that something that exceeds P but is smaller than $2^64$
         // is still the correct field element. The property-based test is unlikely
@@ -1273,7 +1274,7 @@ mod tests {
         assert_eq!(BFieldElement::new(BFieldElement::MAX), diff);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn neg_test() {
         assert_eq!(-BFieldElement::ZERO, BFieldElement::ZERO);
         assert_eq!(
@@ -1287,7 +1288,7 @@ mod tests {
         assert_eq!(max, -max_plus_two);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn equality_and_hash_test() {
         assert_eq!(BFieldElement::ZERO, BFieldElement::ZERO);
         assert_eq!(BFieldElement::ONE, BFieldElement::ONE);
@@ -1321,7 +1322,7 @@ mod tests {
         assert_eq!(hasher_a.finish(), hasher_b.finish());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn create_polynomial_test() {
         let a = Polynomial::from([1, 3, 7]);
         let b = Polynomial::from([2, 5, -1]);
@@ -1330,7 +1331,7 @@ mod tests {
         assert_eq!(expected, a + b);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mod_pow_test_powers_of_two() {
         let two = BFieldElement::new(2);
         // 2^63 < 2^64, so no wrap-around of B-field element
@@ -1339,7 +1340,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mod_pow_test_powers_of_three() {
         let three = BFieldElement::new(3);
         // 3^40 < 2^64, so no wrap-around of B-field element
@@ -1348,7 +1349,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mod_pow_test() {
         // These values were found by finding primitive roots of unity and verifying
         // that they are group generators of the right order
@@ -1364,7 +1365,7 @@ mod tests {
         assert!(BFieldElement::new(0).mod_pow(0).is_one());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn get_primitive_root_of_unity_test() {
         for i in 1..33 {
             let power = 1 << i;
@@ -1379,14 +1380,14 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "Attempted to find the multiplicative inverse of zero.")]
     fn multiplicative_inverse_of_zero() {
         let zero = BFieldElement::ZERO;
         let _ = zero.inverse();
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn u32_conversion() {
         let val = BFieldElement::new(u32::MAX as u64);
         let as_u32: u32 = val.try_into().unwrap();
@@ -1399,7 +1400,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn inverse_or_zero_bfe() {
         let zero = BFieldElement::ZERO;
         let one = BFieldElement::ONE;
@@ -1414,7 +1415,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_random_squares() {
         let mut rng = rand::rng();
         let p = BFieldElement::P;
@@ -1432,7 +1433,7 @@ mod tests {
         assert_eq!(one, one * one);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn equals() {
         let a = BFieldElement::ONE;
         let b = bfe!(BFieldElement::MAX) * bfe!(BFieldElement::MAX);
@@ -1442,7 +1443,7 @@ mod tests {
         assert_eq!(a.value(), b.value());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_random_raw() {
         let mut rng = rand::rng();
         for _ in 0..100 {
@@ -1469,7 +1470,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_fixed_inverse() {
         // (8561862112314395584, 17307602810081694772)
         let a = BFieldElement::new(8561862112314395584);
@@ -1480,7 +1481,7 @@ mod tests {
         assert_eq!(a_inv, expected);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_fixed_modpow() {
         let exponent = 16608971246357572739u64;
         let base = BFieldElement::new(7808276826625786800);
@@ -1488,7 +1489,7 @@ mod tests {
         assert_eq!(base.mod_pow_u64(exponent), expected);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_fixed_mul() {
         {
             let a = BFieldElement::new(2779336007265862836);
@@ -1507,7 +1508,7 @@ mod tests {
         }
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn conversion_from_i32_to_bfe_is_correct(v: i32) {
         let bfe = BFieldElement::from(v);
         match v {
@@ -1516,7 +1517,7 @@ mod tests {
         }
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn conversion_from_isize_to_bfe_is_correct(v: isize) {
         let bfe = BFieldElement::from(v);
         match v {
@@ -1525,7 +1526,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn bfield_element_can_be_converted_to_and_from_many_types() {
         let _ = BFieldElement::from(0_u8);
         let _ = BFieldElement::from(0_u16);
@@ -1556,7 +1557,7 @@ mod tests {
         let _ = i128::from(max);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn bfield_conversion_works_for_types_min_and_max() {
         let _ = BFieldElement::from(u8::MIN);
         let _ = BFieldElement::from(u8::MAX);
@@ -1582,7 +1583,7 @@ mod tests {
         let _ = BFieldElement::from(isize::MAX);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn naive_and_actual_conversion_from_u128_agree(v: u128) {
         fn naive_conversion(x: u128) -> BFieldElement {
             let p = BFieldElement::P as u128;
@@ -1593,7 +1594,7 @@ mod tests {
         prop_assert_eq!(naive_conversion(v), BFieldElement::from(v));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn naive_and_actual_conversion_from_i64_agree(v: i64) {
         fn naive_conversion(x: i64) -> BFieldElement {
             let p = BFieldElement::P as i128;
@@ -1604,7 +1605,7 @@ mod tests {
         prop_assert_eq!(naive_conversion(v), BFieldElement::from(v));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn bfe_macro_can_be_used() {
         let b = bfe!(42);
         let _ = bfe!(42u32);
@@ -1619,12 +1620,12 @@ mod tests {
         assert_eq!(c, d);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn bfe_macro_produces_same_result_as_calling_new(value: u64) {
         prop_assert_eq!(BFieldElement::new(value), bfe!(value));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn const_minus_two_inverse_is_really_minus_two_inverse() {
         assert_eq!(bfe!(-2).inverse(), BFieldElement::MINUS_TWO_INVERSE);
     }

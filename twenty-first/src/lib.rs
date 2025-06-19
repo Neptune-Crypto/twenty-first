@@ -40,6 +40,64 @@ pub(crate) mod tests {
 
     use super::*;
 
+    /// A crate-specific replacement of the `#[test]` attribute for tests that
+    /// should also be executed on `wasm` targets (which is almost all tests).
+    ///
+    /// If you specifically want to exclude a test from `wasm` targets, use the
+    /// usual `#[test]` attribute instead.
+    ///
+    /// # Usage
+    ///
+    /// ```
+    /// #[macro_rules_attr::apply(test)]
+    /// fn foo() {
+    ///     assert_eq!(4, 2 + 2);
+    /// }
+    /// ```
+    macro_rules! test {
+        ($item:item) => {
+            #[test]
+            #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+            $item
+        };
+    }
+    pub(crate) use test;
+
+    /// A crate-specific replacement of the `#[test_strategy::proptest]`
+    /// attribute for tests that should also be executed on `wasm` targets
+    /// (which is almost all tests).
+    ///
+    /// If you specifically want to exclude a test from `wasm` targets, use the
+    /// usual `#[test_strategy::proptest]` attribute instead.
+    ///
+    /// # Usage
+    ///
+    /// ```
+    /// # use proptest::prop_assert_eq;
+    /// #[macro_rules_attr::apply(proptest)]
+    /// fn foo(#[strategy(0..=42)] x: i32) {
+    ///     prop_assert_eq!(2 * x, x + x);
+    /// }
+    /// ```
+    ///
+    /// If you want to configure the test, use the usual syntax defined by
+    /// [`test_strategy`]:
+    /// ```
+    /// # use proptest::prop_assert_eq;
+    /// #[macro_rules_attr::apply(proptest(cases = 10, max_local_rejects = 5))]
+    /// fn foo(#[strategy(0..=42)] x: i32) {
+    ///     prop_assert_eq!(2 * x, x + x);
+    /// }
+    /// ```
+    macro_rules! proptest {
+        ($item:item $(($($config:tt)*))?) => {
+            #[test_strategy::proptest $(($($config)*))?]
+            #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+            $item
+        };
+    }
+    pub(crate) use proptest;
+
     /// The compiler automatically adds any applicable auto trait (all of which are
     /// marker traits) to self-defined types. This implies that these trait bounds
     /// might vanish if the necessary pre-conditions are no longer met. That'd be a
@@ -55,7 +113,7 @@ pub(crate) mod tests {
     /// Inspired by “Rust for Rustaceans” by Jon Gjengset.
     pub fn implements_usual_auto_traits<T: Sized + Send + Sync + Unpin>() {}
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn types_in_prelude_implement_the_usual_auto_traits() {
         implements_usual_auto_traits::<BFieldElement>();
         implements_usual_auto_traits::<Polynomial<BFieldElement>>();
@@ -68,7 +126,7 @@ pub(crate) mod tests {
         implements_usual_auto_traits::<MmrMembershipProof>();
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn public_types_implement_the_usual_auto_traits() {
         implements_usual_auto_traits::<math::lattice::CyclotomicRingElement>();
         implements_usual_auto_traits::<math::lattice::ModuleElement<42>>();
@@ -85,7 +143,7 @@ pub(crate) mod tests {
         >();
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn errors_implement_the_usual_auto_traits() {
         implements_usual_auto_traits::<error::BFieldCodecError>();
         implements_usual_auto_traits::<error::PolynomialBFieldCodecError>();

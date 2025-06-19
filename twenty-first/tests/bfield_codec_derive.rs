@@ -18,6 +18,7 @@ struct BFieldCodecTestStructA {
 }
 
 #[proptest]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn integration_test_struct_a(#[strategy(arb())] test_struct: BFieldCodecTestStructA) {
     let encoding = test_struct.encode();
     let decoding = *BFieldCodecTestStructA::decode(&encoding).unwrap();
@@ -31,6 +32,7 @@ struct BFieldCodecTestStructB {
 }
 
 #[proptest]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn integration_test_struct_b(#[strategy(arb())] test_struct: BFieldCodecTestStructB) {
     let encoding = test_struct.encode();
     let decoding = *BFieldCodecTestStructB::decode(&encoding).unwrap();
@@ -45,6 +47,7 @@ enum BFieldCodecTestEnumA {
 }
 
 #[proptest]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn integration_test_enum_a(#[strategy(arb())] test_enum: BFieldCodecTestEnumA) {
     let encoding = test_enum.encode();
     let decoding = *BFieldCodecTestEnumA::decode(&encoding).unwrap();
@@ -59,6 +62,7 @@ enum BFieldCodecTestEnumB {
 }
 
 #[proptest]
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn integration_test_enum_b(#[strategy(arb())] test_enum: BFieldCodecTestEnumB) {
     let encoding = test_enum.encode();
     let decoding = *BFieldCodecTestEnumB::decode(&encoding).unwrap();
