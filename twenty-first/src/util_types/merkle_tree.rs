@@ -952,7 +952,7 @@ pub mod merkle_tree_test {
     use test_strategy::proptest;
 
     use super::*;
-    use crate::math::digest::digest_tests::DigestCorruptor;
+    use crate::tip5::digest::tests::DigestCorruptor;
 
     impl MerkleTree {
         fn test_tree_of_height(tree_height: MerkleTreeHeight) -> Self {

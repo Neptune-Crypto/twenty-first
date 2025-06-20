@@ -10,9 +10,9 @@ use rand::Rng;
 use rand::RngCore;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use twenty_first::math::bfield_codec::BFieldCodec;
-use twenty_first::math::tip5::Tip5;
-use twenty_first::util_types::merkle_tree::MerkleTree;
+use twenty_first::prelude::BFieldCodec;
+use twenty_first::prelude::MerkleTree;
+use twenty_first::prelude::Tip5;
 
 #[derive(Debug, Clone, Copy)]
 struct AuthStructureEncodingLength(f64);

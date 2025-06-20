@@ -1,6 +1,6 @@
 use super::mmr_accumulator::MmrAccumulator;
 use super::mmr_membership_proof::MmrMembershipProof;
-use crate::math::digest::Digest;
+use crate::tip5::Digest;
 
 /// A wrapper for the data needed to change the value of a leaf in an MMR when
 /// only the MMR-accumulator is known, i.e., only the peaks and the leaf-count

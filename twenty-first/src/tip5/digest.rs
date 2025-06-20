@@ -286,7 +286,7 @@ impl<'de> Deserialize<'de> for Digest {
 }
 
 #[cfg(test)]
-pub(crate) mod digest_tests {
+pub(crate) mod tests {
     use num_traits::One;
     use proptest::collection::vec;
     use proptest::prelude::Arbitrary as ProptestArbitrary;

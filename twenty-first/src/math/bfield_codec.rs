@@ -900,9 +900,9 @@ mod tests {
         use num_traits::Zero;
 
         use super::*;
-        use crate::math::digest::Digest;
-        use crate::math::tip5::Tip5;
         use crate::math::x_field_element::XFieldElement;
+        use crate::tip5::Digest;
+        use crate::tip5::Tip5;
         use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
         use crate::util_types::mmr::mmr_membership_proof::MmrMembershipProof;
 

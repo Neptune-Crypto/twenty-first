@@ -6,10 +6,10 @@ use test_strategy::proptest;
 // once per crate, at the top-level `lib.rs`.
 #[expect(clippy::single_component_path_imports)]
 use twenty_first;
-use twenty_first::math::b_field_element::BFieldElement;
-use twenty_first::math::bfield_codec::BFieldCodec;
-use twenty_first::math::digest::Digest;
-use twenty_first::math::x_field_element::XFieldElement;
+use twenty_first::prelude::BFieldCodec;
+use twenty_first::prelude::BFieldElement;
+use twenty_first::prelude::Digest;
+use twenty_first::prelude::XFieldElement;
 
 #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
 struct BFieldCodecTestStructA {

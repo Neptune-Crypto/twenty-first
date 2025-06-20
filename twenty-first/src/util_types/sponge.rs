@@ -18,8 +18,9 @@ pub enum Domain {
     /// than [`RATE`] number of field elements.
     VariableLength,
 
-    /// The `FixedLength` domain is used for hashing objects that always fit within [RATE] number
-    /// of fields elements, e.g. a pair of [Digest](crate::math::digest::Digest)s.
+    /// The `FixedLength` domain is used for hashing objects that always fit
+    /// within [RATE] number of fields elements, e.g. a pair of
+    /// [Digest](crate::prelude::Digest)s.
     FixedLength,
 }
 
@@ -63,11 +64,11 @@ mod tests {
     use rand::distr::StandardUniform;
 
     use super::*;
-    use crate::math::digest::Digest;
-    use crate::math::tip5::Tip5;
     use crate::math::x_field_element::EXTENSION_DEGREE;
     use crate::prelude::BFieldCodec;
     use crate::prelude::XFieldElement;
+    use crate::tip5::Digest;
+    use crate::tip5::Tip5;
 
     fn encode_prop<T>(smallest: T, largest: T)
     where

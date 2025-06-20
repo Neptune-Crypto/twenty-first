@@ -3,6 +3,7 @@ pub mod config;
 pub mod error;
 pub mod math;
 pub mod prelude;
+pub mod tip5;
 pub mod util_types;
 
 // This is needed for `#[derive(BFieldCodec)]` macro to work consistently across crates.

@@ -263,7 +263,7 @@ mod test {
     use test_strategy::proptest;
 
     use super::*;
-    use crate::math::digest::digest_tests::DigestCorruptor;
+    use crate::tip5::digest::tests::DigestCorruptor;
 
     /// A type exclusive to testing. Simplifies construction and verification of
     /// [`MmrSuccessorProof`]s.

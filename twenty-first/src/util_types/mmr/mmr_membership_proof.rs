@@ -639,9 +639,9 @@ mod mmr_membership_proof_test {
 
     use super::*;
     use crate::math::b_field_element::BFieldElement;
-    use crate::math::digest::Digest;
     use crate::math::other::random_elements;
-    use crate::math::tip5::Tip5;
+    use crate::tip5::Digest;
+    use crate::tip5::Tip5;
     use crate::util_types::mmr::archival_mmr::ArchivalMmr;
     use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
     use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
