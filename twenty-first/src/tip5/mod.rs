@@ -1,7 +1,10 @@
 //! The arithmetization-oriented, cryptographic hash function Tip5.
 //!
 //! This module contains the reference implementation of [“The Tip5 Hash
-//! Function for Recursive STARKs”](https://eprint.iacr.org/2023/107.pdf).
+//! Function for Recursive STARKs”](https://eprint.iacr.org/2023/107.pdf), as
+//! well as an [AVX-512](https://en.wikipedia.org/wiki/AVX-512)-accelerated
+//! implementation, which subject to conditional compilation and compatible
+//! hardware.
 
 use std::hash::Hasher;
 
@@ -29,6 +32,14 @@ pub const RATE: usize = 10;
 pub const NUM_ROUNDS: usize = 5;
 
 pub mod digest;
+
+#[cfg(all(
+    target_feature = "avx512ifma",
+    target_feature = "avx512f",
+    target_feature = "avx512bw",
+    target_feature = "avx512vbmi"
+))]
+mod avx512;
 
 /// The lookup table with a high algebraic degree used in the TIP-5 permutation. To verify its
 /// correctness, see the test “lookup_table_is_correct.”
@@ -144,29 +155,53 @@ pub const MDS_MATRIX_FIRST_COLUMN: [i64; STATE_SIZE] = [
 #[derive(
     Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary,
 )]
+#[repr(align(64))] // for SIMD, align along BFieldElement
 pub struct Tip5 {
     pub state: [BFieldElement; STATE_SIZE],
 }
 
+#[cfg(not(all(
+    target_feature = "avx512ifma",
+    target_feature = "avx512f",
+    target_feature = "avx512bw",
+    target_feature = "avx512vbmi"
+)))]
 impl Tip5 {
-    #[inline]
-    pub const fn new(domain: Domain) -> Self {
-        use Domain::*;
+    #[inline(always)]
+    fn round(&mut self, round_index: usize) {
+        self.sbox_layer();
+        self.mds_generated();
+        for i in 0..STATE_SIZE {
+            self.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
+        }
+    }
 
-        let mut state = [BFieldElement::ZERO; STATE_SIZE];
+    #[inline(always)]
+    fn round_x2(sponge0: &mut Tip5, sponge1: &mut Tip5, round_index: usize) {
+        sponge0.sbox_layer();
+        sponge1.sbox_layer();
 
-        match domain {
-            VariableLength => (),
-            FixedLength => {
-                let mut i = RATE;
-                while i < STATE_SIZE {
-                    state[i] = BFieldElement::ONE;
-                    i += 1;
-                }
-            }
+        sponge0.mds_generated();
+        sponge1.mds_generated();
+
+        for i in 0..STATE_SIZE {
+            sponge0.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
+            sponge1.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
+        }
+    }
+
+    #[inline(always)]
+    #[allow(clippy::needless_range_loop)]
+    fn sbox_layer(&mut self) {
+        for i in 0..NUM_SPLIT_AND_LOOKUP {
+            Self::split_and_lookup(&mut self.state[i]);
         }
 
-        Self { state }
+        for i in NUM_SPLIT_AND_LOOKUP..STATE_SIZE {
+            let sq = self.state[i] * self.state[i];
+            let qu = sq * sq;
+            self.state[i] *= sq * qu;
+        }
     }
 
     #[inline]
@@ -460,27 +495,25 @@ impl Tip5 {
             node_159.wrapping_sub(node_1657),
         ]
     }
+}
 
-    #[inline(always)]
-    fn sbox_layer(&mut self) {
-        for i in 0..NUM_SPLIT_AND_LOOKUP {
-            Self::split_and_lookup(&mut self.state[i]);
+impl Tip5 {
+    #[inline]
+    pub const fn new(domain: Domain) -> Self {
+        let mut state = const { [BFieldElement::ZERO; STATE_SIZE] };
+
+        match domain {
+            Domain::VariableLength => (),
+            Domain::FixedLength => {
+                let mut i = RATE;
+                while i < STATE_SIZE {
+                    state[i] = BFieldElement::ONE;
+                    i += 1;
+                }
+            }
         }
 
-        for i in NUM_SPLIT_AND_LOOKUP..STATE_SIZE {
-            let sq = self.state[i] * self.state[i];
-            let qu = sq * sq;
-            self.state[i] *= sq * qu;
-        }
-    }
-
-    #[inline(always)]
-    fn round(&mut self, round_index: usize) {
-        self.sbox_layer();
-        self.mds_generated();
-        for i in 0..STATE_SIZE {
-            self.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
-        }
+        Self { state }
     }
 
     #[inline(always)]
@@ -524,6 +557,27 @@ impl Tip5 {
 
         // squeeze once
         sponge.state[..Digest::LEN].try_into().unwrap()
+    }
+
+    pub fn hash_10_x2(
+        input0: &[BFieldElement; 10],
+        input1: &[BFieldElement; 10],
+    ) -> ([BFieldElement; Digest::LEN], [BFieldElement; Digest::LEN]) {
+        let mut sponge0 = Self::new(Domain::FixedLength);
+        let mut sponge1 = Self::new(Domain::FixedLength);
+
+        // absorb once
+        sponge0.state[..10].copy_from_slice(input0);
+        sponge1.state[..10].copy_from_slice(input1);
+
+        // apply permutation
+        for i in 0..NUM_ROUNDS {
+            Self::round_x2(&mut sponge0, &mut sponge1, i);
+        }
+
+        // squeeze once
+        let squeeze = |sponge: Self| sponge.state[..Digest::LEN].try_into().unwrap();
+        (squeeze(sponge0), squeeze(sponge1))
     }
 
     /// Hash two [`Digest`]s together.
@@ -1126,40 +1180,42 @@ pub(crate) mod tests {
         println!("agreement with low-degree function: {equal_count}");
     }
 
+    /// A snapshot of a [`Digest`], in hexadecimal form. The exact procedure to
+    /// arrive at the `Digest` in question is involved and best read from the
+    /// code below.
+    ///
+    /// It is paramount that Tip5 has at least some snapshot tests. The reason
+    /// is that (with the current implementation), conditional compilation
+    /// changes the concrete instructions that make up Tip5. Testing different
+    /// binaries for equivalent behavior is easiest when that behavior is pinned
+    /// through snapshots.
+    const MAGIC_SNAPSHOT_HEX: &str =
+        "109cc2fe453bd9962f754b96d8f5b919b60af030940a275f5540da195fef65ee651c1b6fa19b2c6a";
+
     #[test]
-    fn hash10_test_vectors() {
+    fn hash10_test_vectors_snapshot() {
         let mut preimage = [BFieldElement::ZERO; RATE];
-        let mut digest: [BFieldElement; Digest::LEN];
         for i in 0..6 {
-            digest = Tip5::hash_10(&preimage);
-            println!(
-                "{:?} -> {:?}",
-                preimage.iter().map(|b| b.value()).collect_vec(),
-                digest.iter().map(|b| b.value()).collect_vec()
-            );
-            preimage[i..Digest::LEN + i].copy_from_slice(&digest);
+            let digest = Tip5::hash_10(&preimage);
+            preimage[i..i + Digest::LEN].copy_from_slice(&digest);
         }
-        digest = Tip5::hash_10(&preimage);
-        println!(
-            "{:?} -> {:?}",
-            preimage.iter().map(|b| b.value()).collect_vec(),
-            digest.iter().map(|b| b.value()).collect_vec()
-        );
-        let final_digest = [
-            10869784347448351760,
-            1853783032222938415,
-            6856460589287344822,
-            17178399545409290325,
-            7650660984651717733,
-        ]
-        .map(BFieldElement::new);
-        assert_eq!(
-            digest,
-            final_digest,
-            "expected: {:?}\nbut got: {:?}",
-            final_digest.map(|d| d.value()),
-            digest.map(|d| d.value()),
-        )
+        let final_digest = Digest::new(Tip5::hash_10(&preimage)).to_hex();
+        assert_eq!(MAGIC_SNAPSHOT_HEX, final_digest);
+    }
+
+    #[test]
+    fn hash10_x2_test_vectors_snapshot() {
+        let mut preimage_0 = [BFieldElement::ZERO; RATE];
+        let mut preimage_1 = [BFieldElement::ZERO; RATE];
+        for i in 0..6 {
+            let (digest_0, digest_1) = Tip5::hash_10_x2(&preimage_0, &preimage_1);
+            preimage_0[i..i + Digest::LEN].copy_from_slice(&digest_0);
+            preimage_1[i..i + Digest::LEN].copy_from_slice(&digest_1);
+        }
+        let (digest_0, digest_1) = Tip5::hash_10_x2(&preimage_0, &preimage_1);
+
+        assert_eq!(MAGIC_SNAPSHOT_HEX, Digest::new(digest_0).to_hex());
+        assert_eq!(MAGIC_SNAPSHOT_HEX, Digest::new(digest_1).to_hex());
     }
 
     #[test]
@@ -1168,34 +1224,16 @@ pub(crate) mod tests {
         for i in 0..20 {
             let preimage = (0..i).map(BFieldElement::new).collect_vec();
             let digest = Tip5::hash_varlen(&preimage);
-            println!(
-                "{:?} -> {:?}",
-                preimage.iter().map(|b| b.value()).collect_vec(),
-                digest.values().iter().map(|b| b.value()).collect_vec()
-            );
             digest_sum
                 .iter_mut()
                 .zip(digest.values().iter())
                 .for_each(|(s, d)| *s += *d);
         }
-        println!(
-            "sum of digests: {:?}",
-            digest_sum.iter().map(|b| b.value()).collect_vec()
-        );
-        let expected_sum = [
-            7610004073009036015,
-            5725198067541094245,
-            4721320565792709122,
-            1732504843634706218,
-            259800783350288362,
-        ]
-        .map(BFieldElement::new);
+
+        let final_digest = Digest::new(digest_sum).to_hex();
         assert_eq!(
-            expected_sum,
-            digest_sum,
-            "expected: {:?}\nbut got: {:?}",
-            expected_sum.map(|s| s.value()),
-            digest_sum.map(|s| s.value())
+            "efbafa86622a9c69652f8a1c4ffd734f021ad23a0a8085412a877de0f9170b18ea4ff69b6fff9a03",
+            final_digest,
         );
     }
 
@@ -1208,7 +1246,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn hash_var_len_equivalence_corner_cases() {
+    fn hash_var_len_equivalence_edge_cases() {
         for preimage_length in 0..=11 {
             let preimage = vec![BFieldElement::new(42); preimage_length];
             let hash_varlen_digest = Tip5::hash_varlen(&preimage);
@@ -1262,7 +1300,7 @@ pub(crate) mod tests {
         sponge.state = [BFieldElement::ZERO; STATE_SIZE];
         sponge.state[0] = BFieldElement::ONE;
 
-        sponge.mds_generated();
+        sponge.mds_cyclomul();
 
         let mut mat_first_row = [BFieldElement::ZERO; STATE_SIZE];
         mat_first_row[0] = sponge.state[0];
@@ -1287,7 +1325,7 @@ pub(crate) mod tests {
 
         let mut sponge_2 = Tip5::init();
         sponge_2.state = initial_state;
-        sponge_2.mds_generated();
+        sponge_2.mds_cyclomul();
 
         assert_eq!(sponge_2.state, mv);
     }
@@ -1337,28 +1375,24 @@ pub(crate) mod tests {
         assert_ne!(product, XFieldElement::ZERO); // false failure with prob ~2^{-192}
     }
 
-    #[test]
-    fn test_mds_agree() {
-        let mut rng = rand::rng();
-        let initial_state: [BFieldElement; STATE_SIZE] = (0..STATE_SIZE)
-            .map(|_| BFieldElement::new(rng.random_range(0..10)))
-            .collect_vec()
-            .try_into()
-            .unwrap();
-
-        let mut sponge_cyclomut = Tip5 {
-            state: initial_state,
-        };
-        let mut sponge_generated = Tip5 {
-            state: initial_state,
-        };
+    // Function `mds_generated` is not available if the AVX-512 functions are.
+    #[cfg(not(all(
+        target_feature = "avx512ifma",
+        target_feature = "avx512f",
+        target_feature = "avx512bw",
+        target_feature = "avx512vbmi"
+    )))]
+    #[proptest]
+    fn test_mds_matrix_mul_methods_agree(state: [BFieldElement; STATE_SIZE]) {
+        let mut sponge_cyclomut = Tip5 { state };
+        let mut sponge_generated = Tip5 { state };
 
         sponge_cyclomut.mds_cyclomul();
         sponge_generated.mds_generated();
 
-        assert_eq!(
-            sponge_cyclomut,
-            sponge_generated,
+        prop_assert_eq!(
+            &sponge_cyclomut,
+            &sponge_generated,
             "cyclomul =/= generated\n{}\n{}",
             sponge_cyclomut.state.into_iter().join(","),
             sponge_generated.state.into_iter().join(",")

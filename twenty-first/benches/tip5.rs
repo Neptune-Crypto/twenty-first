@@ -15,6 +15,7 @@ criterion_group!(
     config = Criterion::default().measurement_time(Duration::from_secs(8));
     targets =
         hash_10,
+        hash_10_x2,
         hash_pair,
         hash_varlen::<10>,
         hash_varlen::<16_384>,
@@ -24,6 +25,11 @@ criterion_group!(
 fn hash_10(c: &mut Criterion) {
     let input = random();
     c.bench_function("hash_10", |b| b.iter(|| Tip5::hash_10(&input)));
+}
+
+fn hash_10_x2(c: &mut Criterion) {
+    let [left, right] = random();
+    c.bench_function("hash_10_x2", |b| b.iter(|| Tip5::hash_10_x2(&left, &right)));
 }
 
 fn hash_pair(c: &mut Criterion) {
