@@ -12,8 +12,11 @@ use arbitrary::Arbitrary;
 pub use digest::Digest;
 use get_size2::GetSize;
 use itertools::Itertools;
+use itertools::izip;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
+use rayon::prelude::IndexedParallelIterator;
+use rayon::prelude::IntoParallelIterator;
 use rayon::prelude::ParallelIterator;
 use rayon::prelude::ParallelSlice;
 use serde::Deserialize;
@@ -667,6 +670,135 @@ impl Tip5 {
         Digest::new(produce)
     }
 
+    /// Like [`hash_varlen`](Self::hash_varlen) but for many inputs.
+    ///
+    /// Uses [`rayon`] for parallelization and, if available, SIMD-accelerated
+    /// hashing.
+    ///
+    /// Because there is a certain amount of inherent overhead in creating the
+    /// parallel iterator, this function only presents a speedup if the length
+    /// of the outer slice is not too short. Note that, if available,
+    /// [`hash_varlen`](Self::hash_varlen) also benefits from vectorization,
+    /// i.e., SIMD. However, the benefits are greater with this function.
+    ///
+    /// The benefits of vectorization are greatest if the inner slices are (at
+    /// least roughly) of the same length. However, this is not a requirement
+    /// for the function's correctness.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use twenty_first::prelude::*;
+    /// # let input = vec![bfe_vec![3; 17], bfe_vec![4; 19], bfe_vec![5; 21]];
+    /// # let input = input.iter().map(|row| row.as_slice()).collect::<Vec<_>>();
+    /// let many = Tip5::hash_varlen_many(&input);
+    /// let solo = input.into_iter().map(Tip5::hash_varlen).collect::<Vec<_>>();
+    /// assert_eq!(solo, many);
+    /// ```
+    //
+    // Ferdinand, the initial author, thinks the innards of this function are a
+    // hot mess. There is a significant amount of code duplication, verbosity,
+    // and just all-around ugh. He'd gladly welcome improvements.
+    pub fn hash_varlen_many(input: &[&[BFieldElement]]) -> Vec<Digest> {
+        #[inline]
+        fn absorb_x2(
+            left: &mut Tip5,
+            right: &mut Tip5,
+            left_chunk: &[BFieldElement; RATE],
+            right_chunk: &[BFieldElement; RATE],
+        ) {
+            for (l, r, l_element, r_element) in
+                izip!(&mut left.state, &mut right.state, left_chunk, right_chunk)
+            {
+                *l = *l_element;
+                *r = *r_element;
+            }
+
+            // apply permutation
+            for i in 0..NUM_ROUNDS {
+                Tip5::round_x2(left, right, i); // the _entire_ point
+            }
+        }
+
+        // duplicated-then-modified `Sponge::pad_and_absorb_all`
+        #[inline]
+        fn pad_and_absorb_all_x2(
+            left: &mut Tip5,
+            right: &mut Tip5,
+            left_input: &[BFieldElement],
+            right_input: &[BFieldElement],
+        ) {
+            let mut left_chunks = left_input.chunks_exact(RATE);
+            let mut right_chunks = right_input.chunks_exact(RATE);
+
+            // It _feels_ like this is a clear case for `.zip()`. However,
+            // `Zip::next()` is roughly implemented like so:
+            //
+            // fn next(&mut self) -> Option<(A::Item, B::Item)> {
+            //     let x = self.a.next()?;
+            //     let y = self.b.next()?;
+            //     Some((x, y))
+            // }
+            //
+            // In the scenario where `self.a` is longer than `self.b`, this will
+            // advance `self.a`, then return early, discarding `x`. Generally
+            // speaking, there is no way to get `x` back. Hence, this
+            // roundabout, not particularly elegant way to iterate.
+            while left_chunks.len() != 0 && right_chunks.len() != 0 {
+                // `chunks_exact` yields only chunks of length RATE; unwrap is fine
+                let left_chunk = left_chunks.next().unwrap().try_into().unwrap();
+                let right_chunk = right_chunks.next().unwrap().try_into().unwrap();
+                absorb_x2(left, right, left_chunk, right_chunk);
+            }
+
+            // non-vectorized stuff
+            for chunk in left_chunks.by_ref() {
+                left.absorb(chunk.try_into().unwrap());
+            }
+            for chunk in right_chunks.by_ref() {
+                right.absorb(chunk.try_into().unwrap());
+            }
+
+            // last absorption can be vectorized again
+            let left_last_chunk = last_chunk(left_chunks);
+            let right_last_chunk = last_chunk(right_chunks);
+            absorb_x2(left, right, &left_last_chunk, &right_last_chunk);
+        }
+
+        #[inline]
+        /// Pad input with [1, 0, 0, …]. Padding is at least one element.
+        fn last_chunk(chunks: core::slice::ChunksExact<BFieldElement>) -> [BFieldElement; RATE] {
+            // remainder's len is at most `RATE - 1`, i.e., indexing is safe
+            let remainder = chunks.remainder();
+            let mut chunk = const { [BFieldElement::ZERO; RATE] };
+            chunk[..remainder.len()].copy_from_slice(remainder);
+            chunk[remainder.len()] = BFieldElement::ONE;
+            chunk
+        }
+
+        vec![const { Self::new(Domain::VariableLength) }; input.len()]
+            .into_par_iter()
+            .zip(input)
+            .chunks(2)
+            .flat_map(|chunk| {
+                let mut chunk = chunk.into_iter();
+                let (mut left, left_input) = chunk.next().unwrap();
+                if let Some((mut right, right_input)) = chunk.next() {
+                    debug_assert!(chunk.next().is_none());
+                    pad_and_absorb_all_x2(&mut left, &mut right, left_input, right_input);
+                    let left_digest = left.state[..Digest::LEN].try_into().unwrap();
+                    let right_digest = right.state[..Digest::LEN].try_into().unwrap();
+                    [left_digest, right_digest].map(Digest::new).map(Some)
+                } else {
+                    left.pad_and_absorb_all(left_input);
+                    let digest = left.state[..Digest::LEN].try_into().unwrap();
+                    [Some(Digest::new(digest)), None]
+                }
+            })
+            .flatten()
+            .collect()
+    }
+
     /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
     /// `upper_bound` must be a power of 2.
     ///
@@ -1315,6 +1447,38 @@ pub(crate) mod tests {
         let hash_varlen_digest = Tip5::hash_varlen(&preimage);
         let digest_through_pad_squeeze_absorb = manual_hash_varlen(&preimage);
         prop_assert_eq!(digest_through_pad_squeeze_absorb, hash_varlen_digest);
+    }
+
+    #[test]
+    fn hash_varlen_many_edge_cases() {
+        fn test(input: &[&[BFieldElement]]) {
+            let many = Tip5::hash_varlen_many(input);
+            let solo = input.iter().map(|&r| Tip5::hash_varlen(r)).collect_vec();
+            assert_eq!(solo, many);
+        }
+
+        const MAX_LEN: usize = 21;
+
+        for ((((element, len_0), len_1), len_2), outer_len) in bfe_array![0, 1, 42]
+            .into_iter()
+            .cartesian_product(0..MAX_LEN)
+            .cartesian_product(0..MAX_LEN)
+            .cartesian_product(0..MAX_LEN)
+            .cartesian_product(0..3)
+        {
+            dbg!(element, [len_0, len_1, len_2], outer_len);
+            let data = vec![element; len_0.max(len_1).max(len_2)];
+            let input = [&data[..len_0], &data[..len_1], &data[..len_2]];
+            test(&input[..outer_len]);
+        }
+    }
+
+    #[proptest]
+    fn hash_varlen_many(input: Vec<Vec<BFieldElement>>) {
+        let input = input.iter().map(|row| row.as_slice()).collect_vec();
+        let many = Tip5::hash_varlen_many(&input);
+        let solo = input.into_iter().map(Tip5::hash_varlen).collect_vec();
+        prop_assert_eq!(solo, many);
     }
 
     #[test]
