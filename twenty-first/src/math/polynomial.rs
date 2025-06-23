@@ -2115,7 +2115,9 @@ where
         }
     }
 
-    fn naive_coset_extrapolate_preprocessing(points: &[FF]) -> (ZerofierTree<FF>, Vec<FF>, usize) {
+    fn naive_coset_extrapolate_preprocessing(
+        points: &[FF],
+    ) -> (ZerofierTree<'_, FF>, Vec<FF>, usize) {
         let zerofier_tree = ZerofierTree::new_from_domain(points);
         let (shift_coefficients, tail_length) =
             Self::shift_factor_ntt_with_tail_length(&zerofier_tree.zerofier());
