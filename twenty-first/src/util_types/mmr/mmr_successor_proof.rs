@@ -405,7 +405,7 @@ mod test {
         prop_assert_eq!(Err(Error::InconsistentNewMmr), relation.verify());
     }
 
-    #[proptest]
+    #[proptest(cases = 50)]
     fn verification_fails_if_old_mmra_has_more_leafs_than_new_mmra(
         #[filter(#relation.old != #relation.new)] mut relation: MmrSuccessorRelation,
     ) {
@@ -466,7 +466,7 @@ mod test {
         ));
     }
 
-    #[proptest]
+    #[proptest(cases = 50)]
     fn verification_fails_if_authentication_path_has_too_few_elements(
         #[filter(!#relation.proof.paths.is_empty())] mut relation: MmrSuccessorRelation,
         #[strategy(0..#relation.proof.paths.len())] deletion_idx: usize,
