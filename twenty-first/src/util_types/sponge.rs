@@ -1,7 +1,5 @@
 use std::fmt::Debug;
-use std::iter;
 
-use itertools::Itertools;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
 
@@ -40,17 +38,19 @@ pub trait Sponge: Clone + Debug + Default + Send + Sync {
     fn squeeze(&mut self) -> [BFieldElement; RATE];
 
     fn pad_and_absorb_all(&mut self, input: &[BFieldElement]) {
-        // pad input with [1, 0, 0, …] – padding is at least one element
-        let padded_length = (input.len() + 1).next_multiple_of(RATE);
-        let padding_iter =
-            iter::once(&BFieldElement::ONE).chain(iter::repeat(&BFieldElement::ZERO));
-        let padded_input = input.iter().chain(padding_iter).take(padded_length);
-
-        for chunk in padded_input.chunks(RATE).into_iter() {
-            // the padded input has length some multiple of `RATE`
-            let absorb_elems = chunk.cloned().collect_vec().try_into().unwrap();
-            self.absorb(absorb_elems);
+        let mut chunks = input.chunks_exact(RATE);
+        for chunk in chunks.by_ref() {
+            // `chunks_exact` yields only chunks of length RATE; unwrap is fine
+            self.absorb(chunk.try_into().unwrap());
         }
+
+        // Pad input with [1, 0, 0, …] – padding is at least one element.
+        // Since remainder's len is at most `RATE - 1`, the indexing is safe.
+        let remainder = chunks.remainder();
+        let mut last_chunk = const { [BFieldElement::ZERO; RATE] };
+        last_chunk[..remainder.len()].copy_from_slice(remainder);
+        last_chunk[remainder.len()] = BFieldElement::ONE;
+        self.absorb(last_chunk);
     }
 }
 
