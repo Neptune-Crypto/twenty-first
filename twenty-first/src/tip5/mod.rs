@@ -14,6 +14,8 @@ use get_size2::GetSize;
 use itertools::Itertools;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
+use rayon::prelude::ParallelIterator;
+use rayon::prelude::ParallelSlice;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -547,12 +549,13 @@ impl Tip5 {
     /// instead. In some rare cases you do want to hash a fixed-length string
     /// of individual [`BFieldElement`]s, which is why this function is exposed.
     ///
-    /// See also: [`Self::hash_pair`], [`Self::hash`], [`Self::hash_varlen`].
-    pub fn hash_10(input: &[BFieldElement; 10]) -> [BFieldElement; Digest::LEN] {
+    /// See also: [`Self::hash_10_many`], [`Self::hash_pair`], [`Self::hash`],
+    /// [`Self::hash_varlen`].
+    pub fn hash_10(input: &[BFieldElement; RATE]) -> [BFieldElement; Digest::LEN] {
         let mut sponge = Self::new(Domain::FixedLength);
 
         // absorb once
-        sponge.state[..10].copy_from_slice(input);
+        sponge.state[..RATE].copy_from_slice(input);
 
         sponge.permutation();
 
@@ -560,16 +563,45 @@ impl Tip5 {
         sponge.state[..Digest::LEN].try_into().unwrap()
     }
 
+    /// Like [`hash_10`](Self::hash_10) but for many inputs.
+    ///
+    /// Uses [`rayon`] for parallelization and, if available, SIMD-accelerated
+    /// hashing.
+    ///
+    /// Because there is a certain amount of inherent overhead in creating the
+    /// parallel iterator, this function only presents a speedup if the length
+    /// of the outer slice is not too short. Note that, if available,
+    /// [`hash_10`](Self::hash_10) also benefits from vectorization, i.e., SIMD.
+    /// However, the benefits are greater with this function.
+    pub fn hash_10_many(input: &[[BFieldElement; RATE]]) -> Vec<[BFieldElement; Digest::LEN]> {
+        input
+            .par_chunks(2)
+            .flat_map(|chunk| {
+                let mut chunk = chunk.iter();
+                let first = chunk.next().unwrap();
+                if let Some(second) = chunk.next() {
+                    debug_assert!(chunk.next().is_none());
+                    Self::hash_10_x2(first, second).map(Some)
+                } else {
+                    [Some(Self::hash_10(first)), None]
+                }
+            })
+            .flatten()
+            .collect()
+    }
+
+    // Only public for benchmarking purposes.
+    #[doc(hidden)]
     pub fn hash_10_x2(
-        input0: &[BFieldElement; 10],
-        input1: &[BFieldElement; 10],
-    ) -> ([BFieldElement; Digest::LEN], [BFieldElement; Digest::LEN]) {
+        input0: &[BFieldElement; RATE],
+        input1: &[BFieldElement; RATE],
+    ) -> [[BFieldElement; Digest::LEN]; 2] {
         let mut sponge0 = Self::new(Domain::FixedLength);
         let mut sponge1 = Self::new(Domain::FixedLength);
 
         // absorb once
-        sponge0.state[..10].copy_from_slice(input0);
-        sponge1.state[..10].copy_from_slice(input1);
+        sponge0.state[..RATE].copy_from_slice(input0);
+        sponge1.state[..RATE].copy_from_slice(input1);
 
         // apply permutation
         for i in 0..NUM_ROUNDS {
@@ -578,7 +610,7 @@ impl Tip5 {
 
         // squeeze once
         let squeeze = |sponge: Self| sponge.state[..Digest::LEN].try_into().unwrap();
-        (squeeze(sponge0), squeeze(sponge1))
+        [squeeze(sponge0), squeeze(sponge1)]
     }
 
     /// Hash two [`Digest`]s together.
@@ -630,8 +662,7 @@ impl Tip5 {
     pub fn hash_varlen(input: &[BFieldElement]) -> Digest {
         let mut sponge = Self::init();
         sponge.pad_and_absorb_all(input);
-        let produce: [BFieldElement; Digest::LEN] =
-            (&sponge.state[..Digest::LEN]).try_into().unwrap();
+        let produce = (&sponge.state[..Digest::LEN]).try_into().unwrap();
 
         Digest::new(produce)
     }
@@ -745,6 +776,7 @@ pub(crate) mod tests {
     use test_strategy::proptest;
 
     use super::*;
+    use crate::bfe_array;
     use crate::math::other::random_elements;
     use crate::math::x_field_element::XFieldElement;
 
@@ -1209,11 +1241,11 @@ pub(crate) mod tests {
         let mut preimage_0 = [BFieldElement::ZERO; RATE];
         let mut preimage_1 = [BFieldElement::ZERO; RATE];
         for i in 0..6 {
-            let (digest_0, digest_1) = Tip5::hash_10_x2(&preimage_0, &preimage_1);
+            let [digest_0, digest_1] = Tip5::hash_10_x2(&preimage_0, &preimage_1);
             preimage_0[i..i + Digest::LEN].copy_from_slice(&digest_0);
             preimage_1[i..i + Digest::LEN].copy_from_slice(&digest_1);
         }
-        let (digest_0, digest_1) = Tip5::hash_10_x2(&preimage_0, &preimage_1);
+        let [digest_0, digest_1] = Tip5::hash_10_x2(&preimage_0, &preimage_1);
 
         assert_eq!(MAGIC_SNAPSHOT_HEX, Digest::new(digest_0).to_hex());
         assert_eq!(MAGIC_SNAPSHOT_HEX, Digest::new(digest_1).to_hex());
@@ -1236,6 +1268,27 @@ pub(crate) mod tests {
             "efbafa86622a9c69652f8a1c4ffd734f021ad23a0a8085412a877de0f9170b18ea4ff69b6fff9a03",
             final_digest,
         );
+    }
+
+    #[test]
+    fn hash_10_many_edge_cases() {
+        fn test(input: &[[BFieldElement; RATE]]) {
+            let many = Tip5::hash_10_many(input);
+            let solo = input.iter().map(Tip5::hash_10).collect_vec();
+            assert_eq!(solo, many);
+        }
+
+        for (element, len) in bfe_array![0, 1, 42].into_iter().cartesian_product(0..=20) {
+            dbg!(element, len);
+            test(&vec![[element; RATE]; len]);
+        }
+    }
+
+    #[proptest]
+    fn hash_10_many(input: Vec<[BFieldElement; RATE]>) {
+        let many = Tip5::hash_10_many(&input);
+        let solo = input.iter().map(Tip5::hash_10).collect_vec();
+        prop_assert_eq!(solo, many);
     }
 
     fn manual_hash_varlen(preimage: &[BFieldElement]) -> Digest {

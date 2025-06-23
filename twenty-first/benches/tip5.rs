@@ -16,6 +16,8 @@ criterion_group!(
     targets =
         hash_10,
         hash_10_x2,
+        hash_10_many::<2>,
+        hash_10_many::<200>,
         hash_pair,
         hash_varlen::<10>,
         hash_varlen::<16_384>,
@@ -30,6 +32,14 @@ fn hash_10(c: &mut Criterion) {
 fn hash_10_x2(c: &mut Criterion) {
     let [left, right] = random();
     c.bench_function("hash_10_x2", |b| b.iter(|| Tip5::hash_10_x2(&left, &right)));
+}
+
+fn hash_10_many<const N: usize>(c: &mut Criterion) {
+    let elements = random::<[_; N]>();
+    c.benchmark_group("hash_10_many")
+        .bench_function(BenchmarkId::new("N", N), |b| {
+            b.iter(|| Tip5::hash_10_many(&elements))
+        });
 }
 
 fn hash_pair(c: &mut Criterion) {
