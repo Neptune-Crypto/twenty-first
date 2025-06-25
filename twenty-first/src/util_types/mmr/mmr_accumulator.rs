@@ -549,7 +549,6 @@ impl<'a> Arbitrary<'a> for MmrAccumulator {
 mod accumulator_mmr_tests {
     use std::cmp;
 
-    use insta::assert_snapshot;
     use itertools::Itertools;
     use itertools::izip;
     use num_traits::ConstZero;
@@ -1029,19 +1028,31 @@ mod accumulator_mmr_tests {
 
     #[test]
     fn bag_peaks_snapshot() {
+        let snapshot = |mmr: MmrAccumulator| mmr.bag_peaks().to_hex();
         let mut rng = StdRng::seed_from_u64(0x92ca758afeec6d29);
 
-        let empty_mmr = MmrAccumulator::new_from_leafs(vec![]);
-        assert_snapshot!(empty_mmr.bag_peaks().0[0], @"00941080798860502477");
+        let empty = MmrAccumulator::new_from_leafs(vec![]);
+        assert_eq!(
+            "cd65052100640f0d27e5654f97c47e49899add2f265967ccbefee7264e9bc08f588542d9dc3d5ac5",
+            snapshot(empty),
+        );
 
-        let one_leaf_mmr = MmrAccumulator::new_from_leafs(vec![rng.random()]);
-        assert_snapshot!(one_leaf_mmr.bag_peaks().0[0], @"16030278140236594076");
+        let one_leaf = MmrAccumulator::new_from_leafs(vec![rng.random()]);
+        assert_eq!(
+            "9cfb825709fd76de8c24daf437e1bd16a2ea512f2d2338ee417df51dae55905a49628d4f13a2f83e",
+            snapshot(one_leaf),
+        );
 
-        let two_leafs_mmr = MmrAccumulator::new_from_leafs(vec![rng.random()]);
-        assert_snapshot!(two_leafs_mmr.bag_peaks().0[0], @"09405464453414142998");
+        let two_leafs = MmrAccumulator::new_from_leafs(rng.random::<[_; 2]>().to_vec());
+        assert_eq!(
+            "20a22079d30e76c93215f54d986d414d657d4bd056fe8e9a38e87d432ce391cd1dab92f9b6d3442c",
+            snapshot(two_leafs),
+        );
 
-        let ten_peaks: [Digest; 10] = rng.random();
-        let ten_peak_mmr = MmrAccumulator::init(ten_peaks.to_vec(), 0b11_1111_1111);
-        assert_snapshot!(ten_peak_mmr.bag_peaks().0[0], @"03780783030734820370");
+        let ten_peaks = MmrAccumulator::init(rng.random::<[_; 10]>().to_vec(), 0b11_1111_1111);
+        assert_eq!(
+            "42dbf8fcf51d4d8134f719ad9a3a9c621a141b3bc8d7941e8baf5919bceea120e6ecf6314e939b87",
+            snapshot(ten_peaks),
+        );
     }
 }

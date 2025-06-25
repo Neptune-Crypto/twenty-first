@@ -735,7 +735,6 @@ pub(crate) mod tip5_tests {
     use std::hash::Hash;
     use std::ops::Mul;
 
-    use insta::assert_snapshot;
     use prop::sample::size_range;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
@@ -1147,11 +1146,11 @@ pub(crate) mod tip5_tests {
     }
 
     #[test]
-    fn tip5_hasher_trait_test() {
+    fn tip5_hasher_trait_snapshot_test() {
         let mut hasher = Tip5::init();
         let data = b"hello world";
         hasher.write(data);
-        assert_snapshot!(hasher.finish(), @"2267905471610932299");
+        assert_eq!(hasher.finish(), 2267905471610932299);
     }
 
     #[proptest]
