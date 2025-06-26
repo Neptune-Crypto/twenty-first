@@ -24,18 +24,8 @@ use crate::prelude::Tip5;
 /// The result of hashing a sequence of elements, for example using [Tip5].
 /// Sometimes called a “hash”.
 // note: Serialize and Deserialize have custom implementations below
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, BFieldCodec, Arbitrary)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, GetSize, BFieldCodec, Arbitrary)]
 pub struct Digest(pub [BFieldElement; Digest::LEN]);
-
-impl GetSize for Digest {
-    fn get_stack_size() -> usize {
-        std::mem::size_of::<Self>()
-    }
-
-    fn get_heap_size(&self) -> usize {
-        0
-    }
-}
 
 impl PartialOrd for Digest {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {

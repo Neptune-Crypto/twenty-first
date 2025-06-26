@@ -79,7 +79,7 @@ const PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 ///
 /// In Montgomery representation. This implementation follows <https://eprint.iacr.org/2022/274.pdf>
 /// and <https://github.com/novifinancial/winterfell/pull/101/files>.
-#[derive(Debug, Copy, Clone, Default, Hash, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Default, Hash, PartialEq, Eq, GetSize)]
 #[repr(transparent)]
 pub struct BFieldElement(u64);
 
@@ -161,16 +161,6 @@ macro_rules! bfe_array {
     ($($b:expr),* $(,)?) => {
         [$(BFieldElement::from($b)),*]
     };
-}
-
-impl GetSize for BFieldElement {
-    fn get_stack_size() -> usize {
-        std::mem::size_of::<Self>()
-    }
-
-    fn get_heap_size(&self) -> usize {
-        0
-    }
 }
 
 impl<'a> Arbitrary<'a> for BFieldElement {
