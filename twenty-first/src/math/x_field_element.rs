@@ -667,12 +667,12 @@ mod tests {
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
 
+    use super::*;
     use crate::bfe;
     use crate::math::b_field_element::*;
     use crate::math::ntt::intt;
     use crate::math::ntt::ntt;
     use crate::math::other::random_elements;
-    use crate::math::x_field_element::*;
 
     impl proptest::arbitrary::Arbitrary for XFieldElement {
         type Parameters = ();
@@ -1286,5 +1286,11 @@ mod tests {
     fn xfe_macro_produces_same_result_as_calling_new_const(scalar: BFieldElement) {
         let xfe = XFieldElement::new_const(scalar);
         prop_assert_eq!(xfe, xfe!(scalar));
+    }
+
+    #[proptest]
+    fn as_flat_slice_produces_expected_slices(xfes: Vec<XFieldElement>) {
+        let bfes = xfes.iter().flat_map(|&x| x.coefficients).collect_vec();
+        prop_assert_eq!(&bfes, as_flat_slice(&xfes));
     }
 }
