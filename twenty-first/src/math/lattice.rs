@@ -814,8 +814,12 @@ pub mod kem {
 
     #[cfg(test)]
     mod test {
+        #[cfg(target_arch = "wasm32")]
+        use wasm_bindgen_test::*;
+
         use super::*;
 
+        #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
         #[test]
         fn secret_key_zeroize_test() {
             let mut secret_key = SecretKey {
@@ -840,6 +844,8 @@ mod lattice_test {
     use rand::random;
     use sha3::Digest as Sha3Digest;
     use sha3::Sha3_256;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use super::kem::CIPHERTEXT_SIZE_IN_BFES;
     use super::kem::SecretKey;
@@ -849,6 +855,7 @@ mod lattice_test {
     use crate::math::lattice::kem::PublicKey;
     use crate::math::lattice::*;
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_kats() {
         // KATs lifted from
@@ -868,6 +875,7 @@ mod lattice_test {
         assert_eq!(expected_output_sha3_256, &*sha3_out);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_fast_mul() {
         let a: [BFieldElement; 64] = random();
@@ -891,6 +899,7 @@ mod lattice_test {
         assert_eq!(c_fast, c_schoolbook);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_embedding() {
         let mut rng = rand::rng();
@@ -905,6 +914,7 @@ mod lattice_test {
         assert_eq!(msg, extracted);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_module_distributivity() {
         let mut rng = rand::rng();
@@ -928,6 +938,7 @@ mod lattice_test {
         assert_eq!(sumprod, prodsum);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_module_multiply() {
         let mut rng = rand::rng();
@@ -947,6 +958,7 @@ mod lattice_test {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_kem() {
         let mut rng = rand::rng();
@@ -969,6 +981,7 @@ mod lattice_test {
         assert!(kem::dec(other_sk, ctxt).is_none());
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn test_ciphertext_conversion() {
         let bfes: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] = random();
@@ -980,6 +993,7 @@ mod lattice_test {
         assert_eq!(ciphertext, ciphertext_again);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn zero_test() {
         let zero_me = ModuleElement::<4>::zero();
@@ -992,6 +1006,7 @@ mod lattice_test {
         assert!(!not_zero.is_zero(), "not-zero must be not be zero");
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn serialization_deserialization_test() {
         // This is tested here since the serialization for these objects is a bit more complicated

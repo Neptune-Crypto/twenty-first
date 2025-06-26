@@ -1,2 +1,7 @@
 [target.wasm32-unknown-unknown]
-rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]
+rustflags = [
+  "--cfg", "getrandom_backend=\"wasm_js\"",
+  "-C", "debuginfo=0",
+  "-C", "strip=symbols",
+]
+runner = "wasm-bindgen-test-runner"

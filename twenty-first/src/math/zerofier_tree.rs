@@ -107,15 +107,19 @@ mod test {
     use proptest::prop_assert_eq;
     use proptest_arbitrary_interop::arb;
     use test_strategy::proptest;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::*;
 
     use crate::math::zerofier_tree::ZerofierTree;
     use crate::prelude::BFieldElement;
     use crate::prelude::Polynomial;
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[test]
     fn zerofier_tree_can_be_empty() {
         ZerofierTree::<BFieldElement>::new_from_domain(&[]);
     }
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn zerofier_tree_root_is_multiple_of_children(
         #[strategy(vec(arb(), 2*ZerofierTree::<BFieldElement>::RECURSION_CUTOFF_THRESHOLD))]
@@ -135,6 +139,7 @@ mod test {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn zerofier_tree_root_has_right_degree(
         #[strategy(vec(arb(), 1..(1<<10)))] points: Vec<BFieldElement>,
@@ -143,6 +148,7 @@ mod test {
         prop_assert_eq!(points.len(), zerofier_tree.zerofier().degree() as usize);
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn zerofier_tree_root_zerofies(
         #[strategy(vec(arb(), 1..(1<<10)))] points: Vec<BFieldElement>,
@@ -155,6 +161,7 @@ mod test {
         );
     }
 
+    #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
     #[proptest]
     fn zerofier_tree_and_polynomial_agree_on_zerofiers(
         #[strategy(vec(arb(), 1..(1<<10)))] points: Vec<BFieldElement>,
