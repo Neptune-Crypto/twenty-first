@@ -38,6 +38,7 @@ pub const EXTENSION_DEGREE: usize = 3;
 #[derive(
     Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize, BFieldCodec, Arbitrary,
 )]
+#[repr(transparent)]
 pub struct XFieldElement {
     pub coefficients: [BFieldElement; EXTENSION_DEGREE],
 }
@@ -175,6 +176,80 @@ macro_rules! xfe_array {
     ($([$c0:expr, $c1:expr, $c2:expr]),* $(,)?) => {
         [$(XFieldElement::from([$c0, $c1, $c2])),*]
     };
+}
+
+/// Re-interpret a slice of [`XFieldElement`]s as a slice of [`BFieldElement`]s
+/// without any memory allocation.
+///
+/// This function is semantically similar to [flat-mapping] the coefficients of
+/// the `XFieldElement`s (see examples). However, this function does not perform
+/// any memory allocation, which makes is particularly useful in
+/// high-performance scenarios.
+///
+/// # Examples
+///
+/// Re-interpretation behaves like flattening, but does not allocate or copy any
+/// data.
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// # use twenty_first::math::x_field_element::as_flat_slice;
+/// let xfes = xfe_vec![[17, 18, 19], [42, 42, 44], [97, 98, 99]];
+/// let bfes = bfe_vec![17, 18, 19, 42, 42, 44, 97, 98, 99];
+/// assert_eq!(&bfes, as_flat_slice(&xfes));
+/// ```
+///
+/// This can be particularly useful for hashing sequences of [`XFieldElement]`s,
+/// where ownership is irrelevant:
+///
+/// ```
+/// # use twenty_first::prelude::*;
+/// # use twenty_first::math::x_field_element::as_flat_slice;
+/// let xfes = xfe_vec![42; 17];
+/// let xfe_digest = Tip5::hash_varlen(as_flat_slice(&xfes));
+///
+/// // alternative requires copying data
+/// let bfes = xfes.into_iter().flat_map(|xfe| xfe.coefficients).collect::<Vec<_>>();
+/// let bfe_digest = Tip5::hash_varlen(&bfes);
+///
+/// assert_eq!(bfe_digest, xfe_digest);
+/// ```
+///
+/// [hashing]: crate::tip5::Tip5::hash_varlen
+/// [Tip5]: crate::tip5::Tip5
+/// [flat-mapping]: Iterator::flat_map
+pub fn as_flat_slice(xfe_slice: &[XFieldElement]) -> &[BFieldElement] {
+    let slice_pointer = xfe_slice.as_ptr() as *const BFieldElement;
+    let bfe_slice_len = xfe_slice.len() * EXTENSION_DEGREE;
+
+    // SAFETY:
+    // - The slice_pointer is non-null, and is valid for reads for
+    //   xfe_slice.len() * size_of::<XFieldElement>() ==
+    //   xfe_slice.len() * size_of::<BFieldElement>() * EXTENSION_DEGREE
+    //   many bytes, and is properly aligned because both BFieldElement and
+    //   XFieldElement are #[repr(transparent)]. In particular:
+    //   - The entire memory range of the slice is contained within a single
+    //     allocated object. This is because of
+    //     (a) the origin of `slice_pointer` being a slice, and
+    //     (b) the layout and ABI of XFieldElement is identical to
+    //         [BFieldElement; EXTENSION_DEGREE] because of
+    //         #[repr(transparent)]
+    //   - The slice_pointer is non-null and aligned, again because of
+    //     #[repr(transparent)] on BFieldElement and XFieldElement.
+    // - The slice_pointer points to xfe_slice.len() * EXTENSION_DEGREE
+    //   consecutive properly initialized values of type BFieldElement,
+    //   again because of #[repr(transparent)] on BFieldElement and
+    //   XFieldElement.
+    // - The memory referenced by the returned slice cannot be mutated for
+    //   the duration of the lifetime of xfe_slice thanks to rust's
+    //   “mut XOR shared” compile time guarantees.
+    // - The total size of the produced slice is no larger than isize::MAX
+    //   since it is identical to the total size of the initial size, and
+    //   adding that size to the slice_pointer does not “wrap around” the
+    //   address space because both, the slice_pointer and the total size
+    //   have been obtained through safe code or unsafe code for which the
+    //   safety invariants have been upheld.
+    unsafe { std::slice::from_raw_parts(slice_pointer, bfe_slice_len) }
 }
 
 impl From<XFieldElement> for Digest {

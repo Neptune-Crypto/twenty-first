@@ -80,6 +80,7 @@ const PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 /// In Montgomery representation. This implementation follows <https://eprint.iacr.org/2022/274.pdf>
 /// and <https://github.com/novifinancial/winterfell/pull/101/files>.
 #[derive(Debug, Copy, Clone, Default, Hash, PartialEq, Eq)]
+#[repr(transparent)]
 pub struct BFieldElement(u64);
 
 /// Simplifies constructing [base field element][BFieldElement]s.
