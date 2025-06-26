@@ -1,2 +1,2 @@
 [toolchain]
-channel = "1.87.0"
+channel = "nightly-2025-06-20" # todo: change to "1.89.0" once that is stable
