@@ -813,7 +813,8 @@ pub mod kem {
     }
 
     #[cfg(test)]
-    mod test {
+    #[cfg_attr(coverage_nightly, coverage(off))]
+    mod tests {
         use super::*;
 
         #[test]
@@ -832,7 +833,8 @@ pub mod kem {
 }
 
 #[cfg(test)]
-mod lattice_test {
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
     use itertools::Itertools;
     use num_traits::ConstOne;
     use num_traits::Zero;

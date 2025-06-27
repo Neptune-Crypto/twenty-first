@@ -793,7 +793,8 @@ impl PrimitiveRootOfUnity for BFieldElement {
 }
 
 #[cfg(test)]
-mod b_prime_field_element_test {
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::Hasher;
 

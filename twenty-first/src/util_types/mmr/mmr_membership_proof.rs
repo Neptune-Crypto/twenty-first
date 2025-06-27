@@ -630,7 +630,8 @@ impl MmrMembershipProof {
 }
 
 #[cfg(test)]
-mod mmr_membership_proof_test {
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
     use itertools::Itertools;
     use proptest_arbitrary_interop::arb;
     use rand::Rng;

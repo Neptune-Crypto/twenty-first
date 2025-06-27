@@ -1,4 +1,18 @@
 #![deny(clippy::shadow_unrelated)]
+//
+// If code coverage tool `cargo-llvm-cov` is running with the nightly toolchain,
+// enable the unstable “coverage” attribute. This allows using the annotation
+// `#[coverage(off)]` to explicitly exclude certain parts of the code from
+// being considered as “code under test.” Most prominently, the annotation
+// should be added to every `#[cfg(test)]` module. Since the “coverage”
+// feature is enable only conditionally, the annotation to use is:
+// #[cfg_attr(coverage_nightly, coverage(off))]
+//
+// See also:
+// - https://github.com/taiki-e/cargo-llvm-cov#exclude-code-from-coverage
+// - https://github.com/rust-lang/rust/issues/84605
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+
 pub mod config;
 pub mod error;
 pub mod math;
@@ -20,6 +34,7 @@ extern crate self as twenty_first;
 pub use bfieldcodec_derive;
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) mod tests {
     use prelude::*;
 

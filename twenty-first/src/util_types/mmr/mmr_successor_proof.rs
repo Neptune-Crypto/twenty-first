@@ -254,7 +254,8 @@ enum Error {
 }
 
 #[cfg(test)]
-mod test {
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
     use std::ops::Range;
 
     use itertools::Itertools;

@@ -677,7 +677,8 @@ impl Hasher for Tip5 {
 }
 
 #[cfg(test)]
-pub(crate) mod tip5_tests {
+#[cfg_attr(coverage_nightly, coverage(off))]
+pub(crate) mod tests {
     use std::hash::Hash;
     use std::ops::Mul;
 

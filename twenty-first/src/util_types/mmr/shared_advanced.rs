@@ -277,7 +277,8 @@ pub fn node_index_to_leaf_index(node_index: u64) -> Option<u64> {
 }
 
 #[cfg(test)]
-mod mmr_test {
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
     use proptest::prelude::Just;
     use proptest::prop_assert_eq;
     use rand::RngCore;

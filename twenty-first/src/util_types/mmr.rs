@@ -6,6 +6,7 @@ pub mod shared_advanced;
 pub mod shared_basic;
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) mod archival_mmr;
 
 const TOO_MANY_LEAFS_ERR: &str =

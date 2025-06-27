@@ -546,7 +546,8 @@ impl<'a> Arbitrary<'a> for MmrAccumulator {
 }
 
 #[cfg(test)]
-mod accumulator_mmr_tests {
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
     use std::cmp;
 
     use itertools::Itertools;

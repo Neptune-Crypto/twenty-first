@@ -2701,7 +2701,8 @@ where
 }
 
 #[cfg(test)]
-mod test_polynomials {
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
     use num_traits::ConstZero;
     use proptest::collection::size_range;
     use proptest::collection::vec;

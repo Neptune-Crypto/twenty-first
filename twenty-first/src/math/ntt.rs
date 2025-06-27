@@ -307,6 +307,7 @@ pub fn twiddle_factors(slice_len: u32, root_of_unity: BFieldElement) -> Vec<Vec<
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use itertools::Itertools;
     use num_traits::ConstZero;

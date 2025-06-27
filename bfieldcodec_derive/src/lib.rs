@@ -11,6 +11,9 @@
 //!   `use dep_crate::twenty_first;`
 //!
 //! Failure to do so will result in compile errors.
+//
+// See the corresponding attribute in twenty_first/lib.rs
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 
 extern crate proc_macro;
 
@@ -1173,6 +1176,7 @@ impl BFieldCodecErrorEnumBuilder {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use syn::parse_quote;
 

@@ -593,6 +593,7 @@ impl<T> BFieldCodec for PhantomData<T> {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use num_traits::ConstZero;
     use num_traits::Zero;
@@ -894,8 +895,7 @@ mod tests {
     /// See also: https://github.com/rust-lang/cargo/issues/8379#issuecomment-1261970561
     ///
     /// [^1]: almost-cyclic because the dependency would be a dev-dependency
-    #[cfg(test)]
-    pub mod derive_tests {
+    pub mod derive {
         use arbitrary::Arbitrary;
         use num_traits::Zero;
 

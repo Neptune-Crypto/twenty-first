@@ -56,6 +56,7 @@ pub trait Sponge: Clone + Debug + Default + Send + Sync {
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use std::ops::Mul;
 

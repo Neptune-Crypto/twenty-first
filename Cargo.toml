@@ -15,5 +15,8 @@ readme = "README.md"
 
 [workspace.lints]
 
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+
 [profile.release]
 lto = "thin"

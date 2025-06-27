@@ -945,7 +945,8 @@ pub enum MerkleTreeError {
 }
 
 #[cfg(test)]
-pub mod merkle_tree_test {
+#[cfg_attr(coverage_nightly, coverage(off))]
+pub(crate) mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;

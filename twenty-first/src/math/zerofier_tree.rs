@@ -100,6 +100,7 @@ where
 }
 
 #[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 mod test {
     use num_traits::ConstZero;
     use num_traits::Zero;
