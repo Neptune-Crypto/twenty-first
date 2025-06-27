@@ -3,6 +3,24 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [0.50.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.49.0..v0.50.0) – 2025-06-27
+
+### ✨ Features
+
+- Re-interpret xfe-slices as bfe-slices ([0870bf16](https://github.com/Neptune-Crypto/twenty-first/commit/0870bf16))
+
+### ⚡️ Performance
+
+- *(tip5)* Don't allocate in `pad_and_absorb_all` ([ecd5e369](https://github.com/Neptune-Crypto/twenty-first/commit/ecd5e369))
+
+### ⚙️ Miscellaneous
+
+- Add wasm feature flag ([1aeb2a21](https://github.com/Neptune-Crypto/twenty-first/commit/1aeb2a21))
+
+### ♻️ Refactor
+
+- (!) *(tip5)* Create dedicated module for Tip5 ([aedecf93](https://github.com/Neptune-Crypto/twenty-first/commit/aedecf93))
+
 ## [0.49.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.48.0..0.49.0) – 2025-06-18
 
 ### ✨ Features
