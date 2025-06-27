@@ -685,7 +685,7 @@ impl ConstOne for BFieldElement {
 impl Add for BFieldElement {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
+    #[expect(clippy::suspicious_arithmetic_impl)]
     #[inline(always)]
     fn add(self, rhs: Self) -> Self {
         // Compute a + b = a - (p - b).
@@ -747,7 +747,6 @@ impl Neg for BFieldElement {
 impl Sub for BFieldElement {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
     #[inline]
     fn sub(self, rhs: Self) -> Self {
         let (x1, c1) = self.0.overflowing_sub(rhs.0);
@@ -772,7 +771,7 @@ impl Sub for BFieldElement {
 impl Div for BFieldElement {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
+    #[expect(clippy::suspicious_arithmetic_impl)]
     fn div(self, other: Self) -> Self {
         other.inverse() * self
     }

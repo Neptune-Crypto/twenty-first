@@ -48,8 +48,7 @@ fn nop(group: &mut BenchmarkGroup<WallTime>, bench_id: BenchmarkId, size: usize)
     group.bench_with_input(bench_id, &size, |b, _| {
         b.iter(|| {
             for _ in 0..size {
-                #[allow(clippy::let_unit_value)]
-                let _ = black_box(());
+                let () = black_box(());
             }
         })
     });

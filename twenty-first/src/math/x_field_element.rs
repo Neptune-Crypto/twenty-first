@@ -624,7 +624,7 @@ impl SubAssign<BFieldElement> for XFieldElement {
 impl Div for XFieldElement {
     type Output = Self;
 
-    #[allow(clippy::suspicious_arithmetic_impl)]
+    #[expect(clippy::suspicious_arithmetic_impl)]
     fn div(self, other: Self) -> Self {
         self * other.inverse()
     }

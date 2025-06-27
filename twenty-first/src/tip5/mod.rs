@@ -174,7 +174,6 @@ impl Tip5 {
         // let value = element.value();
         let mut bytes = element.raw_bytes();
 
-        #[allow(clippy::needless_range_loop)] // faster like so
         for i in 0..8 {
             // bytes[i] = Self::offset_fermat_cube_map(bytes[i].into()) as u8;
             bytes[i] = LOOKUP_TABLE[bytes[i] as usize];
@@ -463,7 +462,6 @@ impl Tip5 {
     }
 
     #[inline(always)]
-    #[allow(clippy::needless_range_loop)]
     fn sbox_layer(&mut self) {
         for i in 0..NUM_SPLIT_AND_LOOKUP {
             Self::split_and_lookup(&mut self.state[i]);

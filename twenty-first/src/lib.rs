@@ -1,4 +1,4 @@
-#![deny(clippy::shadow_unrelated)]
+#![warn(clippy::shadow_unrelated)]
 //
 // If code coverage tool `cargo-llvm-cov` is running with the nightly toolchain,
 // enable the unstable “coverage” attribute. This allows using the annotation
