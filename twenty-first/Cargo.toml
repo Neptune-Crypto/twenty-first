@@ -18,7 +18,7 @@ categories = ["cryptography", "mathematics"]
 [dev-dependencies]
 bincode = "1.3.3"
 blake3 = "1.5.5"
-test-strategy = "0.4"
+test-strategy = "=0.4.1" # v0.4.2 produces clippy warnings; use v0.4.3 once released
 trybuild = "1.0"
 
 # dev deps for wasm32 target arch
