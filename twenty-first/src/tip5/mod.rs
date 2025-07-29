@@ -6,6 +6,7 @@
 use std::hash::Hasher;
 
 use arbitrary::Arbitrary;
+pub use digest::Digest;
 use get_size2::GetSize;
 use itertools::Itertools;
 use num_traits::ConstOne;
@@ -19,7 +20,6 @@ use crate::prelude::BFieldElement;
 use crate::prelude::XFieldElement;
 use crate::util_types::sponge::Domain;
 use crate::util_types::sponge::Sponge;
-pub use digest::Digest;
 
 pub const STATE_SIZE: usize = 16;
 pub const NUM_SPLIT_AND_LOOKUP: usize = 4;

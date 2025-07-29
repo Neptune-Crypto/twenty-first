@@ -312,11 +312,12 @@ impl ArchivalMmr {
 }
 
 mod tests {
+    use std::collections::HashSet;
+
     use itertools::Itertools;
     use itertools::izip;
     use rand::Rng;
     use rand::random;
-    use std::collections::HashSet;
 
     use super::*;
     use crate::math::b_field_element::BFieldElement;
