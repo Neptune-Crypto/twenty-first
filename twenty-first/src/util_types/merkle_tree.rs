@@ -12,6 +12,7 @@ use std::ops::Sub;
 use std::result;
 
 use arbitrary::*;
+use get_size2::GetSize;
 use itertools::Itertools;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
@@ -81,7 +82,7 @@ type Result<T> = result::Result<T, MerkleTreeError>;
 ///
 /// [1]: <https://en.wikipedia.org/wiki/Merkle_tree>
 /// [^2]: <https://github.com/Neptune-Crypto/twenty-first/pull/250#issuecomment-2782490889>
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, GetSize)]
 pub struct MerkleTree {
     nodes: Vec<Digest>,
 }
