@@ -170,6 +170,18 @@ impl fmt::Debug for BFieldElement {
     }
 }
 
+impl fmt::LowerHex for BFieldElement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fmt::LowerHex::fmt(&self.value(), f)
+    }
+}
+
+impl fmt::UpperHex for BFieldElement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fmt::UpperHex::fmt(&self.value(), f)
+    }
+}
+
 impl<'a> Arbitrary<'a> for BFieldElement {
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
         u.arbitrary().map(BFieldElement::new)
@@ -968,14 +980,26 @@ mod tests {
     fn display_test() {
         let seven = BFieldElement::new(7);
         assert_eq!("7", format!("{seven}"));
+        assert_eq!("7", format!("{seven:x}"));
+        assert_eq!("7", format!("{seven:X}"));
+        assert_eq!("0x7", format!("{seven:#x}"));
+        assert_eq!("0x7", format!("{seven:#X}"));
         assert_eq!("BFieldElement(7)", format!("{seven:?}"));
 
         let forty_two = BFieldElement::new(42);
         assert_eq!("42", format!("{forty_two}"));
+        assert_eq!("2a", format!("{forty_two:x}"));
+        assert_eq!("2A", format!("{forty_two:X}"));
+        assert_eq!("0x2a", format!("{forty_two:#x}"));
+        assert_eq!("0x2A", format!("{forty_two:#X}"));
         assert_eq!("BFieldElement(42)", format!("{forty_two:?}"));
 
         let minus_one = BFieldElement::new(BFieldElement::P - 1);
         assert_eq!("-1", format!("{minus_one}"));
+        assert_eq!("ffffffff00000000", format!("{minus_one:x}"));
+        assert_eq!("FFFFFFFF00000000", format!("{minus_one:X}"));
+        assert_eq!("0xffffffff00000000", format!("{minus_one:#x}"));
+        assert_eq!("0xFFFFFFFF00000000", format!("{minus_one:#X}"));
         assert_eq!(
             "BFieldElement(18446744069414584320)",
             format!("{minus_one:?}")
@@ -983,6 +1007,10 @@ mod tests {
 
         let minus_fifteen = BFieldElement::new(BFieldElement::P - 15);
         assert_eq!("-15", format!("{minus_fifteen}"));
+        assert_eq!("fffffffefffffff2", format!("{minus_fifteen:x}"));
+        assert_eq!("FFFFFFFEFFFFFFF2", format!("{minus_fifteen:X}"));
+        assert_eq!("0xfffffffefffffff2", format!("{minus_fifteen:#x}"));
+        assert_eq!("0xFFFFFFFEFFFFFFF2", format!("{minus_fifteen:#X}"));
         assert_eq!(
             "BFieldElement(18446744069414584306)",
             format!("{minus_fifteen:?}")
