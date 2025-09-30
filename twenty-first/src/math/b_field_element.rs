@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 use std::fmt;
+use std::fmt::Formatter;
 use std::hash::Hash;
 use std::iter::Sum;
 use std::num::TryFromIntError;
@@ -79,7 +80,7 @@ const PRIMITIVE_ROOTS: phf::Map<u64, u64> = phf_map! {
 ///
 /// In Montgomery representation. This implementation follows <https://eprint.iacr.org/2022/274.pdf>
 /// and <https://github.com/novifinancial/winterfell/pull/101/files>.
-#[derive(Debug, Copy, Clone, Default, Hash, PartialEq, Eq, GetSize)]
+#[derive(Copy, Clone, Default, Hash, PartialEq, Eq, GetSize)]
 #[repr(transparent)]
 pub struct BFieldElement(u64);
 
@@ -161,6 +162,12 @@ macro_rules! bfe_array {
     ($($b:expr),* $(,)?) => {
         [$(BFieldElement::from($b)),*]
     };
+}
+
+impl fmt::Debug for BFieldElement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("BFieldElement").field(&self.value()).finish()
+    }
 }
 
 impl<'a> Arbitrary<'a> for BFieldElement {
@@ -959,14 +966,27 @@ mod tests {
 
     #[test]
     fn display_test() {
-        let seven: BFieldElement = BFieldElement::new(7);
+        let seven = BFieldElement::new(7);
         assert_eq!("7", format!("{seven}"));
+        assert_eq!("BFieldElement(7)", format!("{seven:?}"));
 
-        let minus_one: BFieldElement = BFieldElement::new(BFieldElement::P - 1);
+        let forty_two = BFieldElement::new(42);
+        assert_eq!("42", format!("{forty_two}"));
+        assert_eq!("BFieldElement(42)", format!("{forty_two:?}"));
+
+        let minus_one = BFieldElement::new(BFieldElement::P - 1);
         assert_eq!("-1", format!("{minus_one}"));
+        assert_eq!(
+            "BFieldElement(18446744069414584320)",
+            format!("{minus_one:?}")
+        );
 
-        let minus_fifteen: BFieldElement = BFieldElement::new(BFieldElement::P - 15);
+        let minus_fifteen = BFieldElement::new(BFieldElement::P - 15);
         assert_eq!("-15", format!("{minus_fifteen}"));
+        assert_eq!(
+            "BFieldElement(18446744069414584306)",
+            format!("{minus_fifteen:?}")
+        );
     }
 
     #[test]
