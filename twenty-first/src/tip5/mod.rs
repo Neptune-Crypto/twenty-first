@@ -1663,4 +1663,97 @@ pub(crate) mod tests {
         tip5.permutation();
         prop_assert_eq!(last, tip5.state);
     }
+
+    fn print_state(tip5: &Tip5) {
+        for &x in &tip5.state {
+            print!("{:016x} ", x.raw_u64());
+        }
+        println!();
+    }
+
+    #[test]
+    fn snapshot() {
+        // Using initial state
+        //
+        // ```
+        // [
+        //     0x0000000ffffffff0, 0x00000000ffffffff, 0x00000000ffffffff, 0x00000028ffffffd7,
+        //     0x00000006fffffff9, 0x00000002fffffffd, 0x00000000ffffffff, 0x00000030ffffffcf,
+        //     0x00000397fffffc68, 0x0000000ffffffff0, 0x316bfb7236382123, 0x216f521b66ef83f5,
+        //     0x5689d7b363f52df0, 0xeb2f59e3aeae25fc, 0xb08299d277cbb4dc, 0xcbe3d9fdc5349140,
+        // ]
+        // .map(BFieldElement::from_raw_u64)
+        // ```
+        //
+        // then applying rounds 0 and 1 plus one more layer of S-Boxes results
+        // in the following:
+        let state = [
+            0x8c4cde49aad9b2bd,
+            0x1b2375031e6feb72,
+            0x89a47de11bcebe9c,
+            0x6ef24688ec4e49c5,
+            0xe981cbd29fb352fc,
+            0xb64685cf81e9a602,
+            0xe2af1c89826659e6,
+            0xd016afe2586b7534,
+            0xed462a3d14064cf0,
+            0x48a793d2fcae229d,
+            0xd67ceef9ad60ec96,
+            0x17d1a6f6081b34aa,
+            0x99ff2f5fd07d9f57,
+            0x0b27b72a90ba6592,
+            0xdfb78a22aec309e1,
+            0xe10056926193028f,
+        ]
+        .map(BFieldElement::from_raw_u64);
+
+        let mut tip5 = Tip5 { state };
+
+        print!("state after 2½ rounds: ");
+        print_state(&tip5);
+
+        let round_index = 2;
+
+        // apply the second and third step of the Tip5 permutation:
+        // - MDS matrix multiplication
+        // - addition of round constants
+        //
+        #[cfg(not(all(
+            target_feature = "avx512ifma",
+            target_feature = "avx512f",
+            target_feature = "avx512bw",
+            target_feature = "avx512vbmi"
+        )))]
+        {
+            tip5.mds_generated();
+            for i in 0..STATE_SIZE {
+                tip5.state[i] += ROUND_CONSTANTS[round_index * STATE_SIZE + i];
+            }
+        }
+        #[cfg(all(
+            target_feature = "avx512ifma",
+            target_feature = "avx512f",
+            target_feature = "avx512bw",
+            target_feature = "avx512vbmi"
+        ))]
+        {
+            unsafe {
+                Tip5::mds_rcs_avx512(&mut tip5.state, round_index);
+            }
+        }
+
+        print!("state after 3 rounds:  ");
+        print_state(&tip5);
+
+        // With AVX-512 enabled, state element with index 6 (and only this state
+        // element) differs from the expected value, its raw form (i.e., the
+        // Montgomery representation) being 0xffff_ffff too big.
+        //
+        // Note that 0xffff_ffff == 1 + !BFieldElement::P, which is a value
+        // used in BFieldElement::montyred(), the Montgomery reduction. This
+        // might be a red herring.
+        let expected = BFieldElement::from_raw_u64(0x00002939e02b41f2);
+        let actual = tip5.state[6];
+        assert_eq!(expected, actual);
+    }
 }

@@ -149,7 +149,10 @@ impl Tip5 {
 
     #[inline(always)]
     #[expect(clippy::identity_op)]
-    unsafe fn mds_rcs_avx512(state: &mut [BFieldElement; STATE_SIZE], round_index: usize) {
+    pub(super) unsafe fn mds_rcs_avx512(
+        state: &mut [BFieldElement; STATE_SIZE],
+        round_index: usize,
+    ) {
         const MDS_TRANS: [[u64; 8]; 16] = [
             [61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034],
             [56951, 27521, 41351, 40901, 12021, 59689, 26798, 17845],
@@ -372,5 +375,117 @@ impl Tip5 {
         c_0 = _mm512_add_epi64(c_0, c_5);
 
         Self::reduce3x48(a_0, b_0, c_0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::arch::x86_64::_mm512_cmpeq_epi64_mask;
+    use std::mem::transmute;
+
+    use proptest::prelude::*;
+    use test_strategy::proptest;
+
+    use super::*;
+
+    /// Helper trait to turn something into a compatible AVX-512 type. Only
+    /// used for testing.
+    //
+    // Should you want to use this trait in a non-test environment, please
+    // first check if this design is actually what you want. Not much thought
+    // has gone into that part.
+    trait Pack
+    where
+        Self: Sized,
+    {
+        type Packed;
+
+        fn pack(self) -> Self::Packed;
+
+        fn unpack(packed: Self::Packed) -> Self;
+    }
+
+    impl Pack for [i64; 8] {
+        type Packed = __m512i;
+
+        fn pack(self) -> Self::Packed {
+            let s = self;
+            unsafe { _mm512_set_epi64(s[7], s[6], s[5], s[4], s[3], s[2], s[1], s[0]) }
+        }
+
+        fn unpack(packed: Self::Packed) -> Self {
+            // SAFETY: `Self` and `Self::Packed` have the same valid bit-patterns
+            unsafe { transmute(packed) }
+        }
+    }
+
+    impl Pack for [u64; 8] {
+        type Packed = __m512i;
+
+        fn pack(self) -> Self::Packed {
+            self.map(|e| i64::from_ne_bytes(e.to_ne_bytes())).pack()
+        }
+
+        fn unpack(packed: Self::Packed) -> Self {
+            // SAFETY: `Self` and `Self::Packed` have the same valid bit-patterns
+            unsafe { transmute(packed) }
+        }
+    }
+
+    /// A scalar version of [Tip5::reduce2x32].
+    fn scalar_reduce2x32(lo: u64, hi: u64) -> u64 {
+        /* Propagate carries */
+        let overflowing_hi = hi.wrapping_add(lo >> 32);
+        let carry = overflowing_hi >> 32;
+        let carry_shifted_left = carry << 32;
+
+        /* mod reduce */
+        lo.wrapping_add(hi << 32)
+            .wrapping_add(carry_shifted_left)
+            .wrapping_sub(carry)
+    }
+
+    #[proptest]
+    fn packing_and_unpacking_is_reciprocal(original: [u64; 8]) {
+        let repacked = <[u64; 8]>::unpack(original.pack());
+        prop_assert_eq!(original, repacked);
+    }
+
+    #[proptest]
+    fn scalar_and_vectorized_reduce2x32_correspond(lo: u64, hi: u64) {
+        let broadcast = |x: u64| {
+            let x = i64::from_ne_bytes(x.to_ne_bytes());
+            unsafe { _mm512_set1_epi64(x) }
+        };
+
+        let lo_vec = broadcast(lo);
+        let hi_vec = broadcast(hi);
+        let reduced_vec = unsafe { Tip5::reduce2x32(lo_vec, hi_vec) };
+
+        let reduced_scalar = scalar_reduce2x32(lo, hi);
+        let eq_mask = unsafe { _mm512_cmpeq_epi64_mask(reduced_vec, broadcast(reduced_scalar)) };
+        prop_assert_eq!(0xFF, eq_mask);
+    }
+
+    #[proptest]
+    fn reduce2x32_and_montgomery_reduction_correspond(a: BFieldElement, b: BFieldElement) {
+        const LOW_BIT_MASK: u64 = u64::MAX >> 32;
+
+        let a_raw_lo = a.raw_u64() & LOW_BIT_MASK;
+        let a_raw_hi = a.raw_u64() >> 32;
+        let b_raw_lo = b.raw_u64() & LOW_BIT_MASK;
+        let b_raw_hi = b.raw_u64() >> 32;
+
+        let c_raw_lo = a_raw_lo.wrapping_add(b_raw_lo);
+        let c_raw_hi = a_raw_hi.wrapping_add(b_raw_hi);
+        let c_raw = scalar_reduce2x32(c_raw_lo, c_raw_hi);
+        let c = BFieldElement::from_raw_u64(c_raw);
+        prop_assert_eq!(a + b, c, "add");
+
+        let d_raw_lo = a_raw_lo.wrapping_mul(b_raw_lo);
+        let d_raw_hi = a_raw_hi.wrapping_mul(b_raw_hi);
+        let d_raw = scalar_reduce2x32(d_raw_lo, d_raw_hi);
+        let d = BFieldElement::from_raw_u64(d_raw);
+        prop_assert_eq!(a * b, d, "mul");
     }
 }
