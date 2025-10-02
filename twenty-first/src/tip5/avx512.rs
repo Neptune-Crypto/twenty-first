@@ -3,6 +3,8 @@
 use std::arch::x86_64::*;
 
 use super::LOOKUP_TABLE;
+use super::NUM_ROUNDS;
+use super::ROUND_CONSTANTS;
 use super::STATE_SIZE;
 use super::Tip5;
 use crate::prelude::BFieldElement;
@@ -166,34 +168,25 @@ impl Tip5 {
             [27521, 41351, 40901, 12021, 59689, 26798, 17845, 61402],
             [1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951],
         ];
-        const RCS_MONT_U: [u64; 80] = [
-            0x61ab60dc, 0xd9547ed0, 0xa1de063d, 0x876c8676, 0x889cfb95, 0x43699f00, 0x7190db57,
-            0xd2b0d4b0, 0xd483cd36, 0x44882a55, 0x9f498aa3, 0x79338d4b, 0x52c5b216, 0x48adad93,
-            0xfec868b5, 0xfb6b0d8a, 0x20ef0328, 0x5bba5802, 0x27287a26, 0x4e193411, 0xa977eae0,
-            0x63fc191a, 0xaf39b210, 0x5933202e, 0xbfcf71e4, 0xcc520bfb, 0xf774f673, 0x0309bc69,
-            0x275f3cb2, 0x2c8f905a, 0x61e609b3, 0x5c92c93a, 0x56411dbf, 0x5fc2a26b, 0x3d9f2bf2,
-            0x5ca88c43, 0x2e1c1552, 0x3220a672, 0x4b861c4d, 0xeb86ebd6, 0xbc3902de, 0x516bcbc0,
-            0x738f27cf, 0xeac8ea36, 0x4bf937c4, 0x220e6746, 0x07e796f8, 0xf2f6dd71, 0x7d6e3a40,
-            0xe73743d7, 0xef802e57, 0x336e6aa5, 0xf3c8b226, 0x6afb2112, 0x25531967, 0x3866d0ee,
-            0xd2215022, 0x12ee85b1, 0xfcd23eb4, 0xd727752f, 0xaff543b3, 0x17f192d4, 0xb026adc0,
-            0xe35c1017, 0x6080bd06, 0x0b8a28b7, 0xae9da4ca, 0xd9e5a26b, 0x2d337846, 0xb7eee345,
-            0x59dde50c, 0x5ee62a88, 0xf6a203d0, 0x3b6ae69e, 0x2be69c37, 0xdfff43cb, 0x5f4fdc6a,
-            0x97c0d760, 0x14148eba, 0xf2f24472,
-        ];
-        const RCS_MONT_L: [u64; 80] = [
-            0xe12a6137, 0x3c2d8f14, 0xce16c34a, 0x5d4cf10b, 0xa3fe2af2, 0xe0086636, 0x5712e44b,
-            0x05bceb49, 0xb29f2156, 0x88310f48, 0xb091da34, 0xf1ff20f5, 0xfc597178, 0xbe758d99,
-            0x9853d114, 0x2cc48735, 0xebc0eeec, 0x5bdfe8e6, 0x02df87a9, 0x0c7397fa, 0xcf6133cb,
-            0x6bef3d61, 0x96b1f98d, 0xa3216fc1, 0x029fd62d, 0xfb4ad152, 0xe0c840b1, 0xad2abfa1,
-            0x7a336665, 0xe6ad794b, 0x1a9aa328, 0xf0bb400b, 0xe9bc674a, 0x895bd10c, 0x39dfe4f5,
-            0xf0c467e0, 0x35b5227b, 0xe82efadd, 0x0fdd1d04, 0x0308861f, 0x832913f5, 0x1bf8f7c6,
-            0xac69f270, 0xe798f708, 0xaa81ef62, 0x9498717d, 0xf9fad5c4, 0xe16d8ff5, 0x7aefd019,
-            0xd4c162e9, 0x717a8a87, 0x53bcde49, 0x5e71152a, 0xf02e0b04, 0x3d64ddb1, 0x91012a32,
-            0x4702d633, 0x5e3f4dac, 0xc9b208c8, 0x3d490349, 0xb670e77e, 0xf48bc718, 0x0615dfdf,
-            0xdcab5e5b, 0x71014a42, 0xfe9a2b22, 0xcc26240d, 0x732867a0, 0x92fe65b8, 0xdcb6de4c,
-            0x8f0c9826, 0xe059226d, 0xa302d668, 0x93fb6a88, 0x53fb6dbf, 0x9f9a0f27, 0x15b64f4b,
-            0x903d0ed1, 0xdb21a28b, 0xb971e6c9,
-        ];
+        const RCS_MONT_U: [u64; NUM_ROUNDS * STATE_SIZE] = {
+            let mut constants = [0; NUM_ROUNDS * STATE_SIZE];
+            let mut i = 0;
+            while i < NUM_ROUNDS * STATE_SIZE {
+                constants[i] = ROUND_CONSTANTS[i].raw_u64() >> 32;
+                i += 1;
+            }
+            constants
+        };
+        const RCS_MONT_L: [u64; NUM_ROUNDS * STATE_SIZE] = {
+            let mut constants = [0; NUM_ROUNDS * STATE_SIZE];
+            let mut i = 0;
+            while i < NUM_ROUNDS * STATE_SIZE {
+                constants[i] = ROUND_CONSTANTS[i].raw_u64() & (u32::MAX as u64);
+                i += 1;
+            }
+            constants
+        };
+
         union Vec512 {
             vector: __m512i,
             vals32: [u32; 16],
@@ -297,19 +290,20 @@ impl Tip5 {
         _mm512_mask_add_epi64(r, ov, r, mask32) // 1c/0.5c
     }
 
+    /// Combine and reduce `lo * 2**0 + hi * 2**32` to F_P
     #[inline(always)]
     unsafe fn reduce2x32(lo: __m512i, hi: __m512i) -> __m512i {
-        /* Combine and reduce lo * 2**0 + hi * 2**32 to F_P */
-
         /* Propagate carries */
-        let hi2 = _mm512_add_epi64(_mm512_srli_epi64(lo, 32), hi);
-        let ov = _mm512_srli_epi64(hi2, 32);
-        let ov2 = _mm512_slli_epi64(ov, 32);
+        let lo_hi = _mm512_srli_epi64(lo, 32);
+        let overflowing_hi = _mm512_add_epi64(lo_hi, hi);
+        let carry = _mm512_srli_epi64(overflowing_hi, 32);
+        let carry_shifted_left = _mm512_slli_epi64(carry, 32);
 
         /* mod reduce */
-        let mut res = _mm512_add_epi64(lo, _mm512_slli_epi64(hi, 32));
-        res = _mm512_add_epi64(res, ov2);
-        res = _mm512_sub_epi64(res, ov);
+        let hi_shifted_left = _mm512_slli_epi64(hi, 32);
+        let mut res = _mm512_add_epi64(lo, hi_shifted_left);
+        res = _mm512_add_epi64(res, carry_shifted_left);
+        res = _mm512_sub_epi64(res, carry);
 
         res
     }

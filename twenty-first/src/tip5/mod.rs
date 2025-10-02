@@ -62,6 +62,7 @@ pub const LOOKUP_TABLE: [u8; 256] = [
 /// The round constants used in the Tip5 permutation. To verify their correctness, see the test
 /// “round_constants_are_correct.”
 pub const ROUND_CONSTANTS: [BFieldElement; NUM_ROUNDS * STATE_SIZE] = [
+    /* round 1 */
     BFieldElement::new(13630775303355457758),
     BFieldElement::new(16896927574093233874),
     BFieldElement::new(10379449653650130495),
@@ -78,6 +79,7 @@ pub const ROUND_CONSTANTS: [BFieldElement; NUM_ROUNDS * STATE_SIZE] = [
     BFieldElement::new(17932424223723990421),
     BFieldElement::new(7558102534867937463),
     BFieldElement::new(15551047435855531404),
+    /* round 2 */
     BFieldElement::new(17532528648579384106),
     BFieldElement::new(5216785850422679555),
     BFieldElement::new(15418071332095031847),
@@ -94,6 +96,7 @@ pub const ROUND_CONSTANTS: [BFieldElement; NUM_ROUNDS * STATE_SIZE] = [
     BFieldElement::new(17060469201292988508),
     BFieldElement::new(9475383556737206708),
     BFieldElement::new(12876344085611465020),
+    /* round 3 */
     BFieldElement::new(13835756199368269249),
     BFieldElement::new(1648753455944344172),
     BFieldElement::new(9836124473569258483),
@@ -110,6 +113,7 @@ pub const ROUND_CONSTANTS: [BFieldElement; NUM_ROUNDS * STATE_SIZE] = [
     BFieldElement::new(5285298776918878023),
     BFieldElement::new(18310953571768047354),
     BFieldElement::new(3142266350630002035),
+    /* round 4 */
     BFieldElement::new(549990724933663297),
     BFieldElement::new(4901984846118077401),
     BFieldElement::new(11458643033696775769),
@@ -126,6 +130,7 @@ pub const ROUND_CONSTANTS: [BFieldElement; NUM_ROUNDS * STATE_SIZE] = [
     BFieldElement::new(17546769694830203606),
     BFieldElement::new(5315217744825068993),
     BFieldElement::new(4609594252909613081),
+    /* round 5 */
     BFieldElement::new(3350107164315270407),
     BFieldElement::new(17715942834299349177),
     BFieldElement::new(9600609149219873996),
