@@ -64,7 +64,7 @@ impl MmrSuccessorProof {
         let merkle_tree_root_index =
             u64::try_from(merkle_tree::ROOT_INDEX).expect(USIZE_TO_U64_ERR);
         while merkle_tree_index > merkle_tree_root_index {
-            let current_node_is_left_sibling = merkle_tree_index % 2 == 0;
+            let current_node_is_left_sibling = merkle_tree_index.is_multiple_of(2);
             current_node = if current_node_is_left_sibling {
                 let current_height = height_of_new_peak - merkle_tree_index.ilog2();
                 let num_leafs_in_right_tree = 1 << current_height;
@@ -198,7 +198,7 @@ impl MmrSuccessorProof {
 
         let merkle_tree_root_index = merkle_tree::ROOT_INDEX as u64;
         while merkle_tree_index > merkle_tree_root_index {
-            let current_node_is_left_sibling = merkle_tree_index % 2 == 0;
+            let current_node_is_left_sibling = merkle_tree_index.is_multiple_of(2);
             current_node = if current_node_is_left_sibling {
                 let &right_sibling = auth_path.next().ok_or(Error::AuthenticationPathTooShort)?;
                 Tip5::hash_pair(current_node, right_sibling)
