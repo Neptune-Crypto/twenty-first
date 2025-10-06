@@ -40,6 +40,8 @@ pub mod digest;
     target_feature = "avx512vbmi"
 ))]
 mod avx512;
+#[cfg(test)]
+mod naive;
 
 /// The lookup table with a high algebraic degree used in the TIP-5 permutation. To verify its
 /// correctness, see the test “lookup_table_is_correct.”
@@ -191,7 +193,6 @@ impl Tip5 {
     }
 
     #[inline(always)]
-    #[allow(clippy::needless_range_loop)]
     fn sbox_layer(&mut self) {
         for i in 0..NUM_SPLIT_AND_LOOKUP {
             Self::split_and_lookup(&mut self.state[i]);
