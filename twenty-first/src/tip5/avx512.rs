@@ -297,21 +297,93 @@ impl Tip5 {
         _mm512_mask_add_epi64(r, ov, r, mask32) // 1c/0.5c
     }
 
+    /// Combine and reduce the two given limbs modulo [BFieldElement::P].
+    ///
+    /// Each of the arguments must be at most 53 bits wide for this function to
+    /// work correctly.
+    //
+    // This function uses the following equality:
+    //
+    //   x₂·2^64 + x₁·2^32 + x₀        | uses 2^64 == 2^32 - 1 (mod p)
+    // =    (x₁ + x₂)·2^32 + x₀ - x₂     (mod p)
+    //
+    // Any given lane in the input is interpreted as follows:
+    //
+    //        ╭╴ lo ╶╮
+    //  ╭╴ hi ╶╮
+    //  x₂    x₁    x₀
+    //
+    // That is:
+    // - The low 32 bits of the `lo` limb equal x₀.
+    // - The sum of the high 32 bits of the `lo` limb and the low 32 bits of
+    //   the `hi` limb equals x₁.
+    // - The high 32 bits of the `hi` limb plus the carry from the previous sum
+    //   equals x₂.
+    //
+    // This function uses the assumption that the input limbs are at most
+    // 53 bits wide. This means that adding the (at most) 32-bit wide x₁ to the
+    // (at most) 21-bit wide x₂, the result might be 33 bits wide. Therefore,
+    // left-shifting (x₁ + x₂) by 32 bits cannot generally be stored in a u64
+    // without loss. Under the current assumptions, this overflow is at most
+    // 1 bit and is handled explicitly. The same assumption also implies that
+    // the value (x₁ + x₂)·2^32 + x₀ - x₂ is strictly smaller than 2·p, i.e.,
+    // subtracting p at most once completes modular reduction.
+    //
+    // Should the assumption that `lo` and `hi` are at most 53 bits wide change,
+    // the above conclusions might not hold anymore, and the function must be
+    // changed accordingly.
+    //
+    // The assumption that the arguments are at most 53 bits wide exists because
+    // of the context this function is used in, in particular, it is (only) used
+    // after MDS matrix multiplication and round constant addition. Each entry
+    // in the MDS matrix has at most 16 bits, and is multiplied with one 32-bit
+    // limb of a state element, resulting in a 48-bit intermediate result.
+    // STATE_SIZE == 16 such intermediate results are summed up, resulting in a
+    // 52-bit element. A 32-bit limb of the round constant is added to get a
+    // limb of the final result, which is at most 53 bits wide.
     #[inline(always)]
     unsafe fn reduce2x32(lo: __m512i, hi: __m512i) -> __m512i {
-        /* Combine and reduce lo * 2**0 + hi * 2**32 to F_P */
+        // input must be at most 53 bits
+        #[cfg(debug_assertions)]
+        {
+            let max = _mm512_set1_epi64((1_u64 << 53) as i64);
+            let lo_lt_max = _mm512_cmplt_epu64_mask(lo, max);
+            let hi_lt_max = _mm512_cmplt_epu64_mask(hi, max);
+            debug_assert_eq!(0xff, lo_lt_max);
+            debug_assert_eq!(0xff, hi_lt_max);
+        }
 
-        /* Propagate carries */
-        let hi2 = _mm512_add_epi64(_mm512_srli_epi64(lo, 32), hi);
-        let ov = _mm512_srli_epi64(hi2, 32);
-        let ov2 = _mm512_slli_epi64(ov, 32);
+        let u32_max = _mm512_set1_epi64(u32::MAX as i64);
 
-        /* mod reduce */
-        let mut res = _mm512_add_epi64(lo, _mm512_slli_epi64(hi, 32));
-        res = _mm512_add_epi64(res, ov2);
-        res = _mm512_sub_epi64(res, ov);
+        let x0 = _mm512_and_epi64(lo, u32_max);
 
-        res
+        let lo_shr32 = _mm512_srli_epi64(lo, 32);
+        let x_tmp = _mm512_add_epi64(lo_shr32, hi);
+        let x1 = _mm512_and_epi64(x_tmp, u32_max);
+        let x2 = _mm512_srli_epi64(x_tmp, 32); // at most 21 bits (per lane)
+
+        // r = ((x₁ + x₂) << 32) + x0 - x2
+        let x1_plus_x2 = _mm512_add_epi64(x1, x2);
+        let x1_plus_x2_shl32 = _mm512_slli_epi64(x1_plus_x2, 32);
+        let x1_plus_x2_shl32_plus_x0 = _mm512_add_epi64(x1_plus_x2_shl32, x0);
+        let r = _mm512_sub_epi64(x1_plus_x2_shl32_plus_x0, x2);
+
+        // To guarantee a result that is less than p, subtract p if (any of):
+        // - r >= p
+        // - (x₁ + x₂) << 32 would overflow a u64, i.e., if (x₁ + x₂) > u32::MAX
+        let p = _mm512_set1_epi64(BFieldElement::P as i64);
+        let r_ge_p = _mm512_cmpge_epu64_mask(r, p);
+        let x1_p_x2_gt_u32 = _mm512_cmpgt_epu64_mask(x1_plus_x2, u32_max);
+        let ov_mask = r_ge_p | x1_p_x2_gt_u32;
+        let r = _mm512_mask_sub_epi64(r, ov_mask, r, p);
+
+        #[cfg(debug_assertions)]
+        {
+            let r_lt_p = _mm512_cmplt_epu64_mask(r, p);
+            debug_assert_eq!(0xff, r_lt_p);
+        }
+
+        r
     }
 
     #[inline(always)]
