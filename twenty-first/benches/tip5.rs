@@ -15,15 +15,35 @@ criterion_group!(
     config = Criterion::default().measurement_time(Duration::from_secs(8));
     targets =
         hash_10,
+        hash_10_x2,
+        hash_10_many::<2>,
+        hash_10_many::<200>,
         hash_pair,
         hash_varlen::<10>,
         hash_varlen::<16_384>,
+        hash_varlen_many::<10, 2>,
+        hash_varlen_many::<10, 200>,
+        hash_varlen_many::<16_384, 2>,
+        hash_varlen_many::<16_384, 200>,
         hash_parallel::<65_536>,
 );
 
 fn hash_10(c: &mut Criterion) {
     let input = random();
     c.bench_function("hash_10", |b| b.iter(|| Tip5::hash_10(&input)));
+}
+
+fn hash_10_x2(c: &mut Criterion) {
+    let [left, right] = random();
+    c.bench_function("hash_10_x2", |b| b.iter(|| Tip5::hash_10_x2(&left, &right)));
+}
+
+fn hash_10_many<const N: usize>(c: &mut Criterion) {
+    let elements = random::<[_; N]>();
+    c.benchmark_group("hash_10_many")
+        .bench_function(BenchmarkId::new("N", N), |b| {
+            b.iter(|| Tip5::hash_10_many(&elements))
+        });
 }
 
 fn hash_pair(c: &mut Criterion) {
@@ -36,6 +56,15 @@ fn hash_varlen<const LEN: usize>(c: &mut Criterion) {
     c.benchmark_group("hash_varlen")
         .bench_function(BenchmarkId::new("len", LEN), |b| {
             b.iter(|| Tip5::hash_varlen(&input))
+        });
+}
+
+fn hash_varlen_many<const LEN: usize, const N: usize>(c: &mut Criterion) {
+    let input = (0..N).map(|_| random_elements(LEN)).collect::<Vec<_>>();
+    let input = input.iter().map(|row| row.as_slice()).collect::<Vec<_>>();
+    c.benchmark_group("hash_varlen_many")
+        .bench_function(BenchmarkId::new("(len, N)", format!("({LEN}, {N})")), |b| {
+            b.iter(|| Tip5::hash_varlen_many(&input))
         });
 }
 
