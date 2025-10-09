@@ -901,7 +901,6 @@ pub(crate) mod tests {
     use prop::sample::size_range;
     use proptest::prelude::*;
     use proptest_arbitrary_interop::arb;
-    use rand::Rng;
     use rand::RngCore;
     use rayon::prelude::IntoParallelIterator;
     use rayon::prelude::ParallelIterator;
@@ -912,14 +911,17 @@ pub(crate) mod tests {
     use crate::math::other::random_elements;
     use crate::math::x_field_element::XFieldElement;
 
-    impl Tip5 {
-        pub(crate) fn randomly_seeded() -> Self {
-            let mut sponge = Self::init();
-            let mut rng = rand::rng();
-            sponge.absorb(rng.random());
-            sponge
+    impl proptest::arbitrary::Arbitrary for Tip5 {
+        type Parameters = ();
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            arb().boxed()
         }
 
+        type Strategy = BoxedStrategy<Self>;
+    }
+
+    impl Tip5 {
         fn mds_cyclomul(&mut self) {
             let mut result = [BFieldElement::ZERO; STATE_SIZE];
 
@@ -1196,12 +1198,9 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
-    fn get_size_test() {
-        assert_eq!(
-            STATE_SIZE * BFieldElement::ZERO.get_size(),
-            Tip5::randomly_seeded().get_size()
-        );
+    #[proptest(cases = 10)]
+    fn get_size(tip5: Tip5) {
+        assert_eq!(STATE_SIZE * BFieldElement::ZERO.get_size(), tip5.get_size());
     }
 
     #[test]
@@ -1403,6 +1402,43 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn snapshot() {
+        let state = [
+            0x0000_000f_ffff_fff0,
+            0x0000_0000_ffff_ffff,
+            0x0000_0000_ffff_ffff,
+            0x0000_0028_ffff_ffd7,
+            0x0000_0006_ffff_fff9,
+            0x0000_0002_ffff_fffd,
+            0x0000_0000_ffff_ffff,
+            0x0000_0030_ffff_ffcf,
+            0x0000_0397_ffff_fc68,
+            0x0000_000f_ffff_fff0,
+            0x316b_fb72_3638_2123,
+            0x216f_521b_66ef_83f5,
+            0x5689_d7b3_63f5_2df0,
+            0xeb2f_59e3_aeae_25fc,
+            0xb082_99d2_77cb_b4dc,
+            0xcbe3_d9fd_c534_9140,
+        ]
+        .map(BFieldElement::from_raw_u64);
+
+        let mut tip5 = Tip5 { state };
+        tip5.permutation();
+
+        let expected = [
+            0x15d3_8ea9_29f6_632a,
+            0xf988_e509_ff73_8bb4,
+            0x48bc_dfae_88a2_e9f3,
+            0x8733_9e83_2daa_c02a,
+            0x511e_4126_8150_fdac,
+        ]
+        .map(BFieldElement::from_raw_u64);
+
+        assert_eq!(&expected, &tip5.state[0..5]);
+    }
+
+    #[test]
     fn hash_10_many_edge_cases() {
         fn test(input: &[[BFieldElement; RATE]]) {
             let many = Tip5::hash_10_many(input);
@@ -1579,18 +1615,17 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
-    fn sample_scalars_test() {
-        let mut sponge = Tip5::randomly_seeded();
-        let mut product = XFieldElement::ONE;
-        for amount in 0..=4 {
-            let scalars = sponge.sample_scalars(amount);
-            assert_eq!(amount, scalars.len());
-            product *= scalars
-                .into_iter()
-                .fold(XFieldElement::ONE, XFieldElement::mul);
-        }
-        assert_ne!(product, XFieldElement::ZERO); // false failure with prob ~2^{-192}
+    #[proptest]
+    fn sample_scalars(mut tip5: Tip5, #[strategy(0_usize..=100)] num_scalars: usize) {
+        tip5.permutation(); // remove any 0s that exist due to shrinking
+
+        let scalars = tip5.sample_scalars(num_scalars);
+        prop_assert_eq!(num_scalars, scalars.len());
+
+        let product = scalars
+            .into_iter()
+            .fold(XFieldElement::ONE, XFieldElement::mul);
+        prop_assert_ne!(product, XFieldElement::ZERO);
     }
 
     // Function `mds_generated` is not available if the AVX-512 functions are.
@@ -1650,13 +1685,26 @@ pub(crate) mod tests {
     }
 
     #[proptest]
-    fn tip5_trace_starts_with_initial_state_and_is_equivalent_to_permutation(
-        #[strategy(arb())] mut tip5: Tip5,
-    ) {
+    fn tip5_trace_starts_with_initial_state_and_is_equivalent_to_permutation(mut tip5: Tip5) {
         let [first, .., last] = tip5.clone().trace();
         prop_assert_eq!(first, tip5.state);
 
         tip5.permutation();
         prop_assert_eq!(last, tip5.state);
+    }
+
+    #[proptest]
+    fn round_and_round_x2_are_identical(
+        mut tip5: Tip5,
+        #[strategy(0..NUM_ROUNDS)] round_idx: usize,
+    ) {
+        let mut tip5_0 = tip5.clone();
+        let mut tip5_1 = tip5.clone();
+
+        tip5.round(round_idx);
+        Tip5::round_x2(&mut tip5_0, &mut tip5_1, round_idx);
+
+        prop_assert_eq!(&tip5, &tip5_0);
+        prop_assert_eq!(&tip5, &tip5_1);
     }
 }

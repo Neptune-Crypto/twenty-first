@@ -58,11 +58,11 @@ pub trait Sponge: Clone + Debug + Default + Send + Sync {
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
-    use std::ops::Mul;
-
+    use proptest::prelude::*;
     use rand::Rng;
     use rand::distr::Distribution;
     use rand::distr::StandardUniform;
+    use test_strategy::proptest;
 
     use super::*;
     use crate::math::x_field_element::EXTENSION_DEGREE;
@@ -119,15 +119,8 @@ mod tests {
         encode_prop(0u128, u128::MAX);
     }
 
-    fn sample_indices_prop(max: u32, num_indices: usize) {
-        let mut sponge = Tip5::randomly_seeded();
-        let indices = sponge.sample_indices(max, num_indices);
-        assert_eq!(num_indices, indices.len());
-        assert!(indices.into_iter().all(|index| index < max));
-    }
-
-    #[test]
-    fn sample_indices_test() {
+    #[proptest]
+    fn sample_indices(mut tip5: Tip5) {
         let cases = [
             (2, 0),
             (4, 1),
@@ -141,22 +134,9 @@ mod tests {
         ];
 
         for (upper_bound, num_indices) in cases {
-            sample_indices_prop(upper_bound, num_indices);
+            let indices = tip5.sample_indices(upper_bound, num_indices);
+            prop_assert_eq!(num_indices, indices.len());
+            prop_assert!(indices.into_iter().all(|index| index < upper_bound));
         }
-    }
-
-    #[test]
-    fn sample_scalars_test() {
-        let amounts = [0, 1, 2, 3, 4];
-        let mut sponge = Tip5::randomly_seeded();
-        let mut product = XFieldElement::ONE;
-        for amount in amounts {
-            let scalars = sponge.sample_scalars(amount);
-            assert_eq!(amount, scalars.len());
-            product *= scalars
-                .into_iter()
-                .fold(XFieldElement::ONE, XFieldElement::mul);
-        }
-        assert_ne!(product, XFieldElement::ZERO); // false failure with prob ~2^{-192}
     }
 }
