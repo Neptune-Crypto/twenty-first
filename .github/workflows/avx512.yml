@@ -1,0 +1,31 @@
+name: Build AVX-512
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  rust:
+    name: Build with AVX-512 features
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@1.90.0
+
+      - name: Build
+        run: cargo build
+        env:
+          RUSTFLAGS: "-C target-feature=+avx512ifma,+avx512f,+avx512bw,+avx512vbmi"
+
+          # This is necessary to pass the `RUSTFLAGS` only to the compiler
+          # invocation for the final artifact, but _not_ to previous compiler
+          # invocations, such as build scripts. See also:
+          # https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags
+          CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
