@@ -17,15 +17,6 @@ impl Tip5 {
         }
     }
 
-    #[inline(always)]
-    pub fn round_x2(sponge0: &mut Tip5, sponge1: &mut Tip5, round_index: usize) {
-        unsafe {
-            Self::sbox_layer_x2_avx512(&mut sponge0.state, &mut sponge1.state);
-            Self::mds_rcs_avx512(&mut sponge0.state, round_index);
-            Self::mds_rcs_avx512(&mut sponge1.state, round_index);
-        }
-    }
-
     unsafe fn sbox_layer_avx512(state: &mut [BFieldElement; STATE_SIZE]) {
         let a = _mm512_load_epi64(state.as_mut_ptr().offset(0x00) as *mut i64);
         let b = _mm512_load_epi64(state.as_mut_ptr().offset(0x08) as *mut i64);
@@ -71,78 +62,6 @@ impl Tip5 {
 
         _mm512_store_epi64(state.as_mut_ptr().offset(0x00) as *mut i64, amix);
         _mm512_store_epi64(state.as_mut_ptr().offset(0x08) as *mut i64, b7);
-    }
-
-    #[inline(always)]
-    unsafe fn sbox_layer_x2_avx512(
-        state0: &mut [BFieldElement; STATE_SIZE],
-        state1: &mut [BFieldElement; STATE_SIZE],
-    ) {
-        let s0a = _mm512_load_epi64(state0.as_mut_ptr().offset(0x00) as *mut i64);
-        let s0b = _mm512_load_epi64(state0.as_mut_ptr().offset(0x08) as *mut i64);
-
-        let s1a = _mm512_load_epi64(state1.as_mut_ptr().offset(0x00) as *mut i64);
-        let s1b = _mm512_load_epi64(state1.as_mut_ptr().offset(0x08) as *mut i64);
-
-        /* S-BOX */
-        let mut asbox = _mm512_setzero_si512();
-        let c64s = _mm512_set1_epi8(0x40);
-
-        let s0 = _mm512_loadu_epi64(LOOKUP_TABLE.as_ptr().offset(0x00) as *const i64);
-        let s1 = _mm512_loadu_epi64(LOOKUP_TABLE.as_ptr().offset(0x40) as *const i64);
-        let s2 = _mm512_loadu_epi64(LOOKUP_TABLE.as_ptr().offset(0x80) as *const i64);
-        let s3 = _mm512_loadu_epi64(LOOKUP_TABLE.as_ptr().offset(0xc0) as *const i64);
-
-        /* re-combine elements from state0 and state1 for subst/exp */
-        let idx = _mm512_set_epi64(3, 2, 1, 0, 7, 6, 5, 4);
-        let a1rev = _mm512_permutexvar_epi64(idx, s1a);
-        let atosub = _mm512_mask_blend_epi64(0xf0, s0a, a1rev);
-        let atoexp = _mm512_mask_blend_epi64(0x0f, s0a, a1rev);
-
-        let i0 = atosub;
-        let i1 = _mm512_sub_epi8(i0, c64s);
-        let i2 = _mm512_sub_epi8(i1, c64s);
-        let i3 = _mm512_sub_epi8(i2, c64s);
-
-        let lt0 = _mm512_cmplt_epu8_mask(i0, c64s);
-        let lt1 = _mm512_cmplt_epu8_mask(i1, c64s);
-        let lt2 = _mm512_cmplt_epu8_mask(i2, c64s);
-        let lt3 = _mm512_cmplt_epu8_mask(i3, c64s);
-
-        asbox = _mm512_mask_permutexvar_epi8(asbox, lt0, i0, s0);
-        asbox = _mm512_mask_permutexvar_epi8(asbox, lt1, i1, s1);
-        asbox = _mm512_mask_permutexvar_epi8(asbox, lt2, i2, s2);
-        asbox = _mm512_mask_permutexvar_epi8(asbox, lt3, i3, s3);
-
-        let asboxrev = _mm512_permutexvar_epi64(idx, asbox);
-
-        /* 7-th power */
-        let a1 = atoexp;
-        let b1 = s0b;
-        let c1 = s1b;
-
-        let a2 = Self::square8(a1);
-        let b2 = Self::square8(b1);
-        let c2 = Self::square8(c1);
-
-        let a4 = Self::square8(a2);
-        let b4 = Self::square8(b2);
-        let c4 = Self::square8(c2);
-
-        let a7 = Self::mul8(Self::mul8(a1, a2), a4);
-        let b7 = Self::mul8(Self::mul8(b1, b2), b4);
-        let c7 = Self::mul8(Self::mul8(c1, c2), c4);
-
-        /* recombine substitution/exponentiation results and write back to state */
-        let a7rev = _mm512_permutexvar_epi64(idx, a7);
-        let out0 = _mm512_mask_blend_epi64(0x0f, a7, asbox);
-        let out1 = _mm512_mask_blend_epi64(0x0f, a7rev, asboxrev);
-
-        _mm512_store_epi64(state0.as_mut_ptr().offset(0x00) as *mut i64, out0);
-        _mm512_store_epi64(state1.as_mut_ptr().offset(0x00) as *mut i64, out1);
-
-        _mm512_store_epi64(state0.as_mut_ptr().offset(0x08) as *mut i64, b7);
-        _mm512_store_epi64(state1.as_mut_ptr().offset(0x08) as *mut i64, c7);
     }
 
     #[inline(always)]
