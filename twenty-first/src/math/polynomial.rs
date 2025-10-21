@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -14,6 +15,8 @@ use std::ops::MulAssign;
 use std::ops::Neg;
 use std::ops::Rem;
 use std::ops::Sub;
+use std::sync::LazyLock;
+use std::sync::RwLock;
 
 use arbitrary::Arbitrary;
 use arbitrary::Unstructured;
@@ -746,14 +749,84 @@ where
     /// corresponds to evaluating P(α·x).
     #[must_use]
     pub fn scale(&self, alpha: BFieldElement) -> Polynomial<'static, FF> {
-        let mut power_of_alpha = BFieldElement::ONE;
-        let mut new_coefficients = Vec::with_capacity(self.coefficients.len());
-        for &coefficient in self.coefficients.iter() {
-            let mut new_coefficient = coefficient; // trait bound: `MulAssign`
-            new_coefficient *= power_of_alpha;
-            new_coefficients.push(new_coefficient);
-            power_of_alpha *= alpha;
-        }
+        // Quite the type! Let's unpack this from the inside out:
+        //
+        // - The `Vec<BFieldElement>` holds the various powers of argument
+        //   “alpha” (the offset). The vector entry at index i holds element
+        //   α^i. The length of the vector equals the length of the longest
+        //   coefficient vector of `self` this function was called on with
+        //   that specific “alpha”.
+        // - The `HashMap<BFieldElement>, _>` is the cache, going from the
+        //   offset to its various powers.
+        // - The `RwLock<_>` makes sure that many readers can access the cache
+        //   concurrently. Of course, updating the cache requires exclusive
+        //   access.
+        // - Finally, the `LazyLock<_>` gets around the non-const constructor
+        //   of the `HashMap`. The constructor is not const because the hash
+        //   function is randomly seeded to prevent HashDOS attacks.
+        static POWERS_OF_ALPHA: LazyLock<RwLock<HashMap<BFieldElement, Vec<BFieldElement>>>> =
+            LazyLock::new(|| RwLock::new(HashMap::new()));
+
+        // the writer thread cannot panic, hence the lock is never poisoned
+        let mut read_lock = POWERS_OF_ALPHA.read().unwrap();
+        let cached_powers = read_lock.get(&alpha);
+
+        let powers_of_alpha = if let Some(powers) = cached_powers
+            && powers.len() >= self.coefficients.len()
+        {
+            powers
+        } else {
+            // Update the cache.
+
+            // Holding the read lock then requesting a write lock gives you a
+            // dead lock; hence drop. Is re-instantiated later because of
+            // lifetimes.
+            drop(read_lock);
+
+            // It is critical that any updates to the cache are computed while
+            // this thread has exclusive access; otherwise, dataraces will
+            // occur and lead to incorrect results.
+            //
+            // Additionally, it is critical that the thread does not panic
+            // while holding the write lock: the RwLock must not be poisoned.
+            let mut write_lock = POWERS_OF_ALPHA.write().unwrap();
+            let maybe_powers = write_lock.get(&alpha);
+            let smallest_new_power = maybe_powers
+                .and_then(|powers| powers.last())
+                .map(|&highest_existing_power| highest_existing_power * alpha)
+                .unwrap_or(BFieldElement::ONE);
+            let num_existing_powers = maybe_powers.map(|powers| powers.len()).unwrap_or_default();
+            let num_new_powers = self.coefficients.len().saturating_sub(num_existing_powers);
+
+            let mut new_powers = Vec::with_capacity(num_new_powers);
+            let mut current_power = smallest_new_power;
+            for _ in 0..num_new_powers {
+                new_powers.push(current_power);
+                current_power *= alpha;
+            }
+
+            match write_lock.entry(alpha) {
+                Entry::Occupied(mut entry) => entry.get_mut().extend(new_powers),
+                Entry::Vacant(entry) => _ = entry.insert(new_powers),
+            }
+            drop(write_lock);
+
+            // because the cache can never shrink, unwrapping is fine
+            read_lock = POWERS_OF_ALPHA.read().unwrap();
+            read_lock.get(&alpha).unwrap()
+        };
+
+        // finally, compute the Hadamard (i.e., component-wise) product
+        let new_coefficients = self
+            .coefficients
+            .iter()
+            .zip(powers_of_alpha)
+            .map(|(coefficient, power_of_alpha)| {
+                let mut new_coefficient = *coefficient;
+                new_coefficient *= *power_of_alpha; // trait bound: `MulAssign`
+                new_coefficient
+            })
+            .collect();
 
         Polynomial::new(new_coefficients)
     }
