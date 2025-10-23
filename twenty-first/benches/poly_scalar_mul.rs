@@ -10,8 +10,7 @@ criterion_main!(benches);
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = poly_scalar_mul<1>,
-              poly_scalar_mul<7>,
+    targets = poly_scalar_mul<7>,
               poly_scalar_mul<13>,
 );
 
