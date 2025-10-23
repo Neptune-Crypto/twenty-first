@@ -3,6 +3,24 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [1.0.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.50.0..v1.0.0) – 2025-10-23
+
+### ✨ Features
+
+- *(bfe)* Add {lower, upper}-hex formatting ([98aedc63](https://github.com/Neptune-Crypto/twenty-first/commit/98aedc63))
+- *(tip5)* Add AVX-512 version of Tip5 ([90342e6e](https://github.com/Neptune-Crypto/twenty-first/commit/90342e6e))
+
+### ⚙️ Miscellaneous
+
+- *(MerkleTree)* Derive `GetSize` for MerkleTree ([e191598a](https://github.com/Neptune-Crypto/twenty-first/commit/e191598a))
+- (!) Bump MSRV to 1.89.0 ([7d87e801](https://github.com/Neptune-Crypto/twenty-first/commit/7d87e801))
+- Upgrade dependencies ([a6563e49](https://github.com/Neptune-Crypto/twenty-first/commit/a6563e49))
+- Enable continuous benchmarks through codspeed ([12248a5b](https://github.com/Neptune-Crypto/twenty-first/commit/12248a5b))
+
+### ♻️ Refactor
+
+- *(bfe)* Debug-print gives canonical value ([67067459](https://github.com/Neptune-Crypto/twenty-first/commit/67067459))
+
 ## [0.50.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.49.0..v0.50.0) – 2025-06-27
 
 ### ✨ Features
