@@ -49,7 +49,7 @@ test-strategy = "=0.4.3"
 trybuild = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-criterion = { version = "0.7", features = ["html_reports"] }
+criterion = { package = "codspeed-criterion-compat", version = "4.0", features = ["html_reports"] }
 proptest = { version = "1.7.0", default-features = false, features = ["std"] }
 proptest-arbitrary-interop = "0.1"
 
