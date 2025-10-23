@@ -15,36 +15,15 @@ readme.workspace = true
 keywords = ["polynomial", "merkle-tree", "post-quantum", "algebra", "tip5"]
 categories = ["cryptography", "mathematics"]
 
-[dev-dependencies]
-bincode = "1.3.3"
-blake3 = "1.5.5"
-test-strategy = "=0.4.1" # v0.4.2 produces clippy warnings; use v0.4.3 once released
-trybuild = "1.0"
-
-# dev deps for wasm32 target arch
-[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-criterion = { version = "0.6.0", default-features = false, features = ["html_reports"] }
-
-# dev deps for everything except wasm32 target arch
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-criterion = { version = "0.6", features = ["html_reports"] }
-proptest = { version = "1.7.0", default-features = false, features = ["std"] }
-proptest-arbitrary-interop = "0.1"
-
-[dev-dependencies.cargo-husky]
-version = "1"
-default-features = false
-features = ["user-hooks"]
-
 [dependencies]
 arbitrary = { version = "1", features = ["derive"] }
 bfieldcodec_derive = "0.7"
-get-size2 = { version = "0.5", features = ["derive"] }
+get-size2 = { version = "0.7", features = ["derive"] }
 hex = "0.4.3"
 itertools = "0.14"
 num-bigint = { version = "0.4", features = ["serde"] }
 num-traits = "0.2"
-phf = { version = "0.12", features = ["macros"] }
+phf = { version = "0.13", features = ["macros"] }
 rand = "0.9"
 rayon = "1.10"
 serde = { version = "1.0", features = ["derive"] }
@@ -61,7 +40,21 @@ zeroize = { version = "1.8.1", features = ["derive"] }
 # convince getrandom to build for wasm target.
 # note that there is also a flag in .cargo/config.toml
 getrandom = { version = "0.3", features = ["wasm_js"] }
-wasm-bindgen = "=0.2.100"
+wasm-bindgen = "=0.2.104"
+
+[dev-dependencies]
+bincode = "1.3.3"
+blake3 = "1.5.5"
+test-strategy = "=0.4.3"
+trybuild = "1.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+criterion = { version = "0.7", features = ["html_reports"] }
+proptest = { version = "1.7.0", default-features = false, features = ["std"] }
+proptest-arbitrary-interop = "0.1"
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+criterion = { version = "0.7.0", default-features = false }
 
 [lints]
 workspace = true
