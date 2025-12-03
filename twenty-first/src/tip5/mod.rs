@@ -213,22 +213,42 @@ impl Tip5 {
         for i in 0..STATE_SIZE {
             let b = self.state[i].raw_u64();
             hi[i] = b >> 32;
-            lo[i] = b & 0xffffffffu64;
+            lo[i] = b & 0xffff_ffff;
         }
 
         lo = Self::generated_function(lo);
         hi = Self::generated_function(hi);
 
+        // In isolation, the following reduction modulo BFieldElement::P is
+        // buggy. Concretely, it can produce degenerate Montgomery
+        // representations, that is, `state[r].0` can be greater than or equal
+        // to BFieldElement::P. While there are many inputs for which this can
+        // happen, the easiest with which to trace the behavior manually is:
+        // lo[r] = 0x10;
+        // hi[r] = 0xf_ffff_fff0;
+        //
+        // These starting values lead to `s_hi = 0`, `s_lo = BFieldElement::P`.
+        // Since `s_hi` is 0, the `overflowing_add` does nothing, and the
+        // degenerate representation from `s_lo` is directly transferred to the
+        // state element.
+        //
+        // All that said, due to the specific context this method is always (!)
+        // used in, the bug does not propagate. In particular, this method is
+        // followed up with round-constant addition. Due to a quirk in the
+        // implementation of `BFieldElement::Add` and a property of the round
+        // constants, any degenerate representations are corrected.
+        //
+        // Below, you can find tests for the specific properties claimed. The
+        // doc-string of those tests mention the name of this method.
         for r in 0..STATE_SIZE {
             let s = (lo[r] >> 4) as u128 + ((hi[r] as u128) << 28);
 
             let s_hi = (s >> 64) as u64;
             let s_lo = s as u64;
 
-            let (res, over) = s_lo.overflowing_add(s_hi * 0xffffffffu64);
+            let (res, over) = s_lo.overflowing_add(s_hi * 0xffff_ffff);
 
-            self.state[r] =
-                BFieldElement::from_raw_u64(if over { res + 0xffffffffu64 } else { res });
+            self.state[r] = BFieldElement::from_raw_u64(if over { res + 0xffff_ffff } else { res });
         }
     }
 
@@ -1067,6 +1087,116 @@ pub(crate) mod tests {
         assert!(touched.iter().all(|t| *t));
         assert_eq!(Tip5::offset_fermat_cube_map(0), 0);
         assert_eq!(Tip5::offset_fermat_cube_map(255), 255);
+    }
+
+    /// Ensure that the claims made in [`Tip5::mds_generated`] are true.
+    ///
+    /// In particular, `BFieldElement::Add` internally uses the equality
+    /// `a + b = a - (p - b)`. If `a` is a degenerate representation (i.e., is
+    /// larger than or equal to [`BFieldElement::P`]), then a small enough `b`
+    /// makes the result of the addition non-degenerate by removing the
+    /// “surplus” from `a`. In particular, this correction will happen if the
+    /// following inequality holds:
+    ///
+    ///      p - b > u64::MAX - p
+    ///   ↔  p - b > 2^64 - 1 - (2^64 - 2^32 + 1)
+    ///   ↔  p - b > 2^32 - 2
+    ///   ↔     -b > 2^32 - 2 - p
+    ///   ↔      b < p + 2 - 2^32
+    ///
+    /// While it’s not particularly beautiful to depend on such implementation
+    /// details, Ferdinand is too scared to change the implementation of Tip5.
+    /// If you change the behavior of `BFieldElement::Add`, please make sure
+    /// that [`Tip5`] is not breaking.
+    ///
+    /// The test [`round_constants_correct_degenerate_lhs_when_adding`] makes
+    /// sure that all round constants have the required property.
+    ///
+    /// See also: https://www.hyrumslaw.com/. Sorry about that.
+    #[proptest]
+    fn adding_degenerate_lhs_and_small_enough_rhs_makes_sum_non_degenerate(
+        #[strategy(BFieldElement::P..)] raw_a: u64,
+        #[strategy(0..BFieldElement::P + 2 - (1 << 32))] raw_b: u64,
+    ) {
+        let a = BFieldElement::from_raw_u64(raw_a);
+        let b = BFieldElement::from_raw_u64(raw_b);
+        let raw_sum = (a + b).raw_u64();
+        prop_assert!(raw_sum < BFieldElement::P);
+    }
+
+    /// Ensure that the claims made in [`Tip5::mds_generated`] are true.
+    ///
+    /// [`adding_degenerate_lhs_and_small_enough_rhs_makes_sum_non_degenerate`]
+    /// explains the requirement in greater detail.
+    #[test]
+    fn round_constants_correct_degenerate_lhs_when_adding() {
+        for constant in ROUND_CONSTANTS {
+            assert!(constant.raw_u64() < BFieldElement::P + 2 - (1 << 32));
+        }
+    }
+
+    /// Ensure that the claims made in [`Tip5::mds_generated`] are true.
+    #[test]
+    fn tip5_recovers_from_degenerate_field_element_representations() {
+        let state = [
+            0x1063_c4bf_5d8b_b0dd,
+            0xdb62_75d3_71fe_05d0,
+            0xde58_cae3_0144_cdae,
+            0xc774_e646_81d3_622e,
+            0xc4a9_47d1_0a5a_a466,
+            0xda55_77a0_0a91_3151,
+            0xe80e_978b_3836_dcd0,
+            0x8dd1_61f0_a3ac_00c2,
+            0x6857_f251_a9c0_f693,
+            0x4923_a368_3046_178e,
+            0x6e6f_c54a_9b81_010b,
+            0xcb84_fa5b_b9fa_ec36,
+            0x93cb_f9db_4c5c_b1ea,
+            0xf215_d9b9_2dc8_7266,
+            0x88f0_9783_d2ae_3c57,
+            0x6d29_f9ce_94a9_0b71,
+        ]
+        .map(BFieldElement::new);
+        let expected = [
+            0xa5d3_2d62_9e60_d72e,
+            0x5516_ef90_d277_3d74,
+            0x65d3_fa1c_de45_f6cb,
+            0x7bf0_e725_dfa5_906b,
+            0x67a2_db4b_141b_90e9,
+            0x91db_162d_3230_9083,
+            0xefec_1d00_146a_05c9,
+            0xcca0_d656_6bca_8186,
+            0x405b_aeb5_b3f8_7f02,
+            0xd897_0158_7027_8f76,
+            0xd4b2_ee48_10aa_c7d1,
+            0x27b4_51e7_06a5_c2fc,
+            0xe9b4_177f_0a0e_ffe4,
+            0x0c60_def0_f2c5_287f,
+            0x703a_a06d_327c_cc34,
+            0x536f_2355_0ebf_98f1,
+        ]
+        .map(BFieldElement::new);
+
+        let mut dbg_tip5 = Tip5 { state };
+        dbg_tip5.sbox_layer();
+        dbg_tip5.mds_generated();
+
+        // If this assertion fails, you might have improved the internals of
+        // Tip5 in a way that makes the properties tested for in
+        // `adding_degenerate_lhs_and_small_enough_rhs_makes_sum_non_degenerate`
+        // and
+        // `round_constants_correct_degenerate_lhs_when_adding`
+        // superfluous. If that is the case, feel free to remove those tests
+        // as well as this one.
+        debug_assert!(dbg_tip5.state[1].raw_u64() >= BFieldElement::P);
+
+        let mut tip5 = Tip5 { state };
+        tip5.permutation();
+        assert_eq!(expected, tip5.state);
+
+        let mut naive = naive::NaiveTip5 { state };
+        naive.permutation();
+        assert_eq!(expected, naive.state);
     }
 
     #[test]
