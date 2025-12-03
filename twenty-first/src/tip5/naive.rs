@@ -13,8 +13,8 @@
 //!
 //! [dd]: https://doc.rust-lang.org/std/arch/#dynamic-cpu-feature-detection
 
-use proptest::prelude::*;
-use test_strategy::proptest;
+// This is a test-only module; it should not influence code coverage.
+#![cfg_attr(coverage_nightly, coverage(off))]
 
 use super::*;
 
@@ -24,6 +24,12 @@ pub struct NaiveTip5 {
 }
 
 impl NaiveTip5 {
+    pub fn permutation(&mut self) {
+        for i in 0..NUM_ROUNDS {
+            self.round(i);
+        }
+    }
+
     fn round(&mut self, round_index: usize) {
         self.sbox_layer();
         self.mds_matrix_mul();
@@ -51,8 +57,9 @@ impl NaiveTip5 {
         for (row_idx, new_elem) in new_state.iter_mut().enumerate() {
             for col_idx in 0..STATE_SIZE {
                 // See <https://en.wikipedia.org/wiki/Circulant_matrix>
-                let first_col_index = (col_idx * (STATE_SIZE - 1) + row_idx) % STATE_SIZE;
-                let matrix_element = BFieldElement::from(MDS_MATRIX_FIRST_COLUMN[first_col_index]);
+                // The initial summand `STATE_SIZE` only prevents overflows.
+                let mds_matrix_idx = (STATE_SIZE + row_idx - col_idx) % STATE_SIZE;
+                let matrix_element = BFieldElement::from(MDS_MATRIX_FIRST_COLUMN[mds_matrix_idx]);
                 *new_elem += matrix_element * self.state[col_idx];
             }
         }
@@ -74,18 +81,26 @@ impl PartialEq<Tip5> for NaiveTip5 {
     }
 }
 
-/// The entire point of this module: test the naïve against the optimized Tip5
-/// implementation.
-#[proptest]
-fn tip5_corresponds_to_naive_tip5(
-    state: [BFieldElement; STATE_SIZE],
-    #[strategy(0..NUM_ROUNDS)] round_no: usize,
-) {
-    let mut naive = NaiveTip5 { state };
-    let mut real = Tip5 { state };
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use test_strategy::proptest;
 
-    naive.round(round_no);
-    real.round(round_no);
+    use super::*;
 
-    prop_assert_eq!(naive, real);
+    /// The entire point of this module: test the naïve against the optimized
+    /// Tip5 implementation.
+    #[proptest]
+    fn tip5_corresponds_to_naive_tip5(
+        state: [BFieldElement; STATE_SIZE],
+        #[strategy(0..NUM_ROUNDS)] round_no: usize,
+    ) {
+        let mut naive = NaiveTip5 { state };
+        let mut real = Tip5 { state };
+
+        naive.round(round_no);
+        real.round(round_no);
+
+        prop_assert_eq!(naive, real);
+    }
 }

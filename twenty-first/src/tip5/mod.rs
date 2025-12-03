@@ -41,6 +41,8 @@ pub mod digest;
 ))]
 mod avx512;
 #[cfg(test)]
+mod inverse;
+#[cfg(test)]
 mod naive;
 
 /// The lookup table with a high algebraic degree used in the TIP-5 permutation. To verify its
