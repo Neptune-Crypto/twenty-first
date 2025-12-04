@@ -372,11 +372,14 @@ impl XFieldElement {
         Some(*bfe)
     }
 
-    // `increment` and `decrement` are mainly used for testing purposes
+    #[deprecated(since = "2.0.0")]
+    #[doc(hidden)]
     pub fn increment(&mut self, index: usize) {
         self.coefficients[index].increment();
     }
 
+    #[deprecated(since = "2.0.0")]
+    #[doc(hidden)]
     pub fn decrement(&mut self, index: usize) {
         self.coefficients[index].decrement();
     }
@@ -771,7 +774,10 @@ mod tests {
         prop_assert!(XFieldElement::try_from(bfes).is_err());
     }
 
+    /// To be removed once [XFieldElement::increment] and
+    /// [XFieldElement::decrement] are gone.
     #[test]
+    #[expect(deprecated)]
     fn incr_decr_test() {
         let one_const = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
         let two_const = XFieldElement::new([2, 0, 0].map(BFieldElement::new));

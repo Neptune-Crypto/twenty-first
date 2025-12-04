@@ -315,14 +315,14 @@ impl BFieldElement {
         XFieldElement::new_const(*self)
     }
 
-    // You should probably only use `increment` and `decrement` for testing purposes
+    /// Add [`BFieldElement::ONE`] to `self`.
     pub fn increment(&mut self) {
-        *self += Self::one();
+        *self += Self::ONE;
     }
 
-    // You should probably only use `increment` and `decrement` for testing purposes
+    /// Subtract [`BFieldElement::ONE`] from `self`.
     pub fn decrement(&mut self) {
-        *self -= Self::one();
+        *self -= Self::ONE;
     }
 
     #[inline]
