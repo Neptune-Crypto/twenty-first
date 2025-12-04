@@ -222,7 +222,6 @@ impl Digest {
     /// This method invokes [`Tip5::hash_pair`] with the right operand being the
     /// zero digest, agreeing with the standard way to hash a digest in the virtual
     /// machine.
-    // todo: introduce a dedicated newtype for an entropy source
     pub fn hash(self) -> Digest {
         Tip5::hash_pair(self, Self::ALL_ZERO)
     }
@@ -268,9 +267,7 @@ impl<'de> Deserialize<'de> for Digest {
             let hex_string = String::deserialize(deserializer)?;
             Self::try_from_hex(hex_string).map_err(serde::de::Error::custom)
         } else {
-            Ok(Self::new(<[BFieldElement; Self::LEN]>::deserialize(
-                deserializer,
-            )?))
+            <[_; _]>::deserialize(deserializer).map(Self::new)
         }
     }
 }
@@ -333,6 +330,16 @@ pub(crate) mod tests {
         };
         let err = corruptor.corrupt_digest(digest).unwrap_err();
         assert!(matches!(err, TestCaseError::Reject(_)));
+    }
+
+    #[test]
+    fn display_is_as_expected() {
+        let digest = Digest::new(bfe_array![1, 2, 3, 4, 5]);
+        assert_eq!("1,2,3,4,5", format!("{digest}"));
+
+        let hex_digest =
+            "01000000000000000200000000000000030000000000000004000000000000000500000000000000";
+        assert_eq!(hex_digest, format!("{digest:x}"));
     }
 
     #[test]
@@ -480,6 +487,24 @@ pub(crate) mod tests {
     }
 
     #[proptest]
+    fn digest_to_bfe_vector_involution(digest: Digest) {
+        let bfes = <Vec<BFieldElement>>::from(digest);
+        let digest_again = Digest::try_from(bfes)?;
+        prop_assert_eq!(digest, digest_again);
+    }
+
+    #[proptest]
+    fn bfe_vector_of_incorrect_length_cannot_become_a_digest(
+        #[filter(#bfes.len() != Digest::LEN)] bfes: Vec<BFieldElement>,
+    ) {
+        let bfes_len = bfes.len();
+        let Err(TryFromDigestError::InvalidLength(len)) = Digest::try_from(bfes) else {
+            return Err(TestCaseError::Fail("expected an error".into()));
+        };
+        prop_assert_eq!(bfes_len, len);
+    }
+
+    #[proptest]
     fn forty_bytes_can_be_converted_to_digest(bytes: [u8; Digest::BYTES]) {
         let digest = Digest::try_from(bytes).unwrap();
         let bytes_again: [u8; Digest::BYTES] = digest.into();
@@ -524,6 +549,11 @@ pub(crate) mod tests {
         assert_eq!(bytes1, bytes2);
 
         Ok(())
+    }
+
+    #[proptest]
+    fn any_digest_can_be_hashed(digest: Digest) {
+        digest.hash();
     }
 
     mod hex_test {

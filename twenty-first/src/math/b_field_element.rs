@@ -261,7 +261,7 @@ impl BFieldElement {
         let x = *self;
         assert_ne!(
             x,
-            Self::zero(),
+            Self::ZERO,
             "Attempted to find the multiplicative inverse of zero."
         );
 
@@ -278,8 +278,8 @@ impl BFieldElement {
         exp(bin_31_ones_1_zero, 32) * bin_32_ones
     }
 
-    #[inline]
     /// Square the base M times and multiply the result by the tail value
+    #[inline]
     pub const fn power_accumulator<const N: usize, const M: usize>(
         base: [Self; N],
         tail: [Self; N],
@@ -303,11 +303,13 @@ impl BFieldElement {
         result
     }
 
-    /// Get a generator for the entire field
+    /// A generator for the entire base field.
     pub const fn generator() -> Self {
         BFieldElement::new(7)
     }
 
+    /// Turn this base field element into the corresponding extension field
+    /// element.
     #[inline]
     pub const fn lift(&self) -> XFieldElement {
         XFieldElement::new_const(*self)

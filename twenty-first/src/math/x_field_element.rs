@@ -364,11 +364,12 @@ impl XFieldElement {
     }
 
     pub fn unlift(&self) -> Option<BFieldElement> {
-        if self.coefficients[1].is_zero() && self.coefficients[2].is_zero() {
-            Some(self.coefficients[0])
-        } else {
-            None
-        }
+        let Self { coefficients } = self;
+        let [bfe, BFieldElement::ZERO, BFieldElement::ZERO] = coefficients else {
+            return None;
+        };
+
+        Some(*bfe)
     }
 
     // `increment` and `decrement` are mainly used for testing purposes
@@ -686,6 +687,12 @@ mod tests {
     }
 
     #[test]
+    fn display_is_as_expected() {
+        assert_eq!("42_xfe", xfe!(42).to_string());
+        assert_eq!("(3·x² + 2·x + 1)", xfe!([1, 2, 3]).to_string());
+    }
+
+    #[test]
     fn one_zero_test() {
         let one = XFieldElement::one();
         assert!(one.is_one());
@@ -729,6 +736,39 @@ mod tests {
 
         // TODO: Consider doing a statistical test.
         assert!(rand_xs.into_iter().all_unique());
+    }
+
+    #[proptest]
+    fn unlifting_random_xfe_doesnt_work(xfe: XFieldElement) {
+        prop_assert!(xfe.unlift().is_none());
+    }
+
+    #[test]
+    fn summing_gives_expected_result() {
+        let empty_sum = [].into_iter().sum();
+        assert_eq!(XFieldElement::ZERO, empty_sum);
+
+        let a = xfe!([1, 0, 0]);
+        let b = xfe!([0, 2, 0]);
+        let c = xfe!([0, 0, 3]);
+        let d = xfe!([40, 50, 60]);
+        let sum = [a, b, c, d].into_iter().sum();
+
+        assert_eq!(xfe!([41, 52, 63]), sum);
+    }
+
+    #[proptest]
+    fn bfe_vector_of_correct_length_can_become_xfe(
+        #[strategy(vec(arb(), EXTENSION_DEGREE))] bfes: Vec<BFieldElement>,
+    ) {
+        prop_assert!(XFieldElement::try_from(bfes).is_ok());
+    }
+
+    #[proptest]
+    fn bfe_vector_of_incorrect_length_cannot_become_xfe(
+        #[filter(#bfes.len() != EXTENSION_DEGREE)] bfes: Vec<BFieldElement>,
+    ) {
+        prop_assert!(XFieldElement::try_from(bfes).is_err());
     }
 
     #[test]
