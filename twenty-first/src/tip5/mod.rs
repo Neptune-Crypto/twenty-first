@@ -629,19 +629,29 @@ impl Tip5 {
     /// Specifically, if the top 32 bits of a BFieldElement are all ones, then the bottom 32 bits
     /// are not uniformly distributed, and so they are dropped. This method invokes squeeze until
     /// enough uniform u32s have been sampled.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `upper_bound` is not a power of two.
     pub fn sample_indices(&mut self, upper_bound: u32, num_indices: usize) -> Vec<u32> {
-        debug_assert!(upper_bound.is_power_of_two());
-        let mut indices = vec![];
-        let mut squeezed_elements = vec![];
-        while indices.len() != num_indices {
-            if squeezed_elements.is_empty() {
-                squeezed_elements = self.squeeze().into_iter().rev().collect_vec();
+        assert!(upper_bound.is_power_of_two());
+
+        let mut indices = Vec::with_capacity(num_indices);
+        let mut buffer = const { [BFieldElement::ZERO; RATE] };
+        let mut next_in_buffer = RATE;
+        while indices.len() < num_indices {
+            if next_in_buffer == RATE {
+                buffer = self.squeeze();
+                next_in_buffer = 0;
             }
-            let element = squeezed_elements.pop().unwrap();
-            if element != BFieldElement::new(BFieldElement::MAX) {
+            let element = buffer[next_in_buffer];
+            next_in_buffer += 1;
+
+            if element != const { BFieldElement::new(BFieldElement::MAX) } {
                 indices.push(element.value() as u32 % upper_bound);
             }
         }
+
         indices
     }
 
@@ -653,18 +663,13 @@ impl Tip5 {
     /// [rate]: Sponge::RATE
     pub fn sample_scalars(&mut self, num_elements: usize) -> Vec<XFieldElement> {
         let num_squeezes = (num_elements * EXTENSION_DEGREE).div_ceil(Self::RATE);
-        debug_assert!(
-            num_elements * EXTENSION_DEGREE <= num_squeezes * Self::RATE,
-            "need {} elements but getting {}",
-            num_elements * EXTENSION_DEGREE,
-            num_squeezes * Self::RATE
-        );
+        debug_assert!(num_elements * EXTENSION_DEGREE <= num_squeezes * Self::RATE);
+
         (0..num_squeezes)
             .flat_map(|_| self.squeeze())
-            .collect_vec()
-            .chunks(3)
+            .tuples()
             .take(num_elements)
-            .map(|elem| XFieldElement::new([elem[0], elem[1], elem[2]]))
+            .map(|(x0, x1, x2)| XFieldElement::new([x0, x1, x2]))
             .collect()
     }
 }
