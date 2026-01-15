@@ -601,11 +601,12 @@ mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::TestCaseResult;
-    use proptest_arbitrary_interop::arb;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::prelude::*;
+    use crate::proptest_arbitrary_interop::arb;
+    use crate::tests::proptest;
+    use crate::tests::test;
 
     #[derive(Debug, PartialEq, Eq, test_strategy::Arbitrary)]
     struct BFieldCodecPropertyTestData<T>
@@ -711,7 +712,7 @@ mod tests {
 
     macro_rules! test_case {
         (fn $fn_name:ident for $t:ty: $static_len:expr) => {
-            #[proptest]
+            #[macro_rules_attr::apply(proptest)]
             fn $fn_name(test_data: BFieldCodecPropertyTestData<$t>) {
                 prop_assert_eq!($static_len, <$t as BFieldCodec>::static_length());
                 test_data.assert_bfield_codec_properties()?;
@@ -721,7 +722,7 @@ mod tests {
 
     macro_rules! neg_test_case {
         (fn $fn_name:ident for $t:ty) => {
-            #[proptest]
+            #[macro_rules_attr::apply(proptest)]
             fn $fn_name(random_encoding: Vec<BFieldElement>) {
                 let decoding = <$t as BFieldCodec>::decode(&random_encoding);
                 prop_assert!(decoding.is_err());
@@ -782,26 +783,26 @@ mod tests {
     neg_test_case! { fn poly_of_bfe_neg for Polynomial<BFieldElement> }
     neg_test_case! { fn poly_of_xfe_neg for Polynomial<XFieldElement> }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn encoding_tuple_puts_fields_in_expected_order() {
         let encoding = (1_u8, 2_u16, 3_u32, 4_u64, true).encode();
         let expected = bfe_vec![1, 4, 0, 3, 2, 1];
         assert_eq!(expected, encoding);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn leading_zero_coefficient_have_no_effect_on_encoding_empty_poly_bfe() {
         let empty_poly = Polynomial::<BFieldElement>::new(vec![]);
         assert_eq!(empty_poly.encode(), Polynomial::new(bfe_vec![0]).encode());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn leading_zero_coefficients_have_no_effect_on_encoding_empty_poly_xfe() {
         let empty_poly = Polynomial::<XFieldElement>::new(vec![]);
         assert_eq!(empty_poly.encode(), Polynomial::new(xfe_vec![0]).encode());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn leading_zero_coefficients_have_no_effect_on_encoding_poly_bfe_pbt(
         polynomial: Polynomial<'static, BFieldElement>,
         #[strategy(0usize..30)] num_leading_zeros: usize,
@@ -815,7 +816,7 @@ mod tests {
         prop_assert_eq!(encoded, poly_w_leading_zeros.encode());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn leading_zero_coefficients_have_no_effect_on_encoding_poly_xfe_pbt(
         polynomial: Polynomial<'static, XFieldElement>,
         #[strategy(0usize..30)] num_leading_zeros: usize,
@@ -861,7 +862,7 @@ mod tests {
         Ok(())
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn disallow_trailing_zeros_in_poly_encoding_bfe(
         polynomial: Polynomial<'static, BFieldElement>,
         #[filter(!#leading_coefficient.is_zero())] leading_coefficient: BFieldElement,
@@ -874,7 +875,7 @@ mod tests {
         )?
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn disallow_trailing_zeros_in_poly_encoding_xfe(
         polynomial: Polynomial<'static, XFieldElement>,
         #[filter(!#leading_coefficient.is_zero())] leading_coefficient: XFieldElement,
@@ -901,6 +902,8 @@ mod tests {
 
         use super::*;
         use crate::math::x_field_element::XFieldElement;
+        use crate::tests::proptest;
+        use crate::tests::test;
         use crate::tip5::Digest;
         use crate::tip5::Tip5;
         use crate::util_types::mmr::mmr_accumulator::MmrAccumulator;
@@ -1163,7 +1166,7 @@ mod tests {
             b: usize,
         }
 
-        #[proptest]
+        #[macro_rules_attr::apply(proptest)]
         fn unsupported_fields_can_be_ignored_test(#[strategy(arb())] my_struct: UnsupportedFields) {
             let encoded = my_struct.encode();
             let decoded = UnsupportedFields::decode(&encoded).unwrap();
@@ -1316,7 +1319,7 @@ mod tests {
             fn enum_with_generics_and_where_clause for EnumWithGenericsAndWhereClause<u32>: None
         }
 
-        #[test]
+        #[macro_rules_attr::apply(test)]
         fn enums_bfield_codec_discriminant_can_be_accessed() {
             let a = EnumWithGenericsAndWhereClause::<u32>::A;
             let b = EnumWithGenericsAndWhereClause::<u32>::B(1);
@@ -1349,14 +1352,14 @@ mod tests {
             coefficients: Vec<T>,
         }
 
-        #[proptest]
+        #[macro_rules_attr::apply(proptest)]
         fn manual_poly_encoding_implementation_is_consistent_with_derived_bfe(
             #[strategy(arb())] coefficients: Vec<BFieldElement>,
         ) {
             manual_poly_encoding_implementation_is_consistent_with_derived(coefficients)?;
         }
 
-        #[proptest]
+        #[macro_rules_attr::apply(proptest)]
         fn manual_poly_encoding_implementation_is_consistent_with_derived_xfe(
             #[strategy(arb())] coefficients: Vec<XFieldElement>,
         ) {

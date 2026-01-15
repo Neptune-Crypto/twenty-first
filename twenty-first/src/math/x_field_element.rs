@@ -669,8 +669,6 @@ mod tests {
     use num_traits::ConstOne;
     use proptest::collection::vec;
     use proptest::prelude::*;
-    use proptest_arbitrary_interop::arb;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::bfe;
@@ -678,6 +676,9 @@ mod tests {
     use crate::math::ntt::intt;
     use crate::math::ntt::ntt;
     use crate::math::other::random_elements;
+    use crate::proptest_arbitrary_interop::arb;
+    use crate::tests::proptest;
+    use crate::tests::test;
 
     impl proptest::arbitrary::Arbitrary for XFieldElement {
         type Parameters = ();
@@ -689,13 +690,13 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn display_is_as_expected() {
         assert_eq!("42_xfe", xfe!(42).to_string());
         assert_eq!("(3·x² + 2·x + 1)", xfe!([1, 2, 3]).to_string());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn one_zero_test() {
         let one = XFieldElement::one();
         assert!(one.is_one());
@@ -732,7 +733,7 @@ mod tests {
         assert!(!one_as_constant_term_1.is_zero());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn x_field_random_element_generation_test() {
         let rand_xs: Vec<XFieldElement> = random_elements(14);
         assert_eq!(14, rand_xs.len());
@@ -741,12 +742,12 @@ mod tests {
         assert!(rand_xs.into_iter().all_unique());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn unlifting_random_xfe_doesnt_work(xfe: XFieldElement) {
         prop_assert!(xfe.unlift().is_none());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn summing_gives_expected_result() {
         let empty_sum = [].into_iter().sum();
         assert_eq!(XFieldElement::ZERO, empty_sum);
@@ -760,14 +761,14 @@ mod tests {
         assert_eq!(xfe!([41, 52, 63]), sum);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn bfe_vector_of_correct_length_can_become_xfe(
         #[strategy(vec(arb(), EXTENSION_DEGREE))] bfes: Vec<BFieldElement>,
     ) {
         prop_assert!(XFieldElement::try_from(bfes).is_ok());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn bfe_vector_of_incorrect_length_cannot_become_xfe(
         #[filter(#bfes.len() != EXTENSION_DEGREE)] bfes: Vec<BFieldElement>,
     ) {
@@ -776,7 +777,7 @@ mod tests {
 
     /// To be removed once [XFieldElement::increment] and
     /// [XFieldElement::decrement] are gone.
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[expect(deprecated)]
     fn incr_decr_test() {
         let one_const = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
@@ -838,7 +839,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn x_field_add_test() {
         let poly1 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
         let poly2 = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
@@ -871,7 +872,7 @@ mod tests {
         assert_eq!(poly_sum, poly9 + poly10);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn x_field_sub_test() {
         let poly1 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
         let poly2 = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
@@ -904,7 +905,7 @@ mod tests {
         assert_eq!(poly_diff, poly10 - poly9);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn x_field_mul_test() {
         let poly1 = XFieldElement::new([2, 0, 0].map(BFieldElement::new));
         let poly2 = XFieldElement::new([3, 0, 0].map(BFieldElement::new));
@@ -947,7 +948,7 @@ mod tests {
         assert_eq!(poly1112_product, poly11 * poly12);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn x_field_overloaded_arithmetic_test() {
         let mut rng = rand::rng();
         for _ in 0..100 {
@@ -977,7 +978,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn x_field_into_test() {
         let zero_poly: XFieldElement = Polynomial::<BFieldElement>::new(vec![]).into();
         assert!(zero_poly.is_zero());
@@ -990,7 +991,7 @@ mod tests {
         assert!(neg_shah_zero.is_zero());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn x_field_xgcp_test() {
         // Verify expected properties of XGCP: symmetry and that gcd is always
         // one. gcd is always one for all field elements.
@@ -1055,7 +1056,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn x_field_inv_test() {
         let one = XFieldElement::new([1, 0, 0].map(BFieldElement::new));
         let one_inv = one.inverse();
@@ -1109,7 +1110,7 @@ mod tests {
         }
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn field_element_inversion(
         #[filter(!#x.is_zero())] x: XFieldElement,
         #[filter(!#disturbance.is_zero())]
@@ -1122,7 +1123,7 @@ mod tests {
         prop_assert_ne!(XFieldElement::ONE, x * not_x.inverse());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn field_element_batch_inversion(
         #[filter(!#xs.iter().any(|x| x.is_zero()))] xs: Vec<XFieldElement>,
     ) {
@@ -1132,7 +1133,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mul_xfe_with_bfe_pbt() {
         let test_iterations = 100;
         let rands_x: Vec<XFieldElement> = random_elements(test_iterations);
@@ -1150,7 +1151,7 @@ mod tests {
         }
     }
 
-    #[proptest(cases = 1_000)]
+    #[macro_rules_attr::apply(proptest(cases = 1_000))]
     fn x_field_division_mul_pbt(a: XFieldElement, b: XFieldElement) {
         let a_b = a * b;
         let b_a = b * a;
@@ -1214,7 +1215,7 @@ mod tests {
         prop_assert_eq!(a_minus_b_field_b_as_b, a_minus_b_field_b_as_x);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn xfe_mod_pow_zero() {
         assert!(XFieldElement::ZERO.mod_pow_u32(0).is_one());
         assert!(XFieldElement::ZERO.mod_pow_u64(0).is_one());
@@ -1222,7 +1223,7 @@ mod tests {
         assert!(XFieldElement::ONE.mod_pow_u64(0).is_one());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn xfe_mod_pow(base: XFieldElement, #[strategy(0_u32..200)] exponent: u32) {
         let mut acc = XFieldElement::ONE;
         for i in 0..exponent {
@@ -1231,7 +1232,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn xfe_mod_pow_static() {
         let three_to_the_n = |n| xfe!(3).mod_pow_u64(n);
         let actual = [0, 1, 2, 3, 4, 5].map(three_to_the_n);
@@ -1239,7 +1240,7 @@ mod tests {
         assert_eq!(expected, actual);
     }
 
-    #[proptest(cases = 100)]
+    #[macro_rules_attr::apply(proptest(cases = 100))]
     fn xfe_intt_is_inverse_of_xfe_ntt(
         #[strategy(1..=11)]
         #[map(|log| 1_usize << log)]
@@ -1252,7 +1253,7 @@ mod tests {
         prop_assert_eq!(inputs, rv);
     }
 
-    #[proptest(cases = 40)]
+    #[macro_rules_attr::apply(proptest(cases = 40))]
     fn xfe_ntt_corresponds_to_polynomial_evaluation(
         #[strategy(1..=11)]
         #[map(|log_2| 1_u64 << log_2)]
@@ -1269,34 +1270,34 @@ mod tests {
         prop_assert_eq!(evaluations, rv);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn inverse_or_zero_of_zero_is_zero() {
         let zero = XFieldElement::ZERO;
         assert_eq!(zero, zero.inverse_or_zero());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn inverse_or_zero_of_non_zero_is_inverse(#[filter(!#xfe.is_zero())] xfe: XFieldElement) {
         let inv = xfe.inverse_or_zero();
         prop_assert_ne!(XFieldElement::ZERO, inv);
         prop_assert_eq!(XFieldElement::ONE, xfe * inv);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "Cannot invert the zero element in the extension field.")]
     fn multiplicative_inverse_of_zero() {
         let zero = XFieldElement::ZERO;
         let _ = zero.inverse();
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn xfe_to_digest_to_xfe_is_invariant(xfe: XFieldElement) {
         let digest: Digest = xfe.into();
         let xfe2: XFieldElement = digest.try_into().unwrap();
         assert_eq!(xfe, xfe2);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn converting_random_digest_to_xfield_element_fails(digest: Digest) {
         if XFieldElement::try_from(digest).is_ok() {
             let reason = "Should not be able to convert random `Digest` to an `XFieldElement`.";
@@ -1304,7 +1305,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn xfe_macro_can_be_used() {
         let x = xfe!(42);
         let _ = xfe!(42u32);
@@ -1323,19 +1324,19 @@ mod tests {
         assert_eq!(m.to_vec(), n);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn xfe_macro_produces_same_result_as_calling_new(coeffs: [BFieldElement; EXTENSION_DEGREE]) {
         let xfe = XFieldElement::new(coeffs);
         prop_assert_eq!(xfe, xfe!(coeffs));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn xfe_macro_produces_same_result_as_calling_new_const(scalar: BFieldElement) {
         let xfe = XFieldElement::new_const(scalar);
         prop_assert_eq!(xfe, xfe!(scalar));
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn as_flat_slice_produces_expected_slices(xfes: Vec<XFieldElement>) {
         let bfes = xfes.iter().flat_map(|&x| x.coefficients).collect_vec();
         prop_assert_eq!(&bfes, as_flat_slice(&xfes));

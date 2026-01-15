@@ -555,14 +555,15 @@ mod tests {
     use num_traits::ConstZero;
     use proptest::collection::vec;
     use proptest::prop_assert_eq;
-    use proptest_arbitrary_interop::arb;
     use rand::distr::Uniform;
     use rand::prelude::*;
     use rand::random;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::math::other::random_elements;
+    use crate::proptest_arbitrary_interop::arb;
+    use crate::tests::proptest;
+    use crate::tests::test;
     use crate::util_types::mmr::archival_mmr::ArchivalMmr;
 
     impl From<ArchivalMmr> for MmrAccumulator {
@@ -580,7 +581,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn conversion_test() {
         let leaf_hashes = random_elements(3);
         let ammr = ArchivalMmr::new_from_leafs(leaf_hashes);
@@ -594,7 +595,7 @@ mod tests {
         assert_eq!(3, mmra.num_leafs());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn verify_batch_update_single_append_test() {
         let leaf_hashes_start: Vec<Digest> = random_elements(3);
         let appended_leaf: Digest = random();
@@ -614,7 +615,7 @@ mod tests {
         assert!(leafs_were_appended);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn verify_batch_update_single_mutate_test() {
         let leaf0: Digest = random();
         let leaf1: Digest = random();
@@ -659,7 +660,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn verify_batch_update_two_append_test() {
         let leaf_hashes_start: Vec<Digest> = random_elements(3);
         let appended_leafs: Vec<Digest> = random_elements(2);
@@ -677,7 +678,7 @@ mod tests {
         assert!(leafs_were_appended);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn verify_batch_update_two_mutate_test() {
         let leaf14: Digest = random();
         let leaf15: Digest = random();
@@ -708,7 +709,7 @@ mod tests {
         ));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn batch_mutate_leaf_and_update_mps_test() {
         let mut rng = rand::rng();
         for mmr_leaf_count in 1..100 {
@@ -818,7 +819,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn verify_batch_update_pbt() {
         for start_size in 1..18 {
             let leaf_hashes_start: Vec<Digest> = random_elements(start_size);
@@ -930,7 +931,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mmra_serialization_test() {
         // You could argue that this test doesn't belong here, as it tests the behavior of
         // an imported library. I included it here, though, because the setup seems a bit clumsy
@@ -945,7 +946,7 @@ mod tests {
         assert_eq!(1, mmra.num_leafs());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn get_size_test() {
         // 10 digests produces an MMRA with two peaks
         let digests: Vec<Digest> = random_elements(10);
@@ -963,7 +964,7 @@ mod tests {
         assert!(mmra.get_size() < 100 * std::mem::size_of::<Digest>());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_mmr_accumulator_decode() {
         for _ in 0..100 {
             let num_leafs = rand::random_range(0..100);
@@ -975,7 +976,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "Lists must have same length. Got: 0 and 3")]
     fn test_diff_len_lists_batch_mutate_leaf_and_update_mps() {
         // Checks that batch_mutate_leaf_and_update_mps panics when passed differing length lists
@@ -996,14 +997,14 @@ mod tests {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn arbitrary_mmra_has_consistent_num_leafs_and_peaks(
         #[strategy(arb::<MmrAccumulator>())] mmra: MmrAccumulator,
     ) {
         prop_assert_eq!(mmra.peaks().len(), mmra.num_leafs().count_ones() as usize);
     }
 
-    #[proptest(cases = 20)]
+    #[macro_rules_attr::apply(proptest(cases = 20))]
     fn mmra_with_mps_produces_valid_output(
         #[strategy(0..u64::MAX / 2)] mmr_leaf_count: u64,
         #[strategy(0usize..10)] _num_revealed_leafs: usize,
@@ -1022,12 +1023,12 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn computing_mmr_root_for_no_leafs_produces_some_digest() {
         MmrAccumulator::new_from_leafs(vec![]).bag_peaks();
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn bag_peaks_snapshot() {
         let snapshot = |mmr: MmrAccumulator| mmr.bag_peaks().to_hex();
         let mut rng = StdRng::seed_from_u64(0x92ca758afeec6d29);

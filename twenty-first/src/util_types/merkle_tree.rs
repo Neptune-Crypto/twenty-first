@@ -950,10 +950,11 @@ pub enum MerkleTreeError {
 pub(crate) mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
-    use proptest_arbitrary_interop::arb;
-    use test_strategy::proptest;
 
     use super::*;
+    use crate::proptest_arbitrary_interop::arb;
+    use crate::tests::proptest;
+    use crate::tests::test;
     use crate::tip5::digest::tests::DigestCorruptor;
 
     impl MerkleTree {
@@ -1002,14 +1003,14 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn building_merkle_tree_from_empty_list_of_digests_fails_with_expected_error() {
         let maybe_tree = MerkleTree::par_new(&[]);
         let err = maybe_tree.unwrap_err();
         assert_eq!(MerkleTreeError::TooFewLeafs, err);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn merkle_tree_with_one_leaf_has_expected_height_and_number_of_leafs() {
         let digest = Digest::default();
         let tree = MerkleTree::par_new(&[digest]).unwrap();
@@ -1017,13 +1018,13 @@ pub(crate) mod tests {
         assert_eq!(0, tree.height());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn building_merkle_tree_from_one_digest_makes_that_digest_the_root(digest: Digest) {
         let tree = MerkleTree::par_new(&[digest]).unwrap();
         assert_eq!(digest, tree.root());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn building_merkle_tree_from_list_of_digests_with_incorrect_number_of_leafs_fails(
         #[filter(!#num_leafs.is_power_of_two())]
         #[strategy(1_usize..1 << 13)]
@@ -1036,14 +1037,14 @@ pub(crate) mod tests {
         assert_eq!(MerkleTreeError::IncorrectNumberOfLeafs, err);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn merkle_tree_construction_strategies_behave_identically_on_random_input(leafs: Vec<Digest>) {
         let sequential = MerkleTree::sequential_new(&leafs);
         let parallel = MerkleTree::par_new(&leafs);
         prop_assert_eq!(sequential, parallel);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn merkle_tree_construction_strategies_produce_identical_trees(
         #[strategy(0_usize..10)] _tree_height: usize,
         #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
@@ -1053,7 +1054,7 @@ pub(crate) mod tests {
         prop_assert_eq!(sequential, parallel);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn merkle_tree_construction_strategies_are_independent_of_parallelization_cutoff(
         #[strategy(0_usize..10)] _tree_height: usize,
         #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
@@ -1066,7 +1067,7 @@ pub(crate) mod tests {
         prop_assert_eq!(sequential, parallel);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn ram_frugal_merkle_root_is_identical_to_full_tree_root(
         #[strategy(0_usize..10)] _tree_height: usize,
         #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
@@ -1079,7 +1080,7 @@ pub(crate) mod tests {
         prop_assert_eq!(par_frugal, hungry);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn ram_frugal_merkle_root_is_independent_of_parallelization_cutoff(
         #[strategy(0_usize..10)] _tree_height: usize,
         #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
@@ -1095,7 +1096,7 @@ pub(crate) mod tests {
         prop_assert_eq!(par_frugal, hungry);
     }
 
-    #[proptest(cases = 100)]
+    #[macro_rules_attr::apply(proptest(cases = 100))]
     fn various_small_parallelization_cutoffs_dont_cause_infinite_iterations(
         #[strategy(0_usize..10)] _tree_height: usize,
         #[strategy(vec(arb(), 1 << #_tree_height))] leafs: Vec<Digest>,
@@ -1107,7 +1108,7 @@ pub(crate) mod tests {
         }
     }
 
-    #[proptest(cases = 100)]
+    #[macro_rules_attr::apply(proptest(cases = 100))]
     fn accessing_number_of_leafs_and_height_never_panics(
         #[strategy(arb())] merkle_tree: MerkleTree,
     ) {
@@ -1115,7 +1116,7 @@ pub(crate) mod tests {
         let _ = merkle_tree.height();
     }
 
-    #[proptest(cases = 50)]
+    #[macro_rules_attr::apply(proptest(cases = 50))]
     fn trivial_proof_can_be_verified(#[strategy(arb())] merkle_tree: MerkleTree) {
         let proof = merkle_tree.inclusion_proof_for_leaf_indices(&[]).unwrap();
         prop_assert!(proof.authentication_structure.is_empty());
@@ -1123,14 +1124,14 @@ pub(crate) mod tests {
         prop_assert!(verdict);
     }
 
-    #[proptest(cases = 40)]
+    #[macro_rules_attr::apply(proptest(cases = 40))]
     fn honestly_generated_authentication_structure_can_be_verified(test_tree: MerkleTreeToTest) {
         let proof = test_tree.proof();
         let verdict = proof.verify(test_tree.tree.root());
         prop_assert!(verdict);
     }
 
-    #[proptest(cases = 30)]
+    #[macro_rules_attr::apply(proptest(cases = 30))]
     fn corrupt_root_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         corruptor: DigestCorruptor,
@@ -1141,7 +1142,7 @@ pub(crate) mod tests {
         prop_assert!(!verdict);
     }
 
-    #[proptest(cases = 20)]
+    #[macro_rules_attr::apply(proptest(cases = 20))]
     fn corrupt_authentication_structure_leads_to_verification_failure(
         #[filter(!#test_tree.proof().authentication_structure.is_empty())]
         test_tree: MerkleTreeToTest,
@@ -1166,7 +1167,7 @@ pub(crate) mod tests {
         prop_assert!(!verdict);
     }
 
-    #[proptest(cases = 30)]
+    #[macro_rules_attr::apply(proptest(cases = 30))]
     fn corrupt_leaf_digests_lead_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(Just(#test_tree.proof().indexed_leafs.len()))] _n_leafs: usize,
@@ -1190,7 +1191,7 @@ pub(crate) mod tests {
         prop_assert!(!verdict);
     }
 
-    #[proptest(cases = 30)]
+    #[macro_rules_attr::apply(proptest(cases = 30))]
     fn removing_leafs_from_proof_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(Just(#test_tree.proof().indexed_leafs.len()))] _n_leafs: usize,
@@ -1213,7 +1214,7 @@ pub(crate) mod tests {
         prop_assert!(!verdict);
     }
 
-    #[proptest(cases = 30)]
+    #[macro_rules_attr::apply(proptest(cases = 30))]
     fn checking_set_inclusion_of_items_not_in_set_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(vec(0..#test_tree.tree.num_leafs(), 1..=(#test_tree.tree.num_leafs())))]
@@ -1231,7 +1232,7 @@ pub(crate) mod tests {
         prop_assert!(!verdict);
     }
 
-    #[proptest(cases = 30)]
+    #[macro_rules_attr::apply(proptest(cases = 30))]
     fn honestly_generated_proof_with_duplicate_leafs_can_be_verified(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(Just(#test_tree.proof().indexed_leafs.len()))] _n_leafs: usize,
@@ -1247,7 +1248,7 @@ pub(crate) mod tests {
         prop_assert!(verdict);
     }
 
-    #[proptest(cases = 40)]
+    #[macro_rules_attr::apply(proptest(cases = 40))]
     fn incorrect_tree_height_leads_to_verification_failure(
         #[filter(#test_tree.has_non_trivial_proof())] test_tree: MerkleTreeToTest,
         #[strategy(0_u32..64)]
@@ -1260,7 +1261,7 @@ pub(crate) mod tests {
         prop_assert!(!verdict);
     }
 
-    #[proptest(cases = 20)]
+    #[macro_rules_attr::apply(proptest(cases = 20))]
     fn honestly_generated_proof_with_all_leafs_revealed_can_be_verified(
         #[strategy(arb())] tree: MerkleTree,
     ) {
@@ -1272,7 +1273,7 @@ pub(crate) mod tests {
         prop_assert!(verdict);
     }
 
-    #[proptest(cases = 30)]
+    #[macro_rules_attr::apply(proptest(cases = 30))]
     fn requesting_inclusion_proof_for_nonexistent_leaf_fails_with_expected_error(
         #[strategy(arb())] tree: MerkleTree,
         #[filter(#leaf_indices.iter().any(|&i| i > #tree.num_leafs()))] leaf_indices: Vec<
@@ -1285,7 +1286,7 @@ pub(crate) mod tests {
         assert_eq!(MerkleTreeError::LeafIndexInvalid, err);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn authentication_paths_of_extremely_small_tree_use_expected_digests() {
         //     _ 1_
         //    /    \
@@ -1305,7 +1306,7 @@ pub(crate) mod tests {
         assert_eq!(auth_path_with_nodes([6, 2]), auth_path_for_leaf(3));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn authentication_paths_of_very_small_tree_use_expected_digests() {
         //         ──── 1 ────
         //        ╱           ╲
@@ -1332,7 +1333,7 @@ pub(crate) mod tests {
         assert_eq!(auth_path_with_nodes([14, 6, 2]), auth_path_for_leaf(7));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn authentication_paths_of_very_small_tree_are_identical_when_using_tree_or_only_leafs() {
         let tree = MerkleTree::test_tree_of_height(3);
         let leafs = tree.leafs().copied().collect_vec();
@@ -1350,7 +1351,7 @@ pub(crate) mod tests {
         }
     }
 
-    #[proptest(cases = 100)]
+    #[macro_rules_attr::apply(proptest(cases = 100))]
     fn auth_structure_is_independent_of_compute_method(test_tree: MerkleTreeToTest) {
         let tree = test_tree.tree;
         let selected_indices = test_tree.selected_indices;
@@ -1366,7 +1367,7 @@ pub(crate) mod tests {
         prop_assert_eq!(&cached_auth_structure, &par_auth_structure);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn subtree_leafs_are_actually_sub_tree_leafs() {
         let tree = MerkleTree::test_tree_of_height(5);
         let leafs = tree.leafs().copied().collect_vec();
@@ -1385,7 +1386,7 @@ pub(crate) mod tests {
         }
     }
 
-    #[proptest(cases = 10)]
+    #[macro_rules_attr::apply(proptest(cases = 10))]
     fn each_leaf_can_be_verified_individually(test_tree: MerkleTreeToTest) {
         let tree = test_tree.tree;
         for (leaf_index, &leaf) in tree.leafs().enumerate() {
@@ -1400,7 +1401,7 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn partial_merkle_tree_built_from_authentication_structure_contains_expected_nodes() {
         let merkle_tree = MerkleTree::test_tree_of_height(3);
         let proof = merkle_tree
@@ -1424,7 +1425,7 @@ pub(crate) mod tests {
         assert_eq!(expected_node_indices, node_indices);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn manually_constructed_partial_tree_can_be_filled() {
         //         ──── _ ───
         //        ╱           ╲
@@ -1446,7 +1447,7 @@ pub(crate) mod tests {
         partial_tree.fill().unwrap();
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn trying_to_compute_root_of_partial_tree_with_necessary_node_missing_gives_expected_error() {
         //         ──── _ ────
         //        ╱           ╲
@@ -1470,7 +1471,7 @@ pub(crate) mod tests {
         assert_eq!(MerkleTreeError::MissingNodeIndex(3), err);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn trying_to_compute_root_of_partial_tree_with_redundant_node_gives_expected_error() {
         //         ──── _ ────
         //        ╱           ╲
@@ -1494,7 +1495,7 @@ pub(crate) mod tests {
         assert_eq!(MerkleTreeError::SpuriousNodeIndex(2), err);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn converting_authentication_structure_to_authentication_paths_results_in_expected_paths() {
         const TREE_HEIGHT: MerkleTreeHeight = 3;
         let merkle_tree = MerkleTree::test_tree_of_height(TREE_HEIGHT);
@@ -1513,7 +1514,7 @@ pub(crate) mod tests {
         assert_eq!(expected_paths, auth_paths);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn merkle_subtrees_are_sliced_correctly() {
         const TREE_HEIGHT: usize = 5;
         const NUM_LEAFS: u32 = 1 << TREE_HEIGHT;
@@ -1571,7 +1572,7 @@ pub(crate) mod tests {
         assert_eq!((56..64).collect_vec().as_slice(), right_right_tree[3]);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn auth_structure_node_indices_can_be_computed_with_different_types() -> Result<()> {
         let u32_indices: Vec<u32> =
             MerkleTree::authentication_structure_node_indices(8, &[0_u32, 1])?.collect();

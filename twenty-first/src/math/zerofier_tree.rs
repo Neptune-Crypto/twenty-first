@@ -101,23 +101,25 @@ where
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
-mod test {
+mod tests {
     use num_traits::ConstZero;
     use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prop_assert_eq;
-    use proptest_arbitrary_interop::arb;
-    use test_strategy::proptest;
 
     use crate::math::zerofier_tree::ZerofierTree;
     use crate::prelude::BFieldElement;
     use crate::prelude::Polynomial;
+    use crate::proptest_arbitrary_interop::arb;
+    use crate::tests::proptest;
+    use crate::tests::test;
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn zerofier_tree_can_be_empty() {
         ZerofierTree::<BFieldElement>::new_from_domain(&[]);
     }
-    #[proptest]
+
+    #[macro_rules_attr::apply(proptest)]
     fn zerofier_tree_root_is_multiple_of_children(
         #[strategy(vec(arb(), 2*ZerofierTree::<BFieldElement>::RECURSION_CUTOFF_THRESHOLD))]
         points: Vec<BFieldElement>,
@@ -136,7 +138,7 @@ mod test {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn zerofier_tree_root_has_right_degree(
         #[strategy(vec(arb(), 1..(1<<10)))] points: Vec<BFieldElement>,
     ) {
@@ -144,7 +146,7 @@ mod test {
         prop_assert_eq!(points.len(), zerofier_tree.zerofier().degree() as usize);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn zerofier_tree_root_zerofies(
         #[strategy(vec(arb(), 1..(1<<10)))] points: Vec<BFieldElement>,
         #[strategy(0usize..#points.len())] index: usize,
@@ -156,7 +158,7 @@ mod test {
         );
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn zerofier_tree_and_polynomial_agree_on_zerofiers(
         #[strategy(vec(arb(), 1..(1<<10)))] points: Vec<BFieldElement>,
     ) {

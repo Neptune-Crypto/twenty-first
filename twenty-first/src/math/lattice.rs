@@ -815,9 +815,11 @@ pub mod kem {
     #[cfg(test)]
     #[cfg_attr(coverage_nightly, coverage(off))]
     mod tests {
-        use super::*;
 
-        #[test]
+        use super::*;
+        use crate::tests::test;
+
+        #[macro_rules_attr::apply(test)]
         fn secret_key_zeroize_test() {
             let mut secret_key = SecretKey {
                 key: rand::random(),
@@ -844,14 +846,14 @@ mod tests {
     use sha3::Sha3_256;
 
     use super::kem::CIPHERTEXT_SIZE_IN_BFES;
+    use super::kem::Ciphertext;
+    use super::kem::PublicKey;
     use super::kem::SecretKey;
     use super::kem::shake256;
-    use crate::math::b_field_element::BFieldElement;
-    use crate::math::lattice::kem::Ciphertext;
-    use crate::math::lattice::kem::PublicKey;
-    use crate::math::lattice::*;
+    use super::*;
+    use crate::tests::test;
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_kats() {
         // KATs lifted from
         // https://github.com/XKCP/XKCP/blob/master/tests/UnitTests/main.c
@@ -870,7 +872,7 @@ mod tests {
         assert_eq!(expected_output_sha3_256, &*sha3_out);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_fast_mul() {
         let a: [BFieldElement; 64] = random();
         let b: [BFieldElement; 64] = random();
@@ -893,7 +895,7 @@ mod tests {
         assert_eq!(c_fast, c_schoolbook);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_embedding() {
         let mut rng = rand::rng();
         let msg: [u8; 32] = (0..32)
@@ -907,7 +909,7 @@ mod tests {
         assert_eq!(msg, extracted);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_module_distributivity() {
         let mut rng = rand::rng();
         let randomness = (0..(2 * 3 + 2 * 3 + 3) * 64 * 9)
@@ -930,7 +932,7 @@ mod tests {
         assert_eq!(sumprod, prodsum);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_module_multiply() {
         let mut rng = rand::rng();
         let randomness = (0..(2 * 3 + 2 * 3 + 3) * 64 * 9)
@@ -949,7 +951,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_kem() {
         let mut rng = rand::rng();
         let mut key_randomness: [u8; 32] = [0u8; 32];
@@ -971,7 +973,7 @@ mod tests {
         assert!(kem::dec(other_sk, ctxt).is_none());
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_ciphertext_conversion() {
         let bfes: [BFieldElement; CIPHERTEXT_SIZE_IN_BFES] = random();
         let ciphertext: Ciphertext = bfes.into();
@@ -982,7 +984,7 @@ mod tests {
         assert_eq!(ciphertext, ciphertext_again);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn zero_test() {
         let zero_me = ModuleElement::<4>::zero();
         assert!(zero_me.is_zero(), "zero must be zero");
@@ -994,7 +996,7 @@ mod tests {
         assert!(!not_zero.is_zero(), "not-zero must be not be zero");
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn serialization_deserialization_test() {
         // This is tested here since the serialization for these objects is a bit more complicated
         // than the standard serde stuff. So to be sure that it works, we just run this test here.

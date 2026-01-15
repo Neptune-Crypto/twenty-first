@@ -113,11 +113,12 @@ impl InverseTip5 {
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
-    use test_strategy::proptest;
 
     use super::*;
+    use crate::tests::proptest;
+    use crate::tests::test;
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn inv_lookup_table_is_inv_of_lookup_table() {
         for (idx, looked_up) in LOOKUP_TABLE.into_iter().enumerate() {
             let idx_again = INV_LOOKUP_TABLE[looked_up as usize] as usize;
@@ -125,19 +126,19 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn inv_power_map_exponent_is_bezout_coefficient_of_7() {
         let one = (INV_POWER_MAP_EXPONENT as u128 * 7) % (BFieldElement::P as u128 - 1);
         assert_eq!(1, one);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn inv_power_map_exponent_computes_the_correct_root(bfe: BFieldElement) {
         let bfe_again = bfe.mod_pow(7).mod_pow(INV_POWER_MAP_EXPONENT);
         prop_assert_eq!(bfe, bfe_again);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn sbox_layer(mut tip5: Tip5) {
         let orig_state = tip5.state;
         tip5.sbox_layer();
@@ -147,7 +148,7 @@ mod tests {
         prop_assert_eq!(orig_state, inverse_tip5.state);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn mds_matrix_mul(mut tip5: Tip5) {
         let orig_state = tip5.state;
         tip5.mds_generated();
@@ -157,7 +158,7 @@ mod tests {
         prop_assert_eq!(orig_state, inverse_tip5.state);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn round(mut tip5: Tip5, #[strategy(0..NUM_ROUNDS)] round_idx: usize) {
         let orig_state = tip5.state;
         tip5.round(round_idx);
@@ -167,7 +168,7 @@ mod tests {
         prop_assert_eq!(orig_state, inverse_tip5.state);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn permutation(mut tip5: Tip5) {
         let orig_state = tip5.state;
         tip5.permutation();

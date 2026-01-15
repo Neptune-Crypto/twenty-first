@@ -322,10 +322,11 @@ mod tests {
     use super::*;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::other::random_elements;
+    use crate::tests::test;
     use crate::util_types::mmr::mmr_accumulator::util::mmra_with_mps;
     use crate::util_types::mmr::shared_advanced::get_peak_heights_and_peak_node_indices;
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn empty_mmr_behavior_test() {
         let mut archival_mmr = ArchivalMmr::default();
         let mut accumulator_mmr = MmrAccumulator::new_from_leafs(vec![]);
@@ -390,11 +391,11 @@ mod tests {
                 &archival_mmr.peaks(),
                 archival_mmr.num_leafs(),
             ),
-            "membership proof from arhival MMR must validate"
+            "membership proof from archival MMR must validate"
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn verify_against_correct_peak_test() {
         // This test addresses a bug that was discovered late in the development
         // process where it was possible to fake a verification proof by
@@ -431,7 +432,7 @@ mod tests {
         ));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mutate_leaf_archival_test() {
         let leaf_count: u64 = 3;
         let leaf_hashes: Vec<Digest> = random_elements(leaf_count as usize);
@@ -499,7 +500,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn bagging_peaks_is_equivalent_for_archival_and_accumulator_mmrs() {
         let leaf_digests: Vec<Digest> = random_elements(3);
         let leafs = leaf_digests.clone();
@@ -519,7 +520,7 @@ mod tests {
         assert!(no_peak_is_bag);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn accumulator_mmr_mutate_leaf_test() {
         // Verify that updating leafs in archival and in accumulator MMR results
         // in the same peaks and verify that updating all leafs in an MMR
@@ -546,7 +547,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mmr_prove_verify_leaf_mutation_test() {
         for size in 1..150 {
             let new_leaf: Digest = random();
@@ -583,7 +584,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mmr_append_test() {
         // Verify that building an MMR iteratively or in *one* function call
         // results in the same MMR
@@ -640,7 +641,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn one_input_mmr_test() {
         let input_hash = Tip5::hash(&BFieldElement::new(14));
         let new_input_hash = Tip5::hash(&BFieldElement::new(201));
@@ -706,7 +707,7 @@ mod tests {
         );
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn two_input_mmr_test() {
         let num_leafs: u64 = 3;
         let input_digests: Vec<Digest> = random_elements(num_leafs as usize);
@@ -752,7 +753,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn variable_size_tip5_mmr_test() {
         let leaf_counts = (1..34).collect_vec();
         let node_counts = [
@@ -817,7 +818,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn variable_size_mmr_test() {
         let node_counts = [
             1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41, 42,
@@ -896,13 +897,13 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic]
     fn disallow_repeated_leaf_indices_in_construction() {
         mmra_with_mps(14, vec![(0, random()), (0, random())]);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mmra_and_mps_construct_test_cornercases() {
         let mut rng = rand::rng();
         for leaf_count in 0..5 {
@@ -941,7 +942,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mmra_and_mps_construct_test_small() {
         let mut rng = rand::rng();
         let digest_leaf_idx12: Digest = rng.random();
@@ -952,7 +953,7 @@ mod tests {
         assert!(mps[1].verify(14, digest_leaf_idx14, &mmra.peaks(), mmra.num_leafs()));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mmra_and_mps_construct_test_pbt() {
         let mut rng = rand::rng();
 
@@ -977,7 +978,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn mmra_and_mps_construct_test_big() {
         let mut rng = rand::rng();
         let leaf_count = (1 << 59) + (1 << 44) + 1234567890;

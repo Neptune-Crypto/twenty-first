@@ -282,13 +282,14 @@ mod tests {
     use proptest::prelude::Just;
     use proptest::prop_assert_eq;
     use rand::RngCore;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::prelude::Digest;
     use crate::prelude::MmrMembershipProof;
+    use crate::tests::proptest;
+    use crate::tests::test;
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn leaf_index_to_node_index_test() {
         assert_eq!(1, leaf_index_to_node_index(0));
         assert_eq!(2, leaf_index_to_node_index(1));
@@ -314,7 +315,7 @@ mod tests {
         assert_eq!(40, leaf_index_to_node_index(21));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn node_indices_added_by_append_test() {
         assert_eq!(vec![1], node_indices_added_by_append(0));
         assert_eq!(vec![2, 3], node_indices_added_by_append(1));
@@ -343,7 +344,7 @@ mod tests {
         assert_eq!(vec![64], node_indices_added_by_append(32));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn leaf_index_node_index_pbt() {
         let mut rng = rand::rng();
         for _ in 0..10_000 {
@@ -354,7 +355,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn right_ancestor_count_test() {
         assert_eq!((0, 0), right_lineage_length_and_own_height(1)); // 0b1 => 0
         assert_eq!((1, 0), right_lineage_length_and_own_height(2)); // 0b10 => 1
@@ -417,14 +418,14 @@ mod tests {
         assert_eq!((0, 62), right_lineage_length_and_own_height(u64::MAX / 2)); // 0b111...11 => 0
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn right_lineage_length_property(#[strategy(0u64..(1<<63))] leaf_index: u64) {
         let rll = right_lineage_length_from_leaf_index(leaf_index);
         let rac = right_lineage_length_and_own_height(leaf_index_to_node_index(leaf_index)).0;
         prop_assert_eq!(rac, rll);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn leftmost_ancestor_test() {
         assert_eq!((1, 0), leftmost_ancestor(1));
         assert_eq!((3, 1), leftmost_ancestor(2));
@@ -444,7 +445,7 @@ mod tests {
         assert_eq!((31, 4), leftmost_ancestor(16));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn left_sibling_test() {
         assert_eq!(3, left_sibling(6, 1));
         assert_eq!(1, left_sibling(2, 0));
@@ -454,7 +455,7 @@ mod tests {
         assert_eq!(7, left_sibling(14, 2));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn node_index_to_leaf_index_test() {
         assert_eq!(Some(0), node_index_to_leaf_index(1));
         assert_eq!(Some(1), node_index_to_leaf_index(2));
@@ -480,7 +481,7 @@ mod tests {
         assert_eq!(None, node_index_to_leaf_index(22));
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn leaf_count_to_node_count_test() {
         let node_counts: Vec<u64> = vec![
             0, 1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26, 31, 32, 34, 35, 38, 39, 41,
@@ -491,7 +492,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn get_peak_heights_and_peak_node_indices_test() {
         type TestCase = (u64, (Vec<u32>, Vec<u64>));
         let leaf_count_and_expected: Vec<TestCase> = vec![
@@ -526,7 +527,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn get_authentication_path_node_indices_test() {
         type Interval = (u64, u64, u64);
         type TestCase = (Interval, Option<Vec<u64>>);
@@ -548,13 +549,13 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     #[should_panic(expected = "Leaf index out-of-bounds: 5/5")]
     fn auth_path_indices_out_of_bounds_unit_test() {
         auth_path_node_indices(5, 5);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn auth_path_indices_prop(
         #[strategy(0u64..(u64::MAX>>1))] _num_leafs: u64,
         #[strategy(0u64..(#_num_leafs))] leaf_index: u64,
@@ -566,7 +567,7 @@ mod tests {
         prop_assert_eq!(mp.get_node_indices(leaf_index), node_indices);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn auth_path_indices_unit_test() {
         assert_eq!(vec![2, 6, 14, 30], auth_path_node_indices(16, 0));
         assert_eq!(vec![1, 6, 14, 30], auth_path_node_indices(16, 1));
@@ -600,17 +601,17 @@ mod tests {
         }
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn right_lineage_length_from_node_index_does_not_crash(node_index: u64) {
         right_lineage_length_from_node_index(node_index);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn leftmost_ancestor_does_not_crash(node_index: u64) {
         leftmost_ancestor(node_index);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn right_lineage_length_and_own_height_does_not_crash(node_index: u64) {
         right_lineage_length_and_own_height(node_index);
     }

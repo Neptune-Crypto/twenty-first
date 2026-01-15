@@ -260,10 +260,11 @@ mod tests {
 
     use itertools::Itertools;
     use proptest::prelude::*;
-    use proptest_arbitrary_interop::arb;
-    use test_strategy::proptest;
 
     use super::*;
+    use crate::proptest_arbitrary_interop::arb;
+    use crate::tests::proptest;
+    use crate::tests::test;
     use crate::tip5::digest::tests::DigestCorruptor;
 
     /// A type exclusive to testing. Simplifies construction and verification of
@@ -319,21 +320,21 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn append_nothing_to_empty_mmra() {
         let relation = MmrSuccessorRelation::new_with_numbered_leafs(0, 0);
         assert_eq!(0, relation.proof.paths.len());
         relation.verify().unwrap();
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn append_one_thing_to_empty_mmra() {
         let relation = MmrSuccessorRelation::new_with_numbered_leafs(0, 1);
         assert_eq!(0, relation.proof.paths.len());
         relation.verify().unwrap();
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn append_leafs_without_influence_on_existing_peaks() {
         let relation = MmrSuccessorRelation::new_with_numbered_leafs(1 << 3, 3);
         assert_eq!(0, relation.proof.paths.len());
@@ -356,7 +357,7 @@ mod tests {
     ///         ╭─┴─╮   ╭─┴─╮   ╭─┴─╮   ╭─┴─╮   ╭─┴─╮   ╭─┴─╮   ·━┻━x   ┏━┻━┓
     ///        ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ╭┴╮ ┏┻┓ ┏┻┓ ┏┻┓ ┏┻┓
     /// ```
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn append_8_leafs_to_mmra_with_42_leafs() {
         let relation = MmrSuccessorRelation::new_with_numbered_leafs(42, 8);
         assert_eq!(2, relation.proof.paths.len());
@@ -372,7 +373,7 @@ mod tests {
         relation.verify().unwrap();
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn unit_tests() {
         for (n, m) in (0..18).cartesian_product(0..18) {
             dbg!((n, m));
@@ -381,12 +382,12 @@ mod tests {
         }
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn arbitrary_mmr_successor_relation_holds(relation: MmrSuccessorRelation) {
         relation.verify()?;
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn verification_fails_if_old_mmr_is_inconsistent(
         mut relation: MmrSuccessorRelation,
         wrong_num_leafs: u64,
@@ -396,7 +397,7 @@ mod tests {
         prop_assert_eq!(Err(Error::InconsistentOldMmr), relation.verify());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn verification_fails_if_new_mmr_is_inconsistent(
         mut relation: MmrSuccessorRelation,
         wrong_num_leafs: u64,
@@ -406,7 +407,7 @@ mod tests {
         prop_assert_eq!(Err(Error::InconsistentNewMmr), relation.verify());
     }
 
-    #[proptest(cases = 50)]
+    #[macro_rules_attr::apply(proptest(cases = 50))]
     fn verification_fails_if_old_mmra_has_more_leafs_than_new_mmra(
         #[filter(#relation.old != #relation.new)] mut relation: MmrSuccessorRelation,
     ) {
@@ -414,7 +415,7 @@ mod tests {
         prop_assert_eq!(Err(Error::OldHasMoreLeafsThanNew), relation.verify());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn verification_fails_if_old_mmra_has_swapped_peaks(
         #[filter(#relation.old.peaks().len() >= 2)] mut relation: MmrSuccessorRelation,
         #[strategy(0..#relation.old.peaks().len())] first_swap_idx: usize,
@@ -435,7 +436,7 @@ mod tests {
     /// relation, it is impossible to swap arbitrary peaks and guarantee a
     /// verification failure. However, if the old MMRA is non-empty, the first
     /// peak of the new MMRA is always relevant.
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn verification_fails_if_new_mmra_has_first_peak_swapped_out(
         #[filter(#relation.old.num_leafs() > 0)]
         #[filter(#relation.new.peaks().len() >= 2)]
@@ -452,7 +453,7 @@ mod tests {
         ));
     }
 
-    #[proptest(cases = 50)]
+    #[macro_rules_attr::apply(proptest(cases = 50))]
     fn verification_fails_if_authentication_path_is_corrupt(
         #[filter(!#relation.proof.paths.is_empty())] mut relation: MmrSuccessorRelation,
         #[strategy(0..#relation.proof.paths.len())] corruption_idx: usize,
@@ -467,7 +468,7 @@ mod tests {
         ));
     }
 
-    #[proptest(cases = 50)]
+    #[macro_rules_attr::apply(proptest(cases = 50))]
     fn verification_fails_if_authentication_path_has_too_few_elements(
         #[filter(!#relation.proof.paths.is_empty())] mut relation: MmrSuccessorRelation,
         #[strategy(0..#relation.proof.paths.len())] deletion_idx: usize,
@@ -476,7 +477,7 @@ mod tests {
         prop_assert_eq!(Err(Error::AuthenticationPathTooShort), relation.verify());
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn verification_fails_if_authentication_path_has_too_many_elements(
         mut relation: MmrSuccessorRelation,
         #[strategy(arb())] spurious_element: Digest,

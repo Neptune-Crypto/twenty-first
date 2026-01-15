@@ -13,9 +13,23 @@ use super::traits::PrimitiveRootOfUnity;
 /// The number of different domains over which this library can compute (i)NTT.
 ///
 /// In particular, the maximum slice length for both [NTT][ntt] and [iNTT][intt]
-/// supported by this library is 2^31. All domains of length some power of 2
-/// smaller than this, plus the empty domain, are supported as well.
-const NUM_DOMAINS: usize = 32;
+/// supported by this library is 2^31 on 64-bit systems and 2^28 on 32-bit
+/// systems. All domains of length some power of 2 smaller than this, plus the
+/// empty domain, are supported as well.
+const NUM_DOMAINS: usize = {
+    #[cfg(target_pointer_width = "16")]
+    compile_error!("pointer width 16 is not supported");
+
+    #[cfg(target_pointer_width = "32")]
+    {
+        29 // avoid isize::MAX overflow.
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    {
+        32 // NTT currently relies on `usize` to `u32` `as`-casting
+    }
+};
 
 /// ## Perform NTT on slices of prime-field elements
 ///
@@ -317,17 +331,18 @@ mod tests {
     use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prelude::*;
-    use proptest_arbitrary_interop::arb;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::math::other::random_elements;
     use crate::math::traits::PrimitiveRootOfUnity;
     use crate::math::x_field_element::EXTENSION_DEGREE;
     use crate::prelude::*;
+    use crate::proptest_arbitrary_interop::arb;
+    use crate::tests::proptest;
+    use crate::tests::test;
     use crate::xfe;
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn chu_ntt_b_field_prop_test() {
         for log_2_n in 1..10 {
             let n = 1 << log_2_n;
@@ -349,7 +364,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn chu_ntt_x_field_prop_test() {
         for log_2_n in 1..10 {
             let n = 1 << log_2_n;
@@ -379,7 +394,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn xfield_basic_test_of_chu_ntt() {
         let mut input_output = vec![
             XFieldElement::new_const(BFieldElement::ONE),
@@ -405,7 +420,7 @@ mod tests {
         assert_eq!(original_input, input_output);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn bfield_basic_test_of_chu_ntt() {
         let mut input_output = vec![
             BFieldElement::new(1),
@@ -429,7 +444,7 @@ mod tests {
         assert_eq!(original_input, input_output);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn bfield_max_value_test_of_chu_ntt() {
         let mut input_output = vec![
             BFieldElement::new(BFieldElement::MAX),
@@ -453,7 +468,7 @@ mod tests {
         assert_eq!(original_input, input_output);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn ntt_on_empty_input() {
         let mut input_output = vec![];
         let original_input = input_output.clone();
@@ -466,7 +481,7 @@ mod tests {
         assert_eq!(original_input, input_output);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest(cases = 10))]
     fn ntt_on_input_of_length_one(bfe: BFieldElement) {
         let mut test_vector = vec![bfe];
         ntt(&mut test_vector);
@@ -474,7 +489,7 @@ mod tests {
     }
 
     // Make sure that caches are correctly populated in edge cases.
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn ntt_on_input_of_length_0_then_1_then_0() {
         let mut empty = Vec::<BFieldElement>::new();
         ntt(&mut empty);
@@ -482,7 +497,7 @@ mod tests {
         ntt(&mut empty);
     }
 
-    #[proptest(cases = 10)]
+    #[macro_rules_attr::apply(proptest(cases = 10))]
     fn ntt_then_intt_is_identity_operation(
         #[strategy((0_usize..18).prop_map(|l| 1 << l))] _vector_length: usize,
         #[strategy(vec(arb(), #_vector_length))] mut input: Vec<BFieldElement>,
@@ -493,7 +508,7 @@ mod tests {
         assert_eq!(original_input, input);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn b_field_ntt_with_length_32() {
         let mut input_output = bfe_vec![
             1, 4, 0, 0, 0, 0, 0, 0, 1, 4, 0, 0, 0, 0, 0, 0, 1, 4, 0, 0, 0, 0, 0, 0, 1, 4, 0, 0, 0,
@@ -544,7 +559,7 @@ mod tests {
         assert_eq!(original_input, input_output);
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn test_compare_ntt_to_eval() {
         for log_size in 1..10 {
             let size = 1 << log_size;
@@ -563,7 +578,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn swap_indices_can_be_computed() {
         // exponential growth is powerful; cap the number of domains
         for log_size in 0..NUM_DOMAINS - 2 {
@@ -571,7 +586,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn twiddle_factors_can_be_computed() {
         // exponential growth is powerful; cap the number of domains
         for log_size in 0..NUM_DOMAINS - 5 {

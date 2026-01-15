@@ -62,12 +62,13 @@ mod tests {
     use rand::Rng;
     use rand::distr::Distribution;
     use rand::distr::StandardUniform;
-    use test_strategy::proptest;
 
     use super::*;
     use crate::math::x_field_element::EXTENSION_DEGREE;
     use crate::prelude::BFieldCodec;
     use crate::prelude::XFieldElement;
+    use crate::tests::proptest;
+    use crate::tests::test;
     use crate::tip5::Digest;
     use crate::tip5::Tip5;
 
@@ -92,7 +93,7 @@ mod tests {
         }
     }
 
-    #[test]
+    #[macro_rules_attr::apply(test)]
     fn to_sequence_test() {
         // bool
         encode_prop(false, true);
@@ -119,7 +120,7 @@ mod tests {
         encode_prop(0u128, u128::MAX);
     }
 
-    #[proptest]
+    #[macro_rules_attr::apply(proptest)]
     fn sample_indices(mut tip5: Tip5) {
         let cases = [
             (2, 0),
