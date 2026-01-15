@@ -728,7 +728,6 @@ pub(crate) mod tests {
 
     use prop::sample::size_range;
     use proptest::prelude::*;
-    use proptest_arbitrary_interop::arb;
     use rand::RngCore;
     use rayon::prelude::IntoParallelIterator;
     use rayon::prelude::ParallelIterator;
@@ -736,6 +735,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::math::other::random_elements;
     use crate::math::x_field_element::XFieldElement;
+    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
 

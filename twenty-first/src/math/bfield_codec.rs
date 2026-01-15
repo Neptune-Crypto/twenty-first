@@ -601,10 +601,10 @@ mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::TestCaseResult;
-    use proptest_arbitrary_interop::arb;
 
     use super::*;
     use crate::prelude::*;
+    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
 

@@ -950,9 +950,9 @@ pub enum MerkleTreeError {
 pub(crate) mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
-    use proptest_arbitrary_interop::arb;
 
     use super::*;
+    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
     use crate::tip5::digest::tests::DigestCorruptor;

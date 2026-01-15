@@ -633,13 +633,13 @@ impl MmrMembershipProof {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use itertools::Itertools;
-    use proptest_arbitrary_interop::arb;
     use rand::Rng;
     use rand::random;
 
     use super::*;
     use crate::math::b_field_element::BFieldElement;
     use crate::math::other::random_elements;
+    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
     use crate::tip5::Digest;

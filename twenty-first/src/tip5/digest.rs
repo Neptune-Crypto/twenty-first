@@ -279,11 +279,11 @@ pub(crate) mod tests {
     use proptest::collection::vec;
     use proptest::prelude::Arbitrary as ProptestArbitrary;
     use proptest::prelude::*;
-    use proptest_arbitrary_interop::arb;
 
     use super::*;
     use crate::error::ParseBFieldElementError;
     use crate::prelude::*;
+    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
 

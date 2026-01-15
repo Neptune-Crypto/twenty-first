@@ -820,12 +820,12 @@ mod tests {
 
     use itertools::izip;
     use proptest::prelude::*;
-    use proptest_arbitrary_interop::arb;
     use rand::random;
 
     use crate::math::b_field_element::*;
     use crate::math::other::random_elements;
     use crate::math::polynomial::Polynomial;
+    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
 
