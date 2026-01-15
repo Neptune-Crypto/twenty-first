@@ -153,7 +153,10 @@ where
         [const { OnceLock::new() }; NUM_DOMAINS];
 
     let slice_len = x.len();
-    let log2_slice_len = slice_len.checked_ilog2().unwrap_or(0);
+    let Some(log2_slice_len) = slice_len.checked_ilog2() else {
+        // if the slice is empty, there's nothing to do
+        return;
+    };
     let swap_indices =
         ALL_SWAP_INDICES[log2_slice_len as usize].get_or_init(|| swap_indices(slice_len));
     debug_assert_eq!(swap_indices.len(), slice_len);
@@ -468,6 +471,15 @@ mod tests {
         let mut test_vector = vec![bfe];
         ntt(&mut test_vector);
         assert_eq!(vec![bfe], test_vector);
+    }
+
+    // Make sure that caches are correctly populated in edge cases.
+    #[test]
+    fn ntt_on_input_of_length_0_then_1_then_0() {
+        let mut empty = Vec::<BFieldElement>::new();
+        ntt(&mut empty);
+        ntt(&mut [BFieldElement::new(0)]);
+        ntt(&mut empty);
     }
 
     #[proptest(cases = 10)]
