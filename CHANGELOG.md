@@ -3,6 +3,43 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [1.1.0](https://github.com/Neptune-Crypto/twenty-first/compare/v1.0.0..v1.1.0) – 2026-01-16
+
+### ✨ Features
+
+- Build and test on `wasm32-unknown-unknown` ([c5b5e5f7](https://github.com/Neptune-Crypto/twenty-first/commit/c5b5e5f7))
+
+### 🐛 Bug Fixes
+
+- Avoid potential panic in (i)NTT ([23d175ee](https://github.com/Neptune-Crypto/twenty-first/commit/23d175ee))
+
+### ⚡️ Performance
+
+- Avoid allocations when sampling from Tip5 ([2c0f6ca1](https://github.com/Neptune-Crypto/twenty-first/commit/2c0f6ca1))
+
+### 📚 Documentation
+
+- Add WebAssembly README file ([03416bc9](https://github.com/Neptune-Crypto/twenty-first/commit/03416bc9))
+
+### ⚙️ Miscellaneous
+
+- Inline `proptest-arbitrary-interop` ([27f43da9](https://github.com/Neptune-Crypto/twenty-first/commit/27f43da9))
+
+### ♻️ Refactor
+
+- *(XFieldElement)* Deprecate {in, de}crement ([97fc0b39](https://github.com/Neptune-Crypto/twenty-first/commit/97fc0b39))
+
+### ✅ Testing
+
+- Increase code coverage ([f564127c](https://github.com/Neptune-Crypto/twenty-first/commit/f564127c))
+- *(Tip5)* Add implementation of inverse Tip5 ([e343fd0d](https://github.com/Neptune-Crypto/twenty-first/commit/e343fd0d))
+- *(Tip5)* Tip5 gives non-degenerate elements ([a50d7500](https://github.com/Neptune-Crypto/twenty-first/commit/a50d7500))
+- Don't treat tests as code-under-test ([6e4e2a31](https://github.com/Neptune-Crypto/twenty-first/commit/6e4e2a31))
+
+### ⏱️ Benchmark
+
+- Drop too-small, thus noisy, benchmark ([5a794134](https://github.com/Neptune-Crypto/twenty-first/commit/5a794134))
+
 ## [1.0.0](https://github.com/Neptune-Crypto/twenty-first/compare/v0.50.0..v1.0.0) – 2025-10-23
 
 ### ✨ Features
