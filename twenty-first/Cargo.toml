@@ -30,16 +30,16 @@ phf = { version = "0.13", features = ["macros"] }
 rand = "0.9"
 rayon = "1.10"
 serde = { version = "1.0", features = ["derive"] }
-serde-big-array = "0"
+serde-big-array = "0.5"
 serde_derive = "1"
 serde_json = "1.0"
-sha3 = "^0.10.8"
+sha3 = "0.10.8"
 thiserror = "2.0"
 zeroize = { version = "1.8.1", features = ["derive"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.3", features = ["wasm_js"] } # note that there is also a flag in .cargo/config.toml
-wasm-bindgen = "=0.2.104"
+wasm-bindgen = "0.2.104"
 
 [dev-dependencies]
 bincode = "1.3.3"
@@ -53,7 +53,7 @@ proptest = { version = "1.7.0", default-features = false, features = ["std"] }
 criterion = { package = "codspeed-criterion-compat", version = "4.0", features = ["html_reports"] }
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-criterion = { version = "0.7.0", default-features = false }
+criterion = { version = "0.8.1", default-features = false }
 wasm-bindgen-test = "0.3.42"
 
 # Workaround for Rust 1.87.0 (see also: <https://github.com/rust-lang/rust/issues/141048>)
