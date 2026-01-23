@@ -260,9 +260,9 @@ mod tests {
 
     use itertools::Itertools;
     use proptest::prelude::*;
+    use proptest_arbitrary_adapter::arb;
 
     use super::*;
-    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
     use crate::tip5::digest::tests::DigestCorruptor;

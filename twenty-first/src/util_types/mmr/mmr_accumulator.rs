@@ -555,13 +555,13 @@ mod tests {
     use num_traits::ConstZero;
     use proptest::collection::vec;
     use proptest::prop_assert_eq;
+    use proptest_arbitrary_adapter::arb;
     use rand::distr::Uniform;
     use rand::prelude::*;
     use rand::random;
 
     use super::*;
     use crate::math::other::random_elements;
-    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
     use crate::util_types::mmr::archival_mmr::ArchivalMmr;

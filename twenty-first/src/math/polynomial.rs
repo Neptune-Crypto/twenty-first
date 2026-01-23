@@ -2707,10 +2707,10 @@ mod tests {
     use proptest::collection::size_range;
     use proptest::collection::vec;
     use proptest::prelude::*;
+    use proptest_arbitrary_adapter::arb;
 
     use super::*;
     use crate::prelude::*;
-    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
 

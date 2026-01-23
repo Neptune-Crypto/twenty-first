@@ -141,9 +141,9 @@ pub fn calculate_new_peaks_from_leaf_mutation(
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use proptest::collection::vec;
+    use proptest_arbitrary_adapter::arb;
 
     use super::*;
-    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
 

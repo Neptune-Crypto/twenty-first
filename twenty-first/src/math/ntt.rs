@@ -331,13 +331,13 @@ mod tests {
     use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prelude::*;
+    use proptest_arbitrary_adapter::arb;
 
     use super::*;
     use crate::math::other::random_elements;
     use crate::math::traits::PrimitiveRootOfUnity;
     use crate::math::x_field_element::EXTENSION_DEGREE;
     use crate::prelude::*;
-    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
     use crate::xfe;

@@ -669,6 +669,7 @@ mod tests {
     use num_traits::ConstOne;
     use proptest::collection::vec;
     use proptest::prelude::*;
+    use proptest_arbitrary_adapter::arb;
 
     use super::*;
     use crate::bfe;
@@ -676,7 +677,6 @@ mod tests {
     use crate::math::ntt::intt;
     use crate::math::ntt::ntt;
     use crate::math::other::random_elements;
-    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
 

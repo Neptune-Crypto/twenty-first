@@ -106,11 +106,11 @@ mod tests {
     use num_traits::Zero;
     use proptest::collection::vec;
     use proptest::prop_assert_eq;
+    use proptest_arbitrary_adapter::arb;
 
     use crate::math::zerofier_tree::ZerofierTree;
     use crate::prelude::BFieldElement;
     use crate::prelude::Polynomial;
-    use crate::proptest_arbitrary_interop::arb;
     use crate::tests::proptest;
     use crate::tests::test;
 
