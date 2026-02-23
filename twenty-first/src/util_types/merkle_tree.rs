@@ -714,19 +714,30 @@ impl MerkleTreeInclusionProof {
         self.indexed_leafs.is_empty() && self.authentication_structure.is_empty()
     }
 
-    /// Verify that the given root digest is the root of a Merkle tree that contains
-    /// the indicated leafs.
+    /// Verify that the given root digest is the root of a Merkle tree that
+    /// contains the indicated leafs.
+    ///
+    /// If you require additional information in case of verification failure,
+    /// use [`Self::try_verify`].
+    #[must_use]
     pub fn verify(self, expected_root: Digest) -> bool {
+        self.try_verify(expected_root).is_ok()
+    }
+
+    /// Verify that the given root digest is the root of a Merkle tree that
+    /// contains the indicated leafs.
+    ///
+    /// Like [`Self::verify`], but with additional information in case of
+    /// verification failure.
+    pub fn try_verify(self, expected_root: Digest) -> Result<()> {
         if self.is_trivial() {
-            return true;
+            return Ok(());
         }
-        let Ok(partial_tree) = PartialMerkleTree::try_from(self) else {
-            return false;
-        };
-        let Ok(computed_root) = partial_tree.root() else {
-            return false;
-        };
-        computed_root == expected_root
+        if PartialMerkleTree::try_from(self)?.root()? != expected_root {
+            return Err(MerkleTreeError::RootMismatch);
+        }
+
+        Ok(())
     }
 
     /// Transform the inclusion proof into a list of authentication paths.
@@ -916,6 +927,7 @@ impl TryFrom<MerkleTreeInclusionProof> for PartialMerkleTree {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[non_exhaustive]
 pub enum MerkleTreeError {
     #[error("All leaf indices must be valid, i.e., less than the number of leafs.")]
     LeafIndexInvalid,
@@ -943,6 +955,9 @@ pub enum MerkleTreeError {
 
     #[error("Tree height implies a tree that does not fit in RAM")]
     TreeTooHigh,
+
+    #[error("The actual root and the expected root dont't correspond")]
+    RootMismatch,
 }
 
 #[cfg(test)]
