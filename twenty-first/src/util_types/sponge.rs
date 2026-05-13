@@ -59,7 +59,7 @@ pub trait Sponge: Clone + Debug + Default + Send + Sync {
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use proptest::prelude::*;
-    use rand::Rng;
+    use rand::RngExt;
     use rand::distr::Distribution;
     use rand::distr::StandardUniform;
 

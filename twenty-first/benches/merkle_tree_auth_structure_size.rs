@@ -7,7 +7,7 @@ use criterion::measurement::Measurement;
 use criterion::measurement::ValueFormatter;
 use itertools::Itertools;
 use rand::Rng;
-use rand::RngCore;
+use rand::RngExt;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use twenty_first::prelude::BFieldCodec;

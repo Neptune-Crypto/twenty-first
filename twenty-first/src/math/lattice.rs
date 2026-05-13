@@ -840,7 +840,7 @@ mod tests {
     use itertools::Itertools;
     use num_traits::ConstOne;
     use num_traits::Zero;
-    use rand::RngCore;
+    use rand::Rng;
     use rand::random;
     use sha3::Digest as Sha3Digest;
     use sha3::Sha3_256;

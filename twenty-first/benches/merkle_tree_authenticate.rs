@@ -57,7 +57,7 @@ fn auth_structure<const TREE_HEIGHT: usize>(c: &mut Criterion) {
         });
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 struct MerkleTreeSampler<const HEIGHT: usize> {
     rng: StdRng,
     num_opened_indices: usize,

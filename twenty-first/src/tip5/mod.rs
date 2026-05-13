@@ -729,7 +729,7 @@ pub(crate) mod tests {
     use prop::sample::size_range;
     use proptest::prelude::*;
     use proptest_arbitrary_adapter::arb;
-    use rand::RngCore;
+    use rand::Rng;
     use rayon::prelude::IntoParallelIterator;
     use rayon::prelude::ParallelIterator;
 

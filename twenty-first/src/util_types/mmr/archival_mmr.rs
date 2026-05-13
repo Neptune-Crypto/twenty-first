@@ -316,7 +316,7 @@ mod tests {
 
     use itertools::Itertools;
     use itertools::izip;
-    use rand::Rng;
+    use rand::RngExt;
     use rand::random;
 
     use super::*;

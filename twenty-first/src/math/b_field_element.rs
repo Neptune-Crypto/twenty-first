@@ -23,6 +23,7 @@ use num_traits::One;
 use num_traits::Zero;
 use phf::phf_map;
 use rand::Rng;
+use rand::RngExt;
 use rand::distr::Distribution;
 use rand::distr::StandardUniform;
 use serde::Deserialize;

@@ -634,7 +634,7 @@ impl MmrMembershipProof {
 mod tests {
     use itertools::Itertools;
     use proptest_arbitrary_adapter::arb;
-    use rand::Rng;
+    use rand::RngExt;
     use rand::random;
 
     use super::*;
