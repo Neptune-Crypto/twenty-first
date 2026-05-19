@@ -3,6 +3,16 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [2.0.0](https://github.com/Neptune-Crypto/twenty-first/compare/v1.1.0..v2.0.0) – 2026-05-19
+
+### ✨ Features
+
+- (!) More info on Merkle tree verification fail ([c2a48338](https://github.com/Neptune-Crypto/twenty-first/commit/c2a48338))
+
+### 🐛 Bug Fixes
+
+- Correctly set `Arbitrary`'s `size_hint` ([465da5ff](https://github.com/Neptune-Crypto/twenty-first/commit/465da5ff))
+
 ## [1.1.0](https://github.com/Neptune-Crypto/twenty-first/compare/v1.0.0..v1.1.0) – 2026-01-16
 
 ### ✨ Features
