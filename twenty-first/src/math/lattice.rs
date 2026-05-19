@@ -635,9 +635,9 @@ pub mod kem {
     use serde_derive::Serialize;
     use sha3::Digest as Sha3Digest;
     use sha3::Sha3_256;
-    use sha3::Shake256;
     use sha3::digest::ExtendableOutput;
     use sha3::digest::Update;
+    use shake::Shake256;
     use zeroize::Zeroize;
 
     use super::CYCLOTOMIC_RING_ELEMENT_SIZE_IN_BFES;
