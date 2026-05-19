@@ -703,6 +703,10 @@ impl<'a> Arbitrary<'a> for MerkleTree {
         let tree = Self::par_new(&leaf_digests?).unwrap();
         Ok(tree)
     }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        <Vec<Digest>>::size_hint(depth)
+    }
 }
 
 impl MerkleTreeInclusionProof {

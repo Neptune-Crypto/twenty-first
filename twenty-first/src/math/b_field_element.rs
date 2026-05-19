@@ -187,6 +187,10 @@ impl<'a> Arbitrary<'a> for BFieldElement {
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
         u.arbitrary().map(BFieldElement::new)
     }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        u64::size_hint(depth)
+    }
 }
 
 impl Serialize for BFieldElement {

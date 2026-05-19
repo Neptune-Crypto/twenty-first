@@ -308,6 +308,15 @@ mod tests {
 
             Ok(Self::new(leafs(1 << 8)?, leafs(1 << 8)?))
         }
+
+        fn size_hint(depth: usize) -> (usize, Option<usize>) {
+            arbitrary::size_hint::and_all(&[
+                i32::size_hint(depth),
+                i32::size_hint(depth),
+                <[Digest; 1 << 8]>::size_hint(depth),
+                <[Digest; 1 << 8]>::size_hint(depth),
+            ])
+        }
     }
 
     impl proptest::arbitrary::Arbitrary for MmrSuccessorRelation {

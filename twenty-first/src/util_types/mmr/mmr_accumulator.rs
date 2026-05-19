@@ -543,6 +543,12 @@ impl<'a> Arbitrary<'a> for MmrAccumulator {
 
         Ok(MmrAccumulator::init(peaks, num_leafs))
     }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        // `num_leafs` can be at most 63 bits, hence there can be at most
+        // that many digests.
+        arbitrary::size_hint::and(u64::size_hint(depth), <[Digest; 63]>::size_hint(depth))
+    }
 }
 
 #[cfg(test)]

@@ -16,6 +16,7 @@ use std::ops::Rem;
 use std::ops::Sub;
 
 use arbitrary::Arbitrary;
+use arbitrary::MaxRecursionReached;
 use arbitrary::Unstructured;
 use itertools::EitherOrBoth;
 use itertools::Itertools;
@@ -88,6 +89,16 @@ where
 {
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
         Ok(Self::new(u.arbitrary()?))
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        Self::try_size_hint(depth).unwrap_or_default()
+    }
+
+    fn try_size_hint(
+        depth: usize,
+    ) -> arbitrary::Result<(usize, Option<usize>), MaxRecursionReached> {
+        arbitrary::size_hint::try_recursion_guard(depth, <Cow<[FF]>>::try_size_hint)
     }
 }
 
