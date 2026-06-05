@@ -3,6 +3,12 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [2.0.1](https://github.com/Neptune-Crypto/twenty-first/compare/v2.0.0..v2.0.1) – 2026-06-05
+
+### 🐛 Bug Fixes
+
+- Derive `GetSize` for `XFieldElement` ([111b7149](https://github.com/Neptune-Crypto/twenty-first/commit/111b7149))
+
 ## [2.0.0](https://github.com/Neptune-Crypto/twenty-first/compare/v1.1.0..v2.0.0) – 2026-05-19
 
 ### ✨ Features
