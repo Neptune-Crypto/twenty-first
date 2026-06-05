@@ -11,6 +11,7 @@ use std::ops::SubAssign;
 
 use arbitrary::Arbitrary;
 use bfieldcodec_derive::BFieldCodec;
+use get_size2::GetSize;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
 use num_traits::One;
@@ -36,8 +37,21 @@ use crate::tip5::Digest;
 
 pub const EXTENSION_DEGREE: usize = 3;
 
+// due to a bug in rustfmt, the formatted `derive` would exceed 100 characters
+// see also: https://github.com/rust-lang/rustfmt/issues/5796
+#[rustfmt::skip::attributes(derive)]
 #[derive(
-    Debug, PartialEq, Eq, Copy, Clone, Hash, Serialize, Deserialize, BFieldCodec, Arbitrary,
+    Debug,
+    PartialEq,
+    Eq,
+    Copy,
+    Clone,
+    Hash,
+    Serialize,
+    Deserialize,
+    GetSize,
+    BFieldCodec,
+    Arbitrary,
 )]
 #[repr(transparent)]
 pub struct XFieldElement {
