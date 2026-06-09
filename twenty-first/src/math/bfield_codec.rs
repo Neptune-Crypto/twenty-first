@@ -489,9 +489,6 @@ fn bfield_codec_decode_list_with_statically_sized_items<T: BFieldCodec>(
     num_items: usize,
     sequence: &[BFieldElement],
 ) -> Result<Vec<T>, BFieldCodecError> {
-    // Initializing the vector with the indicated capacity potentially allows a DOS.
-    let mut vec = vec![];
-
     let item_length = T::static_length().unwrap();
     let maybe_vector_size = num_items.checked_mul(item_length);
     let Some(vector_size) = maybe_vector_size else {
@@ -504,6 +501,14 @@ fn bfield_codec_decode_list_with_statically_sized_items<T: BFieldCodec>(
         return Err(BFieldCodecError::SequenceTooLong);
     }
 
+    // `chunks_exact` panics on argument 0
+    if item_length == 0 {
+        let vec = (0..num_items).map(|_| *T::decode(&[]).unwrap()).collect();
+        return Ok(vec);
+    }
+
+    // Initializing the vector with the indicated capacity allows a DOS.
+    let mut vec = Vec::new();
     for raw_item in sequence.chunks_exact(item_length) {
         let item = *T::decode(raw_item).map_err(|e| e.into())?;
         vec.push(item);
@@ -1024,6 +1029,18 @@ mod tests {
         }
 
         test_case! { fn with_nested_vec for WithNestedVec: None }
+
+        #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
+        struct VecWithZst(Vec<()>);
+
+        /// Because Zero-Sized Types don't take up space in the encoding,
+        /// many of the usual checks are nonsensical.
+        #[macro_rules_attr::apply(proptest)]
+        fn vec_with_zst(test_data: BFieldCodecPropertyTestData<VecWithZst>) {
+            prop_assert!(VecWithZst::static_length().is_none());
+            test_data.assert_decoding_too_long_encoding_fails()?;
+            test_data.assert_decoded_encoding_is_self()?;
+        }
 
         #[derive(Debug, Clone, PartialEq, Eq, BFieldCodec, Arbitrary)]
         struct EmptyStruct {}
