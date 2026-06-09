@@ -602,8 +602,8 @@ impl Tip5 {
     /// functions, even when the input to the former, after padding, agrees with
     /// the input to the latter. The difference comes from the initial value of
     /// the capacity-part of the state, which in the case of variable-length
-    /// hashing is all-ones but in the case of fixed-length hashing is
-    /// all-zeroes.
+    /// hashing is all-zeros but in the case of fixed-length hashing is
+    /// all-ones.
     ///
     /// Prefer [`Self::hash`] whenever an object is being hashed whose type
     /// implements [`BFieldCodec`]. However, such an object is not always
