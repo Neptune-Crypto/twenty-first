@@ -20,7 +20,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 arbitrary = { version = "1", features = ["derive"] }
-bfieldcodec_derive = "0.7"
+bfieldcodec_derive = { version = "0.7.1", path = "../bfieldcodec_derive" }
 get-size2 = { version = "0.9", features = ["derive"] }
 hex = "0.4.3"
 itertools = "0.14"

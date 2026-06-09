@@ -446,7 +446,8 @@ impl BFieldCodecDeriveBuilder {
             return quote! {
                 Self::#variant_name => {
                     elements.push(crate::twenty_first::prelude::BFieldElement::new(
-                        #discriminant as u64)
+                            #discriminant as u64
+                        )
                     );
                 }
             };
@@ -566,6 +567,7 @@ impl BFieldCodecDeriveBuilder {
     ) -> TokenStream {
         let sequence_empty_for_field_error = self.error_builder.sequence_empty_for_field();
         let sequence_too_short_for_field_error = self.error_builder.sequence_too_short_for_field();
+        let try_from_int_error = self.error_builder.try_from_int();
         let field_name_as_string_literal = field_name.to_string();
         quote! {
             let (#field_name, sequence) = {
@@ -580,7 +582,12 @@ impl BFieldCodecDeriveBuilder {
                 }
                 let (len, sequence) = match maybe_fields_static_length {
                     ::core::option::Option::Some(len) => (len, sequence),
-                    ::core::option::Option::None => (sequence[0].value() as usize, &sequence[1..]),
+                    ::core::option::Option::None => (
+                        usize::try_from(sequence[0].value()).map_err(|err| {
+                            #try_from_int_error(err)
+                        })?,
+                        &sequence[1..],
+                    ),
                 };
                 if sequence.len() < len {
                     return ::core::result::Result::Err(#sequence_too_short_for_field_error(
@@ -606,6 +613,7 @@ impl BFieldCodecDeriveBuilder {
     fn build_decode_function_body_for_enum(&mut self) {
         let sequence_empty_error = self.error_builder.sequence_empty();
         let invalid_variant_error = self.error_builder.invalid_discriminant();
+        let try_from_int_error = self.error_builder.try_from_int();
 
         let mut match_arms = vec![];
         for (discriminant, variant) in self.enum_discriminants_and_variants() {
@@ -618,7 +626,10 @@ impl BFieldCodecDeriveBuilder {
             if sequence.is_empty() {
                 return ::core::result::Result::Err(#sequence_empty_error);
             }
-            let (discriminant, sequence) = (sequence[0].value() as usize, &sequence[1..]);
+            let (discriminant, sequence) = (
+                usize::try_from(sequence[0].value()).map_err(|err| #try_from_int_error(err))?,
+                &sequence[1..],
+            );
             match discriminant {
                 #(#match_arms ,)*
                 other_index => ::core::result::Result::Err(#invalid_variant_error(other_index)),
@@ -634,6 +645,7 @@ impl BFieldCodecDeriveBuilder {
         let sequence_too_long_error = self.error_builder.sequence_too_long();
         let sequence_empty_error = self.error_builder.sequence_empty_for_variant();
         let sequence_too_short_error = self.error_builder.sequence_too_short_for_variant();
+        let try_from_int_error = self.error_builder.try_from_int();
 
         let variant_name = &variant.ident;
         let associated_data = &variant.fields;
@@ -668,9 +680,12 @@ impl BFieldCodecDeriveBuilder {
                         }
                         let (len, sequence) = match maybe_fields_static_length {
                             ::core::option::Option::Some(len) => (len, sequence),
-                            ::core::option::Option::None => {
-                                (sequence[0].value() as usize, &sequence[1..])
-                            },
+                            ::core::option::Option::None => {(
+                                usize::try_from(sequence[0].value()).map_err(|err| {
+                                    #try_from_int_error(err)
+                                })?,
+                                &sequence[1..],
+                            )},
                         };
                         if sequence.len() < len {
                             return ::core::result::Result::Err(
@@ -882,6 +897,7 @@ impl BFieldCodecErrorEnumBuilder {
 
     fn set_up_unit_struct_errors(&mut self) {
         self.register_error_sequence_too_long();
+        self.register_error_try_from_int();
         self.register_error_inner_decoding_failure();
     }
 
@@ -890,6 +906,7 @@ impl BFieldCodecErrorEnumBuilder {
         self.register_error_sequence_empty_for_field();
         self.register_error_sequence_too_short_for_field();
         self.register_error_sequence_too_long();
+        self.register_error_try_from_int();
         self.register_error_inner_decoding_failure();
     }
 
@@ -899,6 +916,7 @@ impl BFieldCodecErrorEnumBuilder {
         self.register_error_sequence_too_short_for_variant();
         self.register_error_sequence_too_long();
         self.register_error_invalid_discriminant();
+        self.register_error_try_from_int();
         self.register_error_inner_decoding_failure();
     }
 
@@ -1066,6 +1084,27 @@ impl BFieldCodecErrorEnumBuilder {
         );
     }
 
+    fn register_error_try_from_int(&mut self) {
+        let name = self.name.to_string();
+
+        let variant_name = quote::format_ident!("TryFromIntError");
+        let variant_type = quote! { #variant_name(::std::num::TryFromIntError) };
+        let display_match_arm = quote! {
+            Self::#variant_name(err) => ::core::write!(
+                f,
+                "cannot decode {}: integer conversion error: {err}",
+                #name,
+            )
+        };
+
+        self.register_error(
+            "try_from_int",
+            variant_name,
+            variant_type,
+            display_match_arm,
+        );
+    }
+
     fn register_error_inner_decoding_failure(&mut self) {
         let name = self.name.to_string();
 
@@ -1077,11 +1116,10 @@ impl BFieldCodecErrorEnumBuilder {
             )
         };
         let display_match_arm = quote! {
-            Self::#variant_name(inner_error) => ::core::write!(
+            Self::#variant_name(err) => ::core::write!(
                 f,
-                "cannot decode {}: inner decoding failure: {}",
+                "cannot decode {}: inner decoding failure: {err}",
                 #name,
-                inner_error
             )
         };
 
@@ -1125,6 +1163,11 @@ impl BFieldCodecErrorEnumBuilder {
 
     fn invalid_discriminant(&self) -> TokenStream {
         let error = self.errors.get("invalid_discriminant").unwrap();
+        self.global_identifier(&error.variant_name)
+    }
+
+    fn try_from_int(&self) -> TokenStream {
+        let error = self.errors.get("try_from_int").unwrap();
         self.global_identifier(&error.variant_name)
     }
 
