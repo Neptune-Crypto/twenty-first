@@ -3,6 +3,17 @@
 All notable changes are documented in this file.
 Lines marked “(!)” indicate a breaking change.
 
+## [2.0.2](https://github.com/Neptune-Crypto/twenty-first/compare/v2.0.1..v2.0.2) – 2026-06-09
+
+### 🐛 Bug Fixes
+
+- *(bfield_codec)* Check `usize` conversions ([3c0adb2d](https://github.com/Neptune-Crypto/twenty-first/commit/3c0adb2d))
+- *(bfield_codec)* Handle collections of ZSTs ([07977976](https://github.com/Neptune-Crypto/twenty-first/commit/07977976))
+
+### 📚 Documentation
+
+- Correct docs of Tip5 capacity initialization ([4e3c3e86](https://github.com/Neptune-Crypto/twenty-first/commit/4e3c3e86))
+
 ## [2.0.1](https://github.com/Neptune-Crypto/twenty-first/compare/v2.0.0..v2.0.1) – 2026-06-05
 
 ### 🐛 Bug Fixes

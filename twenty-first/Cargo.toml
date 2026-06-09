@@ -1,6 +1,6 @@
 [package]
 name = "twenty-first"
-version = "2.0.1"
+version = "2.0.2"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
