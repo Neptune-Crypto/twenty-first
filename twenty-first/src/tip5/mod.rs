@@ -1292,7 +1292,7 @@ pub(crate) mod tests {
     /// binaries for equivalent behavior is easiest when that behavior is pinned
     /// through snapshots.
     const MAGIC_SNAPSHOT_HEX: &str =
-        "109cc2fe453bd9962f754b96d8f5b919b60af030940a275f5540da195fef65ee651c1b6fa19b2c6a";
+        "6a2c9b9fc668ade457b7921002edd4209799ac6d252f4d64eac72809cf5beb9f662609854ef378af";
 
     #[macro_rules_attr::apply(test)]
     fn hash10_test_vectors_snapshot() {
@@ -1319,7 +1319,7 @@ pub(crate) mod tests {
 
         let final_digest = Digest::new(digest_sum).to_hex();
         assert_eq!(
-            "efbafa86622a9c69652f8a1c4ffd734f021ad23a0a8085412a877de0f9170b18ea4ff69b6fff9a03",
+            "039aff6f8d8a522bcc3fd2ad764b6767b56b710eac02947a6fdd22d9fe84847c72bb86965acadb6a",
             final_digest,
         );
     }

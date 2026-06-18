@@ -84,15 +84,15 @@ impl fmt::Display for Digest {
 
 impl fmt::LowerHex for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let bytes = <[u8; Self::BYTES]>::from(*self);
-        write!(f, "{}", hex::encode(bytes))
+        let value = BigUint::from(*self);
+        write!(f, "{value:0width$x}", width = Self::BYTES * 2)
     }
 }
 
 impl fmt::UpperHex for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let bytes = <[u8; Self::BYTES]>::from(*self);
-        write!(f, "{}", hex::encode_upper(bytes))
+        let value = BigUint::from(*self);
+        write!(f, "{value:0width$X}", width = Self::BYTES * 2)
     }
 }
 
@@ -240,8 +240,13 @@ impl Digest {
 
     /// Decode hex string to [`Digest`]. Must not include leading “0x”.
     pub fn try_from_hex(data: impl AsRef<[u8]>) -> Result<Self, TryFromHexDigestError> {
-        let slice = hex::decode(data)?;
-        Ok(Self::try_from(&slice as &[u8])?)
+        let bytes = hex::decode(data)?;
+        if bytes.len() != Self::BYTES {
+            return Err(TryFromDigestError::InvalidLength(bytes.len()).into());
+        }
+
+        let value = BigUint::from_bytes_be(&bytes);
+        Ok(Self::try_from(value)?)
     }
 }
 
@@ -340,7 +345,7 @@ pub(crate) mod tests {
         assert_eq!("1,2,3,4,5", format!("{digest}"));
 
         let hex_digest =
-            "01000000000000000200000000000000030000000000000004000000000000000500000000000000";
+            "0000000000000004ffffffec00000035ffffffa400000079ffffff8e00000054ffffffd80000000f";
         assert_eq!(hex_digest, format!("{digest:x}"));
     }
 
@@ -575,8 +580,8 @@ pub(crate) mod tests {
                 (
                     Digest::new(bfe_array![0, 1, 10, 15, 255]),
                     concat!(
-                        "000000000000000001000000000000000a000000",
-                        "000000000f00000000000000ff00000000000000"
+                        "00000000000000fefffffc0400000a04ffffefe3",
+                        "00001350ffffef9300000a6efffffbc200000119"
                     ),
                 ),
                 // note: this would result in NotCanonical error. See issue 195
@@ -593,6 +598,28 @@ pub(crate) mod tests {
             for (digest, hex) in hex_examples() {
                 assert_eq!(&digest.to_hex(), hex);
             }
+        }
+
+        #[macro_rules_attr::apply(test)]
+        fn small_digest_hex_has_leading_zeroes() {
+            let digest = Digest::new(bfe_array![14, 0, 0, 0, 0]);
+            let expected_hex = format!("{:0>width$x}", 14, width = Digest::BYTES * 2);
+
+            assert_eq!(expected_hex, digest.to_hex());
+            assert_eq!(digest, Digest::try_from_hex(&expected_hex).unwrap());
+        }
+
+        #[macro_rules_attr::apply(proptest)]
+        fn hex_matches_biguint_representation(digest: Digest) {
+            let value = BigUint::from(digest);
+            let expected_hex = format!("{value:0width$x}", width = Digest::BYTES * 2);
+
+            prop_assert_eq!(expected_hex, digest.to_hex());
+        }
+
+        #[macro_rules_attr::apply(proptest)]
+        fn hex_ordering_matches_digest_ordering(lhs: Digest, rhs: Digest) {
+            prop_assert_eq!(lhs.cmp(&rhs), lhs.to_hex().cmp(&rhs.to_hex()));
         }
 
         #[macro_rules_attr::apply(proptest)]
@@ -657,16 +684,13 @@ pub(crate) mod tests {
                 TryFromHexDigestError::Digest(TryFromDigestError::InvalidLength(_))
             )));
 
-            // NotCanonical error. See issue 195
+            // All "ff…ff" exceeds the range representable by a Digest.
             assert!(Digest::try_from_hex(
                 "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
             )
-            .is_err_and(|e| matches!(
-                e,
-                TryFromHexDigestError::Digest(TryFromDigestError::InvalidBFieldElement(
-                    ParseBFieldElementError::NotCanonical(_)
-                ))
-            )));
+            .is_err_and(|e| matches!(e, TryFromHexDigestError::Digest(
+                TryFromDigestError::Overflow
+            ))));
         }
     }
 
