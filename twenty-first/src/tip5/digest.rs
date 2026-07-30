@@ -151,6 +151,10 @@ impl From<Digest> for [u8; Digest::BYTES] {
     }
 }
 
+/// Decodes five little-endian, canonical [`BFieldElement`] representations.
+///
+/// Returns an error if any eight-byte chunk encodes a value greater than or
+/// equal to [`BFieldElement::P`].
 impl TryFrom<[u8; Digest::BYTES]> for Digest {
     type Error = TryFromDigestError;
 
@@ -507,23 +511,47 @@ pub(crate) mod tests {
     }
 
     #[macro_rules_attr::apply(proptest)]
-    fn forty_bytes_can_be_converted_to_digest(bytes: [u8; Digest::BYTES]) {
-        let digest = Digest::try_from(bytes).unwrap();
-        let bytes_again: [u8; Digest::BYTES] = digest.into();
-        prop_assert_eq!(bytes, bytes_again);
+    fn digest_to_bytes_roundtrip(digest: Digest) {
+        let bytes: [u8; Digest::BYTES] = digest.into();
+        let digest_again = Digest::try_from(bytes)?;
+        prop_assert_eq!(digest, digest_again);
     }
 
-    // note: for background on this test, see issue 195
     #[macro_rules_attr::apply(test)]
-    fn try_from_bytes_not_canonical() -> Result<(), TryFromDigestError> {
-        let bytes: [u8; Digest::BYTES] = [255; Digest::BYTES];
+    fn byte_decoding_accepts_largest_canonical_elements() {
+        let bytes: [u8; Digest::BYTES] = BFieldElement::MAX
+            .to_le_bytes()
+            .repeat(Digest::LEN)
+            .try_into()
+            .unwrap();
 
-        assert!(Digest::try_from(bytes).is_err_and(|e| matches!(
-            e,
-            TryFromDigestError::InvalidBFieldElement(ParseBFieldElementError::NotCanonical(_))
-        )));
+        let digest = Digest::try_from(bytes).unwrap();
 
-        Ok(())
+        assert_eq!(
+            [BFieldElement::new(BFieldElement::MAX); Digest::LEN],
+            digest.values()
+        );
+        assert_eq!(bytes, <[u8; Digest::BYTES]>::from(digest));
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn byte_decoding_rejects_noncanonical_elements_in_every_position() {
+        for value in [BFieldElement::P, u64::MAX] {
+            for element_index in 0..Digest::LEN {
+                let mut bytes = [0; Digest::BYTES];
+                let start = element_index * BFieldElement::BYTES;
+                let end = start + BFieldElement::BYTES;
+                bytes[start..end].copy_from_slice(&value.to_le_bytes());
+
+                let error = Digest::try_from(bytes).unwrap_err();
+                assert_eq!(
+                    TryFromDigestError::InvalidBFieldElement(
+                        ParseBFieldElementError::NotCanonical(i128::from(value))
+                    ),
+                    error
+                );
+            }
+        }
     }
 
     // note: for background on this test, see issue 195
