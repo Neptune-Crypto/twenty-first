@@ -288,6 +288,37 @@ where
         Polynomial::new(coefficients)
     }
 
+    /// Parallel version of [`evaluate`](Self::evaluate) for long polynomials.
+    /// The coefficients are split into chunks, each chunk is evaluated with
+    /// Horner's method, and the chunks' values are combined with powers of the
+    /// indeterminate. Short polynomials are evaluated sequentially.
+    pub fn par_evaluate<Ind, Eval>(&self, x: Ind) -> Eval
+    where
+        Ind: Clone + One + Send + Sync,
+        Eval: Mul<Ind, Output = Eval> + Add<FF, Output = Eval> + Zero + Send,
+    {
+        // Large enough to amortize the per-chunk overhead, small enough to
+        // keep all threads busy for polynomials of a few hundred thousand
+        // coefficients.
+        const CHUNK_LEN: usize = 1 << 11;
+
+        if self.coefficients.len() <= CHUNK_LEN {
+            return self.evaluate(x);
+        }
+
+        let x_to_the_chunk_len = generic_pow(x.clone(), CHUNK_LEN);
+        let chunk_values = self
+            .coefficients
+            .par_chunks(CHUNK_LEN)
+            .map(|chunk| Polynomial::new_borrowed(chunk).evaluate::<Ind, Eval>(x.clone()))
+            .collect::<Vec<_>>();
+        let mut acc = Eval::zero();
+        for value in chunk_values.into_iter().rev() {
+            acc = acc * x_to_the_chunk_len.clone() + value;
+        }
+        acc
+    }
+
     /// Evaluate `self` in an indeterminate.
     ///
     /// The indeterminate must come from a field that is compatible with the
@@ -4607,6 +4638,17 @@ mod tests {
             Polynomial::par_interpolate_with_zerofier_tree_and_weights(&zerofier_tree, &weights);
         let fast_interpolant = Polynomial::fast_interpolate(&domain, &values);
         prop_assert_eq!(fast_interpolant, weighted_interpolant);
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 20))]
+    fn par_evaluate_agrees_with_evaluate(
+        #[strategy(vec(arb(), 0..(1 << 13)))] coefficients: Vec<BFieldElement>,
+        #[strategy(arb())] x: XFieldElement,
+    ) {
+        let polynomial = Polynomial::new(coefficients);
+        let sequential = polynomial.evaluate::<_, XFieldElement>(x);
+        let parallel = polynomial.par_evaluate::<_, XFieldElement>(x);
+        prop_assert_eq!(sequential, parallel);
     }
 
     #[macro_rules_attr::apply(test)]
