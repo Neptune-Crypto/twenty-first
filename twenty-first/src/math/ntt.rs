@@ -177,9 +177,15 @@ fn slice_len<FF>(x: &[FF]) -> u32 {
 }
 
 /// The binary logarithm of the number of elements per block for the
-/// cache-blocked part of the NTT. A block of 2^16 base field elements
-/// occupies 512 KiB, which fits the L2 cache of common x86-64 CPUs.
-const LOG_2_BLOCK_LEN: u32 = 16;
+/// cache-blocked part of the NTT. A block of 2^14 base field elements
+/// occupies 128 KiB, a block of extension field elements 384 KiB. Either
+/// fits the L2 cache of common x86-64 CPUs, also when a second thread on
+/// the same core is working on a block of its own, which is the situation
+/// when many transforms run in parallel. Larger blocks fit only in the
+/// base field case, and only for one thread per core; the more numerous
+/// cross-block layers of smaller blocks are still applied in a single pass
+/// over memory.
+const LOG_2_BLOCK_LEN: u32 = 14;
 
 /// The binary logarithm of the tile side length used by the
 /// [bit-reversal permutation][bit_reverse_permutation].
@@ -795,6 +801,11 @@ unsafe fn apply_cross_block_layers_to_columns<FF>(
 /// [`scaled_zero_padded_ntt`]: one cache line of base field elements.
 const GATHER_GROUP_LEN: usize = 8;
 
+/// The binary logarithm of the number of rows per tile in the gather of
+/// [`scaled_zero_padded_ntt`]. A tile writes 2^6 cache lines, i.e., 4 KiB,
+/// contiguously into every block of the group.
+const LOG_2_GATHER_TILE_LEN: u32 = 6;
+
 /// The NTT of `coefficients`, zero-padded to the length of `codeword`, after
 /// scaling coefficient `i` by `offset^i`. In other words: the evaluations of
 /// the polynomial with the given coefficients on the coset `offset · <ω>`,
@@ -869,7 +880,25 @@ fn scaled_zero_padded_ntt_with_block_len<FF>(
         power *= offset_to_the_num_blocks;
     }
 
+    // The gathered values are written as whole cache lines in a scattered
+    // order. Streaming stores avoid the read-for-ownership of every line and
+    // keep the lines out of the caches, where they would only evict data
+    // that is still needed. This requires whole, aligned lines.
+    #[cfg(target_arch = "x86_64")]
+    let stream_limbs = simd_limbs::<FF>().filter(|limbs| {
+        let line_len = avx512::CACHE_LINE_LEN / size_of::<u64>();
+        (expansion * limbs).is_multiple_of(line_len)
+            && codeword
+                .as_ptr()
+                .cast::<u8>()
+                .addr()
+                .is_multiple_of(avx512::CACHE_LINE_LEN)
+    });
+
     let group_len = GATHER_GROUP_LEN.min(num_blocks);
+    let log_2_tile_len = log_2_num_rows.min(LOG_2_GATHER_TILE_LEN);
+    let tile_len = 1_usize << log_2_tile_len;
+    let num_tiles = num_rows >> log_2_tile_len;
     for first_column in (0..num_blocks).step_by(group_len) {
         let columns = first_column..first_column + group_len;
         let blocks = columns
@@ -881,7 +910,13 @@ fn scaled_zero_padded_ntt_with_block_len<FF>(
             .map(|column| offset.mod_pow(column as u64))
             .collect::<Vec<_>>();
 
-        for (row, &row_power) in row_powers.iter().enumerate() {
+        // The rows are visited in tiles such that every block receives a
+        // contiguous run of positions per tile: for a fixed low part of the
+        // row index, the rows with all high parts map to consecutive
+        // positions. The rows of a tile are read at a constant stride.
+        let rows = (0..num_tiles).flat_map(|tile| (0..tile_len).map(move |t| t * num_tiles + tile));
+        for row in rows {
+            let row_power = row_powers[row];
             let position_in_block = bit_reverse(row, log_2_num_rows) * expansion;
             for ((column, &block), &column_power) in
                 columns.clone().zip(&blocks).zip(&column_powers)
@@ -892,12 +927,33 @@ fn scaled_zero_padded_ntt_with_block_len<FF>(
                     None => FF::ZERO,
                 };
                 let start = block * block_len + position_in_block;
+                #[cfg(target_arch = "x86_64")]
+                if let Some(limbs) = stream_limbs {
+                    // SAFETY: AVX-512 was detected (see `simd_limbs`), `FF`
+                    // is laid out as `limbs` base field elements, the
+                    // `expansion` elements at `start` are in bounds, and the
+                    // destination is a whole number of aligned cache lines
+                    // (see `stream_limbs`).
+                    unsafe {
+                        avx512::stream_repeated(
+                            codeword.as_mut_ptr().add(start).cast(),
+                            (&raw const value).cast(),
+                            limbs,
+                            expansion,
+                        )
+                    };
+                    continue;
+                }
                 for target in &mut codeword[start..start + expansion] {
                     target.write(value);
                 }
             }
         }
-
+        #[cfg(target_arch = "x86_64")]
+        if stream_limbs.is_some() {
+            // SAFETY: AVX-512 was detected.
+            unsafe { avx512::fence() };
+        }
         for &block in &blocks {
             let block = &mut codeword[block * block_len..(block + 1) * block_len];
             // SAFETY:
@@ -912,7 +968,6 @@ fn scaled_zero_padded_ntt_with_block_len<FF>(
             apply_layers(block, twiddle_factors, log_2_expansion, log_2_block_len);
         }
     }
-
     if log_2_block_len < log_2_len {
         // SAFETY: All blocks were written to above, and the blocks partition
         // the codeword. See also the safety argument above.
@@ -951,6 +1006,64 @@ mod avx512 {
     #[inline]
     pub(super) fn is_available() -> bool {
         is_x86_feature_detected!("avx512f")
+    }
+
+    /// The length of a cache line, in bytes.
+    pub(super) const CACHE_LINE_LEN: usize = 64;
+
+    /// Lane indices repeating the three limbs of one extension field element
+    /// across consecutive vectors.
+    const REPETITION_3: [[i64; LANES]; 3] = [
+        [0, 1, 2, 0, 1, 2, 0, 1],
+        [2, 0, 1, 2, 0, 1, 2, 0],
+        [1, 2, 0, 1, 2, 0, 1, 2],
+    ];
+
+    /// Write `repetitions` copies of the element at `value`, which has
+    /// `limbs` limbs, to `dst`, with streaming (non-temporal) stores. Call
+    /// [`fence`] before reading the written memory.
+    ///
+    /// # Safety
+    ///
+    /// `limbs` must be 1 or 3, `repetitions · limbs` a multiple of
+    /// [`LANES`], `dst` aligned to [`CACHE_LINE_LEN`] with room for
+    /// `repetitions · limbs` limbs, and `limbs` limbs readable from `value`.
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    pub(super) unsafe fn stream_repeated(
+        dst: *mut u64,
+        value: *const u64,
+        limbs: usize,
+        repetitions: usize,
+    ) {
+        let num_vectors = repetitions * limbs / LANES;
+        if limbs == 1 {
+            let vector = _mm512_set1_epi64(*value as i64);
+            for v in 0..num_vectors {
+                _mm512_stream_si512(dst.add(v * LANES).cast(), vector);
+            }
+            return;
+        }
+
+        let value = _mm512_maskz_loadu_epi64(0b111, value.cast());
+        let patterns = REPETITION_3.map(|indices| {
+            let indices = _mm512_loadu_epi64(indices.as_ptr());
+            _mm512_permutexvar_epi64(indices, value)
+        });
+        for v in 0..num_vectors {
+            _mm512_stream_si512(dst.add(v * LANES).cast(), patterns[v % 3]);
+        }
+    }
+
+    /// Order all preceding streaming stores before subsequent loads.
+    ///
+    /// # Safety
+    ///
+    /// The CPU must support AVX-512.
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    pub(super) unsafe fn fence() {
+        _mm_sfence();
     }
 
     /// Lane indices expanding eight twiddle factors to the 24 limbs of eight
@@ -1613,18 +1726,21 @@ mod tests {
         expected.resize(len, XFieldElement::ZERO);
         ntt(&mut expected);
 
-        let mut codeword = vec![MaybeUninit::<XFieldElement>::uninit(); len];
-        scaled_zero_padded_ntt_with_block_len(
-            &coefficients,
-            offset,
-            &mut codeword,
-            max_log_2_block_len,
-        );
+        let mut buffer = vec![MaybeUninit::<XFieldElement>::uninit(); len + 8];
+        let codeword = cache_line_aligned(&mut buffer, len);
+        scaled_zero_padded_ntt_with_block_len(&coefficients, offset, codeword, max_log_2_block_len);
         let codeword = codeword
-            .into_iter()
+            .iter()
             .map(|c| unsafe { c.assume_init() })
             .collect_vec();
         prop_assert_eq!(expected, codeword);
+    }
+
+    /// The first `len` elements of `buffer` starting at a cache line.
+    fn cache_line_aligned<T>(buffer: &mut [MaybeUninit<T>], len: usize) -> &mut [MaybeUninit<T>] {
+        let misalignment = buffer.as_ptr().cast::<u8>().addr() % 64;
+        let skip = (64 - misalignment) % 64 / size_of::<T>().max(1);
+        &mut buffer[skip..skip + len]
     }
 
     #[macro_rules_attr::apply(proptest(cases = 4))]
@@ -1649,10 +1765,11 @@ mod tests {
         expected.resize(len, BFieldElement::ZERO);
         ntt(&mut expected);
 
-        let mut codeword = vec![MaybeUninit::<BFieldElement>::uninit(); len];
-        scaled_zero_padded_ntt(&coefficients, offset, &mut codeword);
+        let mut buffer = vec![MaybeUninit::<BFieldElement>::uninit(); len + 8];
+        let codeword = cache_line_aligned(&mut buffer, len);
+        scaled_zero_padded_ntt(&coefficients, offset, codeword);
         let codeword = codeword
-            .into_iter()
+            .iter()
             .map(|c| unsafe { c.assume_init() })
             .collect_vec();
         prop_assert_eq!(expected, codeword);
