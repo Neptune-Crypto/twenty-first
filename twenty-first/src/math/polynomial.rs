@@ -697,10 +697,6 @@ where
     }
 }
 
-/// Below this length, transforms are always computed sequentially: the work
-/// is too little to be worth distributing.
-const PAR_NTT_CUTOFF_THRESHOLD: usize = 1 << 15;
-
 /// The largest number of independent, concurrently running tasks for which
 /// each task's transforms should still be parallelized internally. Beyond
 /// that, the tasks themselves provide the parallelism, and nested parallel
@@ -710,7 +706,7 @@ pub(crate) const MAX_CONCURRENT_PAR_NTTS: usize = 3;
 /// Whether a transform of the given length, one of `num_concurrent` running
 /// concurrently, should be computed in parallel.
 pub(crate) fn should_par_ntt(len: usize, num_concurrent: usize) -> bool {
-    len >= PAR_NTT_CUTOFF_THRESHOLD && num_concurrent <= MAX_CONCURRENT_PAR_NTTS
+    len >= 1 << crate::math::ntt::par_min_log_2_len() && num_concurrent <= MAX_CONCURRENT_PAR_NTTS
 }
 
 /// The [NTT](ntt), [in parallel](par_ntt) if requested.
@@ -1090,8 +1086,9 @@ where
         };
         let order = (degree + 1).next_power_of_two();
 
-        let mut lhs_coefficients = zero_padded_maybe_par(&self.coefficients, order, true);
-        let mut rhs_coefficients = zero_padded_maybe_par(&other.coefficients, order, true);
+        let par = should_par_ntt(order, 1);
+        let mut lhs_coefficients = zero_padded_maybe_par(&self.coefficients, order, par);
+        let mut rhs_coefficients = zero_padded_maybe_par(&other.coefficients, order, par);
 
         rayon::join(
             || par_ntt(&mut lhs_coefficients),
@@ -2847,9 +2844,14 @@ where
         S: Clone + One + Inverse + Send + Sync,
         FF: Mul<S, Output = FF>,
     {
-        let mut coefficients = zero_padded_maybe_par(values, values.len(), true);
+        let par = should_par_ntt(values.len(), 1);
+        let mut coefficients = zero_padded_maybe_par(values, values.len(), par);
         par_intt(&mut coefficients);
-        Self::par_scale_in_place(&mut coefficients, offset.inverse());
+        if par {
+            Self::par_scale_in_place(&mut coefficients, offset.inverse());
+        } else {
+            Self::scale_in_place(&mut coefficients, offset.inverse());
+        }
         Polynomial::new(coefficients)
     }
 

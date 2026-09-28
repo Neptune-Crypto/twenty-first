@@ -196,8 +196,26 @@ const LOG_2_TILE_LEN: u32 = 4;
 const CROSS_BLOCK_COLUMN_WIDTH: usize = 64;
 
 /// Below this (binary logarithm of the) length, the parallel NTT falls back
-/// to the serial one: the work is too little to be worth distributing.
+/// to the serial one: the work is too little to be worth distributing. See
+/// also [`par_min_log_2_len`].
 const PAR_MIN_LOG_2_LEN: u32 = 12;
+
+/// The binary logarithm of the minimum number of elements per thread for
+/// the parallel NTT to pay off. Waking a sleeping thread and handing it
+/// work costs on the order of a microsecond, which a few hundred
+/// butterflies amortize.
+const PAR_MIN_LOG_2_LEN_PER_THREAD: u32 = 9;
+
+/// The (binary logarithm of the) length from which on the parallel NTT is
+/// faster than the serial one: at least 2^[`PAR_MIN_LOG_2_LEN`], and at least
+/// 2^[`PAR_MIN_LOG_2_LEN_PER_THREAD`] elements per thread. With few threads,
+/// only the first bound matters; with many, the fixed cost of waking them
+/// all dominates transforms that a single thread finishes in a millisecond.
+pub(crate) fn par_min_log_2_len() -> u32 {
+    let num_threads = rayon::current_num_threads().max(1);
+    let log_2_num_threads = num_threads.next_power_of_two().ilog2();
+    PAR_MIN_LOG_2_LEN.max(PAR_MIN_LOG_2_LEN_PER_THREAD + log_2_num_threads)
+}
 
 /// Internal helper function for [NTT][self::ntt] and [iNTT][self::intt].
 ///
@@ -262,7 +280,7 @@ where
     let Some(log_2_len) = x.len().checked_ilog2() else {
         return;
     };
-    if log_2_len < PAR_MIN_LOG_2_LEN {
+    if log_2_len < par_min_log_2_len() {
         return ntt_unchecked(x, twiddle_factors);
     }
     debug_assert_eq!(log_2_len as usize, twiddle_factors.len());
