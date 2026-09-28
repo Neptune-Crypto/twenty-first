@@ -191,11 +191,10 @@ impl MerkleTree {
                 debug_assert!(tree_layers.len() > 1, "internal error: infinite iteration");
                 let mut previous_layer = tree_layers.pop().unwrap();
                 for next_layer in tree_layers.into_iter().rev() {
-                    for (node, (&left, &right)) in
-                        next_layer.iter_mut().zip(previous_layer.iter().tuples())
-                    {
-                        *node = Tip5::hash_pair(left, right);
-                    }
+                    let (pairs, []) = previous_layer.as_chunks::<2>() else {
+                        unreachable!("layers have even length");
+                    };
+                    next_layer.copy_from_slice(&Tip5::hash_pair_many(pairs));
                     previous_layer = next_layer;
                 }
             });

@@ -632,6 +632,60 @@ impl Tip5 {
         Digest::new(produce)
     }
 
+    /// [`hash_varlen`](Self::hash_varlen) of many inputs, in order.
+    ///
+    /// Equivalent to hashing every input on its own, but considerably faster
+    /// on CPUs with AVX-512: there, groups of consecutive inputs of equal
+    /// length are hashed side by side, one input per SIMD lane.
+    ///
+    /// See also: [`Self::hash_pair_many`].
+    pub fn hash_varlen_many(inputs: &[&[BFieldElement]]) -> Vec<Digest> {
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            let (batches, remainder) = inputs.as_chunks::<{ avx512::BATCH_SIZE }>();
+            let mut digests = Vec::with_capacity(inputs.len());
+            for batch in batches {
+                let len = batch[0].len();
+                if batch.iter().all(|input| input.len() == len) {
+                    // SAFETY: The required CPU features were detected above.
+                    digests.extend(unsafe { Self::hash_varlen_batch(*batch) });
+                } else {
+                    digests.extend(batch.iter().map(|input| Self::hash_varlen(input)));
+                }
+            }
+            digests.extend(remainder.iter().map(|input| Self::hash_varlen(input)));
+            return digests;
+        }
+
+        inputs
+            .iter()
+            .map(|input| Self::hash_varlen(input))
+            .collect()
+    }
+
+    /// [`hash_pair`](Self::hash_pair) of many pairs, in order.
+    ///
+    /// Equivalent to hashing every pair on its own, but considerably faster
+    /// on CPUs with AVX-512, where the pairs are hashed side by side, one
+    /// pair per SIMD lane.
+    ///
+    /// See also: [`Self::hash_varlen_many`].
+    pub fn hash_pair_many(pairs: &[[Digest; 2]]) -> Vec<Digest> {
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            let (batches, remainder) = pairs.as_chunks::<{ avx512::BATCH_SIZE }>();
+            let mut digests = Vec::with_capacity(pairs.len());
+            for batch in batches {
+                // SAFETY: The required CPU features were detected above.
+                digests.extend(unsafe { Self::hash_pair_batch(batch) });
+            }
+            digests.extend(remainder.iter().map(|&[l, r]| Self::hash_pair(l, r)));
+            return digests;
+        }
+
+        pairs.iter().map(|&[l, r]| Self::hash_pair(l, r)).collect()
+    }
+
     /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
     /// `upper_bound` must be a power of 2.
     ///
@@ -1213,6 +1267,21 @@ pub(crate) mod tests {
         let mut naive = naive::NaiveTip5 { state };
         naive.permutation();
         assert_eq!(expected, naive.state);
+
+        // The batched permutation must recover in every lane, too.
+        #[cfg(target_arch = "x86_64")]
+        if Tip5::avx512_is_available() {
+            // SAFETY (all `unsafe` blocks): The required CPU features were
+            // detected above.
+            let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
+            for i in 0..STATE_SIZE {
+                unsafe { batch.set(i, [state[i]; avx512::BATCH_SIZE]) };
+            }
+            unsafe { batch.permutation() };
+            for (i, &expected) in expected.iter().enumerate() {
+                assert_eq!([expected; avx512::BATCH_SIZE], unsafe { batch.get(i) });
+            }
+        }
     }
 
     #[macro_rules_attr::apply(test)]
@@ -1369,6 +1438,23 @@ pub(crate) mod tests {
         .map(BFieldElement::from_raw_u64);
 
         assert_eq!(&expected, &tip5.state[0..5]);
+
+        // The same vector must hold in every lane of the batched permutation.
+        // It is a regression test for the modular reduction, so it must not be
+        // skipped silently on the machines that matter.
+        #[cfg(target_arch = "x86_64")]
+        if Tip5::avx512_is_available() {
+            // SAFETY (all `unsafe` blocks): The required CPU features were
+            // detected above.
+            let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
+            for i in 0..STATE_SIZE {
+                unsafe { batch.set(i, [state[i]; avx512::BATCH_SIZE]) };
+            }
+            unsafe { batch.permutation() };
+            for (i, &expected) in expected.iter().enumerate() {
+                assert_eq!([expected; avx512::BATCH_SIZE], unsafe { batch.get(i) });
+            }
+        }
     }
 
     fn manual_hash_varlen(preimage: &[BFieldElement]) -> Digest {
@@ -1551,6 +1637,147 @@ pub(crate) mod tests {
         // SAFETY: The required CPU features were detected above.
         unsafe { avx512_permutation.permutation_avx512() };
         prop_assert_eq!(scalar_permutation, avx512_permutation);
+    }
+
+    /// Only meaningful on CPUs with the relevant AVX-512 extensions; passes
+    /// trivially otherwise.
+    #[cfg(target_arch = "x86_64")]
+    #[macro_rules_attr::apply(proptest)]
+    fn batched_permutation_agrees_with_naive_permutation(
+        states: [[BFieldElement; STATE_SIZE]; avx512::BATCH_SIZE],
+    ) {
+        if !Tip5::avx512_is_available() {
+            return Ok(());
+        }
+
+        // SAFETY (all `unsafe` blocks): The required CPU features were
+        // detected above.
+        let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
+        for i in 0..STATE_SIZE {
+            unsafe { batch.set(i, states.map(|state| state[i])) };
+        }
+        unsafe { batch.permutation() };
+
+        for (lane, state) in states.into_iter().enumerate() {
+            let mut naive = naive::NaiveTip5 { state };
+            naive.permutation();
+            for i in 0..STATE_SIZE {
+                let batched_element = unsafe { batch.get(i) }[lane];
+                prop_assert_eq!(
+                    naive.state[i],
+                    batched_element,
+                    "lane {}, element {}",
+                    lane,
+                    i
+                );
+            }
+        }
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn hash_varlen_many_agrees_with_hash_varlen(
+        #[strategy(proptest::collection::vec(proptest::collection::vec(arb(), 0..35), 0..30))]
+        inputs: Vec<Vec<BFieldElement>>,
+    ) {
+        let inputs = inputs.iter().map(Vec::as_slice).collect_vec();
+        let individually = inputs
+            .iter()
+            .map(|input| Tip5::hash_varlen(input))
+            .collect_vec();
+        prop_assert_eq!(individually, Tip5::hash_varlen_many(&inputs));
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn hash_varlen_many_agrees_with_hash_varlen_for_equal_lengths(
+        #[strategy(0_usize..35)] _len: usize,
+        #[strategy(proptest::collection::vec(proptest::collection::vec(arb(), #_len), 0..30))]
+        inputs: Vec<Vec<BFieldElement>>,
+    ) {
+        let inputs = inputs.iter().map(Vec::as_slice).collect_vec();
+        let individually = inputs
+            .iter()
+            .map(|input| Tip5::hash_varlen(input))
+            .collect_vec();
+        prop_assert_eq!(individually, Tip5::hash_varlen_many(&inputs));
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn hash_pair_many_agrees_with_hash_pair(
+        #[strategy(proptest::collection::vec(arb(), 0..30))] pairs: Vec<[Digest; 2]>,
+    ) {
+        let individually = pairs
+            .iter()
+            .map(|&[l, r]| Tip5::hash_pair(l, r))
+            .collect_vec();
+        prop_assert_eq!(individually, Tip5::hash_pair_many(&pairs));
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn avx512_reduction_regression_vector() {
+        let state = crate::bfe_array![
+            0x0000_000f_ffff_fff0_u64,
+            0x0000_0000_ffff_ffff_u64,
+            0x0000_0000_ffff_ffff_u64,
+            0x0000_0028_ffff_ffd7_u64,
+            0x0000_0006_ffff_fff9_u64,
+            0x0000_0002_ffff_fffd_u64,
+            0x0000_0000_ffff_ffff_u64,
+            0x0000_0030_ffff_ffcf_u64,
+            0x0000_0397_ffff_fc68_u64,
+            0x0000_000f_ffff_fff0_u64,
+            0x316b_fb72_3638_2123_u64,
+            0x216f_521b_66ef_83f5_u64,
+            0x5689_d7b3_63f5_2df0_u64,
+            0xeb2f_59e3_aeae_25fc_u64,
+            0xb082_99d2_77cb_b4dc_u64,
+            0xcbe3_d9fd_c534_9140_u64,
+        ];
+        let expected = crate::bfe_array![
+            0x231d_a775_9f66_2fd9_u64,
+            0x9bad_454d_eb24_c327_u64,
+            0x8b9f_67d4_0440_bc7e_u64,
+            0xfd56_ad41_eb9d_2514_u64,
+            0xeb4e_1c7c_2b83_5d30_u64,
+            0x9e86_05fe_9bc2_891f_u64,
+            0x0da2_ae9f_e4a6_d684_u64,
+            0x3944_688b_8da6_e25d_u64,
+            0x4bc6_d6d4_e868_ecbe_u64,
+            0x2293_50dc_cc9c_4677_u64,
+            0xe532_c7c1_200d_0349_u64,
+            0x92c2_1e76_49ef_2e40_u64,
+            0xa24f_5d2f_dfd9_fc52_u64,
+            0xd391_72f3_43db_c0f0_u64,
+            0x4236_2d8f_3a6e_9720_u64,
+            0xf7ee_7105_bb49_bd3e_u64,
+        ];
+
+        let mut naive = naive::NaiveTip5 { state };
+        naive.permutation();
+        assert_eq!(expected, naive.state);
+
+        let mut scalar = Tip5 { state };
+        for round_index in 0..NUM_ROUNDS {
+            scalar.round(round_index);
+        }
+        assert_eq!(expected, scalar.state);
+
+        let mut dispatching = Tip5 { state };
+        dispatching.permutation();
+        assert_eq!(expected, dispatching.state);
+
+        #[cfg(target_arch = "x86_64")]
+        if Tip5::avx512_is_available() {
+            // SAFETY (all `unsafe` blocks): The required CPU features were
+            // detected above.
+            let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
+            for i in 0..STATE_SIZE {
+                unsafe { batch.set(i, [state[i]; avx512::BATCH_SIZE]) };
+            }
+            unsafe { batch.permutation() };
+            for (i, &expected) in expected.iter().enumerate() {
+                assert_eq!([expected; avx512::BATCH_SIZE], unsafe { batch.get(i) });
+            }
+        }
     }
 
     #[macro_rules_attr::apply(test)]
