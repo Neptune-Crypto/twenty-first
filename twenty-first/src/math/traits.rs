@@ -13,6 +13,7 @@ use std::ops::SubAssign;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
 use num_traits::Zero;
+use rayon::prelude::*;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -120,8 +121,63 @@ pub trait FiniteField:
         res
     }
 
+    /// Parallel version of [`batch_inversion`](Self::batch_inversion).
+    ///
+    /// # Panics
+    ///
+    /// Panics if any of the elements is zero.
+    fn par_batch_inversion(mut input: Vec<Self>) -> Vec<Self> {
+        // Large enough to amortize the one inversion per chunk, small enough
+        // to keep all threads busy.
+        const CHUNK_SIZE: usize = 1 << 12;
+
+        input.par_chunks_mut(CHUNK_SIZE).for_each(|chunk| {
+            let inverses = Self::batch_inversion(chunk.to_vec());
+            chunk.copy_from_slice(&inverses);
+        });
+        input
+    }
+
     #[inline(always)]
     fn square(self) -> Self {
         self * self
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::*;
+    use crate::math::other::random_elements;
+    use crate::prelude::*;
+    use crate::tests::test;
+
+    #[macro_rules_attr::apply(test)]
+    fn parallel_and_serial_batch_inversion_agree() {
+        // lengths around the chunk boundaries of `par_batch_inversion`
+        for len in [
+            0,
+            1,
+            7,
+            (1 << 12) - 1,
+            1 << 12,
+            (1 << 12) + 1,
+            (1 << 14) + 3,
+        ] {
+            let bfes: Vec<BFieldElement> = random_elements(len);
+            let bfes: Vec<_> = bfes.into_iter().filter(|x| !x.is_zero()).collect();
+            let serial = BFieldElement::batch_inversion(bfes.clone());
+            let parallel = BFieldElement::par_batch_inversion(bfes.clone());
+            assert_eq!(serial, parallel, "{len}");
+            for (x, x_inv) in bfes.into_iter().zip(parallel) {
+                assert_eq!(BFieldElement::ONE, x * x_inv);
+            }
+
+            let xfes: Vec<XFieldElement> = random_elements(len);
+            let xfes: Vec<_> = xfes.into_iter().filter(|x| !x.is_zero()).collect();
+            let serial_xfes = XFieldElement::batch_inversion(xfes.clone());
+            let parallel_xfes = XFieldElement::par_batch_inversion(xfes);
+            assert_eq!(serial_xfes, parallel_xfes, "{len}");
+        }
     }
 }
