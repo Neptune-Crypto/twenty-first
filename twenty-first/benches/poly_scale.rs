@@ -36,6 +36,16 @@ fn poly_scale<const LOG2_SIZE: usize>(c: &mut Criterion) {
         b.iter(|| xfe_poly.scale(bfe_scalar))
     });
 
+    group.bench_function(
+        BenchmarkId::new("bfe poly, bfe scalar, parallel", LOG2_SIZE),
+        |b| b.iter(|| bfe_poly.par_scale(bfe_scalar)),
+    );
+
+    group.bench_function(
+        BenchmarkId::new("xfe poly, bfe scalar, parallel", LOG2_SIZE),
+        |b| b.iter(|| xfe_poly.par_scale(bfe_scalar)),
+    );
+
     group.bench_function(BenchmarkId::new("xfe poly, xfe scalar", LOG2_SIZE), |b| {
         b.iter(|| xfe_poly.scale(xfe_scalar))
     });

@@ -31,6 +31,8 @@ use super::traits::PrimitiveRootOfUnity;
 use super::zerofier_tree::ZerofierTree;
 use crate::math::ntt::intt;
 use crate::math::ntt::ntt;
+use crate::math::ntt::par_intt;
+use crate::math::ntt::par_ntt;
 use crate::math::traits::FiniteField;
 use crate::math::traits::ModPowU32;
 use crate::prelude::BFieldElement;
@@ -772,6 +774,46 @@ where
         Polynomial::new(return_coefficients)
     }
 
+    /// Parallel version of [`scale`](Self::scale).
+    #[must_use]
+    pub fn par_scale<S, XF>(&self, alpha: S) -> Polynomial<'static, XF>
+    where
+        S: Clone + One + Send + Sync,
+        FF: Mul<S, Output = XF>,
+        XF: FiniteField,
+    {
+        // Large enough to amortize computing the chunk's first power of α
+        // by square-and-multiply, small enough to keep all threads busy.
+        const CHUNK_SIZE: usize = 1 << 12;
+
+        // Writing into pre-allocated chunks is considerably faster than
+        // collecting an unindexed parallel iterator. Not initializing the
+        // memory up front saves a full pass over it; the chunks are written
+        // to in parallel, which also spreads the page faults across threads.
+        let num_coefficients = self.coefficients.len();
+        let mut return_coefficients = Vec::with_capacity(num_coefficients);
+        return_coefficients
+            .spare_capacity_mut()
+            .par_chunks_mut(CHUNK_SIZE)
+            .zip(self.coefficients.par_chunks(CHUNK_SIZE))
+            .enumerate()
+            .for_each(|(chunk_index, (scaled_chunk, chunk))| {
+                let mut power_of_alpha = generic_pow(alpha.clone(), chunk_index * CHUNK_SIZE);
+                for (scaled_coefficient, &coefficient) in scaled_chunk.iter_mut().zip(chunk) {
+                    scaled_coefficient.write(coefficient * power_of_alpha.clone());
+                    power_of_alpha = power_of_alpha * alpha.clone();
+                }
+            });
+        // SAFETY:
+        // 1. The capacity is `num_coefficients`.
+        // 2. The chunks of the spare capacity and of the coefficients are
+        //    zipped in lockstep and have identical lengths, so exactly the
+        //    first `num_coefficients` elements were written to, and every
+        //    one of them was.
+        unsafe { return_coefficients.set_len(num_coefficients) };
+        Polynomial::new(return_coefficients)
+    }
+
     /// Square `self`.
     ///
     /// It is the caller's responsibility that this function is called with
@@ -1397,6 +1439,47 @@ where
 
         coefficients
     }
+
+    /// Parallel version of [`fast_coset_evaluate`](Self::fast_coset_evaluate).
+    ///
+    /// Use this for a single, large evaluation. If many polynomials are to be
+    /// evaluated, it is generally more efficient to evaluate them in parallel
+    /// using the serial version for each.
+    ///
+    /// # Panics
+    ///
+    /// See [`fast_coset_evaluate`](Self::fast_coset_evaluate).
+    pub fn par_fast_coset_evaluate<S>(&self, offset: S, order: usize) -> Vec<FF>
+    where
+        S: Clone + One + Send + Sync,
+        FF: Mul<S, Output = FF> + 'static,
+    {
+        assert!(
+            (order as isize) > self.degree(),
+            "`Polynomial::par_fast_coset_evaluate` is currently limited to domains of order \
+            greater than the degree of the polynomial."
+        );
+
+        let mut coefficients = self.par_scale(offset).coefficients.into_owned();
+        coefficients.resize(order, FF::ZERO);
+        par_ntt(&mut coefficients);
+
+        coefficients
+    }
+}
+
+/// `base^exponent` by square-and-multiply, for any multiplicative monoid.
+fn generic_pow<S: Clone + One>(base: S, mut exponent: usize) -> S {
+    let mut result = S::one();
+    let mut base = base;
+    while exponent > 0 {
+        if exponent & 1 == 1 {
+            result = result * base.clone();
+        }
+        base = base.clone() * base;
+        exponent >>= 1;
+    }
+    result
 }
 
 impl<FF> Polynomial<'static, FF>
@@ -1915,6 +1998,26 @@ where
         let poly = Polynomial::new(mut_values);
 
         poly.scale(offset.inverse())
+    }
+
+    /// Parallel version of
+    /// [`fast_coset_interpolate`](Self::fast_coset_interpolate). See also
+    /// [`par_fast_coset_evaluate`](Self::par_fast_coset_evaluate).
+    ///
+    /// # Panics
+    ///
+    /// See [`fast_coset_interpolate`](Self::fast_coset_interpolate).
+    pub fn par_fast_coset_interpolate<S>(offset: S, values: &[FF]) -> Self
+    where
+        S: Clone + One + Inverse + Send + Sync,
+        FF: Mul<S, Output = FF>,
+    {
+        let mut mut_values = values.to_vec();
+
+        par_intt(&mut mut_values);
+        let poly = Polynomial::new(mut_values);
+
+        poly.par_scale(offset.inverse())
     }
 
     /// The degree-`k` polynomial with the same `k + 1` leading coefficients as
@@ -2721,6 +2824,7 @@ mod tests {
     use proptest_arbitrary_adapter::arb;
 
     use super::*;
+    use crate::math::other::random_elements;
     use crate::prelude::*;
     use crate::tests::proptest;
     use crate::tests::test;
@@ -4677,5 +4781,57 @@ mod tests {
 
         // make sure the coefficients are still owned by this scope
         drop(coefficients);
+    }
+    #[macro_rules_attr::apply(test)]
+    fn par_scale_agrees_with_scale() {
+        // lengths around the chunk boundaries of `par_scale`
+        for len in [
+            0,
+            1,
+            7,
+            (1 << 12) - 1,
+            1 << 12,
+            (1 << 12) + 1,
+            (1 << 14) + 3,
+        ] {
+            let poly = Polynomial::<XFieldElement>::new(random_elements(len));
+            let bfe_scalar: BFieldElement = random_elements(1)[0];
+            let xfe_scalar: XFieldElement = random_elements(1)[0];
+            assert_eq!(poly.scale(bfe_scalar), poly.par_scale(bfe_scalar), "{len}");
+            assert_eq!(poly.scale(xfe_scalar), poly.par_scale(xfe_scalar), "{len}");
+
+            let bfe_poly = Polynomial::<BFieldElement>::new(random_elements(len));
+            assert_eq!(
+                bfe_poly.scale(bfe_scalar),
+                bfe_poly.par_scale(bfe_scalar),
+                "{len}"
+            );
+            assert_eq!(
+                bfe_poly.scale(xfe_scalar),
+                bfe_poly.par_scale(xfe_scalar),
+                "{len}"
+            );
+        }
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn parallel_and_serial_coset_evaluation_and_interpolation_agree() {
+        let offset = BFieldElement::generator();
+        for log_order in [1, 5, 10, 17] {
+            let order = 1_usize << log_order;
+            let poly = Polynomial::<XFieldElement>::new(random_elements(order - 1));
+
+            let serial = poly.fast_coset_evaluate(offset, order);
+            let parallel = poly.par_fast_coset_evaluate(offset, order);
+            assert_eq!(serial, parallel, "log_order: {log_order}");
+
+            let serial_interpolant = Polynomial::fast_coset_interpolate(offset, &parallel);
+            let parallel_interpolant = Polynomial::par_fast_coset_interpolate(offset, &parallel);
+            assert_eq!(
+                serial_interpolant, parallel_interpolant,
+                "log_order: {log_order}"
+            );
+            assert_eq!(poly, parallel_interpolant, "log_order: {log_order}");
+        }
     }
 }
