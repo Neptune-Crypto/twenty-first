@@ -39,9 +39,7 @@ where
     FF: FiniteField + MulAssign<BFieldElement> + 'static,
 {
     pub fn new(left: ZerofierTree<'c, FF>, right: ZerofierTree<'c, FF>) -> Self {
-        let zerofier = left
-            .zerofier_view()
-            .multiply_maybe_par(&right.zerofier_view());
+        let zerofier = left.zerofier_view().multiply_monic(&right.zerofier_view());
         let num_points = left.num_points() + right.num_points();
 
         Self {

@@ -695,6 +695,28 @@ where
     }
 }
 
+/// Below this length, transforms are computed sequentially; from it on, in
+/// parallel.
+const PAR_NTT_CUTOFF_THRESHOLD: usize = 1 << 15;
+
+/// The [NTT](ntt), [in parallel](par_ntt) for long inputs.
+pub(crate) fn ntt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF]) {
+    if x.len() < PAR_NTT_CUTOFF_THRESHOLD {
+        ntt(x)
+    } else {
+        par_ntt(x)
+    }
+}
+
+/// The [inverse NTT](intt), [in parallel](par_intt) for long inputs.
+pub(crate) fn intt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF]) {
+    if x.len() < PAR_NTT_CUTOFF_THRESHOLD {
+        intt(x)
+    } else {
+        par_intt(x)
+    }
+}
+
 impl<FF> Polynomial<'_, FF>
 where
     FF: FiniteField + MulAssign<BFieldElement>,
@@ -1053,6 +1075,56 @@ where
         }
     }
 
+    /// The product of two monic polynomials, using a cyclic convolution of
+    /// the smallest power-of-two length that is at least the product's
+    /// degree. If that length equals the degree, the leading coefficient
+    /// wraps around onto the constant term, where it is known and can be
+    /// undone. Compared to [`multiply`](Self::multiply), this halves the
+    /// transform lengths whenever the product's degree is a power of two.
+    ///
+    /// # Panics
+    ///
+    /// Panics if either polynomial is not monic.
+    pub(crate) fn multiply_monic(&self, other: &Polynomial<FF>) -> Polynomial<'static, FF> {
+        let self_degree = usize::try_from(self.degree()).expect("monic polynomial is non-zero");
+        let other_degree = usize::try_from(other.degree()).expect("monic polynomial is non-zero");
+        assert_eq!(FF::ONE, self.coefficients[self_degree], "must be monic");
+        assert_eq!(FF::ONE, other.coefficients[other_degree], "must be monic");
+        if self_degree == 0 {
+            return other.clone().into_owned();
+        }
+        if other_degree == 0 {
+            return self.clone().into_owned();
+        }
+
+        let degree = self_degree + other_degree;
+        if (degree as isize) < Self::FAST_MULTIPLY_CUTOFF_THRESHOLD {
+            return self.naive_multiply(other);
+        }
+
+        let len = degree.next_power_of_two();
+        let mut lhs = crate::memory::vec_with_capacity(len);
+        lhs.extend_from_slice(&self.coefficients[..=self_degree]);
+        lhs.resize(len, FF::ZERO);
+        let mut rhs = crate::memory::vec_with_capacity(len);
+        rhs.extend_from_slice(&other.coefficients[..=other_degree]);
+        rhs.resize(len, FF::ZERO);
+        rayon::join(|| ntt_maybe_par(&mut lhs), || ntt_maybe_par(&mut rhs));
+        for (l, r) in lhs.iter_mut().zip(&rhs) {
+            *l *= *r;
+        }
+        intt_maybe_par(&mut lhs);
+
+        let mut product = lhs;
+        if len == degree {
+            product[0] -= FF::ONE;
+            product.push(FF::ONE);
+        } else {
+            product.truncate(degree + 1);
+        }
+        Polynomial::new(product)
+    }
+
     /// `self mod x^n`, as an owned polynomial. See also
     /// [`mod_x_to_the_n`](Polynomial::mod_x_to_the_n).
     fn truncated(&self, n: usize) -> Polynomial<'static, FF> {
@@ -1072,26 +1144,65 @@ where
     ///
     /// Panics if `self`'s constant term is zero, or if `precision` is zero.
     pub(crate) fn power_series_inverse(&self, precision: usize) -> Polynomial<'static, FF> {
+        // Below this precision, the quadratic algorithm is used to bootstrap
+        // the Newton iteration.
+        const NEWTON_CUTOFF_PRECISION: usize = 1 << 7;
+
         assert!(precision > 0, "precision must be positive");
         let constant_term = self.coefficients.first().copied().unwrap_or(FF::ZERO);
         assert!(!constant_term.is_zero(), "constant term must be invertible");
 
-        let mut inverse = Polynomial::from_constant(constant_term.inverse());
-        let mut current_precision = 1;
+        let bootstrap_precision = precision.min(NEWTON_CUTOFF_PRECISION);
+        let mut inverse = self
+            .formal_power_series_inverse_minimal(bootstrap_precision - 1)
+            .into_coefficients();
+        inverse.resize(bootstrap_precision, FF::ZERO);
+
+        // Newton iteration g ← g + g·(1 - f·g), doubling the precision p in
+        // every step. Since f·g ≡ 1 (mod x^p), the term (1 - f·g) mod x^(2p)
+        // is x^p times the negated coefficients p through 2p-1 of f·g, and the
+        // update is x^p · (g · h mod x^p) with h those coefficients. Both
+        // products are computed with cyclic convolutions of length 2p: the
+        // first because only its upper half is needed and the wrapped
+        // coefficients land in the lower half, the second because it does not
+        // wrap at all. The transform of g is shared between them.
+        let mut current_precision = bootstrap_precision;
         while current_precision < precision {
-            current_precision = (2 * current_precision).min(precision);
-            // g ← g · (2 - f·g)  (mod x^current_precision)
-            let truncated_self = self.truncated(current_precision);
-            let mut self_times_inverse = truncated_self
-                .multiply_maybe_par(&inverse)
-                .truncated(current_precision);
-            self_times_inverse.scalar_mul_mut(-FF::ONE);
-            self_times_inverse += Polynomial::from_constant(FF::from(2));
-            inverse = inverse
-                .multiply_maybe_par(&self_times_inverse)
-                .truncated(current_precision);
+            let len = 2 * current_precision;
+
+            let mut inverse_ntt = inverse.clone();
+            inverse_ntt.resize(len, FF::ZERO);
+            let mut self_times_inverse = crate::memory::vec_with_capacity(len);
+            let num_own_coefficients = len.min(self.coefficients.len());
+            self_times_inverse.extend_from_slice(&self.coefficients[..num_own_coefficients]);
+            self_times_inverse.resize(len, FF::ZERO);
+            rayon::join(
+                || ntt_maybe_par(&mut inverse_ntt),
+                || ntt_maybe_par(&mut self_times_inverse),
+            );
+            for (product, g) in self_times_inverse.iter_mut().zip(&inverse_ntt) {
+                *product *= *g;
+            }
+            intt_maybe_par(&mut self_times_inverse);
+
+            let mut update = self_times_inverse;
+            update.copy_within(current_precision.., 0);
+            for coefficient in update.iter_mut().take(current_precision) {
+                *coefficient = -*coefficient;
+            }
+            update[current_precision..].fill(FF::ZERO);
+            ntt_maybe_par(&mut update);
+            for (u, g) in update.iter_mut().zip(&inverse_ntt) {
+                *u *= *g;
+            }
+            intt_maybe_par(&mut update);
+
+            inverse.extend_from_slice(&update[..current_precision]);
+            current_precision = len;
         }
-        inverse
+        inverse.truncate(precision);
+
+        Polynomial::new(inverse)
     }
 
     /// `self mod modulus`, given the inverse of the reversed modulus as a
@@ -2026,11 +2137,44 @@ where
                 if branch.right.num_points() == 0 {
                     return left;
                 }
-                let (left_term, right_term) = rayon::join(
-                    || left.multiply_maybe_par(&branch.right.zerofier_view()),
-                    || right.multiply_maybe_par(&branch.left.zerofier_view()),
+
+                // left · z_right + right · z_left, which has degree less than
+                // the branch's number of points and thus fits into a cyclic
+                // convolution of the next power of two.
+                let num_points = branch.num_points;
+                let len = num_points.next_power_of_two();
+                let transform = |polynomial: Polynomial<FF>| {
+                    let mut coefficients = crate::memory::vec_with_capacity(len);
+                    coefficients.extend_from_slice(polynomial.coefficients());
+                    coefficients.resize(len, FF::ZERO);
+                    ntt_maybe_par(&mut coefficients);
+                    coefficients
+                };
+                let ((mut left, right_zerofier), (right, left_zerofier)) = rayon::join(
+                    || {
+                        rayon::join(
+                            || transform(left),
+                            || transform(branch.right.zerofier_view()),
+                        )
+                    },
+                    || {
+                        rayon::join(
+                            || transform(right),
+                            || transform(branch.left.zerofier_view()),
+                        )
+                    },
                 );
-                left_term + right_term
+                for (((l, zr), r), zl) in left
+                    .iter_mut()
+                    .zip(&right_zerofier)
+                    .zip(&right)
+                    .zip(&left_zerofier)
+                {
+                    *l = *l * *zr + *r * *zl;
+                }
+                intt_maybe_par(&mut left);
+                left.truncate(num_points);
+                Polynomial::new(left)
             }
             ZerofierTree::Padding => Polynomial::zero(),
         }
@@ -2279,22 +2423,6 @@ where
         zerofier_tree: &ZerofierTree<FF>,
         scaled_remainder: Vec<FF>,
     ) -> Vec<FF> {
-        const PAR_NTT_CUTOFF_THRESHOLD: usize = 1 << 15;
-        fn ntt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF]) {
-            if x.len() < PAR_NTT_CUTOFF_THRESHOLD {
-                ntt(x)
-            } else {
-                par_ntt(x)
-            }
-        }
-        fn intt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF]) {
-            if x.len() < PAR_NTT_CUTOFF_THRESHOLD {
-                intt(x)
-            } else {
-                par_intt(x)
-            }
-        }
-
         let num_points = zerofier_tree.num_points();
         debug_assert_eq!(num_points, scaled_remainder.len());
         match zerofier_tree {
