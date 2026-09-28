@@ -16,6 +16,7 @@
 pub mod config;
 pub mod error;
 pub mod math;
+pub mod memory;
 pub mod prelude;
 pub mod tip5;
 pub mod util_types;

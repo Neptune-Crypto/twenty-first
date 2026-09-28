@@ -765,18 +765,45 @@ where
         FF: Mul<S, Output = XF>,
         XF: FiniteField,
     {
+        Polynomial::new(self.scaled_coefficients(alpha, self.coefficients.len()))
+    }
+
+    /// The coefficients of [`scale`](Self::scale), in a vector with (at least)
+    /// the given capacity. See also [`par_scaled_coefficients`][par].
+    ///
+    /// [par]: Self::par_scaled_coefficients
+    fn scaled_coefficients<S, XF>(&self, alpha: S, capacity: usize) -> Vec<XF>
+    where
+        S: Clone + One,
+        FF: Mul<S, Output = XF>,
+        XF: FiniteField,
+    {
         let mut power_of_alpha = S::one();
-        let mut return_coefficients = Vec::with_capacity(self.coefficients.len());
+        let mut return_coefficients =
+            crate::memory::vec_with_capacity(capacity.max(self.coefficients.len()));
         for &coefficient in self.coefficients.iter() {
             return_coefficients.push(coefficient * power_of_alpha.clone());
             power_of_alpha = power_of_alpha * alpha.clone();
         }
-        Polynomial::new(return_coefficients)
+        return_coefficients
     }
 
     /// Parallel version of [`scale`](Self::scale).
     #[must_use]
     pub fn par_scale<S, XF>(&self, alpha: S) -> Polynomial<'static, XF>
+    where
+        S: Clone + One + Send + Sync,
+        FF: Mul<S, Output = XF>,
+        XF: FiniteField,
+    {
+        Polynomial::new(self.par_scaled_coefficients(alpha, self.coefficients.len()))
+    }
+
+    /// The coefficients of [`par_scale`](Self::par_scale), in a vector with
+    /// (at least) the given capacity. Allocating the final capacity up front
+    /// lets callers extend the vector, e.g., by padding it to the length of an
+    /// NTT domain, without reallocating.
+    fn par_scaled_coefficients<S, XF>(&self, alpha: S, capacity: usize) -> Vec<XF>
     where
         S: Clone + One + Send + Sync,
         FF: Mul<S, Output = XF>,
@@ -791,7 +818,8 @@ where
         // memory up front saves a full pass over it; the chunks are written
         // to in parallel, which also spreads the page faults across threads.
         let num_coefficients = self.coefficients.len();
-        let mut return_coefficients = Vec::with_capacity(num_coefficients);
+        let mut return_coefficients =
+            crate::memory::vec_with_capacity(capacity.max(num_coefficients));
         return_coefficients
             .spare_capacity_mut()
             .par_chunks_mut(CHUNK_SIZE)
@@ -805,13 +833,13 @@ where
                 }
             });
         // SAFETY:
-        // 1. The capacity is `num_coefficients`.
+        // 1. The capacity is at least `num_coefficients`.
         // 2. The chunks of the spare capacity and of the coefficients are
         //    zipped in lockstep and have identical lengths, so exactly the
         //    first `num_coefficients` elements were written to, and every
         //    one of them was.
         unsafe { return_coefficients.set_len(num_coefficients) };
-        Polynomial::new(return_coefficients)
+        return_coefficients
     }
 
     /// Square `self`.
@@ -1433,7 +1461,7 @@ where
             greater than the degree of the polynomial."
         );
 
-        let mut coefficients = self.scale(offset).coefficients.into_owned();
+        let mut coefficients = self.scaled_coefficients(offset, order);
         coefficients.resize(order, FF::ZERO);
         ntt(&mut coefficients);
 
@@ -1460,7 +1488,7 @@ where
             greater than the degree of the polynomial."
         );
 
-        let mut coefficients = self.par_scale(offset).coefficients.into_owned();
+        let mut coefficients = self.par_scaled_coefficients(offset, order);
         coefficients.resize(order, FF::ZERO);
         par_ntt(&mut coefficients);
 
@@ -1992,7 +2020,8 @@ where
         S: Clone + One + Inverse,
         FF: Mul<S, Output = FF>,
     {
-        let mut mut_values = values.to_vec();
+        let mut mut_values = crate::memory::vec_with_capacity(values.len());
+        mut_values.extend_from_slice(values);
 
         intt(&mut mut_values);
         let poly = Polynomial::new(mut_values);
@@ -2012,7 +2041,8 @@ where
         S: Clone + One + Inverse + Send + Sync,
         FF: Mul<S, Output = FF>,
     {
-        let mut mut_values = values.to_vec();
+        let mut mut_values = crate::memory::vec_with_capacity(values.len());
+        mut_values.extend_from_slice(values);
 
         par_intt(&mut mut_values);
         let poly = Polynomial::new(mut_values);
