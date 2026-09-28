@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::ops::MulAssign;
 
 use num_traits::One;
+use rayon::prelude::*;
 
 use super::b_field_element::BFieldElement;
 use super::polynomial::Polynomial;
@@ -28,6 +29,16 @@ pub struct Branch<'c, FF: FiniteField + MulAssign<BFieldElement>> {
     zerofier: Polynomial<'c, FF>,
     pub(crate) left: ZerofierTree<'c, FF>,
     pub(crate) right: ZerofierTree<'c, FF>,
+
+    /// The number of points in this subtree.
+    num_points: usize,
+
+    /// The inverses of the children's reversed zerofiers as formal power
+    /// series, to the precision needed for reducing a polynomial of degree
+    /// less than this branch's number of points modulo the respective child's
+    /// zerofier. See [`Polynomial::reduce_with_reversed_inverse`].
+    pub(crate) left_reversed_zerofier_inverse: Polynomial<'c, FF>,
+    pub(crate) right_reversed_zerofier_inverse: Polynomial<'c, FF>,
 }
 
 impl<'c, FF> Branch<'c, FF>
@@ -35,11 +46,30 @@ where
     FF: FiniteField + MulAssign<BFieldElement> + 'static,
 {
     pub fn new(left: ZerofierTree<'c, FF>, right: ZerofierTree<'c, FF>) -> Self {
-        let zerofier = left.zerofier().multiply(&right.zerofier());
+        let zerofier = left
+            .zerofier_view()
+            .multiply_maybe_par(&right.zerofier_view());
+        let num_points = left.num_points() + right.num_points();
+
+        // A polynomial of degree < num_points, reduced modulo the left
+        // zerofier of degree l, has a quotient of degree < num_points - l,
+        // i.e., the right's number of points.
+        let reversed_inverse = |child: &ZerofierTree<FF>, precision: usize| {
+            child
+                .zerofier_view()
+                .reverse()
+                .power_series_inverse(precision.max(1))
+        };
+        let left_reversed_zerofier_inverse = reversed_inverse(&left, right.num_points());
+        let right_reversed_zerofier_inverse = reversed_inverse(&right, left.num_points());
+
         Self {
             zerofier,
             left,
             right,
+            num_points,
+            left_reversed_zerofier_inverse,
+            right_reversed_zerofier_inverse,
         }
     }
 }
@@ -62,6 +92,30 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<'static, FF> {
     /// Regulates the depth at which the tree is truncated. Phrased differently,
     /// regulates the number of points contained by each leaf.
     const RECURSION_CUTOFF_THRESHOLD: usize = 16;
+
+    /// Parallel version of [`new_from_domain`](Self::new_from_domain).
+    pub fn par_new_from_domain(domain: &[FF]) -> Self {
+        let mut nodes = domain
+            .par_chunks(Self::RECURSION_CUTOFF_THRESHOLD)
+            .map(|chunk| ZerofierTree::Leaf(Leaf::new(chunk.to_vec())))
+            .collect::<Vec<_>>();
+        nodes.resize(nodes.len().next_power_of_two(), ZerofierTree::Padding);
+        while nodes.len() > 1 {
+            nodes = nodes
+                .into_par_iter()
+                .chunks(2)
+                .map(|pair| {
+                    let [left, right] = <[_; 2]>::try_from(pair).unwrap();
+                    if left == ZerofierTree::Padding {
+                        ZerofierTree::Padding
+                    } else {
+                        ZerofierTree::Branch(Box::new(Branch::new(left, right)))
+                    }
+                })
+                .collect();
+        }
+        nodes.pop().unwrap()
+    }
 
     pub fn new_from_domain(domain: &[FF]) -> Self {
         let mut nodes = domain
@@ -95,6 +149,27 @@ where
             ZerofierTree::Leaf(leaf) => leaf.zerofier.clone(),
             ZerofierTree::Branch(branch) => branch.zerofier.clone(),
             ZerofierTree::Padding => Polynomial::one(),
+        }
+    }
+
+    /// Like [`zerofier`](Self::zerofier), but borrowing the coefficients
+    /// where possible.
+    pub(crate) fn zerofier_view(&self) -> Polynomial<'_, FF> {
+        match self {
+            ZerofierTree::Leaf(leaf) => Polynomial::new_borrowed(leaf.zerofier.coefficients()),
+            ZerofierTree::Branch(branch) => {
+                Polynomial::new_borrowed(branch.zerofier.coefficients())
+            }
+            ZerofierTree::Padding => Polynomial::one(),
+        }
+    }
+
+    /// The number of points this (sub)tree was built from.
+    pub fn num_points(&self) -> usize {
+        match self {
+            ZerofierTree::Leaf(leaf) => leaf.points.len(),
+            ZerofierTree::Branch(branch) => branch.num_points,
+            ZerofierTree::Padding => 0,
         }
     }
 }
@@ -165,5 +240,22 @@ mod tests {
         let zerofier_tree = ZerofierTree::new_from_domain(&points);
         let polynomial_zerofier = Polynomial::zerofier(&points);
         prop_assert_eq!(polynomial_zerofier, zerofier_tree.zerofier());
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn parallel_and_sequential_construction_agree(
+        #[strategy(vec(arb(), 0..(1 << 8)))] points: Vec<BFieldElement>,
+    ) {
+        let sequential = ZerofierTree::new_from_domain(&points);
+        let parallel = ZerofierTree::par_new_from_domain(&points);
+        prop_assert_eq!(sequential, parallel);
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn num_points_is_number_of_points(
+        #[strategy(vec(arb(), 0..(1 << 8)))] points: Vec<BFieldElement>,
+    ) {
+        let zerofier_tree = ZerofierTree::new_from_domain(&points);
+        prop_assert_eq!(points.len(), zerofier_tree.num_points());
     }
 }
