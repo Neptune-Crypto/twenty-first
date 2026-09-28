@@ -1,22 +1,60 @@
 //! Make [`Tip5`] even faster by using SIMD, in particular, AVX-512.
+//!
+//! The functions in this module are compiled for every x86-64 target, but
+//! must only be called after checking [`Tip5::avx512_is_available`] at
+//! runtime. This way, binaries that are not compiled with AVX-512 enabled
+//! still benefit on CPUs that support it.
 
 use std::arch::x86_64::*;
 
 use super::LOOKUP_TABLE;
+use super::NUM_ROUNDS;
 use super::STATE_SIZE;
 use super::Tip5;
 use crate::prelude::BFieldElement;
 
 #[expect(unsafe_op_in_unsafe_fn)]
 impl Tip5 {
-    #[inline(always)]
-    pub fn round(&mut self, round_index: usize) {
-        unsafe {
-            Self::sbox_layer_avx512(&mut self.state);
-            Self::mds_rcs_avx512(&mut self.state, round_index);
+    /// Whether the CPU supports all AVX-512 extensions used in this module.
+    ///
+    /// The result is cached by the standard library, so calling this is
+    /// cheap. If the crate is compiled with these features enabled, e.g.,
+    /// through `-C target-cpu=native`, the check is resolved at compile time.
+    #[inline]
+    pub(super) fn avx512_is_available() -> bool {
+        is_x86_feature_detected!("avx512f")
+            && is_x86_feature_detected!("avx512bw")
+            && is_x86_feature_detected!("avx512vbmi")
+            && is_x86_feature_detected!("avx512ifma")
+    }
+
+    /// The Tip5 permutation, using AVX-512.
+    ///
+    /// # Safety
+    ///
+    /// The CPU must support the AVX-512 extensions “f”, “bw”, “vbmi”, and
+    /// “ifma”; see [`Self::avx512_is_available`].
+    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    pub(super) unsafe fn permutation_avx512(&mut self) {
+        for round_index in 0..NUM_ROUNDS {
+            self.round_avx512(round_index);
         }
     }
 
+    /// One round of the Tip5 permutation, using AVX-512.
+    ///
+    /// # Safety
+    ///
+    /// See [`Self::permutation_avx512`].
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    pub(super) unsafe fn round_avx512(&mut self, round_index: usize) {
+        Self::sbox_layer_avx512(&mut self.state);
+        Self::mds_rcs_avx512(&mut self.state, round_index);
+    }
+
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
     unsafe fn sbox_layer_avx512(state: &mut [BFieldElement; STATE_SIZE]) {
         let a = _mm512_load_epi64(state.as_mut_ptr().offset(0x00) as *mut i64);
         let b = _mm512_load_epi64(state.as_mut_ptr().offset(0x08) as *mut i64);
@@ -64,8 +102,9 @@ impl Tip5 {
         _mm512_store_epi64(state.as_mut_ptr().offset(0x08) as *mut i64, b7);
     }
 
-    #[inline(always)]
+    #[inline]
     #[expect(clippy::identity_op)]
+    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
     unsafe fn mds_rcs_avx512(state: &mut [BFieldElement; STATE_SIZE], round_index: usize) {
         const MDS_TRANS: [[u64; 8]; 16] = [
             [61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034],
@@ -174,7 +213,8 @@ impl Tip5 {
         );
     }
 
-    #[inline(always)]
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
     unsafe fn reduce3x48(ain: __m512i, bin: __m512i, cin: __m512i) -> __m512i {
         /* Combine and reduce a * 2**0 + b * 2**48 + c * 2**96 to F_P */
 
@@ -260,7 +300,8 @@ impl Tip5 {
     // STATE_SIZE == 16 such intermediate results are summed up, resulting in a
     // 52-bit element. A 32-bit limb of the round constant is added to get a
     // limb of the final result, which is at most 53 bits wide.
-    #[inline(always)]
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
     unsafe fn reduce2x32(lo: __m512i, hi: __m512i) -> __m512i {
         // input must be at most 53 bits
         #[cfg(debug_assertions)]
@@ -305,7 +346,8 @@ impl Tip5 {
         r
     }
 
-    #[inline(always)]
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
     unsafe fn mul8(x: __m512i, y: __m512i) -> __m512i {
         let mask48 = _mm512_set1_epi64(0xffffffffffff);
 
@@ -340,7 +382,8 @@ impl Tip5 {
         Self::reduce3x48(a_0, b_0, c_0)
     }
 
-    #[inline(always)]
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
     unsafe fn square8(x: __m512i) -> __m512i {
         let mask48 = _mm512_set1_epi64(0xffffffffffff);
 

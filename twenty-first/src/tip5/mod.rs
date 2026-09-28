@@ -33,12 +33,7 @@ pub const NUM_ROUNDS: usize = 5;
 
 pub mod digest;
 
-#[cfg(all(
-    target_feature = "avx512ifma",
-    target_feature = "avx512f",
-    target_feature = "avx512bw",
-    target_feature = "avx512vbmi"
-))]
+#[cfg(target_arch = "x86_64")]
 mod avx512;
 #[cfg(test)]
 mod inverse;
@@ -164,13 +159,8 @@ pub struct Tip5 {
     pub state: [BFieldElement; STATE_SIZE],
 }
 
-#[cfg(not(all(
-    target_feature = "avx512ifma",
-    target_feature = "avx512f",
-    target_feature = "avx512bw",
-    target_feature = "avx512vbmi"
-)))]
 impl Tip5 {
+    /// One round of the Tip5 permutation, without any SIMD.
     #[inline(always)]
     fn round(&mut self, round_index: usize) {
         self.sbox_layer();
@@ -525,11 +515,31 @@ impl Tip5 {
         Self { state }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn permutation(&mut self) {
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            // SAFETY: The required CPU features were just detected.
+            unsafe { self.permutation_avx512() };
+            return;
+        }
+
         for i in 0..NUM_ROUNDS {
             self.round(i);
         }
+    }
+
+    /// One round of the Tip5 permutation, using SIMD if available.
+    #[inline]
+    fn round_dispatching(&mut self, round_index: usize) {
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            // SAFETY: The required CPU features were just detected.
+            unsafe { self.round_avx512(round_index) };
+            return;
+        }
+
+        self.round(round_index);
     }
 
     /// Functionally equivalent to [`permutation`](Self::permutation). Returns the trace of
@@ -540,7 +550,7 @@ impl Tip5 {
 
         trace[0] = self.state;
         for i in 0..NUM_ROUNDS {
-            self.round(i);
+            self.round_dispatching(i);
             trace[1 + i] = self.state;
         }
 
@@ -1498,13 +1508,6 @@ pub(crate) mod tests {
         prop_assert_ne!(product, XFieldElement::ZERO);
     }
 
-    // Function `mds_generated` is not available if the AVX-512 functions are.
-    #[cfg(not(all(
-        target_feature = "avx512ifma",
-        target_feature = "avx512f",
-        target_feature = "avx512bw",
-        target_feature = "avx512vbmi"
-    )))]
     #[macro_rules_attr::apply(proptest)]
     fn test_mds_matrix_mul_methods_agree(state: [BFieldElement; STATE_SIZE]) {
         let mut sponge_cyclomut = Tip5 { state };
@@ -1520,6 +1523,34 @@ pub(crate) mod tests {
             sponge_cyclomut.state.into_iter().join(","),
             sponge_generated.state.into_iter().join(",")
         );
+    }
+
+    /// Only meaningful on CPUs with the relevant AVX-512 extensions; passes
+    /// trivially otherwise.
+    #[cfg(target_arch = "x86_64")]
+    #[macro_rules_attr::apply(proptest)]
+    fn avx512_permutation_agrees_with_scalar_permutation(state: [BFieldElement; STATE_SIZE]) {
+        if !Tip5::avx512_is_available() {
+            return Ok(());
+        }
+
+        let mut scalar = Tip5 { state };
+        let mut avx512 = Tip5 { state };
+        for round_index in 0..NUM_ROUNDS {
+            scalar.round(round_index);
+            // SAFETY: The required CPU features were detected above.
+            unsafe { avx512.round_avx512(round_index) };
+            prop_assert_eq!(&scalar, &avx512, "round {}", round_index);
+        }
+
+        let mut scalar_permutation = Tip5 { state };
+        let mut avx512_permutation = Tip5 { state };
+        for round_index in 0..NUM_ROUNDS {
+            scalar_permutation.round(round_index);
+        }
+        // SAFETY: The required CPU features were detected above.
+        unsafe { avx512_permutation.permutation_avx512() };
+        prop_assert_eq!(scalar_permutation, avx512_permutation);
     }
 
     #[macro_rules_attr::apply(test)]
