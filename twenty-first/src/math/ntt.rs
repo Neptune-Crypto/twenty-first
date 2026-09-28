@@ -2,6 +2,7 @@ use std::ops::MulAssign;
 use std::sync::OnceLock;
 
 use num_traits::ConstOne;
+use rayon::prelude::*;
 
 use super::b_field_element::BFieldElement;
 use super::traits::FiniteField;
@@ -67,17 +68,25 @@ pub fn ntt<FF>(x: &mut [FF])
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    static ALL_TWIDDLE_FACTORS: [OnceLock<Vec<Vec<BFieldElement>>>; NUM_DOMAINS] =
-        [const { OnceLock::new() }; NUM_DOMAINS];
-
-    let slice_len = slice_len(x);
-    let twiddle_factors = ALL_TWIDDLE_FACTORS[slice_len.checked_ilog2().unwrap_or(0) as usize]
-        .get_or_init(|| {
-            let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
-            twiddle_factors(slice_len, omega)
-        });
-
+    let twiddle_factors = forward_twiddle_factors(slice_len(x));
     ntt_unchecked(x, twiddle_factors);
+}
+
+/// Parallel version of [NTT][self::ntt].
+///
+/// Use this for a single, large NTT. If many NTTs are to be computed, for
+/// example one per column of a table, it is generally more efficient to
+/// compute them in parallel using the serial [`ntt`] for each.
+///
+/// # Panics
+///
+/// See [`ntt`].
+pub fn par_ntt<FF>(x: &mut [FF])
+where
+    FF: FiniteField + MulAssign<BFieldElement> + Send + Sync,
+{
+    let twiddle_factors = forward_twiddle_factors(slice_len(x));
+    par_ntt_unchecked(x, twiddle_factors);
 }
 
 /// ## Perform INTT on slices of prime-field elements
@@ -109,18 +118,45 @@ pub fn intt<FF>(x: &mut [FF])
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
+    let twiddle_factors = inverse_twiddle_factors(slice_len(x));
+    ntt_unchecked(x, twiddle_factors);
+    unscale(x);
+}
+
+/// Parallel version of [iNTT][self::intt]. See also [`par_ntt`].
+///
+/// # Panics
+///
+/// See [`intt`].
+pub fn par_intt<FF>(x: &mut [FF])
+where
+    FF: FiniteField + MulAssign<BFieldElement> + Send + Sync,
+{
+    let twiddle_factors = inverse_twiddle_factors(slice_len(x));
+    par_ntt_unchecked(x, twiddle_factors);
+    par_unscale(x);
+}
+
+/// The (cached) twiddle factors for the forward NTT of the given length.
+fn forward_twiddle_factors(slice_len: u32) -> &'static [Vec<BFieldElement>] {
     static ALL_TWIDDLE_FACTORS: [OnceLock<Vec<Vec<BFieldElement>>>; NUM_DOMAINS] =
         [const { OnceLock::new() }; NUM_DOMAINS];
 
-    let slice_len = slice_len(x);
-    let twiddle_factors = ALL_TWIDDLE_FACTORS[slice_len.checked_ilog2().unwrap_or(0) as usize]
-        .get_or_init(|| {
-            let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
-            twiddle_factors(slice_len, omega.inverse())
-        });
+    ALL_TWIDDLE_FACTORS[slice_len.checked_ilog2().unwrap_or(0) as usize].get_or_init(|| {
+        let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
+        twiddle_factors(slice_len, omega)
+    })
+}
 
-    ntt_unchecked(x, twiddle_factors);
-    unscale(x);
+/// The (cached) twiddle factors for the inverse NTT of the given length.
+fn inverse_twiddle_factors(slice_len: u32) -> &'static [Vec<BFieldElement>] {
+    static ALL_TWIDDLE_FACTORS: [OnceLock<Vec<Vec<BFieldElement>>>; NUM_DOMAINS] =
+        [const { OnceLock::new() }; NUM_DOMAINS];
+
+    ALL_TWIDDLE_FACTORS[slice_len.checked_ilog2().unwrap_or(0) as usize].get_or_init(|| {
+        let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
+        twiddle_factors(slice_len, omega.inverse())
+    })
 }
 
 /// Internal helper function to assert that the slice for [NTT][self::ntt] or
@@ -150,6 +186,10 @@ const LOG_2_TILE_LEN: u32 = 4;
 /// The number of adjacent “columns” processed together in the high
 /// (cross-block) layers of the NTT. See [`apply_cross_block_layers`].
 const CROSS_BLOCK_COLUMN_WIDTH: usize = 64;
+
+/// Below this (binary logarithm of the) length, the parallel NTT falls back
+/// to the serial one: the work is too little to be worth distributing.
+const PAR_MIN_LOG_2_LEN: u32 = 12;
 
 /// Internal helper function for [NTT][self::ntt] and [iNTT][self::intt].
 ///
@@ -201,6 +241,93 @@ where
     }
 }
 
+/// Parallel version of [`ntt_unchecked`]. Same assumptions.
+///
+/// All three phases of [`ntt_unchecked`] consist of independent units of
+/// work – tile pairs, blocks, and column groups, respectively – that are
+/// distributed across threads. The block length is reduced for shorter
+/// inputs so that there are enough blocks to keep all threads busy.
+fn par_ntt_unchecked<FF>(x: &mut [FF], twiddle_factors: &[Vec<BFieldElement>])
+where
+    FF: FiniteField + MulAssign<BFieldElement> + Send + Sync,
+{
+    let Some(log_2_len) = x.len().checked_ilog2() else {
+        return;
+    };
+    if log_2_len < PAR_MIN_LOG_2_LEN {
+        return ntt_unchecked(x, twiddle_factors);
+    }
+    debug_assert_eq!(log_2_len as usize, twiddle_factors.len());
+
+    par_bit_reverse_permutation(x);
+
+    let log_2_num_threads = rayon::current_num_threads()
+        .max(1)
+        .next_power_of_two()
+        .ilog2();
+    let log_2_block_len = log_2_len
+        .min(LOG_2_BLOCK_LEN)
+        .min(log_2_len.saturating_sub(log_2_num_threads))
+        .max(2);
+    x.par_chunks_exact_mut(1 << log_2_block_len)
+        .for_each(|block| apply_layers(block, twiddle_factors, 0, log_2_block_len));
+    if log_2_block_len < log_2_len {
+        par_apply_cross_block_layers(x, twiddle_factors, log_2_block_len, log_2_len);
+    }
+}
+
+/// A pointer to a slice that can be shared between threads, in order to
+/// mutate disjoint but interleaved index sets of the slice in parallel.
+/// Every access is `unsafe`; the caller is responsible for ensuring that no
+/// two threads access the same index concurrently.
+#[derive(Debug, Clone, Copy)]
+struct SharedSliceMut<T> {
+    ptr: *mut T,
+    len: usize,
+}
+
+// SAFETY: The pointer is only ever dereferenced through `unsafe` methods
+// whose contracts require exclusive access to the accessed index.
+unsafe impl<T: Send> Send for SharedSliceMut<T> {}
+unsafe impl<T: Send> Sync for SharedSliceMut<T> {}
+
+impl<T: Copy> SharedSliceMut<T> {
+    fn new(x: &mut [T]) -> Self {
+        Self {
+            ptr: x.as_mut_ptr(),
+            len: x.len(),
+        }
+    }
+
+    /// # Safety
+    ///
+    /// No other thread may access index `i` concurrently.
+    #[inline(always)]
+    unsafe fn read(&self, i: usize) -> T {
+        debug_assert!(i < self.len);
+        unsafe { self.ptr.add(i).read() }
+    }
+
+    /// # Safety
+    ///
+    /// No other thread may access index `i` concurrently.
+    #[inline(always)]
+    unsafe fn write(&self, i: usize, value: T) {
+        debug_assert!(i < self.len);
+        unsafe { self.ptr.add(i).write(value) }
+    }
+
+    /// # Safety
+    ///
+    /// No other thread may access indices `i` or `j` concurrently.
+    #[inline(always)]
+    unsafe fn swap(&self, i: usize, j: usize) {
+        debug_assert!(i < self.len);
+        debug_assert!(j < self.len);
+        unsafe { std::ptr::swap(self.ptr.add(i), self.ptr.add(j)) }
+    }
+}
+
 /// Reverse the lowest `num_bits` bits of `i`.
 #[inline(always)]
 const fn bit_reverse(i: usize, num_bits: u32) -> usize {
@@ -229,45 +356,96 @@ const fn bit_reverse(i: usize, num_bits: u32) -> usize {
 //
 // Only public for benchmarking purposes.
 #[doc(hidden)]
-pub fn bit_reverse_permutation<T>(x: &mut [T]) {
+pub fn bit_reverse_permutation<T: Copy>(x: &mut [T]) {
     let Some(log_2_len) = x.len().checked_ilog2() else {
         return;
     };
     assert!(x.len().is_power_of_two());
 
     if log_2_len <= 2 * LOG_2_TILE_LEN {
-        for i in 0..x.len() {
-            let j = bit_reverse(i, log_2_len);
-            if i < j {
-                x.swap(i, j);
-            }
-        }
-        return;
+        return bit_reverse_permutation_naive(x, log_2_len);
     }
 
     let log_2_num_middle = log_2_len - 2 * LOG_2_TILE_LEN;
-    let index = |high: usize, middle: usize, low: usize| {
-        (high << (log_2_num_middle + LOG_2_TILE_LEN)) | (middle << LOG_2_TILE_LEN) | low
-    };
+    let shared_x = SharedSliceMut::new(x);
     for middle in 0..1_usize << log_2_num_middle {
-        let reversed_middle = bit_reverse(middle, log_2_num_middle);
-        if reversed_middle < middle {
-            // this pair of tiles has already been handled
-            continue;
+        // SAFETY: Different `middle`s address disjoint pairs of tiles, and
+        // this loop is sequential anyway.
+        unsafe { bit_reverse_tile_pair(shared_x, middle, log_2_num_middle) };
+    }
+}
+
+/// Parallel version of [`bit_reverse_permutation`].
+fn par_bit_reverse_permutation<T: Copy + Send + Sync>(x: &mut [T]) {
+    let Some(log_2_len) = x.len().checked_ilog2() else {
+        return;
+    };
+    assert!(x.len().is_power_of_two());
+
+    if log_2_len <= 2 * LOG_2_TILE_LEN {
+        return bit_reverse_permutation_naive(x, log_2_len);
+    }
+
+    let log_2_num_middle = log_2_len - 2 * LOG_2_TILE_LEN;
+    let shared_x = SharedSliceMut::new(x);
+    (0..1_usize << log_2_num_middle)
+        .into_par_iter()
+        .for_each(|middle| {
+            // SAFETY: Different `middle`s address disjoint pairs of tiles: the
+            // pair for `middle` is {middle, rev(middle)}, `rev` is an
+            // involution, and the pair is only handled from its smaller
+            // element. Hence, no two threads access the same index.
+            unsafe { bit_reverse_tile_pair(shared_x, middle, log_2_num_middle) };
+        });
+}
+
+fn bit_reverse_permutation_naive<T>(x: &mut [T], log_2_len: u32) {
+    for i in 0..x.len() {
+        let j = bit_reverse(i, log_2_len);
+        if i < j {
+            x.swap(i, j);
         }
-        let is_self_paired_tile = reversed_middle == middle;
-        for high in 0..1_usize << LOG_2_TILE_LEN {
-            let reversed_high = bit_reverse(high, LOG_2_TILE_LEN);
-            for low in 0..1_usize << LOG_2_TILE_LEN {
-                let i = index(high, middle, low);
-                let j = index(
-                    bit_reverse(low, LOG_2_TILE_LEN),
-                    reversed_middle,
-                    reversed_high,
-                );
-                if !is_self_paired_tile || i < j {
-                    x.swap(i, j);
-                }
+    }
+}
+
+/// Move the elements of the tile identified by `middle` into the tile
+/// identified by `rev(middle)`, and vice versa. See
+/// [`bit_reverse_permutation`] for details. Does nothing if
+/// `rev(middle) < middle`, since that pair of tiles is handled when called
+/// with `rev(middle)`.
+///
+/// # Safety
+///
+/// No other thread may concurrently access the tiles identified by `middle`
+/// and `rev(middle)`.
+#[inline]
+unsafe fn bit_reverse_tile_pair<T: Copy>(
+    x: SharedSliceMut<T>,
+    middle: usize,
+    log_2_num_middle: u32,
+) {
+    let reversed_middle = bit_reverse(middle, log_2_num_middle);
+    if reversed_middle < middle {
+        return;
+    }
+    let is_self_paired_tile = reversed_middle == middle;
+    let index = |high: usize, mid: usize, low: usize| {
+        (high << (log_2_num_middle + LOG_2_TILE_LEN)) | (mid << LOG_2_TILE_LEN) | low
+    };
+    for high in 0..1_usize << LOG_2_TILE_LEN {
+        let reversed_high = bit_reverse(high, LOG_2_TILE_LEN);
+        for low in 0..1_usize << LOG_2_TILE_LEN {
+            let i = index(high, middle, low);
+            let j = index(
+                bit_reverse(low, LOG_2_TILE_LEN),
+                reversed_middle,
+                reversed_high,
+            );
+            if !is_self_paired_tile || i < j {
+                // SAFETY: Both `i` and `j` lie in the two tiles this call has
+                // exclusive access to, and they are smaller than the slice
+                // length since all index components are within their ranges.
+                unsafe { x.swap(i, j) };
             }
         }
     }
@@ -376,55 +554,134 @@ fn apply_cross_block_layers<FF>(
 {
     let block_len = 1_usize << first_layer;
     let column_width = CROSS_BLOCK_COLUMN_WIDTH.min(block_len);
-
+    let shared_x = SharedSliceMut::new(x);
     for column_start in (0..block_len).step_by(column_width) {
         let columns = column_start..column_start + column_width;
-        let mut layer = first_layer;
+        // SAFETY: Different column groups address disjoint sets of indices,
+        // and this loop is sequential anyway.
+        unsafe {
+            apply_cross_block_layers_to_columns(
+                shared_x,
+                twiddle_factors,
+                first_layer,
+                last_layer,
+                columns,
+            )
+        };
+    }
+}
 
-        while layer + 1 < last_layer {
-            let m = 1_usize << layer;
-            let twiddles_1 = &twiddle_factors[layer as usize];
-            let twiddles_2 = &twiddle_factors[layer as usize + 1];
-            for k in (0..x.len()).step_by(4 * m) {
-                for block_start in (0..m).step_by(block_len) {
-                    for j in columns.clone() {
-                        let j = block_start + j;
-                        let i = k + j;
-                        let t0 = x[i];
-                        let mut t1 = x[i + m];
-                        let t2 = x[i + 2 * m];
-                        let mut t3 = x[i + 3 * m];
-                        t1 *= twiddles_1[j];
-                        t3 *= twiddles_1[j];
-                        let y0 = t0 + t1;
-                        let y1 = t0 - t1;
-                        let mut y2 = t2 + t3;
-                        let mut y3 = t2 - t3;
-                        y2 *= twiddles_2[j];
-                        y3 *= twiddles_2[j + m];
-                        x[i] = y0 + y2;
-                        x[i + m] = y1 + y3;
-                        x[i + 2 * m] = y0 - y2;
-                        x[i + 3 * m] = y1 - y3;
+/// Parallel version of [`apply_cross_block_layers`].
+fn par_apply_cross_block_layers<FF>(
+    x: &mut [FF],
+    twiddle_factors: &[Vec<BFieldElement>],
+    first_layer: u32,
+    last_layer: u32,
+) where
+    FF: FiniteField + MulAssign<BFieldElement> + Send + Sync,
+{
+    let block_len = 1_usize << first_layer;
+    let column_width = CROSS_BLOCK_COLUMN_WIDTH.min(block_len);
+    let shared_x = SharedSliceMut::new(x);
+    (0..block_len)
+        .into_par_iter()
+        .step_by(column_width)
+        .for_each(|column_start| {
+            let columns = column_start..column_start + column_width;
+            // SAFETY: Different column groups address disjoint sets of
+            // indices: the group starting at `column_start` only accesses
+            // indices that are congruent to some `j` in `columns` modulo the
+            // block length. Hence, no two threads access the same index.
+            unsafe {
+                apply_cross_block_layers_to_columns(
+                    shared_x,
+                    twiddle_factors,
+                    first_layer,
+                    last_layer,
+                    columns,
+                )
+            };
+        });
+}
+
+/// Apply the cross-block layers to the sub-problems identified by `columns`.
+/// See [`apply_cross_block_layers`].
+///
+/// # Safety
+///
+/// No other thread may concurrently access any index congruent to any
+/// element of `columns` modulo `2^first_layer`. The slice length must be a
+/// multiple of `2^last_layer`, and `columns` must be a sub-range of
+/// `0..2^first_layer`.
+#[inline]
+unsafe fn apply_cross_block_layers_to_columns<FF>(
+    x: SharedSliceMut<FF>,
+    twiddle_factors: &[Vec<BFieldElement>],
+    first_layer: u32,
+    last_layer: u32,
+    columns: std::ops::Range<usize>,
+) where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let block_len = 1_usize << first_layer;
+    let len = x.len;
+    let mut layer = first_layer;
+
+    // SAFETY (for all accesses below): all accessed indices are of the form
+    // k + block_start + j + c·m with k < len a multiple of 4m (or 2m),
+    // block_start + j < m, and c < 4 (or 2), hence smaller than `len`, and
+    // congruent to `j ∈ columns` modulo the block length, which the caller
+    // guarantees exclusive access to.
+    while layer + 1 < last_layer {
+        let m = 1_usize << layer;
+        let twiddles_1 = &twiddle_factors[layer as usize];
+        let twiddles_2 = &twiddle_factors[layer as usize + 1];
+        for k in (0..len).step_by(4 * m) {
+            for block_start in (0..m).step_by(block_len) {
+                for j in columns.clone() {
+                    let j = block_start + j;
+                    let i = k + j;
+                    let (t0, mut t1, t2, mut t3) = unsafe {
+                        (
+                            x.read(i),
+                            x.read(i + m),
+                            x.read(i + 2 * m),
+                            x.read(i + 3 * m),
+                        )
+                    };
+                    t1 *= twiddles_1[j];
+                    t3 *= twiddles_1[j];
+                    let y0 = t0 + t1;
+                    let y1 = t0 - t1;
+                    let mut y2 = t2 + t3;
+                    let mut y3 = t2 - t3;
+                    y2 *= twiddles_2[j];
+                    y3 *= twiddles_2[j + m];
+                    unsafe {
+                        x.write(i, y0 + y2);
+                        x.write(i + m, y1 + y3);
+                        x.write(i + 2 * m, y0 - y2);
+                        x.write(i + 3 * m, y1 - y3);
                     }
                 }
             }
-            layer += 2;
         }
+        layer += 2;
+    }
 
-        if layer < last_layer {
-            let m = 1_usize << layer;
-            let twiddles = &twiddle_factors[layer as usize];
-            for k in (0..x.len()).step_by(2 * m) {
-                for block_start in (0..m).step_by(block_len) {
-                    for j in columns.clone() {
-                        let j = block_start + j;
-                        let i = k + j;
-                        let u = x[i];
-                        let mut v = x[i + m];
-                        v *= twiddles[j];
-                        x[i] = u + v;
-                        x[i + m] = u - v;
+    if layer < last_layer {
+        let m = 1_usize << layer;
+        let twiddles = &twiddle_factors[layer as usize];
+        for k in (0..len).step_by(2 * m) {
+            for block_start in (0..m).step_by(block_len) {
+                for j in columns.clone() {
+                    let j = block_start + j;
+                    let i = k + j;
+                    let (u, mut v) = unsafe { (x.read(i), x.read(i + m)) };
+                    v *= twiddles[j];
+                    unsafe {
+                        x.write(i, u + v);
+                        x.write(i + m, u - v);
                     }
                 }
             }
@@ -443,6 +700,16 @@ where
     for elem in array {
         *elem *= n_inv;
     }
+}
+
+/// Parallel version of [`unscale`].
+#[inline]
+fn par_unscale<FF>(array: &mut [FF])
+where
+    FF: FiniteField + MulAssign<BFieldElement> + Send + Sync,
+{
+    let n_inv = BFieldElement::from(array.len()).inverse_or_zero();
+    array.par_iter_mut().for_each(|elem| *elem *= n_inv);
 }
 
 /// Internal helper function to (pre-) compute the twiddle factors for use in
@@ -808,6 +1075,34 @@ mod tests {
 
             intt(&mut evaluations);
             assert_eq!(coefficients, evaluations, "log_size: {log_size}");
+        }
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn parallel_ntt_agrees_with_serial_ntt() {
+        // covers the serial fallback, the tiled bit-reversal, and the
+        // cross-block layers with a reduced block length
+        for log_size in [
+            0,
+            1,
+            5,
+            PAR_MIN_LOG_2_LEN - 1,
+            PAR_MIN_LOG_2_LEN,
+            15,
+            17,
+            18,
+        ] {
+            let size = 1_usize << log_size;
+            let original: Vec<XFieldElement> = random_elements(size);
+
+            let mut serial = original.clone();
+            ntt(&mut serial);
+            let mut parallel = original.clone();
+            par_ntt(&mut parallel);
+            assert_eq!(serial, parallel, "log_size: {log_size}");
+
+            par_intt(&mut parallel);
+            assert_eq!(original, parallel, "log_size: {log_size}");
         }
     }
 

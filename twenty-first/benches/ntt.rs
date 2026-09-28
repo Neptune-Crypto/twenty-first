@@ -22,6 +22,10 @@ criterion_group!(
               xfe_ntt::<{ 1 << 7 }>,
               xfe_ntt::<{ 1 << 18 }>,
               xfe_ntt::<{ 1 << 23 }>,
+              bfe_par_ntt::<{ 1 << 18 }>,
+              bfe_par_ntt::<{ 1 << 23 }>,
+              xfe_par_ntt::<{ 1 << 18 }>,
+              xfe_par_ntt::<{ 1 << 23 }>,
               bfe_intt::<{ 1 << 7 }>,
               bfe_intt::<{ 1 << 18 }>,
               bfe_intt::<{ 1 << 23 }>,
@@ -53,6 +57,24 @@ fn bfe_ntt<const LEN: usize>(c: &mut Criterion) {
         .throughput(Throughput::Elements(LEN as u64))
         .bench_function(BenchmarkId::new("len", LEN.ilog2()), |b| {
             b.iter(|| twenty_first::math::ntt::ntt(&mut xs))
+        });
+}
+
+fn bfe_par_ntt<const LEN: usize>(c: &mut Criterion) {
+    let mut xs = random_elements::<BFieldElement>(LEN);
+    c.benchmark_group("bfe_par_ntt")
+        .throughput(Throughput::Elements(LEN as u64))
+        .bench_function(BenchmarkId::new("len", LEN.ilog2()), |b| {
+            b.iter(|| twenty_first::math::ntt::par_ntt(&mut xs))
+        });
+}
+
+fn xfe_par_ntt<const LEN: usize>(c: &mut Criterion) {
+    let mut xs = random_elements::<XFieldElement>(LEN);
+    c.benchmark_group("xfe_par_ntt")
+        .throughput(Throughput::Elements(LEN as u64))
+        .bench_function(BenchmarkId::new("len", LEN.ilog2()), |b| {
+            b.iter(|| twenty_first::math::ntt::par_ntt(&mut xs))
         });
 }
 
