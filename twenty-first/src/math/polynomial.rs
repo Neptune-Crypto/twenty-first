@@ -34,6 +34,7 @@ use crate::math::ntt::intt;
 use crate::math::ntt::ntt;
 use crate::math::ntt::par_intt;
 use crate::math::ntt::par_ntt;
+use crate::math::ntt::scaled_zero_padded_ntt;
 use crate::math::traits::FiniteField;
 use crate::math::traits::ModPowU32;
 use crate::prelude::BFieldElement;
@@ -1784,6 +1785,29 @@ where
         ntt(&mut coefficients);
 
         coefficients
+    }
+
+    /// [`fast_coset_evaluate`](Self::fast_coset_evaluate), writing the
+    /// codeword into the given, possibly uninitialized memory instead of
+    /// allocating. On return, every element of `codeword` is initialized.
+    ///
+    /// Besides avoiding the allocation, this fuses the scaling and
+    /// zero-padding with the transform's first passes over memory; see
+    /// [`scaled_zero_padded_ntt`]. For large codewords, this is considerably
+    /// faster than [`fast_coset_evaluate`](Self::fast_coset_evaluate).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the codeword's length is not a power of two, or if the
+    /// polynomial has more coefficients than the codeword is long.
+    pub fn fast_coset_evaluate_into(
+        &self,
+        offset: BFieldElement,
+        codeword: &mut [std::mem::MaybeUninit<FF>],
+    ) where
+        FF: Mul<BFieldElement, Output = FF>,
+    {
+        scaled_zero_padded_ntt(&self.coefficients, offset, codeword);
     }
 
     /// Parallel version of [`fast_coset_evaluate`](Self::fast_coset_evaluate).

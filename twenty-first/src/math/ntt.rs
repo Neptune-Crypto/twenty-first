@@ -1,3 +1,5 @@
+use std::mem::MaybeUninit;
+use std::ops::Mul;
 use std::ops::MulAssign;
 use std::sync::OnceLock;
 
@@ -689,6 +691,138 @@ unsafe fn apply_cross_block_layers_to_columns<FF>(
     }
 }
 
+/// The number of blocks whose inputs are gathered together in
+/// [`scaled_zero_padded_ntt`]: one cache line of base field elements.
+const GATHER_GROUP_LEN: usize = 8;
+
+/// The NTT of `coefficients`, zero-padded to the length of `codeword`, after
+/// scaling coefficient `i` by `offset^i`. In other words: the evaluations of
+/// the polynomial with the given coefficients on the coset `offset · <ω>`,
+/// where `ω` is a primitive root of unity of the codeword's length. The
+/// codeword may be uninitialized; on return, every element is initialized.
+///
+/// Compared to scaling, zero-padding, and then transforming, this saves the
+/// passes over memory that dominate the runtime of large transforms. Let `n`
+/// be the codeword's length and `E` the expansion factor, i.e., the ratio of
+/// `n` and the (power-of-two-padded) number of coefficients. The bit-reversal
+/// permutation of the zero-padded input is nonzero only at every `E`-th
+/// index, and the first `log₂(E)` layers of the transform turn each of these
+/// values into `E` copies of itself. Hence, the input of every block (see
+/// [`ntt_unchecked`]) can be gathered directly from the coefficients,
+/// scaled on the fly. The gather reads the coefficients like the columns of
+/// a matrix, so the blocks are processed in groups that share cache lines.
+///
+/// # Panics
+///
+/// Panics if the codeword's length is not a power of two, or if there are
+/// more coefficients than the codeword is long.
+pub fn scaled_zero_padded_ntt<FF>(
+    coefficients: &[FF],
+    offset: BFieldElement,
+    codeword: &mut [MaybeUninit<FF>],
+) where
+    FF: FiniteField + MulAssign<BFieldElement> + Mul<BFieldElement, Output = FF>,
+{
+    scaled_zero_padded_ntt_with_block_len(coefficients, offset, codeword, LOG_2_BLOCK_LEN);
+}
+
+/// [`scaled_zero_padded_ntt`] with a configurable maximum block length, to
+/// exercise the multi-block code paths in tests with small inputs.
+fn scaled_zero_padded_ntt_with_block_len<FF>(
+    coefficients: &[FF],
+    offset: BFieldElement,
+    codeword: &mut [MaybeUninit<FF>],
+    max_log_2_block_len: u32,
+) where
+    FF: FiniteField + MulAssign<BFieldElement> + Mul<BFieldElement, Output = FF>,
+{
+    let len = codeword.len();
+    assert!(coefficients.len() <= len);
+    let Some(log_2_len) = len.checked_ilog2() else {
+        return;
+    };
+    assert!(len.is_power_of_two());
+    let twiddle_factors = forward_twiddle_factors(u32::try_from(len).unwrap());
+
+    let padded_num_coefficients = coefficients.len().next_power_of_two();
+    let log_2_expansion = log_2_len - padded_num_coefficients.ilog2();
+    let expansion = 1_usize << log_2_expansion;
+
+    // A block is at least one expanded coefficient, i.e., `expansion` long.
+    let log_2_block_len = log_2_len.min(max_log_2_block_len).max(log_2_expansion);
+    let block_len = 1_usize << log_2_block_len;
+    let log_2_num_blocks = log_2_len - log_2_block_len;
+    let num_blocks = 1_usize << log_2_num_blocks;
+    // The coefficients block `j` needs: interpreting the coefficient indices as
+    // the matrix `row · num_blocks + column`, it is column `rev(j)`, with the
+    // rows in bit-reversed order.
+    let log_2_num_rows = log_2_block_len - log_2_expansion;
+    let num_rows = 1_usize << log_2_num_rows;
+
+    // The scaling factor of coefficient `row · num_blocks + column` is
+    // `(offset^num_blocks)^row · offset^column`.
+    let offset_to_the_num_blocks = offset.mod_pow(num_blocks as u64);
+    let mut row_powers = Vec::with_capacity(num_rows);
+    let mut power = BFieldElement::ONE;
+    for _ in 0..num_rows {
+        row_powers.push(power);
+        power *= offset_to_the_num_blocks;
+    }
+
+    let group_len = GATHER_GROUP_LEN.min(num_blocks);
+    for first_column in (0..num_blocks).step_by(group_len) {
+        let columns = first_column..first_column + group_len;
+        let blocks = columns
+            .clone()
+            .map(|column| bit_reverse(column, log_2_num_blocks))
+            .collect::<Vec<_>>();
+        let column_powers = columns
+            .clone()
+            .map(|column| offset.mod_pow(column as u64))
+            .collect::<Vec<_>>();
+
+        for (row, &row_power) in row_powers.iter().enumerate() {
+            let position_in_block = bit_reverse(row, log_2_num_rows) * expansion;
+            for ((column, &block), &column_power) in
+                columns.clone().zip(&blocks).zip(&column_powers)
+            {
+                let index = row * num_blocks + column;
+                let value = match coefficients.get(index) {
+                    Some(&coefficient) => coefficient * (row_power * column_power),
+                    None => FF::ZERO,
+                };
+                let start = block * block_len + position_in_block;
+                for target in &mut codeword[start..start + expansion] {
+                    target.write(value);
+                }
+            }
+        }
+
+        for &block in &blocks {
+            let block = &mut codeword[block * block_len..(block + 1) * block_len];
+            // SAFETY:
+            // 1. Every element of the block was written to above: the rows
+            //    and positions within a block are a bijection.
+            // 2. `MaybeUninit<FF>` has the same layout as `FF`.
+            // 3. The pointer and length are those of the exclusively borrowed
+            //    `block`, and the resulting slice does not outlive it.
+            let block = unsafe {
+                std::slice::from_raw_parts_mut(block.as_mut_ptr().cast::<FF>(), block.len())
+            };
+            apply_layers(block, twiddle_factors, log_2_expansion, log_2_block_len);
+        }
+    }
+
+    if log_2_block_len < log_2_len {
+        // SAFETY: All blocks were written to above, and the blocks partition
+        // the codeword. See also the safety argument above.
+        let codeword = unsafe {
+            std::slice::from_raw_parts_mut(codeword.as_mut_ptr().cast::<FF>(), codeword.len())
+        };
+        apply_cross_block_layers(codeword, twiddle_factors, log_2_block_len, log_2_len);
+    }
+}
+
 /// Unscale the array by multiplying every element by the
 /// inverse of the array's length. Useful for following up intt.
 #[inline]
@@ -1104,6 +1238,70 @@ mod tests {
             par_intt(&mut parallel);
             assert_eq!(original, parallel, "log_size: {log_size}");
         }
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 200))]
+    fn scaled_zero_padded_ntt_agrees_with_scaling_padding_and_transforming(
+        #[strategy(0_u32..=12)] log_2_len: u32,
+        #[strategy(0_usize..=(1 << #log_2_len))] _num_coefficients: usize,
+        #[strategy(vec(arb(), #_num_coefficients))] coefficients: Vec<XFieldElement>,
+        #[filter(!#offset.is_zero())] offset: BFieldElement,
+        #[strategy(0_u32..=6)] max_log_2_block_len: u32,
+    ) {
+        let len = 1_usize << log_2_len;
+        let mut expected = coefficients
+            .iter()
+            .zip(std::iter::successors(Some(BFieldElement::ONE), |&p| {
+                Some(p * offset)
+            }))
+            .map(|(&c, p)| c * p)
+            .collect_vec();
+        expected.resize(len, XFieldElement::ZERO);
+        ntt(&mut expected);
+
+        let mut codeword = vec![MaybeUninit::<XFieldElement>::uninit(); len];
+        scaled_zero_padded_ntt_with_block_len(
+            &coefficients,
+            offset,
+            &mut codeword,
+            max_log_2_block_len,
+        );
+        let codeword = codeword
+            .into_iter()
+            .map(|c| unsafe { c.assume_init() })
+            .collect_vec();
+        prop_assert_eq!(expected, codeword);
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 4))]
+    fn scaled_zero_padded_ntt_agrees_for_default_block_len(
+        #[strategy(17_u32..=18)] log_2_len: u32,
+        #[strategy(0_u32..=4)] log_2_expansion: u32,
+        #[filter(!#offset.is_zero())] offset: BFieldElement,
+        seed: u64,
+    ) {
+        let len = 1_usize << log_2_len;
+        let num_coefficients = len >> log_2_expansion;
+        let coefficients = (0..num_coefficients as u64)
+            .map(|i| BFieldElement::new(i.wrapping_mul(seed | 1)))
+            .collect_vec();
+        let mut expected = coefficients
+            .iter()
+            .zip(std::iter::successors(Some(BFieldElement::ONE), |&p| {
+                Some(p * offset)
+            }))
+            .map(|(&c, p)| c * p)
+            .collect_vec();
+        expected.resize(len, BFieldElement::ZERO);
+        ntt(&mut expected);
+
+        let mut codeword = vec![MaybeUninit::<BFieldElement>::uninit(); len];
+        scaled_zero_padded_ntt(&coefficients, offset, &mut codeword);
+        let codeword = codeword
+            .into_iter()
+            .map(|c| unsafe { c.assume_init() })
+            .collect_vec();
+        prop_assert_eq!(expected, codeword);
     }
 
     #[macro_rules_attr::apply(test)]
