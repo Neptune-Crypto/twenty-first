@@ -367,15 +367,44 @@ impl XFieldElement {
         Self::new([element, zero, zero])
     }
 
+    /// The multiplicative inverse.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self` is zero.
     #[must_use]
     pub fn inverse(&self) -> Self {
         assert!(
             !self.is_zero(),
             "Cannot invert the zero element in the extension field."
         );
-        let self_as_poly: Polynomial<BFieldElement> = self.to_owned().into();
-        let (_, a, _) = Polynomial::<BFieldElement>::xgcd(self_as_poly, Self::shah_polynomial());
-        a.into()
+
+        // Multiplication by a = a₀ + a₁·x + a₂·x² is a linear map on the
+        // vector space with basis (1, x, x²). Modulo the Shah polynomial
+        // x³ - x + 1, its matrix is
+        //
+        //       ⎛ a₀   -a₂     -a₁   ⎞
+        //   M = ⎜ a₁  a₀ + a₂  a₁ - a₂ ⎟.
+        //       ⎝ a₂    a₁    a₀ + a₂ ⎠
+        //
+        // The inverse of a is the first column of M⁻¹, which is the first
+        // column of the adjugate of M divided by the determinant of M. This
+        // requires only one inversion in the base field.
+        let [a0, a1, a2] = self.coefficients;
+        let a0_plus_a2 = a0 + a2;
+        let cofactor_00 = a0_plus_a2 * a0_plus_a2 - a1 * (a1 - a2);
+        let cofactor_01 = -(a0 * a1 + a2 * a2);
+        let cofactor_02 = a1 * a1 - a2 * a0_plus_a2;
+        // The remaining cofactors of the first column are the negations of
+        // the cofactors computed above: C₁₀ = -C₀₂ and C₂₀ = -C₀₁.
+        let determinant = a0 * cofactor_00 - a1 * cofactor_02 - a2 * cofactor_01;
+        let determinant_inverse = determinant.inverse();
+
+        Self::new([
+            cofactor_00 * determinant_inverse,
+            cofactor_01 * determinant_inverse,
+            cofactor_02 * determinant_inverse,
+        ])
     }
 
     pub fn unlift(&self) -> Option<BFieldElement> {
@@ -1283,6 +1312,49 @@ mod tests {
         let domain = root.get_cyclic_group_elements(None);
         let evaluations = poly.batch_evaluate(&domain);
         prop_assert_eq!(evaluations, rv);
+    }
+
+    /// The inverse computed through the extended Euclidean algorithm, as a
+    /// reference implementation.
+    fn inverse_by_xgcd(xfe: XFieldElement) -> XFieldElement {
+        let xfe_as_poly: Polynomial<BFieldElement> = xfe.into();
+        let (_, a, _) = Polynomial::xgcd(xfe_as_poly, XFieldElement::shah_polynomial());
+        a.into()
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn inverse_agrees_with_extended_euclidean_algorithm(
+        #[filter(!#xfe.is_zero())] xfe: XFieldElement,
+    ) {
+        prop_assert_eq!(inverse_by_xgcd(xfe), xfe.inverse());
+        prop_assert_eq!(XFieldElement::ONE, xfe * xfe.inverse());
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn inverse_of_lifted_base_field_element_is_lifted_inverse(
+        #[filter(!#bfe.is_zero())] bfe: BFieldElement,
+    ) {
+        let xfe = bfe.lift();
+        prop_assert_eq!(bfe.inverse().lift(), xfe.inverse());
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn inverse_of_elements_with_zero_coefficients() {
+        for coefficients in [
+            [1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+            [1, 1, 0],
+            [1, 0, 1],
+            [0, 1, 1],
+            [BFieldElement::MAX, 0, 0],
+            [0, BFieldElement::MAX, 0],
+            [0, 0, BFieldElement::MAX],
+        ] {
+            let xfe = xfe!(coefficients);
+            assert_eq!(inverse_by_xgcd(xfe), xfe.inverse(), "{xfe}");
+            assert_eq!(XFieldElement::ONE, xfe * xfe.inverse(), "{xfe}");
+        }
     }
 
     #[macro_rules_attr::apply(test)]
