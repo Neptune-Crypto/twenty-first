@@ -2208,49 +2208,158 @@ where
         }
 
         let zerofier_tree = ZerofierTree::par_new_from_domain(domain);
-        if self.degree() < domain.len() as isize {
-            return self.par_divide_and_conquer_batch_evaluate(&zerofier_tree);
-        }
-
-        // Reduce modulo the zerofier of all points first, so that the
-        // divide-and-conquer evaluation starts from a polynomial of degree
-        // less than the number of points.
-        let zerofier = zerofier_tree.zerofier_view();
-        let quotient_degree = self.degree() - zerofier.degree();
-        let reversed_zerofier_inverse = zerofier
-            .reverse()
-            .power_series_inverse(quotient_degree as usize + 1);
-        self.reduce_with_reversed_inverse(&zerofier, &reversed_zerofier_inverse)
-            .par_divide_and_conquer_batch_evaluate(&zerofier_tree)
+        self.par_divide_and_conquer_batch_evaluate(&zerofier_tree)
     }
 
     /// Parallel version of
     /// [`divide_and_conquer_batch_evaluate`](Self::divide_and_conquer_batch_evaluate).
-    /// Unlike the sequential version, the polynomial is reduced modulo the
-    /// zerofier at every branch of the tree, which makes the total work
-    /// quasi-linear in the number of points if the degree of `self` is
-    /// smaller than that number.
+    /// Unlike the sequential version, the total work is quasi-linear in the
+    /// number of points (plus the degree of `self`).
+    ///
+    /// Uses a scaled remainder tree, after [Bernstein][srt]: instead of the
+    /// remainders of `self` modulo the nodes' zerofiers, the tree is traversed
+    /// with the _scaled_ remainders `(self mod z) / z`, expanded as power
+    /// series in `1/x`. Passing from a node to a child only requires
+    /// multiplication with the sibling's zerofier, and the leafs' remainders
+    /// follow from their scaled remainders with one more multiplication. The
+    /// only division is the one at the root.
+    ///
+    /// [srt]: https://cr.yp.to/arith/scaledmod-20040820.pdf
     pub fn par_divide_and_conquer_batch_evaluate(
         &self,
         zerofier_tree: &ZerofierTree<FF>,
     ) -> Vec<FF> {
+        let num_points = zerofier_tree.num_points();
+        if num_points == 0 {
+            return vec![];
+        }
+        let Ok(degree) = usize::try_from(self.degree()) else {
+            return vec![FF::ZERO; num_points];
+        };
+
+        let zerofier = zerofier_tree.zerofier_view();
+        let reversed_zerofier = zerofier.reverse();
+        if degree >= num_points {
+            // Reduce modulo the zerofier of all points first, so that the
+            // scaled remainder tree starts from a polynomial of degree less
+            // than the number of points.
+            let quotient_degree = degree - num_points;
+            let reversed_zerofier_inverse =
+                reversed_zerofier.power_series_inverse(quotient_degree + 1);
+            return self
+                .reduce_with_reversed_inverse(&zerofier, &reversed_zerofier_inverse)
+                .par_divide_and_conquer_batch_evaluate(zerofier_tree);
+        }
+
+        // With n the number of points and y = 1/x, the expansion of self / z
+        // in y is y · rev(self) / rev(z), where rev(self) is the reversal of
+        // self with respect to degree n - 1. Its first n coefficients are the
+        // root's scaled remainder.
+        let reversed_zerofier_inverse = reversed_zerofier.power_series_inverse(num_points);
+        let mut reversed_self = vec![FF::ZERO; num_points];
+        for (i, &coefficient) in self.coefficients.iter().take(degree + 1).enumerate() {
+            reversed_self[num_points - 1 - i] = coefficient;
+        }
+        let mut scaled_remainder = Polynomial::new(reversed_self)
+            .multiply_maybe_par(&reversed_zerofier_inverse)
+            .into_coefficients();
+        scaled_remainder.resize(num_points, FF::ZERO);
+
+        Self::evaluate_scaled_remainder_tree(zerofier_tree, scaled_remainder)
+    }
+
+    /// Evaluate the polynomial `r` of degree less than the tree's number of
+    /// points `n` in the tree's points, given its scaled remainder: the
+    /// coefficients `s_1, …, s_n` of the expansion `r / z = Σ_k s_k · x^(-k)`
+    /// where `z` is the tree's zerofier. See
+    /// [`par_divide_and_conquer_batch_evaluate`][eval].
+    ///
+    /// [eval]: Self::par_divide_and_conquer_batch_evaluate
+    fn evaluate_scaled_remainder_tree(
+        zerofier_tree: &ZerofierTree<FF>,
+        scaled_remainder: Vec<FF>,
+    ) -> Vec<FF> {
+        const PAR_NTT_CUTOFF_THRESHOLD: usize = 1 << 15;
+        fn ntt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF]) {
+            if x.len() < PAR_NTT_CUTOFF_THRESHOLD {
+                ntt(x)
+            } else {
+                par_ntt(x)
+            }
+        }
+        fn intt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF]) {
+            if x.len() < PAR_NTT_CUTOFF_THRESHOLD {
+                intt(x)
+            } else {
+                par_intt(x)
+            }
+        }
+
+        let num_points = zerofier_tree.num_points();
+        debug_assert_eq!(num_points, scaled_remainder.len());
         match zerofier_tree {
-            ZerofierTree::Leaf(leaf) => self
-                .reduce(&zerofier_tree.zerofier_view())
-                .iterative_batch_evaluate(&leaf.points),
+            ZerofierTree::Padding => vec![],
+            ZerofierTree::Leaf(leaf) => {
+                // The remainder is the polynomial part of z · Σ_k s_k · x^(-k),
+                // i.e., its j-th coefficient is Σ_k z_(j+k) · s_k.
+                let zerofier = zerofier_tree.zerofier_view();
+                let z = zerofier.coefficients();
+                let remainder = (0..num_points)
+                    .map(|j| {
+                        (1..=num_points - j)
+                            .map(|k| z[j + k] * scaled_remainder[k - 1])
+                            .fold(FF::ZERO, |acc, term| acc + term)
+                    })
+                    .collect_vec();
+                Polynomial::new(remainder).iterative_batch_evaluate(&leaf.points)
+            }
             ZerofierTree::Branch(branch) => {
-                let evaluate_child = |child: &ZerofierTree<FF>, reversed_inverse| {
-                    self.reduce_with_reversed_inverse(&child.zerofier_view(), reversed_inverse)
-                        .par_divide_and_conquer_batch_evaluate(child)
+                if branch.right.num_points() == 0 {
+                    return Self::evaluate_scaled_remainder_tree(&branch.left, scaled_remainder);
+                }
+
+                // The scaled remainder of a child is that of the parent times
+                // the sibling's zerofier, retaining only the negative powers
+                // of x. In terms of y = 1/x, the sibling's zerofier of degree
+                // m is y^(-m) · rev(z_sibling), and the child's coefficients
+                // are the coefficients of y^m through y^(n-1) of the product
+                // of the parent's scaled remainder and rev(z_sibling).
+                // Cyclic convolution of length ≥ n suffices: the wrapped
+                // coefficients land strictly below index m.
+                let len = num_points.next_power_of_two();
+                let mut scaled_remainder_ntt = scaled_remainder;
+                scaled_remainder_ntt.resize(len, FF::ZERO);
+                ntt_maybe_par(&mut scaled_remainder_ntt);
+
+                let child_scaled_remainder = |sibling: &ZerofierTree<FF>| {
+                    let sibling_zerofier = sibling.zerofier_view();
+                    let sibling_num_points = sibling.num_points();
+                    let mut product = vec![FF::ZERO; len];
+                    for (i, &coefficient) in sibling_zerofier.coefficients().iter().enumerate() {
+                        product[sibling_num_points - i] = coefficient;
+                    }
+                    ntt_maybe_par(&mut product);
+                    for (p, s) in product.iter_mut().zip(&scaled_remainder_ntt) {
+                        *p *= *s;
+                    }
+                    intt_maybe_par(&mut product);
+                    product.truncate(num_points);
+                    product.drain(..sibling_num_points);
+                    product
                 };
+                let (left_scaled_remainder, right_scaled_remainder) = rayon::join(
+                    || child_scaled_remainder(&branch.right),
+                    || child_scaled_remainder(&branch.left),
+                );
+                drop(scaled_remainder_ntt);
+
                 let (mut left, right) = rayon::join(
-                    || evaluate_child(&branch.left, &branch.left_reversed_zerofier_inverse),
-                    || evaluate_child(&branch.right, &branch.right_reversed_zerofier_inverse),
+                    || Self::evaluate_scaled_remainder_tree(&branch.left, left_scaled_remainder),
+                    || Self::evaluate_scaled_remainder_tree(&branch.right, right_scaled_remainder),
                 );
                 left.extend(right);
                 left
             }
-            ZerofierTree::Padding => vec![],
         }
     }
 

@@ -31,14 +31,7 @@ pub struct Branch<'c, FF: FiniteField + MulAssign<BFieldElement>> {
     pub(crate) right: ZerofierTree<'c, FF>,
 
     /// The number of points in this subtree.
-    num_points: usize,
-
-    /// The inverses of the children's reversed zerofiers as formal power
-    /// series, to the precision needed for reducing a polynomial of degree
-    /// less than this branch's number of points modulo the respective child's
-    /// zerofier. See [`Polynomial::reduce_with_reversed_inverse`].
-    pub(crate) left_reversed_zerofier_inverse: Polynomial<'c, FF>,
-    pub(crate) right_reversed_zerofier_inverse: Polynomial<'c, FF>,
+    pub(crate) num_points: usize,
 }
 
 impl<'c, FF> Branch<'c, FF>
@@ -51,25 +44,11 @@ where
             .multiply_maybe_par(&right.zerofier_view());
         let num_points = left.num_points() + right.num_points();
 
-        // A polynomial of degree < num_points, reduced modulo the left
-        // zerofier of degree l, has a quotient of degree < num_points - l,
-        // i.e., the right's number of points.
-        let reversed_inverse = |child: &ZerofierTree<FF>, precision: usize| {
-            child
-                .zerofier_view()
-                .reverse()
-                .power_series_inverse(precision.max(1))
-        };
-        let left_reversed_zerofier_inverse = reversed_inverse(&left, right.num_points());
-        let right_reversed_zerofier_inverse = reversed_inverse(&right, left.num_points());
-
         Self {
             zerofier,
             left,
             right,
             num_points,
-            left_reversed_zerofier_inverse,
-            right_reversed_zerofier_inverse,
         }
     }
 }
