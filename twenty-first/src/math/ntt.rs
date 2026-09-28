@@ -469,6 +469,7 @@ fn apply_layers<FF>(
     FF: FiniteField + MulAssign<BFieldElement>,
 {
     let mut layer = first_layer;
+    let simd_limbs = simd_limbs::<FF>();
 
     // The twiddle factors of the first two layers are 1, 1, and a primitive
     // 4th root of unity: only one multiplication per radix-4 butterfly.
@@ -493,6 +494,29 @@ fn apply_layers<FF>(
         let m = 1_usize << layer;
         let twiddles_1 = &twiddle_factors[layer as usize];
         let twiddles_2 = &twiddle_factors[layer as usize + 1];
+        #[cfg(target_arch = "x86_64")]
+        if let Some(limbs) = simd_limbs
+            && m >= avx512::LANES
+        {
+            for k in (0..x.len()).step_by(4 * m) {
+                // SAFETY: AVX-512 was detected (see `simd_limbs`), `FF` is
+                // laid out as `limbs` base field elements (see
+                // `FiniteField::NUM_BFE_LIMBS`), and all accessed indices
+                // are below `x.len()`, which is a multiple of `4m`.
+                unsafe {
+                    avx512::radix_4_butterflies(
+                        x.as_mut_ptr().cast(),
+                        limbs,
+                        k,
+                        m,
+                        &twiddles_1[..m],
+                        &twiddles_2[..2 * m],
+                    )
+                };
+            }
+            layer += 2;
+            continue;
+        }
         for butterflies in x.chunks_exact_mut(4 * m) {
             let (ab, cd) = butterflies.split_at_mut(2 * m);
             let (a, b) = ab.split_at_mut(m);
@@ -522,6 +546,18 @@ fn apply_layers<FF>(
     if layer < last_layer {
         let m = 1_usize << layer;
         let twiddles = &twiddle_factors[layer as usize];
+        #[cfg(target_arch = "x86_64")]
+        if let Some(limbs) = simd_limbs
+            && m >= avx512::LANES
+        {
+            for k in (0..x.len()).step_by(2 * m) {
+                // SAFETY: See the radix-4 case above.
+                unsafe {
+                    avx512::radix_2_butterflies(x.as_mut_ptr().cast(), limbs, k, m, &twiddles[..m])
+                };
+            }
+            return;
+        }
         for butterflies in x.chunks_exact_mut(2 * m) {
             let (a, b) = butterflies.split_at_mut(m);
             for j in 0..m {
@@ -532,6 +568,23 @@ fn apply_layers<FF>(
                 b[j] = u - v;
             }
         }
+    }
+}
+
+/// The number of base field limbs of `FF` if the SIMD kernels can be used
+/// for it on this CPU, else `None`.
+#[inline]
+fn simd_limbs<FF: FiniteField>() -> Option<usize> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        match FF::NUM_BFE_LIMBS {
+            Some(limbs @ (1 | 3)) if avx512::is_available() => Some(limbs),
+            _ => None,
+        }
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        None
     }
 }
 
@@ -628,6 +681,8 @@ unsafe fn apply_cross_block_layers_to_columns<FF>(
     let block_len = 1_usize << first_layer;
     let len = x.len;
     let mut layer = first_layer;
+    #[cfg(target_arch = "x86_64")]
+    let simd_limbs = simd_limbs::<FF>().filter(|_| columns.len() % avx512::LANES == 0);
 
     // SAFETY (for all accesses below): all accessed indices are of the form
     // k + block_start + j + c·m with k < len a multiple of 4m (or 2m),
@@ -638,6 +693,30 @@ unsafe fn apply_cross_block_layers_to_columns<FF>(
         let m = 1_usize << layer;
         let twiddles_1 = &twiddle_factors[layer as usize];
         let twiddles_2 = &twiddle_factors[layer as usize + 1];
+        #[cfg(target_arch = "x86_64")]
+        if let Some(limbs) = simd_limbs {
+            for k in (0..len).step_by(4 * m) {
+                for block_start in (0..m).step_by(block_len) {
+                    for j in columns.clone().step_by(avx512::LANES) {
+                        let j = block_start + j;
+                        // SAFETY: See above, and `radix_4_butterflies`.
+                        unsafe {
+                            avx512::radix_4_butterflies_at(
+                                x.ptr.cast(),
+                                limbs,
+                                k + j,
+                                m,
+                                twiddles_1.as_ptr().add(j),
+                                twiddles_2.as_ptr().add(j),
+                                twiddles_2.as_ptr().add(j + m),
+                            )
+                        };
+                    }
+                }
+            }
+            layer += 2;
+            continue;
+        }
         for k in (0..len).step_by(4 * m) {
             for block_start in (0..m).step_by(block_len) {
                 for j in columns.clone() {
@@ -674,6 +753,27 @@ unsafe fn apply_cross_block_layers_to_columns<FF>(
     if layer < last_layer {
         let m = 1_usize << layer;
         let twiddles = &twiddle_factors[layer as usize];
+        #[cfg(target_arch = "x86_64")]
+        if let Some(limbs) = simd_limbs {
+            for k in (0..len).step_by(2 * m) {
+                for block_start in (0..m).step_by(block_len) {
+                    for j in columns.clone().step_by(avx512::LANES) {
+                        let j = block_start + j;
+                        // SAFETY: See above, and `radix_2_butterflies`.
+                        unsafe {
+                            avx512::radix_2_butterflies_at(
+                                x.ptr.cast(),
+                                limbs,
+                                k + j,
+                                m,
+                                twiddles.as_ptr().add(j),
+                            )
+                        };
+                    }
+                }
+            }
+            return;
+        }
         for k in (0..len).step_by(2 * m) {
             for block_start in (0..m).step_by(block_len) {
                 for j in columns.clone() {
@@ -820,6 +920,260 @@ fn scaled_zero_padded_ntt_with_block_len<FF>(
             std::slice::from_raw_parts_mut(codeword.as_mut_ptr().cast::<FF>(), codeword.len())
         };
         apply_cross_block_layers(codeword, twiddle_factors, log_2_block_len, log_2_len);
+    }
+}
+
+/// AVX-512 kernels for the butterflies of the NTT.
+///
+/// The kernels operate on the base field limbs of the elements: a
+/// [`BFieldElement`] is one limb, an [`XFieldElement`] three (see
+/// [`FiniteField::NUM_BFE_LIMBS`]). Eight limbs fill one vector. A twiddle
+/// factor multiplies every limb of its element, so for extension field
+/// elements, the twiddles are expanded threefold: three base field
+/// multiplications per element, exactly as in the scalar code.
+///
+/// The functions in this module are compiled for every x86-64 target, but
+/// must only be called after checking [`is_available`] at runtime.
+///
+/// [`XFieldElement`]: crate::math::x_field_element::XFieldElement
+#[cfg(target_arch = "x86_64")]
+#[expect(unsafe_op_in_unsafe_fn)]
+mod avx512 {
+    use std::arch::x86_64::*;
+
+    use super::BFieldElement;
+
+    /// The number of 64-bit lanes in a vector.
+    pub(super) const LANES: usize = 8;
+
+    /// Whether the CPU supports the AVX-512 extensions used in this module.
+    /// The result is cached by the standard library, so this is cheap.
+    #[inline]
+    pub(super) fn is_available() -> bool {
+        is_x86_feature_detected!("avx512f")
+    }
+
+    /// Lane indices expanding eight twiddle factors to the 24 limbs of eight
+    /// extension field elements.
+    const EXPANSION_3: [[i64; LANES]; 3] = [
+        [0, 0, 0, 1, 1, 1, 2, 2],
+        [2, 3, 3, 3, 4, 4, 4, 5],
+        [5, 5, 6, 6, 6, 7, 7, 7],
+    ];
+
+    /// Montgomery reduction of the 128-bit product `hi · 2^64 + lo` in every
+    /// lane; the vector version of [`BFieldElement::montyred`].
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    unsafe fn montyred(lo: __m512i, hi: __m512i) -> __m512i {
+        let one = _mm512_set1_epi64(1);
+        let epsilon = _mm512_set1_epi64(0xffff_ffff); // 2^64 - p
+
+        // (a, e) = lo.overflowing_add(lo << 32)
+        let a = _mm512_add_epi64(lo, _mm512_slli_epi64(lo, 32));
+        let e = _mm512_cmplt_epu64_mask(a, lo);
+        // b = a - (a >> 32) - e
+        let b = _mm512_sub_epi64(a, _mm512_srli_epi64(a, 32));
+        let b = _mm512_mask_sub_epi64(b, e, b, one);
+        // (r, c) = hi.overflowing_sub(b)
+        let r = _mm512_sub_epi64(hi, b);
+        let c = _mm512_cmplt_epu64_mask(hi, b);
+        // r - (2^64 - p) · c
+        _mm512_mask_sub_epi64(r, c, r, epsilon)
+    }
+
+    /// The product of two field elements in Montgomery representation, in
+    /// every lane. The inputs must be canonical, i.e., less than p; so is the
+    /// output.
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    unsafe fn mul(x: __m512i, y: __m512i) -> __m512i {
+        let mask_32 = _mm512_set1_epi64(0xffff_ffff);
+        let x_hi = _mm512_srli_epi64(x, 32);
+        let y_hi = _mm512_srli_epi64(y, 32);
+
+        // the 128-bit product from four 32×32-bit products, without overflow
+        let p00 = _mm512_mul_epu32(x, y);
+        let p01 = _mm512_mul_epu32(x, y_hi);
+        let p10 = _mm512_mul_epu32(x_hi, y);
+        let p11 = _mm512_mul_epu32(x_hi, y_hi);
+        let t0 = _mm512_add_epi64(p10, _mm512_srli_epi64(p00, 32));
+        let t1 = _mm512_add_epi64(p01, _mm512_and_epi64(t0, mask_32));
+        let lo = _mm512_or_epi64(_mm512_slli_epi64(t1, 32), _mm512_and_epi64(p00, mask_32));
+        let hi = _mm512_add_epi64(
+            _mm512_add_epi64(p11, _mm512_srli_epi64(t0, 32)),
+            _mm512_srli_epi64(t1, 32),
+        );
+
+        montyred(lo, hi)
+    }
+
+    /// The sum of two canonical field elements, canonical, in every lane.
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    unsafe fn add(x: __m512i, y: __m512i) -> __m512i {
+        let p = _mm512_set1_epi64(BFieldElement::P as i64);
+        let sum = _mm512_add_epi64(x, y);
+        let overflow = _mm512_cmplt_epu64_mask(sum, x);
+        let too_large = _mm512_cmpge_epu64_mask(sum, p);
+        _mm512_mask_sub_epi64(sum, overflow | too_large, sum, p)
+    }
+
+    /// The difference of two canonical field elements, canonical, in every
+    /// lane.
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    unsafe fn sub(x: __m512i, y: __m512i) -> __m512i {
+        let p = _mm512_set1_epi64(BFieldElement::P as i64);
+        let difference = _mm512_sub_epi64(x, y);
+        let underflow = _mm512_cmplt_epu64_mask(x, y);
+        _mm512_mask_add_epi64(difference, underflow, difference, p)
+    }
+
+    /// The twiddle factors for the limbs of eight consecutive elements with
+    /// `limbs` limbs each, given the eight elements' twiddle factors.
+    ///
+    /// # Safety
+    ///
+    /// `limbs` must be 1 or 3, and eight twiddle factors must be readable.
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    unsafe fn expand_twiddles(twiddles: *const BFieldElement, limbs: usize) -> [__m512i; 3] {
+        let twiddles = _mm512_loadu_epi64(twiddles.cast());
+        if limbs == 1 {
+            return [twiddles; 3];
+        }
+        EXPANSION_3.map(|indices| {
+            let indices = _mm512_loadu_epi64(indices.as_ptr());
+            _mm512_permutexvar_epi64(indices, twiddles)
+        })
+    }
+
+    /// Two layers of butterflies on the eight elements at `i..i + 8` and
+    /// their partners at distances `m`, `2m`, and `3m`.
+    ///
+    /// # Safety
+    ///
+    /// `limbs` must be 1 or 3, and `x` must point to elements with that many
+    /// limbs, of which all indices up to `i + 3m + 8` must be valid and not
+    /// concurrently accessed. `m` twiddles must be readable from
+    /// `twiddles_1` and `twiddles_2`, and from `twiddles_2_shifted`.
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    pub(super) unsafe fn radix_4_butterflies_at(
+        x: *mut u64,
+        limbs: usize,
+        i: usize,
+        m: usize,
+        twiddles_1: *const BFieldElement,
+        twiddles_2: *const BFieldElement,
+        twiddles_2_shifted: *const BFieldElement,
+    ) {
+        let w1 = expand_twiddles(twiddles_1, limbs);
+        let w2 = expand_twiddles(twiddles_2, limbs);
+        let w2_shifted = expand_twiddles(twiddles_2_shifted, limbs);
+
+        let a = x.add(i * limbs);
+        let b = a.add(m * limbs);
+        let c = b.add(m * limbs);
+        let d = c.add(m * limbs);
+        for v in 0..limbs {
+            let offset = v * LANES;
+            let (pa, pb, pc, pd) = (a.add(offset), b.add(offset), c.add(offset), d.add(offset));
+
+            let t0 = _mm512_loadu_epi64(pa.cast());
+            let t1 = mul(_mm512_loadu_epi64(pb.cast()), w1[v]);
+            let t2 = _mm512_loadu_epi64(pc.cast());
+            let t3 = mul(_mm512_loadu_epi64(pd.cast()), w1[v]);
+            let y0 = add(t0, t1);
+            let y1 = sub(t0, t1);
+            let y2 = mul(add(t2, t3), w2[v]);
+            let y3 = mul(sub(t2, t3), w2_shifted[v]);
+            _mm512_storeu_epi64(pa.cast(), add(y0, y2));
+            _mm512_storeu_epi64(pb.cast(), add(y1, y3));
+            _mm512_storeu_epi64(pc.cast(), sub(y0, y2));
+            _mm512_storeu_epi64(pd.cast(), sub(y1, y3));
+        }
+    }
+
+    /// One layer of butterflies on the eight elements at `i..i + 8` and their
+    /// partners at distance `m`.
+    ///
+    /// # Safety
+    ///
+    /// Like [`radix_4_butterflies_at`], with indices up to `i + m + 8`.
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    pub(super) unsafe fn radix_2_butterflies_at(
+        x: *mut u64,
+        limbs: usize,
+        i: usize,
+        m: usize,
+        twiddles: *const BFieldElement,
+    ) {
+        let w = expand_twiddles(twiddles, limbs);
+        let a = x.add(i * limbs);
+        let b = a.add(m * limbs);
+        for v in 0..limbs {
+            let offset = v * LANES;
+            let (pa, pb) = (a.add(offset), b.add(offset));
+            let u = _mm512_loadu_epi64(pa.cast());
+            let t = mul(_mm512_loadu_epi64(pb.cast()), w[v]);
+            _mm512_storeu_epi64(pa.cast(), add(u, t));
+            _mm512_storeu_epi64(pb.cast(), sub(u, t));
+        }
+    }
+
+    /// Two layers of butterflies on the group of `4m` elements starting at
+    /// `k`; see [`super::apply_layers`].
+    ///
+    /// # Safety
+    ///
+    /// Like [`radix_4_butterflies_at`], for indices `k..k + 4m`. `m` must be
+    /// a multiple of [`LANES`].
+    #[target_feature(enable = "avx512f")]
+    pub(super) unsafe fn radix_4_butterflies(
+        x: *mut u64,
+        limbs: usize,
+        k: usize,
+        m: usize,
+        twiddles_1: &[BFieldElement],
+        twiddles_2: &[BFieldElement],
+    ) {
+        debug_assert_eq!(m, twiddles_1.len());
+        debug_assert_eq!(2 * m, twiddles_2.len());
+        for j in (0..m).step_by(LANES) {
+            radix_4_butterflies_at(
+                x,
+                limbs,
+                k + j,
+                m,
+                twiddles_1.as_ptr().add(j),
+                twiddles_2.as_ptr().add(j),
+                twiddles_2.as_ptr().add(j + m),
+            );
+        }
+    }
+
+    /// One layer of butterflies on the group of `2m` elements starting at
+    /// `k`; see [`super::apply_layers`].
+    ///
+    /// # Safety
+    ///
+    /// Like [`radix_2_butterflies_at`], for indices `k..k + 2m`. `m` must be
+    /// a multiple of [`LANES`].
+    #[target_feature(enable = "avx512f")]
+    pub(super) unsafe fn radix_2_butterflies(
+        x: *mut u64,
+        limbs: usize,
+        k: usize,
+        m: usize,
+        twiddles: &[BFieldElement],
+    ) {
+        debug_assert_eq!(m, twiddles.len());
+        for j in (0..m).step_by(LANES) {
+            radix_2_butterflies_at(x, limbs, k + j, m, twiddles.as_ptr().add(j));
+        }
     }
 }
 

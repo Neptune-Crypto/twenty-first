@@ -674,7 +674,10 @@ impl Distribution<BFieldElement> for StandardUniform {
     }
 }
 
-impl FiniteField for BFieldElement {}
+impl FiniteField for BFieldElement {
+    // `BFieldElement` is `#[repr(transparent)]` over a `u64`.
+    const NUM_BFE_LIMBS: Option<usize> = Some(1);
+}
 
 impl Zero for BFieldElement {
     #[inline]

@@ -89,6 +89,15 @@ pub trait FiniteField:
     + Send
     + Sync
 {
+    /// If values of this type are laid out in memory as a run of
+    /// [`BFieldElement`]s, the number of base field elements in that run.
+    /// Types with any other layout must leave this at the default `None`.
+    ///
+    /// SIMD kernels, like the NTT's, use this to process the base field limbs
+    /// of many elements at once. Setting it for a type whose layout does not
+    /// match the description is unsound.
+    const NUM_BFE_LIMBS: Option<usize> = None;
+
     /// Montgomery Batch Inversion
     // Adapted from https://paulmillr.com/posts/noble-secp256k1-fast-ecc/#batch-inversion
     fn batch_inversion(input: Vec<Self>) -> Vec<Self> {

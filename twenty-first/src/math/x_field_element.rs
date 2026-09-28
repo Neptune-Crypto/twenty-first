@@ -503,7 +503,10 @@ impl ConstOne for XFieldElement {
     const ONE: Self = Self::new([BFieldElement::ONE, BFieldElement::ZERO, BFieldElement::ZERO]);
 }
 
-impl FiniteField for XFieldElement {}
+impl FiniteField for XFieldElement {
+    // `XFieldElement` is `#[repr(transparent)]` over `[BFieldElement; 3]`.
+    const NUM_BFE_LIMBS: Option<usize> = Some(EXTENSION_DEGREE);
+}
 
 impl Add<XFieldElement> for XFieldElement {
     type Output = Self;
