@@ -2767,13 +2767,48 @@ where
         S: Clone + One + Inverse,
         FF: Mul<S, Output = FF>,
     {
-        let mut mut_values = crate::memory::vec_with_capacity(values.len());
-        mut_values.extend_from_slice(values);
+        let mut coefficients = crate::memory::vec_with_capacity(values.len());
+        coefficients.extend_from_slice(values);
 
-        intt(&mut mut_values);
-        let poly = Polynomial::new(mut_values);
+        intt(&mut coefficients);
+        Self::scale_in_place(&mut coefficients, offset.inverse());
+        Polynomial::new(coefficients)
+    }
 
-        poly.scale(offset.inverse())
+    /// Replace every `coefficients[i]` by `coefficients[i] · alpha^i`, i.e.,
+    /// [`scale`](Self::scale) without allocating.
+    fn scale_in_place<S>(coefficients: &mut [FF], alpha: S)
+    where
+        S: Clone + One,
+        FF: Mul<S, Output = FF>,
+    {
+        let mut power_of_alpha = S::one();
+        for coefficient in coefficients {
+            *coefficient = *coefficient * power_of_alpha.clone();
+            power_of_alpha = power_of_alpha * alpha.clone();
+        }
+    }
+
+    /// Parallel version of [`scale_in_place`](Self::scale_in_place).
+    fn par_scale_in_place<S>(coefficients: &mut [FF], alpha: S)
+    where
+        S: Clone + One + Send + Sync,
+        FF: Mul<S, Output = FF>,
+    {
+        // Large enough to amortize computing the chunk's first power of α
+        // by square-and-multiply, small enough to keep all threads busy.
+        const CHUNK_SIZE: usize = 1 << 12;
+
+        coefficients
+            .par_chunks_mut(CHUNK_SIZE)
+            .enumerate()
+            .for_each(|(chunk_index, chunk)| {
+                let mut power_of_alpha = generic_pow(alpha.clone(), chunk_index * CHUNK_SIZE);
+                for coefficient in chunk {
+                    *coefficient = *coefficient * power_of_alpha.clone();
+                    power_of_alpha = power_of_alpha * alpha.clone();
+                }
+            });
     }
 
     /// Parallel version of
@@ -2788,13 +2823,10 @@ where
         S: Clone + One + Inverse + Send + Sync,
         FF: Mul<S, Output = FF>,
     {
-        let mut mut_values = crate::memory::vec_with_capacity(values.len());
-        mut_values.extend_from_slice(values);
-
-        par_intt(&mut mut_values);
-        let poly = Polynomial::new(mut_values);
-
-        poly.par_scale(offset.inverse())
+        let mut coefficients = zero_padded_maybe_par(values, values.len(), true);
+        par_intt(&mut coefficients);
+        Self::par_scale_in_place(&mut coefficients, offset.inverse());
+        Polynomial::new(coefficients)
     }
 
     /// The degree-`k` polynomial with the same `k + 1` leading coefficients as
