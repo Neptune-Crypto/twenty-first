@@ -1963,7 +1963,31 @@ where
             .map(|(&value, inverse)| value * inverse)
             .collect::<Vec<_>>();
 
-        Self::interpolate_with_zerofier_tree(zerofier_tree, &weights)
+        Self::par_interpolate_with_zerofier_tree_and_weights(zerofier_tree, &weights)
+    }
+
+    /// Like [`par_interpolate_with_zerofier_tree`][interpolate], but for
+    /// Lagrange weights instead of values. With `z` the zerofier of the
+    /// tree's points `x_i`, the returned polynomial is `Σ_i weights[i] · z /
+    /// (x - x_i)`. It interpolates the values `y_i` if `weights[i] = y_i /
+    /// z'(x_i)`, where `z'` is the formal derivative of `z`.
+    ///
+    /// Prefer this over [`par_interpolate_with_zerofier_tree`][interpolate]
+    /// when the evaluations of `z'` in the points, or their inverses, are
+    /// already known: computing them is the bulk of the work.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of weights does not equal the tree's number of
+    /// points.
+    ///
+    /// [interpolate]: Self::par_interpolate_with_zerofier_tree
+    pub fn par_interpolate_with_zerofier_tree_and_weights(
+        zerofier_tree: &ZerofierTree<FF>,
+        weights: &[FF],
+    ) -> Self {
+        assert_eq!(zerofier_tree.num_points(), weights.len());
+        Self::interpolate_with_zerofier_tree(zerofier_tree, weights)
     }
 
     /// The polynomial `Σ_i weights[i] · z / (x - x_i)`, where `z` is the
@@ -4030,6 +4054,27 @@ mod tests {
         let par_fast_interpolant = Polynomial::par_fast_interpolate(&domain, &values);
         let fast_interpolant = Polynomial::fast_interpolate(&domain, &values);
         prop_assert_eq!(par_fast_interpolant, fast_interpolant);
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 10))]
+    fn interpolation_with_zerofier_tree_and_weights_agrees_with_fast_interpolation(
+        #[any(size_range(1..2048).lift())]
+        #[filter(#domain.iter().all_unique())]
+        domain: Vec<BFieldElement>,
+        #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
+    ) {
+        let zerofier_tree = ZerofierTree::par_new_from_domain(&domain);
+        let derivative = zerofier_tree.zerofier().formal_derivative();
+        let weights = domain
+            .iter()
+            .zip(&values)
+            .map(|(&x, &y)| y / derivative.evaluate::<_, BFieldElement>(x))
+            .collect_vec();
+
+        let weighted_interpolant =
+            Polynomial::par_interpolate_with_zerofier_tree_and_weights(&zerofier_tree, &weights);
+        let fast_interpolant = Polynomial::fast_interpolate(&domain, &values);
+        prop_assert_eq!(fast_interpolant, weighted_interpolant);
     }
 
     #[macro_rules_attr::apply(test)]
