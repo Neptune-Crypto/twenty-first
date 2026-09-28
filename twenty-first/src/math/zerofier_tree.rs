@@ -39,7 +39,15 @@ where
     FF: FiniteField + MulAssign<BFieldElement> + 'static,
 {
     pub fn new(left: ZerofierTree<'c, FF>, right: ZerofierTree<'c, FF>) -> Self {
-        let zerofier = left.zerofier_view().multiply_monic(&right.zerofier_view());
+        Self::new_maybe_par(left, right, false)
+    }
+
+    /// Like [`new`](Self::new), but with the product of the children's
+    /// zerofiers computed with parallel transforms if `par` is set.
+    fn new_maybe_par(left: ZerofierTree<'c, FF>, right: ZerofierTree<'c, FF>, par: bool) -> Self {
+        let zerofier = left
+            .zerofier_view()
+            .multiply_monic(&right.zerofier_view(), par);
         let num_points = left.num_points() + right.num_points();
 
         Self {
@@ -78,6 +86,10 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<'static, FF> {
             .collect::<Vec<_>>();
         nodes.resize(nodes.len().next_power_of_two(), ZerofierTree::Padding);
         while nodes.len() > 1 {
+            // The nodes of a level are built concurrently. Only if there are
+            // few of them are the transforms within parallelized, too.
+            let num_branches = nodes.len() / 2;
+            let par = num_branches <= crate::math::polynomial::MAX_CONCURRENT_PAR_NTTS;
             nodes = nodes
                 .into_par_iter()
                 .chunks(2)
@@ -86,7 +98,7 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<'static, FF> {
                     if left == ZerofierTree::Padding {
                         ZerofierTree::Padding
                     } else {
-                        ZerofierTree::Branch(Box::new(Branch::new(left, right)))
+                        ZerofierTree::Branch(Box::new(Branch::new_maybe_par(left, right, par)))
                     }
                 })
                 .collect();

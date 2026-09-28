@@ -28,6 +28,7 @@ use rayon::current_num_threads;
 use rayon::prelude::*;
 
 use super::traits::PrimitiveRootOfUnity;
+use super::zerofier_tree::Branch;
 use super::zerofier_tree::ZerofierTree;
 use crate::math::ntt::intt;
 use crate::math::ntt::ntt;
@@ -695,26 +696,76 @@ where
     }
 }
 
-/// Below this length, transforms are computed sequentially; from it on, in
-/// parallel.
+/// Below this length, transforms are always computed sequentially: the work
+/// is too little to be worth distributing.
 const PAR_NTT_CUTOFF_THRESHOLD: usize = 1 << 15;
 
-/// The [NTT](ntt), [in parallel](par_ntt) for long inputs.
-pub(crate) fn ntt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF]) {
-    if x.len() < PAR_NTT_CUTOFF_THRESHOLD {
-        ntt(x)
+/// The largest number of independent, concurrently running tasks for which
+/// each task's transforms should still be parallelized internally. Beyond
+/// that, the tasks themselves provide the parallelism, and nested parallel
+/// transforms only contend for the threads.
+pub(crate) const MAX_CONCURRENT_PAR_NTTS: usize = 3;
+
+/// Whether a transform of the given length, one of `num_concurrent` running
+/// concurrently, should be computed in parallel.
+pub(crate) fn should_par_ntt(len: usize, num_concurrent: usize) -> bool {
+    len >= PAR_NTT_CUTOFF_THRESHOLD && num_concurrent <= MAX_CONCURRENT_PAR_NTTS
+}
+
+/// The [NTT](ntt), [in parallel](par_ntt) if requested.
+pub(crate) fn ntt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], par: bool) {
+    if par { par_ntt(x) } else { ntt(x) }
+}
+
+/// A vector of the given length whose `i`-th element is `f(i)`, initialized
+/// in parallel if requested. Parallel initialization also distributes the
+/// page faults of large, fresh allocations across threads.
+pub(crate) fn init_maybe_par<FF: FiniteField>(
+    len: usize,
+    par: bool,
+    f: impl Fn(usize) -> FF + Sync + Send,
+) -> Vec<FF> {
+    let mut vec = crate::memory::vec_with_capacity(len);
+    if par {
+        vec.par_extend((0..len).into_par_iter().map(f));
     } else {
-        par_ntt(x)
+        vec.extend((0..len).map(f));
+    }
+    vec
+}
+
+/// A copy of `coefficients`, zero-padded to `len`. See [`init_maybe_par`].
+pub(crate) fn zero_padded_maybe_par<FF: FiniteField>(
+    coefficients: &[FF],
+    len: usize,
+    par: bool,
+) -> Vec<FF> {
+    debug_assert!(coefficients.len() <= len);
+    if !par {
+        let mut vec = crate::memory::vec_with_capacity(len);
+        vec.extend_from_slice(coefficients);
+        vec.resize(len, FF::ZERO);
+        return vec;
+    }
+    init_maybe_par(len, true, |i| {
+        coefficients.get(i).copied().unwrap_or(FF::ZERO)
+    })
+}
+
+/// Element-wise `lhs[i] *= rhs[i]`, in parallel if requested.
+pub(crate) fn hadamard_product_maybe_par<FF: FiniteField>(lhs: &mut [FF], rhs: &[FF], par: bool) {
+    if par {
+        lhs.par_iter_mut().zip(rhs).for_each(|(l, r)| *l *= *r);
+    } else {
+        for (l, r) in lhs.iter_mut().zip(rhs) {
+            *l *= *r;
+        }
     }
 }
 
-/// The [inverse NTT](intt), [in parallel](par_intt) for long inputs.
-pub(crate) fn intt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF]) {
-    if x.len() < PAR_NTT_CUTOFF_THRESHOLD {
-        intt(x)
-    } else {
-        par_intt(x)
-    }
+/// The [inverse NTT](intt), [in parallel](par_intt) if requested.
+pub(crate) fn intt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], par: bool) {
+    if par { par_intt(x) } else { intt(x) }
 }
 
 impl<FF> Polynomial<'_, FF>
@@ -1038,12 +1089,8 @@ where
         };
         let order = (degree + 1).next_power_of_two();
 
-        let mut lhs_coefficients = crate::memory::vec_with_capacity(order);
-        lhs_coefficients.extend_from_slice(&self.coefficients);
-        lhs_coefficients.resize(order, FF::ZERO);
-        let mut rhs_coefficients = crate::memory::vec_with_capacity(order);
-        rhs_coefficients.extend_from_slice(&other.coefficients);
-        rhs_coefficients.resize(order, FF2::ZERO);
+        let mut lhs_coefficients = zero_padded_maybe_par(&self.coefficients, order, true);
+        let mut rhs_coefficients = zero_padded_maybe_par(&other.coefficients, order, true);
 
         rayon::join(
             || par_ntt(&mut lhs_coefficients),
@@ -1082,10 +1129,17 @@ where
     /// undone. Compared to [`multiply`](Self::multiply), this halves the
     /// transform lengths whenever the product's degree is a power of two.
     ///
+    /// The transforms are parallelized if `par` is set and the product is
+    /// long enough; see [`should_par_ntt`].
+    ///
     /// # Panics
     ///
     /// Panics if either polynomial is not monic.
-    pub(crate) fn multiply_monic(&self, other: &Polynomial<FF>) -> Polynomial<'static, FF> {
+    pub(crate) fn multiply_monic(
+        &self,
+        other: &Polynomial<FF>,
+        par: bool,
+    ) -> Polynomial<'static, FF> {
         let self_degree = usize::try_from(self.degree()).expect("monic polynomial is non-zero");
         let other_degree = usize::try_from(other.degree()).expect("monic polynomial is non-zero");
         assert_eq!(FF::ONE, self.coefficients[self_degree], "must be monic");
@@ -1103,17 +1157,17 @@ where
         }
 
         let len = degree.next_power_of_two();
-        let mut lhs = crate::memory::vec_with_capacity(len);
-        lhs.extend_from_slice(&self.coefficients[..=self_degree]);
-        lhs.resize(len, FF::ZERO);
-        let mut rhs = crate::memory::vec_with_capacity(len);
-        rhs.extend_from_slice(&other.coefficients[..=other_degree]);
-        rhs.resize(len, FF::ZERO);
-        rayon::join(|| ntt_maybe_par(&mut lhs), || ntt_maybe_par(&mut rhs));
-        for (l, r) in lhs.iter_mut().zip(&rhs) {
-            *l *= *r;
+        let par = par && should_par_ntt(len, 1);
+        let mut lhs = zero_padded_maybe_par(&self.coefficients[..=self_degree], len, par);
+        let mut rhs = zero_padded_maybe_par(&other.coefficients[..=other_degree], len, par);
+        if par {
+            rayon::join(|| par_ntt(&mut lhs), || par_ntt(&mut rhs));
+        } else {
+            ntt(&mut lhs);
+            ntt(&mut rhs);
         }
-        intt_maybe_par(&mut lhs);
+        hadamard_product_maybe_par(&mut lhs, &rhs, par);
+        intt_maybe_par(&mut lhs, par);
 
         let mut product = lhs;
         if len == degree {
@@ -1153,9 +1207,11 @@ where
         assert!(!constant_term.is_zero(), "constant term must be invertible");
 
         let bootstrap_precision = precision.min(NEWTON_CUTOFF_PRECISION);
-        let mut inverse = self
-            .formal_power_series_inverse_minimal(bootstrap_precision - 1)
-            .into_coefficients();
+        let mut inverse = crate::memory::vec_with_capacity(precision.next_power_of_two());
+        inverse.extend(
+            self.formal_power_series_inverse_minimal(bootstrap_precision - 1)
+                .into_coefficients(),
+        );
         inverse.resize(bootstrap_precision, FF::ZERO);
 
         // Newton iteration g ← g + g·(1 - f·g), doubling the precision p in
@@ -1169,35 +1225,38 @@ where
         let mut current_precision = bootstrap_precision;
         while current_precision < precision {
             let len = 2 * current_precision;
+            let par = should_par_ntt(len, 1);
 
-            let mut inverse_ntt = inverse.clone();
-            inverse_ntt.resize(len, FF::ZERO);
-            let mut self_times_inverse = crate::memory::vec_with_capacity(len);
+            let mut inverse_ntt = zero_padded_maybe_par(&inverse, len, par);
             let num_own_coefficients = len.min(self.coefficients.len());
-            self_times_inverse.extend_from_slice(&self.coefficients[..num_own_coefficients]);
-            self_times_inverse.resize(len, FF::ZERO);
+            let mut self_times_inverse =
+                zero_padded_maybe_par(&self.coefficients[..num_own_coefficients], len, par);
             rayon::join(
-                || ntt_maybe_par(&mut inverse_ntt),
-                || ntt_maybe_par(&mut self_times_inverse),
+                || ntt_maybe_par(&mut inverse_ntt, par),
+                || ntt_maybe_par(&mut self_times_inverse, par),
             );
-            for (product, g) in self_times_inverse.iter_mut().zip(&inverse_ntt) {
-                *product *= *g;
-            }
-            intt_maybe_par(&mut self_times_inverse);
+            hadamard_product_maybe_par(&mut self_times_inverse, &inverse_ntt, par);
+            intt_maybe_par(&mut self_times_inverse, par);
 
-            let mut update = self_times_inverse;
-            update.copy_within(current_precision.., 0);
-            for coefficient in update.iter_mut().take(current_precision) {
-                *coefficient = -*coefficient;
-            }
-            update[current_precision..].fill(FF::ZERO);
-            ntt_maybe_par(&mut update);
-            for (u, g) in update.iter_mut().zip(&inverse_ntt) {
-                *u *= *g;
-            }
-            intt_maybe_par(&mut update);
+            // the update's coefficients, negated and shifted down by p
+            let mut update = init_maybe_par(len, par, |i| {
+                if i < current_precision {
+                    -self_times_inverse[current_precision + i]
+                } else {
+                    FF::ZERO
+                }
+            });
+            drop(self_times_inverse);
+            ntt_maybe_par(&mut update, par);
+            hadamard_product_maybe_par(&mut update, &inverse_ntt, par);
+            intt_maybe_par(&mut update, par);
 
-            inverse.extend_from_slice(&update[..current_precision]);
+            update.truncate(current_precision);
+            if par {
+                inverse.par_extend(update);
+            } else {
+                inverse.extend(update);
+            }
             current_precision = len;
         }
         inverse.truncate(precision);
@@ -2104,80 +2163,183 @@ where
     /// The polynomial `Σ_i weights[i] · z / (x - x_i)`, where `z` is the
     /// zerofier of the tree's points `x_i`. See
     /// [`par_fast_interpolate`](Self::par_fast_interpolate).
+    ///
+    /// The tree is traversed level by level, from the leafs up, with all
+    /// nodes of a level processed in parallel. The (few, large) nodes near
+    /// the root use parallel transforms internally; the (many, small) nodes
+    /// further down do not.
     fn interpolate_with_zerofier_tree(
         zerofier_tree: &ZerofierTree<FF>,
         weights: &[FF],
     ) -> Polynomial<'static, FF> {
-        match zerofier_tree {
-            ZerofierTree::Leaf(leaf) => {
-                // For each point, synthetic division of the leaf's zerofier
-                // by (x - x_i) gives z / (x - x_i).
-                let zerofier = zerofier_tree.zerofier_view();
-                let z = zerofier.coefficients();
-                let num_points = leaf.points.len();
-                debug_assert_eq!(num_points, weights.len());
-                let mut accumulator = vec![FF::ZERO; num_points];
-                for (&x_i, &weight) in leaf.points.iter().zip(weights) {
-                    let mut quotient_coefficient = FF::ONE;
-                    accumulator[num_points - 1] += weight * quotient_coefficient;
-                    for k in (1..num_points).rev() {
-                        quotient_coefficient = z[k] + x_i * quotient_coefficient;
-                        accumulator[k - 1] += weight * quotient_coefficient;
+        // Every level lists its nodes from left to right, each with the
+        // index of its first point.
+        let mut levels = vec![vec![(zerofier_tree, 0)]];
+        loop {
+            let next_level = levels
+                .last()
+                .unwrap()
+                .iter()
+                .flat_map(|&(node, first_point)| match node {
+                    ZerofierTree::Branch(branch) => {
+                        let right_first_point = first_point + branch.left.num_points();
+                        vec![
+                            (&branch.left, first_point),
+                            (&branch.right, right_first_point),
+                        ]
                     }
-                }
-                Polynomial::new(accumulator)
+                    _ => vec![],
+                })
+                .collect_vec();
+            if next_level.is_empty() {
+                break;
             }
-            ZerofierTree::Branch(branch) => {
-                let num_left_points = branch.left.num_points();
-                let (left_weights, right_weights) = weights.split_at(num_left_points);
-                let (left, right) = rayon::join(
-                    || Self::interpolate_with_zerofier_tree(&branch.left, left_weights),
-                    || Self::interpolate_with_zerofier_tree(&branch.right, right_weights),
-                );
-                if branch.right.num_points() == 0 {
-                    return left;
-                }
+            levels.push(next_level);
+        }
 
-                // left · z_right + right · z_left, which has degree less than
-                // the branch's number of points and thus fits into a cyclic
-                // convolution of the next power of two.
-                let num_points = branch.num_points;
-                let len = num_points.next_power_of_two();
-                let transform = |polynomial: Polynomial<FF>| {
-                    let mut coefficients = crate::memory::vec_with_capacity(len);
-                    coefficients.extend_from_slice(polynomial.coefficients());
-                    coefficients.resize(len, FF::ZERO);
-                    ntt_maybe_par(&mut coefficients);
-                    coefficients
-                };
-                let ((mut left, right_zerofier), (right, left_zerofier)) = rayon::join(
-                    || {
-                        rayon::join(
-                            || transform(left),
-                            || transform(branch.right.zerofier_view()),
-                        )
-                    },
-                    || {
-                        rayon::join(
-                            || transform(right),
-                            || transform(branch.left.zerofier_view()),
-                        )
-                    },
-                );
-                for (((l, zr), r), zl) in left
-                    .iter_mut()
-                    .zip(&right_zerofier)
-                    .zip(&right)
-                    .zip(&left_zerofier)
-                {
-                    *l = *l * *zr + *r * *zl;
-                }
-                intt_maybe_par(&mut left);
-                left.truncate(num_points);
-                Polynomial::new(left)
+        let interpolate_leaf_or_padding = |node: &ZerofierTree<FF>, first_point: usize| match node {
+            ZerofierTree::Leaf(leaf) => {
+                let weights = &weights[first_point..first_point + leaf.points.len()];
+                Self::interpolate_leaf(node, &leaf.points, weights)
             }
             ZerofierTree::Padding => Polynomial::zero(),
+            ZerofierTree::Branch(_) => unreachable!("branches are handled separately"),
+        };
+
+        let mut interpolants_below: Vec<Polynomial<'static, FF>> = vec![];
+        for level in levels.iter().rev() {
+            // Hand every branch its two children's interpolants. The level
+            // below lists them in the same order as the branches here.
+            let mut interpolants_below_iter = interpolants_below.into_iter();
+            let children = level
+                .iter()
+                .map(|(node, _)| match node {
+                    ZerofierTree::Branch(_) => {
+                        let left = interpolants_below_iter.next().unwrap();
+                        let right = interpolants_below_iter.next().unwrap();
+                        Some((left, right))
+                    }
+                    _ => None,
+                })
+                .collect_vec();
+            debug_assert!(interpolants_below_iter.next().is_none());
+
+            interpolants_below = level
+                .par_iter()
+                .zip(children)
+                .map(|(&(node, first_point), children)| match (node, children) {
+                    (ZerofierTree::Branch(branch), Some((left, right))) => {
+                        Self::interpolate_branch(branch, left, right, level.len())
+                    }
+                    (node, None) => interpolate_leaf_or_padding(node, first_point),
+                    (_, Some(_)) => unreachable!("only branches have children"),
+                })
+                .collect();
         }
+
+        interpolants_below.pop().unwrap()
+    }
+
+    /// The leaf step of [`interpolate_with_zerofier_tree`][interp]: for each
+    /// point, synthetic division of the leaf's zerofier by (x - x_i) gives
+    /// z / (x - x_i).
+    ///
+    /// [interp]: Self::interpolate_with_zerofier_tree
+    fn interpolate_leaf(
+        leaf: &ZerofierTree<FF>,
+        points: &[FF],
+        weights: &[FF],
+    ) -> Polynomial<'static, FF> {
+        let zerofier = leaf.zerofier_view();
+        let z = zerofier.coefficients();
+        let num_points = points.len();
+        debug_assert_eq!(num_points, weights.len());
+        let mut accumulator = vec![FF::ZERO; num_points];
+        for (&x_i, &weight) in points.iter().zip(weights) {
+            let mut quotient_coefficient = FF::ONE;
+            accumulator[num_points - 1] += weight * quotient_coefficient;
+            for k in (1..num_points).rev() {
+                quotient_coefficient = z[k] + x_i * quotient_coefficient;
+                accumulator[k - 1] += weight * quotient_coefficient;
+            }
+        }
+        Polynomial::new(accumulator)
+    }
+
+    /// The branch step of [`interpolate_with_zerofier_tree`][interp]:
+    /// `left · z_right + right · z_left`, which has degree less than the
+    /// branch's number of points and thus fits into a cyclic convolution of
+    /// the next power of two.
+    ///
+    /// [interp]: Self::interpolate_with_zerofier_tree
+    fn interpolate_branch(
+        branch: &Branch<FF>,
+        left: Polynomial<'static, FF>,
+        right: Polynomial<'static, FF>,
+        num_concurrent: usize,
+    ) -> Polynomial<'static, FF> {
+        if branch.right.num_points() == 0 {
+            return left;
+        }
+
+        let num_points = branch.num_points;
+        let len = num_points.next_power_of_two();
+        let par = should_par_ntt(len, num_concurrent);
+        let transform = |coefficients: &[FF]| {
+            let mut transformed = zero_padded_maybe_par(coefficients, len, par);
+            ntt_maybe_par(&mut transformed, par);
+            transformed
+        };
+        let left_zerofier = branch.left.zerofier_view();
+        let right_zerofier = branch.right.zerofier_view();
+
+        // For small nodes, the level's many nodes already saturate the
+        // threads; spawning more tasks only adds stealing overhead.
+        let ((mut left, right_zerofier), (right, left_zerofier)) = if par {
+            rayon::join(
+                || {
+                    rayon::join(
+                        || transform(left.coefficients()),
+                        || transform(right_zerofier.coefficients()),
+                    )
+                },
+                || {
+                    rayon::join(
+                        || transform(right.coefficients()),
+                        || transform(left_zerofier.coefficients()),
+                    )
+                },
+            )
+        } else {
+            (
+                (
+                    transform(left.coefficients()),
+                    transform(right_zerofier.coefficients()),
+                ),
+                (
+                    transform(right.coefficients()),
+                    transform(left_zerofier.coefficients()),
+                ),
+            )
+        };
+
+        let combine = |(((l, zr), r), zl): (((&mut FF, &FF), &FF), &FF)| *l = *l * *zr + *r * *zl;
+        if par {
+            left.par_iter_mut()
+                .zip(&right_zerofier)
+                .zip(&right)
+                .zip(&left_zerofier)
+                .for_each(combine);
+        } else {
+            left.iter_mut()
+                .zip(&right_zerofier)
+                .zip(&right)
+                .zip(&left_zerofier)
+                .for_each(combine);
+        }
+        intt_maybe_par(&mut left, par);
+        left.truncate(num_points);
+        Polynomial::new(left)
     }
 
     pub fn batch_fast_interpolate(
@@ -2400,15 +2562,19 @@ where
         // self with respect to degree n - 1. Its first n coefficients are the
         // root's scaled remainder.
         let reversed_zerofier_inverse = reversed_zerofier.power_series_inverse(num_points);
-        let mut reversed_self = vec![FF::ZERO; num_points];
-        for (i, &coefficient) in self.coefficients.iter().take(degree + 1).enumerate() {
-            reversed_self[num_points - 1 - i] = coefficient;
-        }
+        let par = should_par_ntt(num_points, 1);
+        let reversed_self = init_maybe_par(num_points, par, |i| {
+            let j = num_points - 1 - i;
+            if j <= degree {
+                self.coefficients[j]
+            } else {
+                FF::ZERO
+            }
+        });
         let mut scaled_remainder = Polynomial::new(reversed_self)
             .multiply_maybe_par(&reversed_zerofier_inverse)
             .into_coefficients();
         scaled_remainder.resize(num_points, FF::ZERO);
-
         Self::evaluate_scaled_remainder_tree(zerofier_tree, scaled_remainder)
     }
 
@@ -2418,76 +2584,147 @@ where
     /// where `z` is the tree's zerofier. See
     /// [`par_divide_and_conquer_batch_evaluate`][eval].
     ///
+    /// The tree is traversed level by level, with all nodes of a level
+    /// processed in parallel. The (few, large) nodes near the root use
+    /// parallel transforms internally; the (many, small) nodes further down
+    /// do not.
+    ///
     /// [eval]: Self::par_divide_and_conquer_batch_evaluate
     fn evaluate_scaled_remainder_tree(
         zerofier_tree: &ZerofierTree<FF>,
         scaled_remainder: Vec<FF>,
     ) -> Vec<FF> {
-        let num_points = zerofier_tree.num_points();
-        debug_assert_eq!(num_points, scaled_remainder.len());
-        match zerofier_tree {
-            ZerofierTree::Padding => vec![],
-            ZerofierTree::Leaf(leaf) => {
-                // The remainder is the polynomial part of z · Σ_k s_k · x^(-k),
-                // i.e., its j-th coefficient is Σ_k z_(j+k) · s_k.
-                let zerofier = zerofier_tree.zerofier_view();
-                let z = zerofier.coefficients();
-                let remainder = (0..num_points)
-                    .map(|j| {
-                        (1..=num_points - j)
-                            .map(|k| z[j + k] * scaled_remainder[k - 1])
-                            .fold(FF::ZERO, |acc, term| acc + term)
-                    })
-                    .collect_vec();
-                Polynomial::new(remainder).iterative_batch_evaluate(&leaf.points)
+        enum Item<'tree, 'coeffs, FF: FiniteField + MulAssign<BFieldElement>> {
+            Pending(&'tree ZerofierTree<'coeffs, FF>, Vec<FF>),
+            Evaluated(Vec<FF>),
+        }
+
+        debug_assert_eq!(zerofier_tree.num_points(), scaled_remainder.len());
+        let mut items = vec![Item::Pending(zerofier_tree, scaled_remainder)];
+        loop {
+            let num_pending = items
+                .iter()
+                .filter(|item| matches!(item, Item::Pending(..)))
+                .count();
+            if num_pending == 0 {
+                break;
             }
-            ZerofierTree::Branch(branch) => {
-                if branch.right.num_points() == 0 {
-                    return Self::evaluate_scaled_remainder_tree(&branch.left, scaled_remainder);
+
+            // Every item turns into at most two items for the next level.
+            let successors = items
+                .into_par_iter()
+                .map(|item| match item {
+                    Item::Evaluated(evaluations) => [Some(Item::Evaluated(evaluations)), None],
+                    Item::Pending(ZerofierTree::Padding, _) => [None, None],
+                    Item::Pending(tree @ ZerofierTree::Leaf(leaf), remainder) => {
+                        let evaluations =
+                            Self::evaluate_scaled_remainder_leaf(tree, &leaf.points, &remainder);
+                        [Some(Item::Evaluated(evaluations)), None]
+                    }
+                    Item::Pending(ZerofierTree::Branch(branch), remainder) => {
+                        if branch.right.num_points() == 0 {
+                            return [Some(Item::Pending(&branch.left, remainder)), None];
+                        }
+                        let (left, right) =
+                            Self::scaled_remainders_of_children(branch, remainder, num_pending);
+                        [
+                            Some(Item::Pending(&branch.left, left)),
+                            Some(Item::Pending(&branch.right, right)),
+                        ]
+                    }
+                })
+                .collect::<Vec<_>>();
+            items = successors.into_iter().flatten().flatten().collect();
+        }
+
+        items
+            .into_iter()
+            .flat_map(|item| match item {
+                Item::Evaluated(evaluations) => evaluations,
+                Item::Pending(..) => unreachable!(),
+            })
+            .collect()
+    }
+
+    /// The leaf step of [`evaluate_scaled_remainder_tree`][srt].
+    ///
+    /// [srt]: Self::evaluate_scaled_remainder_tree
+    fn evaluate_scaled_remainder_leaf(
+        leaf: &ZerofierTree<FF>,
+        points: &[FF],
+        scaled_remainder: &[FF],
+    ) -> Vec<FF> {
+        // The remainder is the polynomial part of z · Σ_k s_k · x^(-k),
+        // i.e., its j-th coefficient is Σ_k z_(j+k) · s_k.
+        let num_points = points.len();
+        let zerofier = leaf.zerofier_view();
+        let z = zerofier.coefficients();
+        let remainder = (0..num_points)
+            .map(|j| {
+                (1..=num_points - j)
+                    .map(|k| z[j + k] * scaled_remainder[k - 1])
+                    .fold(FF::ZERO, |acc, term| acc + term)
+            })
+            .collect_vec();
+        Polynomial::new(remainder).iterative_batch_evaluate(points)
+    }
+
+    /// The branch step of [`evaluate_scaled_remainder_tree`][srt]: the scaled
+    /// remainders of both children, given the branch's.
+    ///
+    /// The scaled remainder of a child is that of the parent times the
+    /// sibling's zerofier, retaining only the negative powers of x. In terms
+    /// of y = 1/x, the sibling's zerofier of degree m is y^(-m) · rev(z_sibling),
+    /// and the child's coefficients are the coefficients of y^m through
+    /// y^(n-1) of the product of the parent's scaled remainder and
+    /// rev(z_sibling). A cyclic convolution of length ≥ n suffices: the
+    /// wrapped coefficients land strictly below index m.
+    ///
+    /// [srt]: Self::evaluate_scaled_remainder_tree
+    fn scaled_remainders_of_children(
+        branch: &Branch<FF>,
+        scaled_remainder: Vec<FF>,
+        num_concurrent: usize,
+    ) -> (Vec<FF>, Vec<FF>) {
+        let num_points = branch.num_points;
+        let len = num_points.next_power_of_two();
+        let par = should_par_ntt(len, num_concurrent);
+
+        let mut scaled_remainder_ntt = zero_padded_maybe_par(&scaled_remainder, len, par);
+        drop(scaled_remainder);
+        ntt_maybe_par(&mut scaled_remainder_ntt, par);
+
+        let child_scaled_remainder = |sibling: &ZerofierTree<FF>| {
+            let sibling_zerofier = sibling.zerofier_view();
+            let sibling_num_points = sibling.num_points();
+            let z = sibling_zerofier.coefficients();
+            let mut product = init_maybe_par(len, par, |i| {
+                if i <= sibling_num_points {
+                    z[sibling_num_points - i]
+                } else {
+                    FF::ZERO
                 }
+            });
+            ntt_maybe_par(&mut product, par);
+            hadamard_product_maybe_par(&mut product, &scaled_remainder_ntt, par);
+            intt_maybe_par(&mut product, par);
+            product.truncate(num_points);
+            product.drain(..sibling_num_points);
+            product
+        };
 
-                // The scaled remainder of a child is that of the parent times
-                // the sibling's zerofier, retaining only the negative powers
-                // of x. In terms of y = 1/x, the sibling's zerofier of degree
-                // m is y^(-m) · rev(z_sibling), and the child's coefficients
-                // are the coefficients of y^m through y^(n-1) of the product
-                // of the parent's scaled remainder and rev(z_sibling).
-                // Cyclic convolution of length ≥ n suffices: the wrapped
-                // coefficients land strictly below index m.
-                let len = num_points.next_power_of_two();
-                let mut scaled_remainder_ntt = scaled_remainder;
-                scaled_remainder_ntt.resize(len, FF::ZERO);
-                ntt_maybe_par(&mut scaled_remainder_ntt);
-
-                let child_scaled_remainder = |sibling: &ZerofierTree<FF>| {
-                    let sibling_zerofier = sibling.zerofier_view();
-                    let sibling_num_points = sibling.num_points();
-                    let mut product = vec![FF::ZERO; len];
-                    for (i, &coefficient) in sibling_zerofier.coefficients().iter().enumerate() {
-                        product[sibling_num_points - i] = coefficient;
-                    }
-                    ntt_maybe_par(&mut product);
-                    for (p, s) in product.iter_mut().zip(&scaled_remainder_ntt) {
-                        *p *= *s;
-                    }
-                    intt_maybe_par(&mut product);
-                    product.truncate(num_points);
-                    product.drain(..sibling_num_points);
-                    product
-                };
-                let (left_scaled_remainder, right_scaled_remainder) = rayon::join(
-                    || child_scaled_remainder(&branch.right),
-                    || child_scaled_remainder(&branch.left),
-                );
-                drop(scaled_remainder_ntt);
-
-                let (mut left, right) = rayon::join(
-                    || Self::evaluate_scaled_remainder_tree(&branch.left, left_scaled_remainder),
-                    || Self::evaluate_scaled_remainder_tree(&branch.right, right_scaled_remainder),
-                );
-                left.extend(right);
-                left
-            }
+        // For small nodes, the level's many nodes already saturate the
+        // threads; spawning more tasks only adds stealing overhead.
+        if par {
+            rayon::join(
+                || child_scaled_remainder(&branch.right),
+                || child_scaled_remainder(&branch.left),
+            )
+        } else {
+            (
+                child_scaled_remainder(&branch.right),
+                child_scaled_remainder(&branch.left),
+            )
         }
     }
 
