@@ -5528,6 +5528,96 @@ mod tests {
     }
 
     #[macro_rules_attr::apply(proptest)]
+    fn coset_evaluation_into_agrees_with_coset_evaluation(
+        #[strategy(0_usize..12)] _log_order: usize,
+        #[strategy(vec(arb(), 0..(1 << #_log_order)))] coefficients: Vec<XFieldElement>,
+        #[strategy(arb())] offset: BFieldElement,
+    ) {
+        let order = 1 << _log_order;
+        let polynomial = Polynomial::new(coefficients);
+        let expected = polynomial.fast_coset_evaluate(offset, order);
+
+        let mut codeword = Vec::with_capacity(order);
+        polynomial.fast_coset_evaluate_into(offset, codeword.spare_capacity_mut());
+        // SAFETY: `fast_coset_evaluate_into` initializes every element.
+        unsafe { codeword.set_len(order) };
+        prop_assert_eq!(&expected, &codeword);
+
+        let mut par_codeword = Vec::with_capacity(order);
+        polynomial.par_fast_coset_evaluate_into(offset, par_codeword.spare_capacity_mut());
+        // SAFETY: `par_fast_coset_evaluate_into` initializes every element.
+        unsafe { par_codeword.set_len(order) };
+        prop_assert_eq!(expected, par_codeword);
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 4))]
+    fn formal_power_series_inverse_newton_with_large_precision(
+        #[filter(!#f.coefficients.is_empty())]
+        #[filter(!#f.coefficients[0].is_zero())]
+        f: BfePoly,
+        #[strategy(1000_usize..3000)] precision: usize,
+    ) {
+        let g = f.clone().formal_power_series_inverse_newton(precision);
+        let product = g.multiply(&f).mod_x_to_the_n(precision);
+        prop_assert!(product.is_one());
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 4))]
+    fn parallel_clean_division_agrees_with_division_if_divisor_has_0_as_root(
+        #[strategy(vec(arb(), 1..300))] mut dividend_roots: Vec<BFieldElement>,
+        #[strategy(vec(0..#dividend_roots.len(), 0..=#dividend_roots.len()))]
+        #[filter(#divisor_root_indices.iter().all_unique())]
+        divisor_root_indices: Vec<usize>,
+    ) {
+        let mut divisor_roots = divisor_root_indices
+            .into_iter()
+            .map(|i| dividend_roots[i])
+            .collect_vec();
+        dividend_roots.push(bfe!(0));
+        divisor_roots.push(bfe!(0));
+
+        let dividend = Polynomial::zerofier(&dividend_roots);
+        let divisor = Polynomial::zerofier(&divisor_roots);
+        let (expected, remainder) = dividend.divide(&divisor);
+        prop_assert!(remainder.is_zero());
+        prop_assert_eq!(expected, dividend.par_clean_divide(divisor));
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 2))]
+    fn par_batch_coset_extrapolate_through_many_points_agrees_with_batch_version(
+        #[strategy(vec(arb(), 3 * 64))] codewords: Vec<BFieldElement>,
+        #[strategy(vec(arb(), 100..150))] points: Vec<BFieldElement>,
+    ) {
+        let offset = BFieldElement::new(7);
+        let batched = Polynomial::batch_coset_extrapolate(offset, 64, &codewords, &points);
+        let par_batched = Polynomial::par_batch_coset_extrapolate(offset, 64, &codewords, &points);
+        prop_assert_eq!(batched, par_batched);
+    }
+
+    /// Large enough for the nodes near the root of the zerofier tree to use
+    /// parallel transforms.
+    #[macro_rules_attr::apply(proptest(cases = 1))]
+    fn par_fast_interpolation_through_very_many_points(
+        #[strategy(vec(arb(), 1 << 15))] points: Vec<BFieldElement>,
+        #[strategy(vec(arb(), 1 << 15))] values: Vec<BFieldElement>,
+    ) {
+        let points = points.into_iter().unique().collect_vec();
+        let values = values[..points.len()].to_vec();
+        let interpolant = Polynomial::par_fast_interpolate(&points, &values);
+        prop_assert_eq!(values, interpolant.par_batch_evaluate(&points));
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 8))]
+    fn par_fast_multiply_agrees_with_fast_multiply(
+        #[strategy(vec(arb(), 0..(1 << 16)))] a_coefficients: Vec<BFieldElement>,
+        #[strategy(vec(arb(), 0..(1 << 16)))] b_coefficients: Vec<BFieldElement>,
+    ) {
+        let a = Polynomial::new(a_coefficients);
+        let b = Polynomial::new(b_coefficients);
+        prop_assert_eq!(a.fast_multiply(&b), a.par_fast_multiply(&b));
+    }
+
+    #[macro_rules_attr::apply(proptest)]
     fn power_series_inverse_is_inverse_modulo_x_to_the_precision(
         #[filter(!#f.coefficients.is_empty())]
         #[filter(!#f.coefficients[0].is_zero())]

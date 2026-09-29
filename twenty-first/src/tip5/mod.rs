@@ -558,6 +558,12 @@ impl Tip5 {
             return;
         }
 
+        self.permutation_scalar();
+    }
+
+    /// The Tip5 permutation, without any SIMD.
+    #[inline]
+    fn permutation_scalar(&mut self) {
         for i in 0..NUM_ROUNDS {
             self.round(i);
         }
@@ -691,6 +697,11 @@ impl Tip5 {
             return digests;
         }
 
+        Self::hash_varlen_many_scalar(inputs)
+    }
+
+    /// [`hash_varlen_many`](Self::hash_varlen_many), without any SIMD.
+    fn hash_varlen_many_scalar(inputs: &[&[BFieldElement]]) -> Vec<Digest> {
         inputs
             .iter()
             .map(|input| Self::hash_varlen(input))
@@ -717,6 +728,11 @@ impl Tip5 {
             return digests;
         }
 
+        Self::hash_pair_many_scalar(pairs)
+    }
+
+    /// [`hash_pair_many`](Self::hash_pair_many), without any SIMD.
+    fn hash_pair_many_scalar(pairs: &[[Digest; 2]]) -> Vec<Digest> {
         pairs.iter().map(|&[l, r]| Self::hash_pair(l, r)).collect()
     }
 
@@ -1665,9 +1681,7 @@ pub(crate) mod tests {
 
         let mut scalar_permutation = Tip5 { state };
         let mut avx512_permutation = Tip5 { state };
-        for round_index in 0..NUM_ROUNDS {
-            scalar_permutation.round(round_index);
-        }
+        scalar_permutation.permutation_scalar();
         // SAFETY: The required CPU features were detected above.
         unsafe { avx512_permutation.permutation_avx512() };
         prop_assert_eq!(scalar_permutation, avx512_permutation);
@@ -1718,7 +1732,8 @@ pub(crate) mod tests {
             .iter()
             .map(|input| Tip5::hash_varlen(input))
             .collect_vec();
-        prop_assert_eq!(individually, Tip5::hash_varlen_many(&inputs));
+        prop_assert_eq!(individually.clone(), Tip5::hash_varlen_many(&inputs));
+        prop_assert_eq!(individually, Tip5::hash_varlen_many_scalar(&inputs));
     }
 
     #[macro_rules_attr::apply(proptest)]
@@ -1743,6 +1758,7 @@ pub(crate) mod tests {
             .iter()
             .map(|&[l, r]| Tip5::hash_pair(l, r))
             .collect_vec();
+        prop_assert_eq!(individually.clone(), Tip5::hash_pair_many_scalar(&pairs));
         prop_assert_eq!(individually, Tip5::hash_pair_many(&pairs));
     }
 
