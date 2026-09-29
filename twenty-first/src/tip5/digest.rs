@@ -156,8 +156,10 @@ impl TryFrom<[u8; Digest::BYTES]> for Digest {
 
     fn try_from(item: [u8; Self::BYTES]) -> Result<Self, Self::Error> {
         let digest_innards: Vec<_> = item
-            .chunks_exact(BFieldElement::BYTES)
-            .map(BFieldElement::try_from)
+            .as_chunks::<{ BFieldElement::BYTES }>()
+            .0
+            .iter()
+            .map(|&bytes| BFieldElement::try_from(bytes))
             .try_collect()?;
 
         Ok(Self(digest_innards.try_into().unwrap()))

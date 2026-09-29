@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::ops::MulAssign;
 
 use num_traits::One;
+use rayon::prelude::*;
 
 use super::b_field_element::BFieldElement;
 use super::polynomial::Polynomial;
@@ -28,6 +29,9 @@ pub struct Branch<'c, FF: FiniteField + MulAssign<BFieldElement>> {
     zerofier: Polynomial<'c, FF>,
     pub(crate) left: ZerofierTree<'c, FF>,
     pub(crate) right: ZerofierTree<'c, FF>,
+
+    /// The number of points in this subtree.
+    pub(crate) num_points: usize,
 }
 
 impl<'c, FF> Branch<'c, FF>
@@ -35,11 +39,22 @@ where
     FF: FiniteField + MulAssign<BFieldElement> + 'static,
 {
     pub fn new(left: ZerofierTree<'c, FF>, right: ZerofierTree<'c, FF>) -> Self {
-        let zerofier = left.zerofier().multiply(&right.zerofier());
+        Self::new_maybe_par(left, right, false)
+    }
+
+    /// Like [`new`](Self::new), but with the product of the children's
+    /// zerofiers computed with parallel transforms if `par` is set.
+    fn new_maybe_par(left: ZerofierTree<'c, FF>, right: ZerofierTree<'c, FF>, par: bool) -> Self {
+        let zerofier = left
+            .zerofier_view()
+            .multiply_monic(&right.zerofier_view(), par);
+        let num_points = left.num_points() + right.num_points();
+
         Self {
             zerofier,
             left,
             right,
+            num_points,
         }
     }
 }
@@ -62,6 +77,34 @@ impl<FF: FiniteField + MulAssign<BFieldElement>> ZerofierTree<'static, FF> {
     /// Regulates the depth at which the tree is truncated. Phrased differently,
     /// regulates the number of points contained by each leaf.
     const RECURSION_CUTOFF_THRESHOLD: usize = 16;
+
+    /// Parallel version of [`new_from_domain`](Self::new_from_domain).
+    pub fn par_new_from_domain(domain: &[FF]) -> Self {
+        let mut nodes = domain
+            .par_chunks(Self::RECURSION_CUTOFF_THRESHOLD)
+            .map(|chunk| ZerofierTree::Leaf(Leaf::new(chunk.to_vec())))
+            .collect::<Vec<_>>();
+        nodes.resize(nodes.len().next_power_of_two(), ZerofierTree::Padding);
+        while nodes.len() > 1 {
+            // The nodes of a level are built concurrently. Only if there are
+            // few of them are the transforms within parallelized, too.
+            let num_branches = nodes.len() / 2;
+            let par = num_branches <= crate::math::polynomial::MAX_CONCURRENT_PAR_NTTS;
+            nodes = nodes
+                .into_par_iter()
+                .chunks(2)
+                .map(|pair| {
+                    let [left, right] = <[_; 2]>::try_from(pair).unwrap();
+                    if left == ZerofierTree::Padding {
+                        ZerofierTree::Padding
+                    } else {
+                        ZerofierTree::Branch(Box::new(Branch::new_maybe_par(left, right, par)))
+                    }
+                })
+                .collect();
+        }
+        nodes.pop().unwrap()
+    }
 
     pub fn new_from_domain(domain: &[FF]) -> Self {
         let mut nodes = domain
@@ -95,6 +138,27 @@ where
             ZerofierTree::Leaf(leaf) => leaf.zerofier.clone(),
             ZerofierTree::Branch(branch) => branch.zerofier.clone(),
             ZerofierTree::Padding => Polynomial::one(),
+        }
+    }
+
+    /// Like [`zerofier`](Self::zerofier), but borrowing the coefficients
+    /// where possible.
+    pub(crate) fn zerofier_view(&self) -> Polynomial<'_, FF> {
+        match self {
+            ZerofierTree::Leaf(leaf) => Polynomial::new_borrowed(leaf.zerofier.coefficients()),
+            ZerofierTree::Branch(branch) => {
+                Polynomial::new_borrowed(branch.zerofier.coefficients())
+            }
+            ZerofierTree::Padding => Polynomial::one(),
+        }
+    }
+
+    /// The number of points this (sub)tree was built from.
+    pub fn num_points(&self) -> usize {
+        match self {
+            ZerofierTree::Leaf(leaf) => leaf.points.len(),
+            ZerofierTree::Branch(branch) => branch.num_points,
+            ZerofierTree::Padding => 0,
         }
     }
 }
@@ -165,5 +229,22 @@ mod tests {
         let zerofier_tree = ZerofierTree::new_from_domain(&points);
         let polynomial_zerofier = Polynomial::zerofier(&points);
         prop_assert_eq!(polynomial_zerofier, zerofier_tree.zerofier());
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn parallel_and_sequential_construction_agree(
+        #[strategy(vec(arb(), 0..(1 << 8)))] points: Vec<BFieldElement>,
+    ) {
+        let sequential = ZerofierTree::new_from_domain(&points);
+        let parallel = ZerofierTree::par_new_from_domain(&points);
+        prop_assert_eq!(sequential, parallel);
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn num_points_is_number_of_points(
+        #[strategy(vec(arb(), 0..(1 << 8)))] points: Vec<BFieldElement>,
+    ) {
+        let zerofier_tree = ZerofierTree::new_from_domain(&points);
+        prop_assert_eq!(points.len(), zerofier_tree.num_points());
     }
 }

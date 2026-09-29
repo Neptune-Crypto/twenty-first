@@ -5,6 +5,8 @@ use criterion::criterion_main;
 use itertools::Itertools;
 use twenty_first::math::b_field_element::BFieldElement;
 use twenty_first::math::other::random_elements;
+use twenty_first::math::traits::FiniteField;
+use twenty_first::math::x_field_element::XFieldElement;
 
 /// Run with `cargo criterion --bench inverse`
 fn inverse(c: &mut Criterion) {
@@ -19,6 +21,24 @@ fn inverse(c: &mut Criterion) {
         bencher.iter(|| {
             rnd_elems.iter().map(|x| x.inverse()).collect_vec();
         });
+    });
+
+    let xfes: Vec<XFieldElement> = random_elements(count);
+    let xfe_inverse = BenchmarkId::new("XFieldElement inverse", 0);
+    group.bench_function(xfe_inverse, |bencher| {
+        bencher.iter(|| {
+            xfes.iter().map(|x| x.inverse()).collect_vec();
+        });
+    });
+
+    let batch_inverse = BenchmarkId::new("Batch inverse", 0);
+    group.bench_function(batch_inverse, |bencher| {
+        bencher.iter(|| BFieldElement::batch_inversion(rnd_elems.clone()));
+    });
+
+    let par_batch_inverse = BenchmarkId::new("Parallel batch inverse", 0);
+    group.bench_function(par_batch_inverse, |bencher| {
+        bencher.iter(|| BFieldElement::par_batch_inversion(rnd_elems.clone()));
     });
 
     group.finish();

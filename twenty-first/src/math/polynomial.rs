@@ -28,9 +28,14 @@ use rayon::current_num_threads;
 use rayon::prelude::*;
 
 use super::traits::PrimitiveRootOfUnity;
+use super::zerofier_tree::Branch;
 use super::zerofier_tree::ZerofierTree;
 use crate::math::ntt::intt;
 use crate::math::ntt::ntt;
+use crate::math::ntt::par_intt;
+use crate::math::ntt::par_ntt;
+use crate::math::ntt::par_scaled_zero_padded_ntt;
+use crate::math::ntt::scaled_zero_padded_ntt;
 use crate::math::traits::FiniteField;
 use crate::math::traits::ModPowU32;
 use crate::prelude::BFieldElement;
@@ -282,6 +287,37 @@ where
             .collect();
 
         Polynomial::new(coefficients)
+    }
+
+    /// Parallel version of [`evaluate`](Self::evaluate) for long polynomials.
+    /// The coefficients are split into chunks, each chunk is evaluated with
+    /// Horner's method, and the chunks' values are combined with powers of the
+    /// indeterminate. Short polynomials are evaluated sequentially.
+    pub fn par_evaluate<Ind, Eval>(&self, x: Ind) -> Eval
+    where
+        Ind: Clone + One + Send + Sync,
+        Eval: Mul<Ind, Output = Eval> + Add<FF, Output = Eval> + Zero + Send,
+    {
+        // Large enough to amortize the per-chunk overhead, small enough to
+        // keep all threads busy for polynomials of a few hundred thousand
+        // coefficients.
+        const CHUNK_LEN: usize = 1 << 11;
+
+        if self.coefficients.len() <= CHUNK_LEN {
+            return self.evaluate(x);
+        }
+
+        let x_to_the_chunk_len = generic_pow(x.clone(), CHUNK_LEN);
+        let chunk_values = self
+            .coefficients
+            .par_chunks(CHUNK_LEN)
+            .map(|chunk| Polynomial::new_borrowed(chunk).evaluate::<Ind, Eval>(x.clone()))
+            .collect::<Vec<_>>();
+        let mut acc = Eval::zero();
+        for value in chunk_values.into_iter().rev() {
+            acc = acc * x_to_the_chunk_len.clone() + value;
+        }
+        acc
     }
 
     /// Evaluate `self` in an indeterminate.
@@ -648,32 +684,6 @@ where
         (x, a, b)
     }
 
-    /// Given a polynomial f(X), find the polynomial g(X) of degree at most n
-    /// such that f(X) * g(X) = 1 mod X^{n+1} where n is the precision.
-    /// # Panics
-    ///
-    /// Panics if f(X) does not have an inverse in the formal power series
-    /// ring, _i.e._ if its constant coefficient is zero.
-    fn formal_power_series_inverse_minimal(&self, precision: usize) -> Polynomial<'static, FF> {
-        let lc_inv = self.coefficients.first().unwrap().inverse();
-        let mut g = vec![lc_inv];
-
-        // invariant: product[i] = 0
-        for _ in 1..(precision + 1) {
-            let inner_product = self
-                .coefficients
-                .iter()
-                .skip(1)
-                .take(g.len())
-                .zip(g.iter().rev())
-                .map(|(l, r)| *l * *r)
-                .fold(FF::ZERO, |l, r| l + r);
-            g.push(-inner_product * lc_inv);
-        }
-
-        Polynomial::new(g)
-    }
-
     pub(crate) fn reverse(&self) -> Polynomial<'static, FF> {
         let degree = self.degree();
         let new_coefficients = self
@@ -691,6 +701,74 @@ where
     pub fn into_owned(self) -> Polynomial<'static, FF> {
         Polynomial::new(self.coefficients.into_owned())
     }
+}
+
+/// The largest number of independent, concurrently running tasks for which
+/// each task's transforms should still be parallelized internally. Beyond
+/// that, the tasks themselves provide the parallelism, and nested parallel
+/// transforms only contend for the threads.
+pub(crate) const MAX_CONCURRENT_PAR_NTTS: usize = 3;
+
+/// Whether a transform of the given length, one of `num_concurrent` running
+/// concurrently, should be computed in parallel.
+pub(crate) fn should_par_ntt(len: usize, num_concurrent: usize) -> bool {
+    len >= 1 << crate::math::ntt::par_min_log_2_len() && num_concurrent <= MAX_CONCURRENT_PAR_NTTS
+}
+
+/// The [NTT](ntt), [in parallel](par_ntt) if requested.
+pub(crate) fn ntt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], par: bool) {
+    if par { par_ntt(x) } else { ntt(x) }
+}
+
+/// A vector of the given length whose `i`-th element is `f(i)`, initialized
+/// in parallel if requested. Parallel initialization also distributes the
+/// page faults of large, fresh allocations across threads.
+pub(crate) fn init_maybe_par<FF: FiniteField>(
+    len: usize,
+    par: bool,
+    f: impl Fn(usize) -> FF + Sync + Send,
+) -> Vec<FF> {
+    let mut vec = crate::memory::vec_with_capacity(len);
+    if par {
+        vec.par_extend((0..len).into_par_iter().map(f));
+    } else {
+        vec.extend((0..len).map(f));
+    }
+    vec
+}
+
+/// A copy of `coefficients`, zero-padded to `len`. See [`init_maybe_par`].
+pub(crate) fn zero_padded_maybe_par<FF: FiniteField>(
+    coefficients: &[FF],
+    len: usize,
+    par: bool,
+) -> Vec<FF> {
+    debug_assert!(coefficients.len() <= len);
+    if !par {
+        let mut vec = crate::memory::vec_with_capacity(len);
+        vec.extend_from_slice(coefficients);
+        vec.resize(len, FF::ZERO);
+        return vec;
+    }
+    init_maybe_par(len, true, |i| {
+        coefficients.get(i).copied().unwrap_or(FF::ZERO)
+    })
+}
+
+/// Element-wise `lhs[i] *= rhs[i]`, in parallel if requested.
+pub(crate) fn hadamard_product_maybe_par<FF: FiniteField>(lhs: &mut [FF], rhs: &[FF], par: bool) {
+    if par {
+        lhs.par_iter_mut().zip(rhs).for_each(|(l, r)| *l *= *r);
+    } else {
+        for (l, r) in lhs.iter_mut().zip(rhs) {
+            *l *= *r;
+        }
+    }
+}
+
+/// The [inverse NTT](intt), [in parallel](par_intt) if requested.
+pub(crate) fn intt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], par: bool) {
+    if par { par_intt(x) } else { intt(x) }
 }
 
 impl<FF> Polynomial<'_, FF>
@@ -747,6 +825,13 @@ where
     /// size of the NTT.
     const FAST_REDUCE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
+    /// Below this product of a modulus' degree and the precision of a
+    /// reduction, i.e., below roughly this many base field multiplications,
+    /// quadratic algorithms (long division, coefficient-wise power series
+    /// inversion) beat their quasi-linear counterparts, which have larger
+    /// constants.
+    const QUADRATIC_REDUCTION_CUTOFF: usize = 1 << 14;
+
     /// When doing batch evaluation, sometimes it makes sense to reduce the
     /// polynomial modulo the zerofier of the domain first. This const regulates
     /// when.
@@ -763,13 +848,81 @@ where
         FF: Mul<S, Output = XF>,
         XF: FiniteField,
     {
+        Polynomial::new(self.scaled_coefficients(alpha, self.coefficients.len()))
+    }
+
+    /// The coefficients of [`scale`](Self::scale), in a vector with (at least)
+    /// the given capacity. See also [`par_scaled_coefficients`][par].
+    ///
+    /// [par]: Self::par_scaled_coefficients
+    fn scaled_coefficients<S, XF>(&self, alpha: S, capacity: usize) -> Vec<XF>
+    where
+        S: Clone + One,
+        FF: Mul<S, Output = XF>,
+        XF: FiniteField,
+    {
         let mut power_of_alpha = S::one();
-        let mut return_coefficients = Vec::with_capacity(self.coefficients.len());
+        let mut return_coefficients =
+            crate::memory::vec_with_capacity(capacity.max(self.coefficients.len()));
         for &coefficient in self.coefficients.iter() {
             return_coefficients.push(coefficient * power_of_alpha.clone());
             power_of_alpha = power_of_alpha * alpha.clone();
         }
-        Polynomial::new(return_coefficients)
+        return_coefficients
+    }
+
+    /// Parallel version of [`scale`](Self::scale).
+    #[must_use]
+    pub fn par_scale<S, XF>(&self, alpha: S) -> Polynomial<'static, XF>
+    where
+        S: Clone + One + Send + Sync,
+        FF: Mul<S, Output = XF>,
+        XF: FiniteField,
+    {
+        Polynomial::new(self.par_scaled_coefficients(alpha, self.coefficients.len()))
+    }
+
+    /// The coefficients of [`par_scale`](Self::par_scale), in a vector with
+    /// (at least) the given capacity. Allocating the final capacity up front
+    /// lets callers extend the vector, e.g., by padding it to the length of an
+    /// NTT domain, without reallocating.
+    fn par_scaled_coefficients<S, XF>(&self, alpha: S, capacity: usize) -> Vec<XF>
+    where
+        S: Clone + One + Send + Sync,
+        FF: Mul<S, Output = XF>,
+        XF: FiniteField,
+    {
+        // Large enough to amortize computing the chunk's first power of α
+        // by square-and-multiply, small enough to keep all threads busy.
+        const CHUNK_SIZE: usize = 1 << 12;
+
+        // Writing into pre-allocated chunks is considerably faster than
+        // collecting an unindexed parallel iterator. Not initializing the
+        // memory up front saves a full pass over it; the chunks are written
+        // to in parallel, which also spreads the page faults across threads.
+        let num_coefficients = self.coefficients.len();
+        let mut return_coefficients =
+            crate::memory::vec_with_capacity(capacity.max(num_coefficients));
+        return_coefficients
+            .spare_capacity_mut()
+            .par_chunks_mut(CHUNK_SIZE)
+            .zip(self.coefficients.par_chunks(CHUNK_SIZE))
+            .enumerate()
+            .for_each(|(chunk_index, (scaled_chunk, chunk))| {
+                let mut power_of_alpha = generic_pow(alpha.clone(), chunk_index * CHUNK_SIZE);
+                for (scaled_coefficient, &coefficient) in scaled_chunk.iter_mut().zip(chunk) {
+                    scaled_coefficient.write(coefficient * power_of_alpha.clone());
+                    power_of_alpha = power_of_alpha * alpha.clone();
+                }
+            });
+        // SAFETY:
+        // 1. The capacity is at least `num_coefficients`.
+        // 2. The chunks of the spare capacity and of the coefficients are
+        //    zipped in lockstep and have identical lengths, so exactly the
+        //    first `num_coefficients` elements were written to, and every
+        //    one of them was.
+        unsafe { return_coefficients.set_len(num_coefficients) };
+        return_coefficients
     }
 
     /// Square `self`.
@@ -931,6 +1084,278 @@ where
         Polynomial::new(hadamard_product)
     }
 
+    /// Parallel version of [`fast_multiply`](Self::fast_multiply).
+    pub fn par_fast_multiply<FF2>(
+        &self,
+        other: &Polynomial<FF2>,
+    ) -> Polynomial<'static, <FF as Mul<FF2>>::Output>
+    where
+        FF: Mul<FF2>,
+        FF2: FiniteField + MulAssign<BFieldElement>,
+        <FF as Mul<FF2>>::Output: FiniteField + MulAssign<BFieldElement>,
+    {
+        let Ok(degree) = usize::try_from(self.degree() + other.degree()) else {
+            return Polynomial::zero();
+        };
+        let order = (degree + 1).next_power_of_two();
+
+        let par = should_par_ntt(order, 1);
+        let mut lhs_coefficients = zero_padded_maybe_par(&self.coefficients, order, par);
+        let mut rhs_coefficients = zero_padded_maybe_par(&other.coefficients, order, par);
+
+        rayon::join(
+            || par_ntt(&mut lhs_coefficients),
+            || par_ntt(&mut rhs_coefficients),
+        );
+
+        let mut hadamard_product = lhs_coefficients
+            .into_par_iter()
+            .zip(rhs_coefficients)
+            .map(|(l, r)| l * r)
+            .collect::<Vec<_>>();
+
+        par_intt(&mut hadamard_product);
+        hadamard_product.truncate(degree + 1);
+        Polynomial::new(hadamard_product)
+    }
+
+    /// [`multiply`](Self::multiply), using the [parallel][par] NTT for large
+    /// operands.
+    ///
+    /// [par]: Self::par_fast_multiply
+    pub(crate) fn multiply_maybe_par(&self, other: &Polynomial<FF>) -> Polynomial<'static, FF> {
+        const PAR_MULTIPLY_CUTOFF_THRESHOLD: isize = 1 << 15;
+
+        if self.degree() + other.degree() < PAR_MULTIPLY_CUTOFF_THRESHOLD {
+            self.multiply(other)
+        } else {
+            self.par_fast_multiply(other)
+        }
+    }
+
+    /// The product of two monic polynomials, using a cyclic convolution of
+    /// the smallest power-of-two length that is at least the product's
+    /// degree. If that length equals the degree, the leading coefficient
+    /// wraps around onto the constant term, where it is known and can be
+    /// undone. Compared to [`multiply`](Self::multiply), this halves the
+    /// transform lengths whenever the product's degree is a power of two.
+    ///
+    /// The transforms are parallelized if `par` is set and the product is
+    /// long enough; see [`should_par_ntt`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if either polynomial is not monic.
+    pub(crate) fn multiply_monic(
+        &self,
+        other: &Polynomial<FF>,
+        par: bool,
+    ) -> Polynomial<'static, FF> {
+        let self_degree = usize::try_from(self.degree()).expect("monic polynomial is non-zero");
+        let other_degree = usize::try_from(other.degree()).expect("monic polynomial is non-zero");
+        assert_eq!(FF::ONE, self.coefficients[self_degree], "must be monic");
+        assert_eq!(FF::ONE, other.coefficients[other_degree], "must be monic");
+        if self_degree == 0 {
+            return other.clone().into_owned();
+        }
+        if other_degree == 0 {
+            return self.clone().into_owned();
+        }
+
+        let degree = self_degree + other_degree;
+        if (degree as isize) < Self::FAST_MULTIPLY_CUTOFF_THRESHOLD {
+            return self.naive_multiply(other);
+        }
+
+        let len = degree.next_power_of_two();
+        let par = par && should_par_ntt(len, 1);
+        let mut lhs = zero_padded_maybe_par(&self.coefficients[..=self_degree], len, par);
+        let mut rhs = zero_padded_maybe_par(&other.coefficients[..=other_degree], len, par);
+        if par {
+            rayon::join(|| par_ntt(&mut lhs), || par_ntt(&mut rhs));
+        } else {
+            ntt(&mut lhs);
+            ntt(&mut rhs);
+        }
+        hadamard_product_maybe_par(&mut lhs, &rhs, par);
+        intt_maybe_par(&mut lhs, par);
+
+        let mut product = lhs;
+        if len == degree {
+            product[0] -= FF::ONE;
+            product.push(FF::ONE);
+        } else {
+            product.truncate(degree + 1);
+        }
+        Polynomial::new(product)
+    }
+
+    /// Given a polynomial f(X), find the polynomial g(X) of degree at most n
+    /// such that f(X) * g(X) = 1 mod X^{n+1} where n is the precision.
+    /// # Panics
+    ///
+    /// Panics if f(X) does not have an inverse in the formal power series
+    /// ring, _i.e._ if its constant coefficient is zero.
+    fn formal_power_series_inverse_minimal(&self, precision: usize) -> Polynomial<'static, FF> {
+        let lc_inv = self.coefficients.first().unwrap().inverse();
+        let mut g = vec![lc_inv];
+
+        // invariant: product[i] = 0
+        for _ in 1..(precision + 1) {
+            let inner_product = self
+                .coefficients
+                .iter()
+                .skip(1)
+                .take(g.len())
+                .zip(g.iter().rev())
+                .map(|(l, r)| *l * *r)
+                .fold(FF::ZERO, |l, r| l + r);
+            g.push(-inner_product * lc_inv);
+        }
+
+        Polynomial::new(g)
+    }
+
+    /// `self mod x^n`, as an owned polynomial. See also
+    /// [`mod_x_to_the_n`](Polynomial::mod_x_to_the_n).
+    fn truncated(&self, n: usize) -> Polynomial<'static, FF> {
+        let num_coefficients_to_retain = n.min(self.coefficients.len());
+        Polynomial::new(self.coefficients[..num_coefficients_to_retain].to_vec())
+    }
+
+    /// The inverse of `self` as a formal power series, modulo `x^precision`.
+    /// That is, the returned polynomial `g` of degree less than `precision`
+    /// satisfies `self · g ≡ 1 (mod x^precision)`.
+    ///
+    /// Uses Newton iteration, doubling the precision in every step, at a
+    /// total cost of a few multiplications of polynomials of degree
+    /// `precision`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `self`'s constant term is zero, or if `precision` is zero.
+    pub(crate) fn power_series_inverse(&self, precision: usize) -> Polynomial<'static, FF> {
+        // Below this precision, the quadratic algorithm is used to bootstrap
+        // the Newton iteration.
+        const NEWTON_CUTOFF_PRECISION: usize = 1 << 7;
+
+        assert!(precision > 0, "precision must be positive");
+        let constant_term = self.coefficients.first().copied().unwrap_or(FF::ZERO);
+        assert!(!constant_term.is_zero(), "constant term must be invertible");
+
+        let bootstrap_precision = precision.min(NEWTON_CUTOFF_PRECISION);
+        let mut inverse = crate::memory::vec_with_capacity(precision.next_power_of_two());
+        inverse.extend(
+            self.formal_power_series_inverse_minimal(bootstrap_precision - 1)
+                .into_coefficients(),
+        );
+        inverse.resize(bootstrap_precision, FF::ZERO);
+
+        // Newton iteration g ← g + g·(1 - f·g), doubling the precision p in
+        // every step. Since f·g ≡ 1 (mod x^p), the term (1 - f·g) mod x^(2p)
+        // is x^p times the negated coefficients p through 2p-1 of f·g, and the
+        // update is x^p · (g · h mod x^p) with h those coefficients. Both
+        // products are computed with cyclic convolutions of length 2p: the
+        // first because only its upper half is needed and the wrapped
+        // coefficients land in the lower half, the second because it does not
+        // wrap at all. The transform of g is shared between them.
+        let mut current_precision = bootstrap_precision;
+        while current_precision < precision {
+            let len = 2 * current_precision;
+            let par = should_par_ntt(len, 1);
+
+            let mut inverse_ntt = zero_padded_maybe_par(&inverse, len, par);
+            let num_own_coefficients = len.min(self.coefficients.len());
+            let mut self_times_inverse =
+                zero_padded_maybe_par(&self.coefficients[..num_own_coefficients], len, par);
+            rayon::join(
+                || ntt_maybe_par(&mut inverse_ntt, par),
+                || ntt_maybe_par(&mut self_times_inverse, par),
+            );
+            hadamard_product_maybe_par(&mut self_times_inverse, &inverse_ntt, par);
+            intt_maybe_par(&mut self_times_inverse, par);
+
+            // the update's coefficients, negated and shifted down by p
+            let mut update = init_maybe_par(len, par, |i| {
+                if i < current_precision {
+                    -self_times_inverse[current_precision + i]
+                } else {
+                    FF::ZERO
+                }
+            });
+            drop(self_times_inverse);
+            ntt_maybe_par(&mut update, par);
+            hadamard_product_maybe_par(&mut update, &inverse_ntt, par);
+            intt_maybe_par(&mut update, par);
+
+            update.truncate(current_precision);
+            if par {
+                inverse.par_extend(update);
+            } else {
+                inverse.extend(update);
+            }
+            current_precision = len;
+        }
+        inverse.truncate(precision);
+
+        Polynomial::new(inverse)
+    }
+
+    /// `self mod modulus`, given the inverse of the reversed modulus as a
+    /// formal power series to a precision of at least
+    /// `self.degree() - modulus.degree() + 1`. See
+    /// [`power_series_inverse`](Self::power_series_inverse).
+    ///
+    /// This is fast division: the quotient's reversal is the product of the
+    /// reversed dividend and the reversed divisor's inverse, and the remainder
+    /// follows from the quotient.
+    pub(crate) fn reduce_with_reversed_inverse(
+        &self,
+        modulus: &Polynomial<FF>,
+        reversed_modulus_inverse: &Polynomial<FF>,
+    ) -> Polynomial<'static, FF> {
+        let modulus_degree = usize::try_from(modulus.degree()).expect("modulus must not be zero");
+        let Ok(self_degree) = usize::try_from(self.degree()) else {
+            return Polynomial::zero();
+        };
+        if self_degree < modulus_degree {
+            return self.clone().into_owned();
+        }
+        let quotient_degree = self_degree - modulus_degree;
+
+        let reversed_self = self.reverse().truncated(quotient_degree + 1);
+        let reversed_inverse = reversed_modulus_inverse.truncated(quotient_degree + 1);
+        let reversed_quotient = reversed_self
+            .multiply_maybe_par(&reversed_inverse)
+            .truncated(quotient_degree + 1);
+        let quotient_coefficients = (0..=quotient_degree)
+            .map(|i| {
+                reversed_quotient
+                    .coefficients
+                    .get(quotient_degree - i)
+                    .copied()
+                    .unwrap_or(FF::ZERO)
+            })
+            .collect_vec();
+        let quotient = Polynomial::new(quotient_coefficients);
+
+        // The remainder has degree less than the modulus; the higher
+        // coefficients of the difference are zero by construction.
+        let product = quotient.multiply_maybe_par(modulus);
+        let remainder_coefficients = self
+            .coefficients
+            .iter()
+            .take(modulus_degree)
+            .zip_longest(product.coefficients.iter().take(modulus_degree))
+            .map(|pair| match pair {
+                EitherOrBoth::Both(&s, &p) => s - p,
+                EitherOrBoth::Left(&s) => s,
+                EitherOrBoth::Right(&p) => -p,
+            })
+            .collect_vec();
+        Polynomial::new(remainder_coefficients)
+    }
+
     /// Multiply a bunch of polynomials together.
     pub fn batch_multiply(factors: &[Self]) -> Polynomial<'static, FF> {
         // Build a tree-like structure of multiplications to keep the degrees of
@@ -1026,23 +1451,26 @@ where
         // n-m using NTT-based multiplication over a domain of size n = 2^k.
 
         let (shift_factor_ntt, tail_size) = modulus.shift_factor_ntt_with_tail_length();
-        let mut intermediate_remainder =
+        let intermediate_remainder =
             self.reduce_by_ntt_friendly_modulus(&shift_factor_ntt, tail_size);
 
-        // 2. Chunk-wise reduction with schoolbook multiplication.
-        // We generate a smaller structured multiple of the denominator
-        // that also admits chunk-wise reduction but not NTT-based
-        // multiplication within. While asymptotically on par with long
-        // division, this schoolbook chunk-wise reduction is concretely more
-        // performant.
-        if intermediate_remainder.degree() > 4 * modulus.degree() {
-            let structured_multiple = modulus.structured_multiple();
-            intermediate_remainder =
-                intermediate_remainder.reduce_by_structured_modulus(&structured_multiple);
+        // 2. Reduction of the intermediate remainder, which has degree at
+        // most a small multiple of the modulus' degree. Long division costs
+        // about (deg r - deg m) · deg m multiplications and has no overhead,
+        // which beats fast division for small moduli.
+        let modulus_degree = usize::try_from(modulus.degree()).expect("modulus is non-zero");
+        let Ok(remainder_degree) = usize::try_from(intermediate_remainder.degree()) else {
+            return Polynomial::zero();
+        };
+        if remainder_degree < modulus_degree {
+            return intermediate_remainder;
         }
-
-        // 3. Long division based reduction by the (unmultiplied) modulus.
-        intermediate_remainder.reduce_long_division(modulus)
+        let precision = remainder_degree - modulus_degree + 1;
+        if modulus_degree * precision <= Self::QUADRATIC_REDUCTION_CUTOFF {
+            return intermediate_remainder.reduce_long_division(modulus);
+        }
+        let reversed_modulus_inverse = modulus.reverse().power_series_inverse(precision);
+        intermediate_remainder.reduce_with_reversed_inverse(modulus, &reversed_modulus_inverse)
     }
 
     /// Only marked `pub` for benchmarking purposes. Not considered part of the
@@ -1141,17 +1569,6 @@ where
         Polynomial::new(working_window)
     }
 
-    /// Given a polynomial f(X) of degree n >= 0, find a multiple of f(X) of the
-    /// form X^{3*n+1} + (something of degree at most 2*n).
-    ///
-    /// # Panics
-    ///
-    /// Panics if f(X) = 0.
-    fn structured_multiple(&self) -> Polynomial<'static, FF> {
-        let n = usize::try_from(self.degree()).expect("cannot compute multiple of zero");
-        self.structured_multiple_of_degree(3 * n + 1)
-    }
-
     /// Given a polynomial f(X) and an integer n, find a multiple of f(X) of the
     /// form X^n + (something of much smaller degree).
     ///
@@ -1176,74 +1593,20 @@ where
         // Without modular reduction, the degree of the product f(X) * g(X) is
         // deg(f) + arg -- even after coefficient reversal. So n = deg(f) + arg
         // and arg = n - deg(f).
-        let inverse_reverse = reverse.formal_power_series_inverse_minimal(n - degree);
+        // For a modulus of small degree, the quadratic algorithm is cheaper
+        // than Newton iteration; see also `fast_reduce`.
+        let precision = (n - degree).max(1);
+        let inverse_reverse = if degree * precision <= Self::QUADRATIC_REDUCTION_CUTOFF {
+            reverse.formal_power_series_inverse_minimal(precision)
+        } else {
+            reverse.power_series_inverse(precision)
+        };
         let product_reverse = reverse.multiply(&inverse_reverse);
         let product = product_reverse.reverse();
 
         // Coefficient reversal drops trailing zero. Correct for that.
         let product_degree = product.degree() as usize;
         product.shift_coefficients(n - product_degree)
-    }
-
-    /// Reduces f(X) by a structured modulus, which is of the form
-    /// X^{m+n} + (something of degree less than m). When the modulus has this
-    /// form, polynomial modular reductions can be computed faster than in the
-    /// generic case.
-    ///
-    /// # Panics
-    ///
-    /// Panics if
-    ///  - multiple is a constant
-    ///  - multiple is not monic
-    fn reduce_by_structured_modulus(&self, multiple: &Self) -> Polynomial<'static, FF> {
-        assert_ne!(0, multiple.degree());
-        let multiple_degree = usize::try_from(multiple.degree()).expect("cannot reduce by zero");
-        assert_eq!(
-            Some(FF::ONE),
-            multiple.leading_coefficient(),
-            "multiple must be monic"
-        );
-        let leading_term = Polynomial::x_to_the(multiple_degree);
-        let shift_polynomial = multiple.clone() - leading_term.clone();
-        assert!(shift_polynomial.degree() < multiple.degree());
-
-        let tail_length = usize::try_from(shift_polynomial.degree())
-            .map(|unsigned_degree| unsigned_degree + 1)
-            .unwrap_or(0);
-        let window_length = multiple_degree;
-        let chunk_size = window_length - tail_length;
-        if self.coefficients.len() < chunk_size + tail_length {
-            return self.clone().into_owned();
-        }
-        let num_reducible_chunks =
-            (self.coefficients.len() - (tail_length + chunk_size)).div_ceil(chunk_size);
-
-        let window_stop = (tail_length + chunk_size) + num_reducible_chunks * chunk_size;
-        let mut window_start = window_stop - window_length;
-        let mut working_window = self.coefficients[window_start..].to_vec();
-        working_window.resize(chunk_size + tail_length, FF::ZERO);
-
-        for _ in (0..num_reducible_chunks).rev() {
-            let overflow = Polynomial::new(working_window[tail_length..].to_vec());
-            let product = overflow.multiply(&shift_polynomial);
-
-            window_start -= chunk_size;
-            working_window = [
-                self.coefficients[window_start..window_start + chunk_size].to_vec(),
-                working_window[0..tail_length].to_vec(),
-            ]
-            .concat();
-
-            for (i, wwi) in working_window
-                .iter_mut()
-                .enumerate()
-                .take(chunk_size + tail_length)
-            {
-                *wwi -= *product.coefficients.get(i).unwrap_or(&FF::ZERO);
-            }
-        }
-
-        Polynomial::new(working_window)
     }
 
     fn reduce_long_division(&self, modulus: &Polynomial<'_, FF>) -> Polynomial<'static, FF> {
@@ -1391,12 +1754,93 @@ where
             greater than the degree of the polynomial."
         );
 
-        let mut coefficients = self.scale(offset).coefficients.into_owned();
+        let mut coefficients = self.scaled_coefficients(offset, order);
         coefficients.resize(order, FF::ZERO);
         ntt(&mut coefficients);
 
         coefficients
     }
+
+    /// [`fast_coset_evaluate`](Self::fast_coset_evaluate), writing the
+    /// codeword into the given, possibly uninitialized memory instead of
+    /// allocating. On return, every element of `codeword` is initialized.
+    ///
+    /// Besides avoiding the allocation, this fuses the scaling and
+    /// zero-padding with the transform's first passes over memory; see
+    /// [`scaled_zero_padded_ntt`]. For large codewords, this is considerably
+    /// faster than [`fast_coset_evaluate`](Self::fast_coset_evaluate).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the codeword's length is not a power of two, or if the
+    /// polynomial has more coefficients than the codeword is long.
+    pub fn fast_coset_evaluate_into(
+        &self,
+        offset: BFieldElement,
+        codeword: &mut [std::mem::MaybeUninit<FF>],
+    ) where
+        FF: Mul<BFieldElement, Output = FF>,
+    {
+        scaled_zero_padded_ntt(&self.coefficients, offset, codeword);
+    }
+
+    /// Parallel version of
+    /// [`fast_coset_evaluate_into`](Self::fast_coset_evaluate_into). Use this
+    /// for a single, large evaluation; see [`par_scaled_zero_padded_ntt`].
+    ///
+    /// # Panics
+    ///
+    /// See [`fast_coset_evaluate_into`](Self::fast_coset_evaluate_into).
+    pub fn par_fast_coset_evaluate_into(
+        &self,
+        offset: BFieldElement,
+        codeword: &mut [std::mem::MaybeUninit<FF>],
+    ) where
+        FF: Mul<BFieldElement, Output = FF>,
+    {
+        par_scaled_zero_padded_ntt(&self.coefficients, offset, codeword);
+    }
+
+    /// Parallel version of [`fast_coset_evaluate`](Self::fast_coset_evaluate).
+    ///
+    /// Use this for a single, large evaluation. If many polynomials are to be
+    /// evaluated, it is generally more efficient to evaluate them in parallel
+    /// using the serial version for each.
+    ///
+    /// # Panics
+    ///
+    /// See [`fast_coset_evaluate`](Self::fast_coset_evaluate).
+    pub fn par_fast_coset_evaluate<S>(&self, offset: S, order: usize) -> Vec<FF>
+    where
+        S: Clone + One + Send + Sync,
+        FF: Mul<S, Output = FF> + 'static,
+    {
+        assert!(
+            (order as isize) > self.degree(),
+            "`Polynomial::par_fast_coset_evaluate` is currently limited to domains of order \
+            greater than the degree of the polynomial."
+        );
+
+        let mut coefficients = self.par_scaled_coefficients(offset, order);
+        coefficients.resize(order, FF::ZERO);
+        par_ntt(&mut coefficients);
+
+        coefficients
+    }
+}
+
+/// `base^exponent` by square-and-multiply, for any multiplicative monoid.
+fn generic_pow<S: Clone + One>(base: S, mut exponent: usize) -> S {
+    let mut result = S::one();
+    let mut base = base;
+    while exponent > 0 {
+        if exponent & 1 == 1 {
+            result = result * base.clone();
+        }
+        base = base.clone() * base;
+        exponent >>= 1;
+    }
+    result
 }
 
 impl<FF> Polynomial<'static, FF>
@@ -1462,13 +1906,11 @@ where
     pub fn smart_zerofier(roots: &[FF]) -> Self {
         let mut zerofier = vec![FF::ZERO; roots.len() + 1];
         zerofier[0] = FF::ONE;
-        let mut num_coeffs = 1;
-        for &root in roots {
+        for (num_coeffs, &root) in (1..).zip(roots) {
             for k in (1..=num_coeffs).rev() {
                 zerofier[k] = zerofier[k - 1] - root * zerofier[k];
             }
             zerofier[0] = -root * zerofier[0];
-            num_coeffs += 1;
         }
         Self::new(zerofier)
     }
@@ -1660,44 +2102,257 @@ where
         );
         debug_assert_eq!(domain.len(), values.len());
 
-        // prevent edge case failure where the left half would be empty
         if domain.len() == 1 {
             return Self::from_constant(values[0]);
         }
 
-        let mid_point = domain.len() / 2;
-        let left_domain_half = &domain[..mid_point];
-        let left_values_half = &values[..mid_point];
-        let right_domain_half = &domain[mid_point..];
-        let right_values_half = &values[mid_point..];
+        let zerofier_tree = ZerofierTree::par_new_from_domain(domain);
+        Self::par_interpolate_with_zerofier_tree(&zerofier_tree, values)
+    }
 
-        let (left_zerofier, right_zerofier) = rayon::join(
-            || Self::zerofier(left_domain_half),
-            || Self::zerofier(right_domain_half),
-        );
+    /// Like [`par_fast_interpolate`](Self::par_fast_interpolate), but for a
+    /// domain given as its [zerofier tree](ZerofierTree), which can then be
+    /// shared with other computations over the same domain, like
+    /// [`par_divide_and_conquer_batch_evaluate`][eval].
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of values does not equal the tree's number of
+    /// points, or if the tree's points are not distinct.
+    ///
+    /// [eval]: Self::par_divide_and_conquer_batch_evaluate
+    pub fn par_interpolate_with_zerofier_tree(
+        zerofier_tree: &ZerofierTree<FF>,
+        values: &[FF],
+    ) -> Self {
+        assert_eq!(zerofier_tree.num_points(), values.len());
+        if zerofier_tree.num_points() == 1 {
+            return Self::from_constant(values[0]);
+        }
 
-        let (left_offset, right_offset) = rayon::join(
-            || right_zerofier.par_batch_evaluate(left_domain_half),
-            || left_zerofier.par_batch_evaluate(right_domain_half),
-        );
+        // Lagrange's formula: with z the zerofier of the domain and z' its
+        // formal derivative, the interpolant is Σ_i y_i / z'(x_i) · z / (x - x_i).
+        // The sums over subsets of the points are combined along the zerofier
+        // tree: the sum over a branch is the sum over the left child times
+        // the right zerofier, plus vice versa. All steps are parallel, and
+        // the total work is quasi-linear in the number of points.
+        let zerofier_derivative = zerofier_tree.zerofier_view().formal_derivative();
+        let derivative_in_domain =
+            zerofier_derivative.par_divide_and_conquer_batch_evaluate(zerofier_tree);
+        let derivative_inverses = FF::par_batch_inversion(derivative_in_domain);
+        let weights = values
+            .par_iter()
+            .zip(derivative_inverses)
+            .map(|(&value, inverse)| value * inverse)
+            .collect::<Vec<_>>();
 
-        let hadamard_mul = |x: &[_], y: Vec<_>| x.iter().zip(y).map(|(&n, d)| n * d).collect_vec();
-        let interpolate_half = |offset, domain_half, values_half| {
-            let offset_inverse = FF::batch_inversion(offset);
-            let targets = hadamard_mul(values_half, offset_inverse);
-            Self::par_interpolate(domain_half, &targets)
+        Self::par_interpolate_with_zerofier_tree_and_weights(zerofier_tree, &weights)
+    }
+
+    /// Like [`par_interpolate_with_zerofier_tree`][interpolate], but for
+    /// Lagrange weights instead of values. With `z` the zerofier of the
+    /// tree's points `x_i`, the returned polynomial is `Σ_i weights[i] · z /
+    /// (x - x_i)`. It interpolates the values `y_i` if `weights[i] = y_i /
+    /// z'(x_i)`, where `z'` is the formal derivative of `z`.
+    ///
+    /// Prefer this over [`par_interpolate_with_zerofier_tree`][interpolate]
+    /// when the evaluations of `z'` in the points, or their inverses, are
+    /// already known: computing them is the bulk of the work.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of weights does not equal the tree's number of
+    /// points.
+    ///
+    /// [interpolate]: Self::par_interpolate_with_zerofier_tree
+    pub fn par_interpolate_with_zerofier_tree_and_weights(
+        zerofier_tree: &ZerofierTree<FF>,
+        weights: &[FF],
+    ) -> Self {
+        assert_eq!(zerofier_tree.num_points(), weights.len());
+        Self::interpolate_with_zerofier_tree(zerofier_tree, weights)
+    }
+
+    /// The polynomial `Σ_i weights[i] · z / (x - x_i)`, where `z` is the
+    /// zerofier of the tree's points `x_i`. See
+    /// [`par_fast_interpolate`](Self::par_fast_interpolate).
+    ///
+    /// The tree is traversed level by level, from the leafs up, with all
+    /// nodes of a level processed in parallel. The (few, large) nodes near
+    /// the root use parallel transforms internally; the (many, small) nodes
+    /// further down do not.
+    fn interpolate_with_zerofier_tree(
+        zerofier_tree: &ZerofierTree<FF>,
+        weights: &[FF],
+    ) -> Polynomial<'static, FF> {
+        // Every level lists its nodes from left to right, each with the
+        // index of its first point.
+        let mut levels = vec![vec![(zerofier_tree, 0)]];
+        loop {
+            let next_level = levels
+                .last()
+                .unwrap()
+                .iter()
+                .flat_map(|&(node, first_point)| match node {
+                    ZerofierTree::Branch(branch) => {
+                        let right_first_point = first_point + branch.left.num_points();
+                        vec![
+                            (&branch.left, first_point),
+                            (&branch.right, right_first_point),
+                        ]
+                    }
+                    _ => vec![],
+                })
+                .collect_vec();
+            if next_level.is_empty() {
+                break;
+            }
+            levels.push(next_level);
+        }
+
+        let interpolate_leaf_or_padding = |node: &ZerofierTree<FF>, first_point: usize| match node {
+            ZerofierTree::Leaf(leaf) => {
+                let weights = &weights[first_point..first_point + leaf.points.len()];
+                Self::interpolate_leaf(node, &leaf.points, weights)
+            }
+            ZerofierTree::Padding => Polynomial::zero(),
+            ZerofierTree::Branch(_) => unreachable!("branches are handled separately"),
         };
-        let (left_interpolant, right_interpolant) = rayon::join(
-            || interpolate_half(left_offset, left_domain_half, left_values_half),
-            || interpolate_half(right_offset, right_domain_half, right_values_half),
-        );
 
-        let (left_term, right_term) = rayon::join(
-            || left_interpolant.multiply(&right_zerofier),
-            || right_interpolant.multiply(&left_zerofier),
-        );
+        let mut interpolants_below: Vec<Polynomial<'static, FF>> = vec![];
+        for level in levels.iter().rev() {
+            // Hand every branch its two children's interpolants. The level
+            // below lists them in the same order as the branches here.
+            let mut interpolants_below_iter = interpolants_below.into_iter();
+            let children = level
+                .iter()
+                .map(|(node, _)| match node {
+                    ZerofierTree::Branch(_) => {
+                        let left = interpolants_below_iter.next().unwrap();
+                        let right = interpolants_below_iter.next().unwrap();
+                        Some((left, right))
+                    }
+                    _ => None,
+                })
+                .collect_vec();
+            debug_assert!(interpolants_below_iter.next().is_none());
 
-        left_term + right_term
+            interpolants_below = level
+                .par_iter()
+                .zip(children)
+                .map(|(&(node, first_point), children)| match (node, children) {
+                    (ZerofierTree::Branch(branch), Some((left, right))) => {
+                        Self::interpolate_branch(branch, left, right, level.len())
+                    }
+                    (node, None) => interpolate_leaf_or_padding(node, first_point),
+                    (_, Some(_)) => unreachable!("only branches have children"),
+                })
+                .collect();
+        }
+
+        interpolants_below.pop().unwrap()
+    }
+
+    /// The leaf step of [`interpolate_with_zerofier_tree`][interp]: for each
+    /// point, synthetic division of the leaf's zerofier by (x - x_i) gives
+    /// z / (x - x_i).
+    ///
+    /// [interp]: Self::interpolate_with_zerofier_tree
+    fn interpolate_leaf(
+        leaf: &ZerofierTree<FF>,
+        points: &[FF],
+        weights: &[FF],
+    ) -> Polynomial<'static, FF> {
+        let zerofier = leaf.zerofier_view();
+        let z = zerofier.coefficients();
+        let num_points = points.len();
+        debug_assert_eq!(num_points, weights.len());
+        let mut accumulator = vec![FF::ZERO; num_points];
+        for (&x_i, &weight) in points.iter().zip(weights) {
+            let mut quotient_coefficient = FF::ONE;
+            accumulator[num_points - 1] += weight * quotient_coefficient;
+            for k in (1..num_points).rev() {
+                quotient_coefficient = z[k] + x_i * quotient_coefficient;
+                accumulator[k - 1] += weight * quotient_coefficient;
+            }
+        }
+        Polynomial::new(accumulator)
+    }
+
+    /// The branch step of [`interpolate_with_zerofier_tree`][interp]:
+    /// `left · z_right + right · z_left`, which has degree less than the
+    /// branch's number of points and thus fits into a cyclic convolution of
+    /// the next power of two.
+    ///
+    /// [interp]: Self::interpolate_with_zerofier_tree
+    fn interpolate_branch(
+        branch: &Branch<FF>,
+        left: Polynomial<'static, FF>,
+        right: Polynomial<'static, FF>,
+        num_concurrent: usize,
+    ) -> Polynomial<'static, FF> {
+        if branch.right.num_points() == 0 {
+            return left;
+        }
+
+        let num_points = branch.num_points;
+        let len = num_points.next_power_of_two();
+        let par = should_par_ntt(len, num_concurrent);
+        let transform = |coefficients: &[FF]| {
+            let mut transformed = zero_padded_maybe_par(coefficients, len, par);
+            ntt_maybe_par(&mut transformed, par);
+            transformed
+        };
+        let left_zerofier = branch.left.zerofier_view();
+        let right_zerofier = branch.right.zerofier_view();
+
+        // For small nodes, the level's many nodes already saturate the
+        // threads; spawning more tasks only adds stealing overhead.
+        let ((mut left, right_zerofier), (right, left_zerofier)) = if par {
+            rayon::join(
+                || {
+                    rayon::join(
+                        || transform(left.coefficients()),
+                        || transform(right_zerofier.coefficients()),
+                    )
+                },
+                || {
+                    rayon::join(
+                        || transform(right.coefficients()),
+                        || transform(left_zerofier.coefficients()),
+                    )
+                },
+            )
+        } else {
+            (
+                (
+                    transform(left.coefficients()),
+                    transform(right_zerofier.coefficients()),
+                ),
+                (
+                    transform(right.coefficients()),
+                    transform(left_zerofier.coefficients()),
+                ),
+            )
+        };
+
+        let combine = |(((l, zr), r), zl): (((&mut FF, &FF), &FF), &FF)| *l = *l * *zr + *r * *zl;
+        if par {
+            left.par_iter_mut()
+                .zip(&right_zerofier)
+                .zip(&right)
+                .zip(&left_zerofier)
+                .for_each(combine);
+        } else {
+            left.iter_mut()
+                .zip(&right_zerofier)
+                .zip(&right)
+                .zip(&left_zerofier)
+                .for_each(combine);
+        }
+        intt_maybe_par(&mut left, par);
+        left.truncate(num_points);
+        Polynomial::new(left)
     }
 
     pub fn batch_fast_interpolate(
@@ -1859,15 +2514,237 @@ where
 
     /// Parallel version of [`batch_evaluate`](Self::batch_evaluate).
     pub fn par_batch_evaluate(&self, domain: &[FF]) -> Vec<FF> {
+        // For few points, the zerofier tree is not worth building.
+        const ITERATIVE_EVALUATION_THRESHOLD: usize = 1 << 5;
+
         if domain.is_empty() || self.is_zero() {
             return vec![FF::ZERO; domain.len()];
         }
-        let num_threads = current_num_threads().max(1);
-        let chunk_size = domain.len().div_ceil(num_threads);
-        domain
-            .par_chunks(chunk_size)
-            .flat_map(|ch| self.batch_evaluate(ch))
+        if domain.len() < ITERATIVE_EVALUATION_THRESHOLD
+            && self.degree() < 4 * (domain.len() as isize)
+        {
+            return self.iterative_batch_evaluate(domain);
+        }
+
+        let zerofier_tree = ZerofierTree::par_new_from_domain(domain);
+        self.par_divide_and_conquer_batch_evaluate(&zerofier_tree)
+    }
+
+    /// Parallel version of
+    /// [`divide_and_conquer_batch_evaluate`](Self::divide_and_conquer_batch_evaluate).
+    /// Unlike the sequential version, the total work is quasi-linear in the
+    /// number of points (plus the degree of `self`).
+    ///
+    /// Uses a scaled remainder tree, after [Bernstein][srt]: instead of the
+    /// remainders of `self` modulo the nodes' zerofiers, the tree is traversed
+    /// with the _scaled_ remainders `(self mod z) / z`, expanded as power
+    /// series in `1/x`. Passing from a node to a child only requires
+    /// multiplication with the sibling's zerofier, and the leafs' remainders
+    /// follow from their scaled remainders with one more multiplication. The
+    /// only division is the one at the root.
+    ///
+    /// [srt]: https://cr.yp.to/arith/scaledmod-20040820.pdf
+    pub fn par_divide_and_conquer_batch_evaluate(
+        &self,
+        zerofier_tree: &ZerofierTree<FF>,
+    ) -> Vec<FF> {
+        let num_points = zerofier_tree.num_points();
+        if num_points == 0 {
+            return vec![];
+        }
+        let Ok(degree) = usize::try_from(self.degree()) else {
+            return vec![FF::ZERO; num_points];
+        };
+
+        let zerofier = zerofier_tree.zerofier_view();
+        let reversed_zerofier = zerofier.reverse();
+        if degree >= num_points {
+            // Reduce modulo the zerofier of all points first, so that the
+            // scaled remainder tree starts from a polynomial of degree less
+            // than the number of points. For a degree much larger than the
+            // number of points, chunk-wise reduction is the better fit;
+            // otherwise, fast division is.
+            let degree_ratio = Self::REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO as usize;
+            let reduced = if degree >= degree_ratio * num_points {
+                self.fast_reduce(&zerofier)
+            } else {
+                let quotient_degree = degree - num_points;
+                let reversed_zerofier_inverse =
+                    reversed_zerofier.power_series_inverse(quotient_degree + 1);
+                self.reduce_with_reversed_inverse(&zerofier, &reversed_zerofier_inverse)
+            };
+            return reduced.par_divide_and_conquer_batch_evaluate(zerofier_tree);
+        }
+
+        // With n the number of points and y = 1/x, the expansion of self / z
+        // in y is y · rev(self) / rev(z), where rev(self) is the reversal of
+        // self with respect to degree n - 1. Its first n coefficients are the
+        // root's scaled remainder.
+        let reversed_zerofier_inverse = reversed_zerofier.power_series_inverse(num_points);
+        let par = should_par_ntt(num_points, 1);
+        let reversed_self = init_maybe_par(num_points, par, |i| {
+            let j = num_points - 1 - i;
+            if j <= degree {
+                self.coefficients[j]
+            } else {
+                FF::ZERO
+            }
+        });
+        let mut scaled_remainder = Polynomial::new(reversed_self)
+            .multiply_maybe_par(&reversed_zerofier_inverse)
+            .into_coefficients();
+        scaled_remainder.resize(num_points, FF::ZERO);
+        Self::evaluate_scaled_remainder_tree(zerofier_tree, scaled_remainder)
+    }
+
+    /// Evaluate the polynomial `r` of degree less than the tree's number of
+    /// points `n` in the tree's points, given its scaled remainder: the
+    /// coefficients `s_1, …, s_n` of the expansion `r / z = Σ_k s_k · x^(-k)`
+    /// where `z` is the tree's zerofier. See
+    /// [`par_divide_and_conquer_batch_evaluate`][eval].
+    ///
+    /// The tree is traversed level by level, with all nodes of a level
+    /// processed in parallel. The (few, large) nodes near the root use
+    /// parallel transforms internally; the (many, small) nodes further down
+    /// do not.
+    ///
+    /// [eval]: Self::par_divide_and_conquer_batch_evaluate
+    fn evaluate_scaled_remainder_tree(
+        zerofier_tree: &ZerofierTree<FF>,
+        scaled_remainder: Vec<FF>,
+    ) -> Vec<FF> {
+        enum Item<'tree, 'coeffs, FF: FiniteField + MulAssign<BFieldElement>> {
+            Pending(&'tree ZerofierTree<'coeffs, FF>, Vec<FF>),
+            Evaluated(Vec<FF>),
+        }
+
+        debug_assert_eq!(zerofier_tree.num_points(), scaled_remainder.len());
+        let mut items = vec![Item::Pending(zerofier_tree, scaled_remainder)];
+        loop {
+            let num_pending = items
+                .iter()
+                .filter(|item| matches!(item, Item::Pending(..)))
+                .count();
+            if num_pending == 0 {
+                break;
+            }
+
+            // Every item turns into at most two items for the next level.
+            let successors = items
+                .into_par_iter()
+                .map(|item| match item {
+                    Item::Evaluated(evaluations) => [Some(Item::Evaluated(evaluations)), None],
+                    Item::Pending(ZerofierTree::Padding, _) => [None, None],
+                    Item::Pending(tree @ ZerofierTree::Leaf(leaf), remainder) => {
+                        let evaluations =
+                            Self::evaluate_scaled_remainder_leaf(tree, &leaf.points, &remainder);
+                        [Some(Item::Evaluated(evaluations)), None]
+                    }
+                    Item::Pending(ZerofierTree::Branch(branch), remainder) => {
+                        if branch.right.num_points() == 0 {
+                            return [Some(Item::Pending(&branch.left, remainder)), None];
+                        }
+                        let (left, right) =
+                            Self::scaled_remainders_of_children(branch, remainder, num_pending);
+                        [
+                            Some(Item::Pending(&branch.left, left)),
+                            Some(Item::Pending(&branch.right, right)),
+                        ]
+                    }
+                })
+                .collect::<Vec<_>>();
+            items = successors.into_iter().flatten().flatten().collect();
+        }
+
+        items
+            .into_iter()
+            .flat_map(|item| match item {
+                Item::Evaluated(evaluations) => evaluations,
+                Item::Pending(..) => unreachable!(),
+            })
             .collect()
+    }
+
+    /// The leaf step of [`evaluate_scaled_remainder_tree`][srt].
+    ///
+    /// [srt]: Self::evaluate_scaled_remainder_tree
+    fn evaluate_scaled_remainder_leaf(
+        leaf: &ZerofierTree<FF>,
+        points: &[FF],
+        scaled_remainder: &[FF],
+    ) -> Vec<FF> {
+        // The remainder is the polynomial part of z · Σ_k s_k · x^(-k),
+        // i.e., its j-th coefficient is Σ_k z_(j+k) · s_k.
+        let num_points = points.len();
+        let zerofier = leaf.zerofier_view();
+        let z = zerofier.coefficients();
+        let remainder = (0..num_points)
+            .map(|j| {
+                (1..=num_points - j)
+                    .map(|k| z[j + k] * scaled_remainder[k - 1])
+                    .fold(FF::ZERO, |acc, term| acc + term)
+            })
+            .collect_vec();
+        Polynomial::new(remainder).iterative_batch_evaluate(points)
+    }
+
+    /// The branch step of [`evaluate_scaled_remainder_tree`][srt]: the scaled
+    /// remainders of both children, given the branch's.
+    ///
+    /// The scaled remainder of a child is that of the parent times the
+    /// sibling's zerofier, retaining only the negative powers of x. In terms
+    /// of y = 1/x, the sibling's zerofier of degree m is y^(-m) · rev(z_sibling),
+    /// and the child's coefficients are the coefficients of y^m through
+    /// y^(n-1) of the product of the parent's scaled remainder and
+    /// rev(z_sibling). A cyclic convolution of length ≥ n suffices: the
+    /// wrapped coefficients land strictly below index m.
+    ///
+    /// [srt]: Self::evaluate_scaled_remainder_tree
+    fn scaled_remainders_of_children(
+        branch: &Branch<FF>,
+        scaled_remainder: Vec<FF>,
+        num_concurrent: usize,
+    ) -> (Vec<FF>, Vec<FF>) {
+        let num_points = branch.num_points;
+        let len = num_points.next_power_of_two();
+        let par = should_par_ntt(len, num_concurrent);
+
+        let mut scaled_remainder_ntt = zero_padded_maybe_par(&scaled_remainder, len, par);
+        drop(scaled_remainder);
+        ntt_maybe_par(&mut scaled_remainder_ntt, par);
+
+        let child_scaled_remainder = |sibling: &ZerofierTree<FF>| {
+            let sibling_zerofier = sibling.zerofier_view();
+            let sibling_num_points = sibling.num_points();
+            let z = sibling_zerofier.coefficients();
+            let mut product = init_maybe_par(len, par, |i| {
+                if i <= sibling_num_points {
+                    z[sibling_num_points - i]
+                } else {
+                    FF::ZERO
+                }
+            });
+            ntt_maybe_par(&mut product, par);
+            hadamard_product_maybe_par(&mut product, &scaled_remainder_ntt, par);
+            intt_maybe_par(&mut product, par);
+            product.truncate(num_points);
+            product.drain(..sibling_num_points);
+            product
+        };
+
+        // For small nodes, the level's many nodes already saturate the
+        // threads; spawning more tasks only adds stealing overhead.
+        if par {
+            rayon::join(
+                || child_scaled_remainder(&branch.right),
+                || child_scaled_remainder(&branch.left),
+            )
+        } else {
+            (
+                child_scaled_remainder(&branch.right),
+                child_scaled_remainder(&branch.left),
+            )
+        }
     }
 
     /// Only marked `pub` for benchmarking; not considered part of the public
@@ -1909,12 +2786,71 @@ where
         S: Clone + One + Inverse,
         FF: Mul<S, Output = FF>,
     {
-        let mut mut_values = values.to_vec();
+        let mut coefficients = crate::memory::vec_with_capacity(values.len());
+        coefficients.extend_from_slice(values);
 
-        intt(&mut mut_values);
-        let poly = Polynomial::new(mut_values);
+        intt(&mut coefficients);
+        Self::scale_in_place(&mut coefficients, offset.inverse());
+        Polynomial::new(coefficients)
+    }
 
-        poly.scale(offset.inverse())
+    /// Replace every `coefficients[i]` by `coefficients[i] · alpha^i`, i.e.,
+    /// [`scale`](Self::scale) without allocating.
+    fn scale_in_place<S>(coefficients: &mut [FF], alpha: S)
+    where
+        S: Clone + One,
+        FF: Mul<S, Output = FF>,
+    {
+        let mut power_of_alpha = S::one();
+        for coefficient in coefficients {
+            *coefficient = *coefficient * power_of_alpha.clone();
+            power_of_alpha = power_of_alpha * alpha.clone();
+        }
+    }
+
+    /// Parallel version of [`scale_in_place`](Self::scale_in_place).
+    fn par_scale_in_place<S>(coefficients: &mut [FF], alpha: S)
+    where
+        S: Clone + One + Send + Sync,
+        FF: Mul<S, Output = FF>,
+    {
+        // Large enough to amortize computing the chunk's first power of α
+        // by square-and-multiply, small enough to keep all threads busy.
+        const CHUNK_SIZE: usize = 1 << 12;
+
+        coefficients
+            .par_chunks_mut(CHUNK_SIZE)
+            .enumerate()
+            .for_each(|(chunk_index, chunk)| {
+                let mut power_of_alpha = generic_pow(alpha.clone(), chunk_index * CHUNK_SIZE);
+                for coefficient in chunk {
+                    *coefficient = *coefficient * power_of_alpha.clone();
+                    power_of_alpha = power_of_alpha * alpha.clone();
+                }
+            });
+    }
+
+    /// Parallel version of
+    /// [`fast_coset_interpolate`](Self::fast_coset_interpolate). See also
+    /// [`par_fast_coset_evaluate`](Self::par_fast_coset_evaluate).
+    ///
+    /// # Panics
+    ///
+    /// See [`fast_coset_interpolate`](Self::fast_coset_interpolate).
+    pub fn par_fast_coset_interpolate<S>(offset: S, values: &[FF]) -> Self
+    where
+        S: Clone + One + Inverse + Send + Sync,
+        FF: Mul<S, Output = FF>,
+    {
+        let par = should_par_ntt(values.len(), 1);
+        let mut coefficients = zero_padded_maybe_par(values, values.len(), par);
+        par_intt(&mut coefficients);
+        if par {
+            Self::par_scale_in_place(&mut coefficients, offset.inverse());
+        } else {
+            Self::scale_in_place(&mut coefficients, offset.inverse());
+        }
+        Polynomial::new(coefficients)
     }
 
     /// The degree-`k` polynomial with the same `k + 1` leading coefficients as
@@ -2411,6 +3347,63 @@ impl Polynomial<'_, BFieldElement> {
 
         Polynomial::new(coeffs.into_iter().map(|c| c.unlift().unwrap()).collect())
     }
+
+    /// Parallel version of [`clean_divide`](Self::clean_divide).
+    pub fn par_clean_divide(self, divisor: Self) -> Polynomial<'static, BFieldElement> {
+        let dividend = self;
+        if divisor.degree() < Self::CLEAN_DIVIDE_CUTOFF_THRESHOLD {
+            let (quotient, remainder) = dividend.divide(&divisor);
+            debug_assert!(remainder.is_zero());
+            return quotient;
+        }
+
+        // See `clean_divide` for the reasoning behind the following two
+        // workarounds.
+        let mut dividend_coefficients = dividend.coefficients.into_owned();
+        let mut divisor_coefficients = divisor.coefficients.into_owned();
+        if divisor_coefficients.first().is_some_and(Zero::is_zero) {
+            assert!(dividend_coefficients[0].is_zero());
+            dividend_coefficients.remove(0);
+            divisor_coefficients.remove(0);
+        }
+        let reduced_dividend = Polynomial::new(dividend_coefficients);
+        let reduced_divisor = Polynomial::new(divisor_coefficients);
+
+        let offset = XFieldElement::from([0, 1, 0]);
+        let dividend_deg_plus_1 = usize::try_from(reduced_dividend.degree() + 1).unwrap();
+        let order = dividend_deg_plus_1.next_power_of_two();
+
+        let mut scaled_dividend = reduced_dividend.par_scaled_coefficients(offset, order);
+        let mut scaled_divisor = reduced_divisor.par_scaled_coefficients(offset, order);
+        scaled_dividend.resize(order, XFieldElement::ZERO);
+        scaled_divisor.resize(order, XFieldElement::ZERO);
+
+        rayon::join(
+            || par_ntt(&mut scaled_dividend),
+            || par_ntt(&mut scaled_divisor),
+        );
+
+        let divisor_inverses = XFieldElement::par_batch_inversion(scaled_divisor);
+        let mut quotient_codeword = scaled_dividend
+            .into_par_iter()
+            .zip(divisor_inverses)
+            .map(|(l, r)| l * r)
+            .collect::<Vec<_>>();
+
+        par_intt(&mut quotient_codeword);
+        let quotient = Polynomial::new(quotient_codeword);
+
+        let Cow::Owned(coeffs) = quotient.par_scale(offset.inverse()).coefficients else {
+            unreachable!();
+        };
+
+        Polynomial::new(
+            coeffs
+                .into_par_iter()
+                .map(|c| c.unlift().unwrap())
+                .collect(),
+        )
+    }
 }
 
 impl<const N: usize, FF, E> From<[E; N]> for Polynomial<'static, FF>
@@ -2721,6 +3714,7 @@ mod tests {
     use proptest_arbitrary_adapter::arb;
 
     use super::*;
+    use crate::math::other::random_elements;
     use crate::prelude::*;
     use crate::tests::proptest;
     use crate::tests::test;
@@ -3592,6 +4586,38 @@ mod tests {
         prop_assert_eq!(par_fast_interpolant, fast_interpolant);
     }
 
+    #[macro_rules_attr::apply(proptest(cases = 10))]
+    fn interpolation_with_zerofier_tree_and_weights_agrees_with_fast_interpolation(
+        #[any(size_range(1..2048).lift())]
+        #[filter(#domain.iter().all_unique())]
+        domain: Vec<BFieldElement>,
+        #[strategy(vec(arb(), #domain.len()))] values: Vec<BFieldElement>,
+    ) {
+        let zerofier_tree = ZerofierTree::par_new_from_domain(&domain);
+        let derivative = zerofier_tree.zerofier().formal_derivative();
+        let weights = domain
+            .iter()
+            .zip(&values)
+            .map(|(&x, &y)| y / derivative.evaluate::<_, BFieldElement>(x))
+            .collect_vec();
+
+        let weighted_interpolant =
+            Polynomial::par_interpolate_with_zerofier_tree_and_weights(&zerofier_tree, &weights);
+        let fast_interpolant = Polynomial::fast_interpolate(&domain, &values);
+        prop_assert_eq!(fast_interpolant, weighted_interpolant);
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 20))]
+    fn par_evaluate_agrees_with_evaluate(
+        #[strategy(vec(arb(), 0..(1 << 13)))] coefficients: Vec<BFieldElement>,
+        #[strategy(arb())] x: XFieldElement,
+    ) {
+        let polynomial = Polynomial::new(coefficients);
+        let sequential = polynomial.evaluate::<_, XFieldElement>(x);
+        let parallel = polynomial.par_evaluate::<_, XFieldElement>(x);
+        prop_assert_eq!(sequential, parallel);
+    }
+
     #[macro_rules_attr::apply(test)]
     fn fast_interpolation_through_a_single_point_succeeds() {
         let zero_arr = bfe_array![0];
@@ -3796,7 +4822,20 @@ mod tests {
         let a = Polynomial::zerofier(&a_roots);
         let b = Polynomial::zerofier(&b_roots);
         let quotient = a.clone().clean_divide(b.clone());
-        prop_assert_eq!(a, quotient * b);
+        prop_assert_eq!(a.clone(), quotient * b.clone());
+
+        let par_quotient = a.clone().par_clean_divide(b.clone());
+        prop_assert_eq!(a, par_quotient * b);
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 8))]
+    fn parallel_and_sequential_clean_division_agree_on_large_input(
+        #[strategy(vec(arb(), 600..1200))] a_roots: Vec<BFieldElement>,
+        #[strategy(1_usize..600)] num_b_roots: usize,
+    ) {
+        let a = Polynomial::zerofier(&a_roots);
+        let b = Polynomial::zerofier(&a_roots[..num_b_roots]);
+        prop_assert_eq!(a.clone().clean_divide(b.clone()), a.par_clean_divide(b));
     }
 
     #[macro_rules_attr::apply(proptest)]
@@ -4070,95 +5109,6 @@ mod tests {
     }
 
     #[macro_rules_attr::apply(proptest)]
-    fn formal_power_series_inverse_minimal(
-        #[strategy(2usize..20)] precision: usize,
-        #[filter(!#f.coefficients.is_empty())]
-        #[filter(!#f.coefficients[0].is_zero())]
-        #[filter(#precision > 1 + #f.degree() as usize)]
-        f: BfePoly,
-    ) {
-        let g = f.formal_power_series_inverse_minimal(precision);
-        let mut coefficients = vec![BFieldElement::ZERO; precision + 1];
-        coefficients[precision] = BFieldElement::ONE;
-        let xn = Polynomial::new(coefficients);
-        let (_quotient, remainder) = g.multiply(&f).divide(&xn);
-
-        // inverse in formal power series ring
-        prop_assert!(remainder.is_one());
-
-        // minimal?
-        prop_assert!(g.degree() <= precision as isize);
-    }
-
-    #[macro_rules_attr::apply(proptest)]
-    fn structured_multiple_is_multiple(
-        #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
-        #[strategy(vec(arb(), 1..30))]
-        coefficients: Vec<BFieldElement>,
-    ) {
-        let polynomial = Polynomial::new(coefficients);
-        let multiple = polynomial.structured_multiple();
-        let remainder = multiple.reduce_long_division(&polynomial);
-        prop_assert!(remainder.is_zero());
-    }
-
-    #[macro_rules_attr::apply(proptest)]
-    fn structured_multiple_of_modulus_with_trailing_zeros_is_multiple(
-        #[filter(!#raw_modulus.is_zero())] raw_modulus: BfePoly,
-        #[strategy(0usize..100)] num_trailing_zeros: usize,
-    ) {
-        let modulus = raw_modulus.shift_coefficients(num_trailing_zeros);
-        let multiple = modulus.structured_multiple();
-        prop_assert!(multiple.reduce_long_division(&modulus).is_zero());
-    }
-
-    #[macro_rules_attr::apply(proptest)]
-    fn structured_multiple_generates_structure(
-        #[filter(#coefficients.iter().filter(|c|!c.is_zero()).count() >= 3)]
-        #[strategy(vec(arb(), 1..30))]
-        coefficients: Vec<BFieldElement>,
-    ) {
-        let polynomial = Polynomial::new(coefficients);
-        let n = polynomial.degree();
-        let structured_multiple = polynomial.structured_multiple();
-        assert!(structured_multiple.degree() <= 3 * n + 1);
-
-        let x3np1 = Polynomial::x_to_the((3 * n + 1) as usize);
-        let remainder = structured_multiple.reduce_long_division(&x3np1);
-        assert!(2 * n >= remainder.degree());
-
-        let structured_mul_minus_rem = structured_multiple - remainder;
-        assert_eq!(0, structured_mul_minus_rem.clone().reverse().degree());
-        assert_eq!(
-            BFieldElement::ONE,
-            *structured_mul_minus_rem.coefficients.last().unwrap(),
-        );
-    }
-
-    #[macro_rules_attr::apply(test)]
-    fn structured_multiple_generates_structure_concrete() {
-        let polynomial = Polynomial::new(
-            [884763262770, 0, 51539607540, 14563891882495327437]
-                .map(BFieldElement::new)
-                .to_vec(),
-        );
-        let n = polynomial.degree();
-        let structured_multiple = polynomial.structured_multiple();
-        assert_eq!(3 * n + 1, structured_multiple.degree());
-
-        let x3np1 = Polynomial::x_to_the((3 * n + 1) as usize);
-        let remainder = structured_multiple.reduce_long_division(&x3np1);
-        assert!(2 * n >= remainder.degree());
-
-        let structured_mul_minus_rem = structured_multiple - remainder;
-        assert_eq!(0, structured_mul_minus_rem.clone().reverse().degree());
-        assert_eq!(
-            BFieldElement::ONE,
-            *structured_mul_minus_rem.coefficients.last().unwrap(),
-        );
-    }
-
-    #[macro_rules_attr::apply(proptest)]
     fn structured_multiple_of_degree_is_multiple(
         #[strategy(2usize..100)] n: usize,
         #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
@@ -4231,51 +5181,6 @@ mod tests {
         prop_assert_eq!(
             fx_plus_1.clone(),
             fx_plus_1.reverse().reverse().shift_coefficients(1)
-        );
-    }
-
-    #[macro_rules_attr::apply(proptest)]
-    fn reduce_by_structured_modulus_and_reduce_long_division_agree(
-        #[strategy(1usize..10)] n: usize,
-        #[strategy(1usize..10)] m: usize,
-        #[strategy(vec(arb(), #m))] b_coefficients: Vec<BFieldElement>,
-        #[strategy(1usize..100)] _deg_a: usize,
-        #[strategy(vec(arb(), #_deg_a + 1))] _a_coefficients: Vec<BFieldElement>,
-        #[strategy(Just(Polynomial::new(#_a_coefficients)))] a: BfePoly,
-    ) {
-        let mut full_modulus_coefficients = b_coefficients.clone();
-        full_modulus_coefficients.resize(m + n + 1, BFieldElement::from(0));
-        *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
-        let full_modulus = Polynomial::new(full_modulus_coefficients);
-
-        let long_remainder = a.reduce_long_division(&full_modulus);
-        let structured_remainder = a.reduce_by_structured_modulus(&full_modulus);
-
-        prop_assert_eq!(long_remainder, structured_remainder);
-    }
-
-    #[macro_rules_attr::apply(test)]
-    fn reduce_by_structured_modulus_and_reduce_agree_long_division_concrete() {
-        let a = Polynomial::new(
-            [1, 0, 0, 3, 4, 3, 1, 5, 1, 0, 1, 2, 9, 2, 0, 3, 1]
-                .into_iter()
-                .map(BFieldElement::new)
-                .collect_vec(),
-        );
-        let mut full_modulus_coefficients =
-            [5, 6, 3].into_iter().map(BFieldElement::new).collect_vec();
-        let m = full_modulus_coefficients.len();
-        let n = 2;
-        full_modulus_coefficients.resize(m + n + 1, BFieldElement::from(0));
-        *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
-        let full_modulus = Polynomial::new(full_modulus_coefficients);
-
-        let long_remainder = a.reduce_long_division(&full_modulus);
-        let structured_remainder = a.reduce_by_structured_modulus(&full_modulus);
-
-        assert_eq!(
-            long_remainder, structured_remainder,
-            "naive: {long_remainder}\nstructured: {structured_remainder}",
         );
     }
 
@@ -4589,6 +5494,168 @@ mod tests {
         );
     }
 
+    #[macro_rules_attr::apply(proptest(cases = 32))]
+    fn par_batch_evaluate_agrees_with_iterative_evaluation_on_many_points(
+        #[strategy(vec(arb(), 0..(1 << 10)))] coefficients: Vec<BFieldElement>,
+        #[strategy(vec(arb(), 1..(1 << 8)))] points: Vec<BFieldElement>,
+    ) {
+        let polynomial = Polynomial::new(coefficients);
+        prop_assert_eq!(
+            polynomial.iterative_batch_evaluate(&points),
+            polynomial.par_batch_evaluate(&points)
+        );
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn formal_power_series_inverse_minimal(
+        #[strategy(2usize..20)] precision: usize,
+        #[filter(!#f.coefficients.is_empty())]
+        #[filter(!#f.coefficients[0].is_zero())]
+        #[filter(#precision > 1 + #f.degree() as usize)]
+        f: BfePoly,
+    ) {
+        let g = f.formal_power_series_inverse_minimal(precision);
+        let mut coefficients = vec![BFieldElement::ZERO; precision + 1];
+        coefficients[precision] = BFieldElement::ONE;
+        let xn = Polynomial::new(coefficients);
+        let (_quotient, remainder) = g.multiply(&f).divide(&xn);
+
+        // inverse in formal power series ring
+        prop_assert!(remainder.is_one());
+
+        // minimal?
+        prop_assert!(g.degree() <= precision as isize);
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn coset_evaluation_into_agrees_with_coset_evaluation(
+        #[strategy(0_usize..12)] _log_order: usize,
+        #[strategy(vec(arb(), 0..(1 << #_log_order)))] coefficients: Vec<XFieldElement>,
+        #[strategy(arb())] offset: BFieldElement,
+    ) {
+        let order = 1 << _log_order;
+        let polynomial = Polynomial::new(coefficients);
+        let expected = polynomial.fast_coset_evaluate(offset, order);
+
+        let mut codeword = Vec::with_capacity(order);
+        polynomial.fast_coset_evaluate_into(offset, codeword.spare_capacity_mut());
+        // SAFETY: `fast_coset_evaluate_into` initializes every element.
+        unsafe { codeword.set_len(order) };
+        prop_assert_eq!(&expected, &codeword);
+
+        let mut par_codeword = Vec::with_capacity(order);
+        polynomial.par_fast_coset_evaluate_into(offset, par_codeword.spare_capacity_mut());
+        // SAFETY: `par_fast_coset_evaluate_into` initializes every element.
+        unsafe { par_codeword.set_len(order) };
+        prop_assert_eq!(expected, par_codeword);
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 4))]
+    fn formal_power_series_inverse_newton_with_large_precision(
+        #[filter(!#f.coefficients.is_empty())]
+        #[filter(!#f.coefficients[0].is_zero())]
+        f: BfePoly,
+        #[strategy(1000_usize..3000)] precision: usize,
+    ) {
+        let g = f.clone().formal_power_series_inverse_newton(precision);
+        let product = g.multiply(&f).mod_x_to_the_n(precision);
+        prop_assert!(product.is_one());
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 4))]
+    fn parallel_clean_division_agrees_with_division_if_divisor_has_0_as_root(
+        #[strategy(vec(arb(), 1..300))] mut dividend_roots: Vec<BFieldElement>,
+        #[strategy(vec(0..#dividend_roots.len(), 0..=#dividend_roots.len()))]
+        #[filter(#divisor_root_indices.iter().all_unique())]
+        divisor_root_indices: Vec<usize>,
+    ) {
+        let mut divisor_roots = divisor_root_indices
+            .into_iter()
+            .map(|i| dividend_roots[i])
+            .collect_vec();
+        dividend_roots.push(bfe!(0));
+        divisor_roots.push(bfe!(0));
+
+        let dividend = Polynomial::zerofier(&dividend_roots);
+        let divisor = Polynomial::zerofier(&divisor_roots);
+        let (expected, remainder) = dividend.divide(&divisor);
+        prop_assert!(remainder.is_zero());
+        prop_assert_eq!(expected, dividend.par_clean_divide(divisor));
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 2))]
+    fn par_batch_coset_extrapolate_through_many_points_agrees_with_batch_version(
+        #[strategy(vec(arb(), 3 * 64))] codewords: Vec<BFieldElement>,
+        #[strategy(vec(arb(), 100..150))] points: Vec<BFieldElement>,
+    ) {
+        let offset = BFieldElement::new(7);
+        let batched = Polynomial::batch_coset_extrapolate(offset, 64, &codewords, &points);
+        let par_batched = Polynomial::par_batch_coset_extrapolate(offset, 64, &codewords, &points);
+        prop_assert_eq!(batched, par_batched);
+    }
+
+    /// Large enough for the nodes near the root of the zerofier tree to use
+    /// parallel transforms.
+    #[macro_rules_attr::apply(proptest(cases = 1))]
+    fn par_fast_interpolation_through_very_many_points(
+        #[strategy(vec(arb(), 1 << 15))] points: Vec<BFieldElement>,
+        #[strategy(vec(arb(), 1 << 15))] values: Vec<BFieldElement>,
+    ) {
+        let points = points.into_iter().unique().collect_vec();
+        let values = values[..points.len()].to_vec();
+        let interpolant = Polynomial::par_fast_interpolate(&points, &values);
+        prop_assert_eq!(values, interpolant.par_batch_evaluate(&points));
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 8))]
+    fn par_fast_multiply_agrees_with_fast_multiply(
+        #[strategy(vec(arb(), 0..(1 << 16)))] a_coefficients: Vec<BFieldElement>,
+        #[strategy(vec(arb(), 0..(1 << 16)))] b_coefficients: Vec<BFieldElement>,
+    ) {
+        let a = Polynomial::new(a_coefficients);
+        let b = Polynomial::new(b_coefficients);
+        prop_assert_eq!(a.fast_multiply(&b), a.par_fast_multiply(&b));
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn power_series_inverse_is_inverse_modulo_x_to_the_precision(
+        #[filter(!#f.coefficients.is_empty())]
+        #[filter(!#f.coefficients[0].is_zero())]
+        f: BfePoly,
+        #[strategy(1_usize..2000)] precision: usize,
+    ) {
+        let g = f.power_series_inverse(precision);
+        prop_assert!(g.degree() < precision as isize);
+        let product = f.multiply(&g).mod_x_to_the_n(precision);
+        prop_assert!(product.is_one());
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn reduction_with_reversed_inverse_agrees_with_reduction(
+        #[filter(#a.degree() >= 0)] a: BfePoly,
+        #[filter(#m.degree() >= 1)] m: BfePoly,
+    ) {
+        let quotient_degree = (a.degree() - m.degree()).max(0) as usize;
+        let reversed_inverse = m.reverse().power_series_inverse(quotient_degree + 1);
+        prop_assert_eq!(
+            a.reduce(&m),
+            a.reduce_with_reversed_inverse(&m, &reversed_inverse)
+        );
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 16))]
+    fn par_fast_interpolation_recovers_polynomial_through_many_points(
+        #[strategy(1_usize..10)] _log_num_points: usize,
+        #[strategy(vec(arb(), 1 << #_log_num_points))] points: Vec<BFieldElement>,
+        #[strategy(vec(arb(), #points.len()))] values: Vec<BFieldElement>,
+    ) {
+        let points = points.into_iter().unique().collect_vec();
+        let values = values[..points.len()].to_vec();
+        let interpolant = Polynomial::par_fast_interpolate(&points, &values);
+        prop_assert!(interpolant.degree() < points.len() as isize);
+        prop_assert_eq!(values, interpolant.iterative_batch_evaluate(&points));
+    }
+
     #[macro_rules_attr::apply(proptest(cases = 20))]
     fn polynomial_evaluation_and_barycentric_evaluation_are_equivalent(
         #[strategy(1_usize..8)] _log_num_coefficients: usize,
@@ -4677,5 +5744,57 @@ mod tests {
 
         // make sure the coefficients are still owned by this scope
         drop(coefficients);
+    }
+    #[macro_rules_attr::apply(test)]
+    fn par_scale_agrees_with_scale() {
+        // lengths around the chunk boundaries of `par_scale`
+        for len in [
+            0,
+            1,
+            7,
+            (1 << 12) - 1,
+            1 << 12,
+            (1 << 12) + 1,
+            (1 << 14) + 3,
+        ] {
+            let poly = Polynomial::<XFieldElement>::new(random_elements(len));
+            let bfe_scalar: BFieldElement = random_elements(1)[0];
+            let xfe_scalar: XFieldElement = random_elements(1)[0];
+            assert_eq!(poly.scale(bfe_scalar), poly.par_scale(bfe_scalar), "{len}");
+            assert_eq!(poly.scale(xfe_scalar), poly.par_scale(xfe_scalar), "{len}");
+
+            let bfe_poly = Polynomial::<BFieldElement>::new(random_elements(len));
+            assert_eq!(
+                bfe_poly.scale(bfe_scalar),
+                bfe_poly.par_scale(bfe_scalar),
+                "{len}"
+            );
+            assert_eq!(
+                bfe_poly.scale(xfe_scalar),
+                bfe_poly.par_scale(xfe_scalar),
+                "{len}"
+            );
+        }
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn parallel_and_serial_coset_evaluation_and_interpolation_agree() {
+        let offset = BFieldElement::generator();
+        for log_order in [1, 5, 10, 17] {
+            let order = 1_usize << log_order;
+            let poly = Polynomial::<XFieldElement>::new(random_elements(order - 1));
+
+            let serial = poly.fast_coset_evaluate(offset, order);
+            let parallel = poly.par_fast_coset_evaluate(offset, order);
+            assert_eq!(serial, parallel, "log_order: {log_order}");
+
+            let serial_interpolant = Polynomial::fast_coset_interpolate(offset, &parallel);
+            let parallel_interpolant = Polynomial::par_fast_coset_interpolate(offset, &parallel);
+            assert_eq!(
+                serial_interpolant, parallel_interpolant,
+                "log_order: {log_order}"
+            );
+            assert_eq!(poly, parallel_interpolant, "log_order: {log_order}");
+        }
     }
 }

@@ -39,15 +39,13 @@ pub trait Sponge: Clone + Debug + Default + Send + Sync {
     fn squeeze(&mut self) -> [BFieldElement; RATE];
 
     fn pad_and_absorb_all(&mut self, input: &[BFieldElement]) {
-        let mut chunks = input.chunks_exact(RATE);
-        for chunk in chunks.by_ref() {
-            // `chunks_exact` yields only chunks of length RATE; unwrap is fine
-            self.absorb(chunk.try_into().unwrap());
+        let (chunks, remainder) = input.as_chunks::<RATE>();
+        for &chunk in chunks {
+            self.absorb(chunk);
         }
 
         // Pad input with [1, 0, 0, …] – padding is at least one element.
         // Since remainder's len is at most `RATE - 1`, the indexing is safe.
-        let remainder = chunks.remainder();
         let mut last_chunk = const { [BFieldElement::ZERO; RATE] };
         last_chunk[..remainder.len()].copy_from_slice(remainder);
         last_chunk[remainder.len()] = BFieldElement::ONE;

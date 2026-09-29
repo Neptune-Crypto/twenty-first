@@ -395,10 +395,7 @@ impl MmrMembershipProof {
         // `own_node_indices` and check if the element is contained `deducible_hashes`.
         // If it is, then the appropriate element in `self.authentication_path` needs to
         // be replaced with an element from `deducible_hashes`.
-        for (digest, own_node_index) in self
-            .authentication_path
-            .iter_mut()
-            .zip(own_node_ap_indices.into_iter())
+        for (digest, own_node_index) in self.authentication_path.iter_mut().zip(own_node_ap_indices)
         {
             if !deducible_hashes.contains_key(&own_node_index) {
                 continue;
@@ -487,7 +484,7 @@ impl MmrMembershipProof {
             for (digest, authentication_path_indices) in membership_proof
                 .authentication_path
                 .iter_mut()
-                .zip(ap_indices.into_iter())
+                .zip(ap_indices)
             {
                 // Maximum 1 digest can be updated in each authentication path
                 // so if that is encountered, we might as well break and go to
@@ -608,7 +605,7 @@ impl MmrMembershipProof {
             for (digest, authentication_path_indices) in membership_proof
                 .authentication_path
                 .iter_mut()
-                .zip(ap_indices.into_iter())
+                .zip(ap_indices)
             {
                 // Any number of hashes can be updated in the authentication path, since
                 // we're modifying multiple leafs in the MMR
@@ -711,7 +708,7 @@ mod tests {
         let mut expected_peak_indices_and_heights: Vec<(u64, u32)> =
             vec![(7, 2), (7, 2), (7, 2), (7, 2), (10, 1), (10, 1), (11, 0)];
         for (leaf_index, expected_peak_index) in
-            (0..mmr_size as u64).zip(expected_peak_indices_and_heights.into_iter())
+            (0..mmr_size as u64).zip(expected_peak_indices_and_heights)
         {
             let membership_proof = archival_mmr.prove_membership(leaf_index);
             assert_eq!(
@@ -726,7 +723,7 @@ mod tests {
         archival_mmr.append(leaf_hash);
         expected_peak_indices_and_heights = vec![(15, 3); mmr_size];
         for (leaf_index, expected_peak_index) in
-            (0..mmr_size as u64).zip(expected_peak_indices_and_heights.into_iter())
+            (0..mmr_size as u64).zip(expected_peak_indices_and_heights)
         {
             let membership_proof = archival_mmr.prove_membership(leaf_index);
             assert_eq!(
@@ -751,7 +748,7 @@ mod tests {
             (16, 0),
         ];
         for (leaf_index, expected_peak_index) in
-            (0..mmr_size as u64).zip(expected_peak_indices_and_heights.into_iter())
+            (0..mmr_size as u64).zip(expected_peak_indices_and_heights)
         {
             let membership_proof = archival_mmr.prove_membership(leaf_index);
             assert_eq!(
@@ -937,7 +934,7 @@ mod tests {
             let original_mps = own_membership_proofs.clone();
             let mutation_argument: Vec<LeafMutation> = authentication_paths
                 .into_iter()
-                .zip(new_leafs.clone().into_iter())
+                .zip(new_leafs.clone())
                 .zip(mutated_leaf_leaf_indices.iter())
                 .map(|((mp, leaf), leaf_idx)| LeafMutation::new(*leaf_idx, leaf, mp))
                 .collect();

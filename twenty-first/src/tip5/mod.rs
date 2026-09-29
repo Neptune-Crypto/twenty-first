@@ -33,12 +33,7 @@ pub const NUM_ROUNDS: usize = 5;
 
 pub mod digest;
 
-#[cfg(all(
-    target_feature = "avx512ifma",
-    target_feature = "avx512f",
-    target_feature = "avx512bw",
-    target_feature = "avx512vbmi"
-))]
+#[cfg(target_arch = "x86_64")]
 mod avx512;
 #[cfg(test)]
 mod inverse;
@@ -156,6 +151,30 @@ pub const MDS_MATRIX_FIRST_COLUMN: [i64; STATE_SIZE] = [
     26798, 17845,
 ];
 
+/// The wrapping integer arithmetic of [`Tip5::generated_function`].
+pub(super) trait WrappingArithmetic: Copy {
+    fn wrapping_add(self, rhs: Self) -> Self;
+    fn wrapping_sub(self, rhs: Self) -> Self;
+    fn wrapping_mul(self, rhs: u64) -> Self;
+}
+
+impl WrappingArithmetic for u64 {
+    #[inline(always)]
+    fn wrapping_add(self, rhs: Self) -> Self {
+        u64::wrapping_add(self, rhs)
+    }
+
+    #[inline(always)]
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        u64::wrapping_sub(self, rhs)
+    }
+
+    #[inline(always)]
+    fn wrapping_mul(self, rhs: u64) -> Self {
+        u64::wrapping_mul(self, rhs)
+    }
+}
+
 #[derive(
     Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary,
 )]
@@ -164,13 +183,8 @@ pub struct Tip5 {
     pub state: [BFieldElement; STATE_SIZE],
 }
 
-#[cfg(not(all(
-    target_feature = "avx512ifma",
-    target_feature = "avx512f",
-    target_feature = "avx512bw",
-    target_feature = "avx512vbmi"
-)))]
 impl Tip5 {
+    /// One round of the Tip5 permutation, without any SIMD.
     #[inline(always)]
     fn round(&mut self, round_index: usize) {
         self.sbox_layer();
@@ -182,14 +196,15 @@ impl Tip5 {
 
     #[inline(always)]
     fn sbox_layer(&mut self) {
-        for i in 0..NUM_SPLIT_AND_LOOKUP {
-            Self::split_and_lookup(&mut self.state[i]);
+        let (lookup_elements, power_map_elements) = self.state.split_at_mut(NUM_SPLIT_AND_LOOKUP);
+        for element in lookup_elements {
+            Self::split_and_lookup(element);
         }
 
-        for i in NUM_SPLIT_AND_LOOKUP..STATE_SIZE {
-            let sq = self.state[i] * self.state[i];
+        for element in power_map_elements {
+            let sq = *element * *element;
             let qu = sq * sq;
-            self.state[i] *= sq * qu;
+            *element *= sq * qu;
         }
     }
 
@@ -252,8 +267,17 @@ impl Tip5 {
         }
     }
 
+    /// The product of the MDS matrix with the input vector, scaled by 16, in
+    /// wrapping integer arithmetic. Since the matrix is circulant, the product
+    /// is a cyclic convolution, which is computed with a divide-and-conquer
+    /// approach that needs far fewer multiplications than the textbook method.
+    ///
+    /// Generic over the integer type so that the batched AVX-512 permutation
+    /// can use it for eight states at once.
     #[inline(always)]
-    fn generated_function(input: [u64; STATE_SIZE]) -> [u64; STATE_SIZE] {
+    pub(super) fn generated_function<T: WrappingArithmetic>(
+        input: [T; STATE_SIZE],
+    ) -> [T; STATE_SIZE] {
         let node_34 = input[0].wrapping_add(input[8]);
         let node_38 = input[4].wrapping_add(input[12]);
         let node_36 = input[2].wrapping_add(input[10]);
@@ -525,11 +549,37 @@ impl Tip5 {
         Self { state }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn permutation(&mut self) {
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            // SAFETY: The required CPU features were just detected.
+            unsafe { self.permutation_avx512() };
+            return;
+        }
+
+        self.permutation_scalar();
+    }
+
+    /// The Tip5 permutation, without any SIMD.
+    #[inline]
+    fn permutation_scalar(&mut self) {
         for i in 0..NUM_ROUNDS {
             self.round(i);
         }
+    }
+
+    /// One round of the Tip5 permutation, using SIMD if available.
+    #[inline]
+    fn round_dispatching(&mut self, round_index: usize) {
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            // SAFETY: The required CPU features were just detected.
+            unsafe { self.round_avx512(round_index) };
+            return;
+        }
+
+        self.round(round_index);
     }
 
     /// Functionally equivalent to [`permutation`](Self::permutation). Returns the trace of
@@ -540,7 +590,7 @@ impl Tip5 {
 
         trace[0] = self.state;
         for i in 0..NUM_ROUNDS {
-            self.round(i);
+            self.round_dispatching(i);
             trace[1 + i] = self.state;
         }
 
@@ -620,6 +670,70 @@ impl Tip5 {
         let produce = (&sponge.state[..Digest::LEN]).try_into().unwrap();
 
         Digest::new(produce)
+    }
+
+    /// [`hash_varlen`](Self::hash_varlen) of many inputs, in order.
+    ///
+    /// Equivalent to hashing every input on its own, but considerably faster
+    /// on CPUs with AVX-512: there, groups of consecutive inputs of equal
+    /// length are hashed side by side, one input per SIMD lane.
+    ///
+    /// See also: [`Self::hash_pair_many`].
+    pub fn hash_varlen_many(inputs: &[&[BFieldElement]]) -> Vec<Digest> {
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            let (batches, remainder) = inputs.as_chunks::<{ avx512::BATCH_SIZE }>();
+            let mut digests = Vec::with_capacity(inputs.len());
+            for batch in batches {
+                let len = batch[0].len();
+                if batch.iter().all(|input| input.len() == len) {
+                    // SAFETY: The required CPU features were detected above.
+                    digests.extend(unsafe { Self::hash_varlen_batch(*batch) });
+                } else {
+                    digests.extend(batch.iter().map(|input| Self::hash_varlen(input)));
+                }
+            }
+            digests.extend(remainder.iter().map(|input| Self::hash_varlen(input)));
+            return digests;
+        }
+
+        Self::hash_varlen_many_scalar(inputs)
+    }
+
+    /// [`hash_varlen_many`](Self::hash_varlen_many), without any SIMD.
+    fn hash_varlen_many_scalar(inputs: &[&[BFieldElement]]) -> Vec<Digest> {
+        inputs
+            .iter()
+            .map(|input| Self::hash_varlen(input))
+            .collect()
+    }
+
+    /// [`hash_pair`](Self::hash_pair) of many pairs, in order.
+    ///
+    /// Equivalent to hashing every pair on its own, but considerably faster
+    /// on CPUs with AVX-512, where the pairs are hashed side by side, one
+    /// pair per SIMD lane.
+    ///
+    /// See also: [`Self::hash_varlen_many`].
+    pub fn hash_pair_many(pairs: &[[Digest; 2]]) -> Vec<Digest> {
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            let (batches, remainder) = pairs.as_chunks::<{ avx512::BATCH_SIZE }>();
+            let mut digests = Vec::with_capacity(pairs.len());
+            for batch in batches {
+                // SAFETY: The required CPU features were detected above.
+                digests.extend(unsafe { Self::hash_pair_batch(batch) });
+            }
+            digests.extend(remainder.iter().map(|&[l, r]| Self::hash_pair(l, r)));
+            return digests;
+        }
+
+        Self::hash_pair_many_scalar(pairs)
+    }
+
+    /// [`hash_pair_many`](Self::hash_pair_many), without any SIMD.
+    fn hash_pair_many_scalar(pairs: &[[Digest; 2]]) -> Vec<Digest> {
+        pairs.iter().map(|&[l, r]| Self::hash_pair(l, r)).collect()
     }
 
     /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
@@ -1203,6 +1317,21 @@ pub(crate) mod tests {
         let mut naive = naive::NaiveTip5 { state };
         naive.permutation();
         assert_eq!(expected, naive.state);
+
+        // The batched permutation must recover in every lane, too.
+        #[cfg(target_arch = "x86_64")]
+        if Tip5::avx512_is_available() {
+            // SAFETY (all `unsafe` blocks): The required CPU features were
+            // detected above.
+            let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
+            for (i, &element) in state.iter().enumerate() {
+                unsafe { batch.set(i, [element; avx512::BATCH_SIZE]) };
+            }
+            unsafe { batch.permutation() };
+            for (i, &element) in expected.iter().enumerate() {
+                assert_eq!([element; avx512::BATCH_SIZE], unsafe { batch.get(i) });
+            }
+        }
     }
 
     #[macro_rules_attr::apply(test)]
@@ -1359,6 +1488,23 @@ pub(crate) mod tests {
         .map(BFieldElement::from_raw_u64);
 
         assert_eq!(&expected, &tip5.state[0..5]);
+
+        // The same vector must hold in every lane of the batched permutation.
+        // It is a regression test for the modular reduction, so it must not be
+        // skipped silently on the machines that matter.
+        #[cfg(target_arch = "x86_64")]
+        if Tip5::avx512_is_available() {
+            // SAFETY (all `unsafe` blocks): The required CPU features were
+            // detected above.
+            let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
+            for (i, &element) in state.iter().enumerate() {
+                unsafe { batch.set(i, [element; avx512::BATCH_SIZE]) };
+            }
+            unsafe { batch.permutation() };
+            for (i, &element) in expected.iter().enumerate() {
+                assert_eq!([element; avx512::BATCH_SIZE], unsafe { batch.get(i) });
+            }
+        }
     }
 
     fn manual_hash_varlen(preimage: &[BFieldElement]) -> Digest {
@@ -1498,13 +1644,6 @@ pub(crate) mod tests {
         prop_assert_ne!(product, XFieldElement::ZERO);
     }
 
-    // Function `mds_generated` is not available if the AVX-512 functions are.
-    #[cfg(not(all(
-        target_feature = "avx512ifma",
-        target_feature = "avx512f",
-        target_feature = "avx512bw",
-        target_feature = "avx512vbmi"
-    )))]
     #[macro_rules_attr::apply(proptest)]
     fn test_mds_matrix_mul_methods_agree(state: [BFieldElement; STATE_SIZE]) {
         let mut sponge_cyclomut = Tip5 { state };
@@ -1520,6 +1659,175 @@ pub(crate) mod tests {
             sponge_cyclomut.state.into_iter().join(","),
             sponge_generated.state.into_iter().join(",")
         );
+    }
+
+    /// Only meaningful on CPUs with the relevant AVX-512 extensions; passes
+    /// trivially otherwise.
+    #[cfg(target_arch = "x86_64")]
+    #[macro_rules_attr::apply(proptest)]
+    fn avx512_permutation_agrees_with_scalar_permutation(state: [BFieldElement; STATE_SIZE]) {
+        if !Tip5::avx512_is_available() {
+            return Ok(());
+        }
+
+        let mut scalar = Tip5 { state };
+        let mut avx512 = Tip5 { state };
+        for round_index in 0..NUM_ROUNDS {
+            scalar.round(round_index);
+            // SAFETY: The required CPU features were detected above.
+            unsafe { avx512.round_avx512(round_index) };
+            prop_assert_eq!(&scalar, &avx512, "round {}", round_index);
+        }
+
+        let mut scalar_permutation = Tip5 { state };
+        let mut avx512_permutation = Tip5 { state };
+        scalar_permutation.permutation_scalar();
+        // SAFETY: The required CPU features were detected above.
+        unsafe { avx512_permutation.permutation_avx512() };
+        prop_assert_eq!(scalar_permutation, avx512_permutation);
+    }
+
+    /// Only meaningful on CPUs with the relevant AVX-512 extensions; passes
+    /// trivially otherwise.
+    #[cfg(target_arch = "x86_64")]
+    #[macro_rules_attr::apply(proptest)]
+    fn batched_permutation_agrees_with_naive_permutation(
+        states: [[BFieldElement; STATE_SIZE]; avx512::BATCH_SIZE],
+    ) {
+        if !Tip5::avx512_is_available() {
+            return Ok(());
+        }
+
+        // SAFETY (all `unsafe` blocks): The required CPU features were
+        // detected above.
+        let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
+        for i in 0..STATE_SIZE {
+            unsafe { batch.set(i, states.map(|state| state[i])) };
+        }
+        unsafe { batch.permutation() };
+
+        for (lane, state) in states.into_iter().enumerate() {
+            let mut naive = naive::NaiveTip5 { state };
+            naive.permutation();
+            for (i, &naive_element) in naive.state.iter().enumerate() {
+                let batched_element = unsafe { batch.get(i) }[lane];
+                prop_assert_eq!(
+                    naive_element,
+                    batched_element,
+                    "lane {}, element {}",
+                    lane,
+                    i
+                );
+            }
+        }
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn hash_varlen_many_agrees_with_hash_varlen(
+        #[strategy(proptest::collection::vec(proptest::collection::vec(arb(), 0..35), 0..30))]
+        inputs: Vec<Vec<BFieldElement>>,
+    ) {
+        let inputs = inputs.iter().map(Vec::as_slice).collect_vec();
+        let individually = inputs
+            .iter()
+            .map(|input| Tip5::hash_varlen(input))
+            .collect_vec();
+        prop_assert_eq!(individually.clone(), Tip5::hash_varlen_many(&inputs));
+        prop_assert_eq!(individually, Tip5::hash_varlen_many_scalar(&inputs));
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn hash_varlen_many_agrees_with_hash_varlen_for_equal_lengths(
+        #[strategy(0_usize..35)] _len: usize,
+        #[strategy(proptest::collection::vec(proptest::collection::vec(arb(), #_len), 0..30))]
+        inputs: Vec<Vec<BFieldElement>>,
+    ) {
+        let inputs = inputs.iter().map(Vec::as_slice).collect_vec();
+        let individually = inputs
+            .iter()
+            .map(|input| Tip5::hash_varlen(input))
+            .collect_vec();
+        prop_assert_eq!(individually, Tip5::hash_varlen_many(&inputs));
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn hash_pair_many_agrees_with_hash_pair(
+        #[strategy(proptest::collection::vec(arb(), 0..30))] pairs: Vec<[Digest; 2]>,
+    ) {
+        let individually = pairs
+            .iter()
+            .map(|&[l, r]| Tip5::hash_pair(l, r))
+            .collect_vec();
+        prop_assert_eq!(individually.clone(), Tip5::hash_pair_many_scalar(&pairs));
+        prop_assert_eq!(individually, Tip5::hash_pair_many(&pairs));
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn avx512_reduction_regression_vector() {
+        let state = crate::bfe_array![
+            0x0000_000f_ffff_fff0_u64,
+            0x0000_0000_ffff_ffff_u64,
+            0x0000_0000_ffff_ffff_u64,
+            0x0000_0028_ffff_ffd7_u64,
+            0x0000_0006_ffff_fff9_u64,
+            0x0000_0002_ffff_fffd_u64,
+            0x0000_0000_ffff_ffff_u64,
+            0x0000_0030_ffff_ffcf_u64,
+            0x0000_0397_ffff_fc68_u64,
+            0x0000_000f_ffff_fff0_u64,
+            0x316b_fb72_3638_2123_u64,
+            0x216f_521b_66ef_83f5_u64,
+            0x5689_d7b3_63f5_2df0_u64,
+            0xeb2f_59e3_aeae_25fc_u64,
+            0xb082_99d2_77cb_b4dc_u64,
+            0xcbe3_d9fd_c534_9140_u64,
+        ];
+        let expected = crate::bfe_array![
+            0x231d_a775_9f66_2fd9_u64,
+            0x9bad_454d_eb24_c327_u64,
+            0x8b9f_67d4_0440_bc7e_u64,
+            0xfd56_ad41_eb9d_2514_u64,
+            0xeb4e_1c7c_2b83_5d30_u64,
+            0x9e86_05fe_9bc2_891f_u64,
+            0x0da2_ae9f_e4a6_d684_u64,
+            0x3944_688b_8da6_e25d_u64,
+            0x4bc6_d6d4_e868_ecbe_u64,
+            0x2293_50dc_cc9c_4677_u64,
+            0xe532_c7c1_200d_0349_u64,
+            0x92c2_1e76_49ef_2e40_u64,
+            0xa24f_5d2f_dfd9_fc52_u64,
+            0xd391_72f3_43db_c0f0_u64,
+            0x4236_2d8f_3a6e_9720_u64,
+            0xf7ee_7105_bb49_bd3e_u64,
+        ];
+
+        let mut naive = naive::NaiveTip5 { state };
+        naive.permutation();
+        assert_eq!(expected, naive.state);
+
+        let mut scalar = Tip5 { state };
+        for round_index in 0..NUM_ROUNDS {
+            scalar.round(round_index);
+        }
+        assert_eq!(expected, scalar.state);
+
+        let mut dispatching = Tip5 { state };
+        dispatching.permutation();
+        assert_eq!(expected, dispatching.state);
+
+        #[cfg(target_arch = "x86_64")]
+        if Tip5::avx512_is_available() {
+            // SAFETY (all `unsafe` blocks): The required CPU features were
+            // detected above.
+            let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
+            for (i, &element) in state.iter().enumerate() {
+                unsafe { batch.set(i, [element; avx512::BATCH_SIZE]) };
+            }
+            unsafe { batch.permutation() };
+            for (i, &element) in expected.iter().enumerate() {
+                assert_eq!([element; avx512::BATCH_SIZE], unsafe { batch.get(i) });
+            }
+        }
     }
 
     #[macro_rules_attr::apply(test)]
