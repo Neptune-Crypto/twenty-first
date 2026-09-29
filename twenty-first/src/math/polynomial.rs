@@ -684,32 +684,6 @@ where
         (x, a, b)
     }
 
-    /// Given a polynomial f(X), find the polynomial g(X) of degree at most n
-    /// such that f(X) * g(X) = 1 mod X^{n+1} where n is the precision.
-    /// # Panics
-    ///
-    /// Panics if f(X) does not have an inverse in the formal power series
-    /// ring, _i.e._ if its constant coefficient is zero.
-    fn formal_power_series_inverse_minimal(&self, precision: usize) -> Polynomial<'static, FF> {
-        let lc_inv = self.coefficients.first().unwrap().inverse();
-        let mut g = vec![lc_inv];
-
-        // invariant: product[i] = 0
-        for _ in 1..(precision + 1) {
-            let inner_product = self
-                .coefficients
-                .iter()
-                .skip(1)
-                .take(g.len())
-                .zip(g.iter().rev())
-                .map(|(l, r)| *l * *r)
-                .fold(FF::ZERO, |l, r| l + r);
-            g.push(-inner_product * lc_inv);
-        }
-
-        Polynomial::new(g)
-    }
-
     pub(crate) fn reverse(&self) -> Polynomial<'static, FF> {
         let degree = self.degree();
         let new_coefficients = self
@@ -1209,6 +1183,32 @@ where
         Polynomial::new(product)
     }
 
+    /// Given a polynomial f(X), find the polynomial g(X) of degree at most n
+    /// such that f(X) * g(X) = 1 mod X^{n+1} where n is the precision.
+    /// # Panics
+    ///
+    /// Panics if f(X) does not have an inverse in the formal power series
+    /// ring, _i.e._ if its constant coefficient is zero.
+    fn formal_power_series_inverse_minimal(&self, precision: usize) -> Polynomial<'static, FF> {
+        let lc_inv = self.coefficients.first().unwrap().inverse();
+        let mut g = vec![lc_inv];
+
+        // invariant: product[i] = 0
+        for _ in 1..(precision + 1) {
+            let inner_product = self
+                .coefficients
+                .iter()
+                .skip(1)
+                .take(g.len())
+                .zip(g.iter().rev())
+                .map(|(l, r)| *l * *r)
+                .fold(FF::ZERO, |l, r| l + r);
+            g.push(-inner_product * lc_inv);
+        }
+
+        Polynomial::new(g)
+    }
+
     /// `self mod x^n`, as an owned polynomial. See also
     /// [`mod_x_to_the_n`](Polynomial::mod_x_to_the_n).
     fn truncated(&self, n: usize) -> Polynomial<'static, FF> {
@@ -1444,23 +1444,21 @@ where
         // n-m using NTT-based multiplication over a domain of size n = 2^k.
 
         let (shift_factor_ntt, tail_size) = modulus.shift_factor_ntt_with_tail_length();
-        let mut intermediate_remainder =
+        let intermediate_remainder =
             self.reduce_by_ntt_friendly_modulus(&shift_factor_ntt, tail_size);
 
-        // 2. Chunk-wise reduction with schoolbook multiplication.
-        // We generate a smaller structured multiple of the denominator
-        // that also admits chunk-wise reduction but not NTT-based
-        // multiplication within. While asymptotically on par with long
-        // division, this schoolbook chunk-wise reduction is concretely more
-        // performant.
-        if intermediate_remainder.degree() > 4 * modulus.degree() {
-            let structured_multiple = modulus.structured_multiple();
-            intermediate_remainder =
-                intermediate_remainder.reduce_by_structured_modulus(&structured_multiple);
+        // 2. Reduction of the intermediate remainder, which has degree at
+        // most a small multiple of the modulus' degree, by fast division.
+        let modulus_degree = usize::try_from(modulus.degree()).expect("modulus is non-zero");
+        let Ok(remainder_degree) = usize::try_from(intermediate_remainder.degree()) else {
+            return Polynomial::zero();
+        };
+        if remainder_degree < modulus_degree {
+            return intermediate_remainder;
         }
-
-        // 3. Long division based reduction by the (unmultiplied) modulus.
-        intermediate_remainder.reduce_long_division(modulus)
+        let precision = remainder_degree - modulus_degree + 1;
+        let reversed_modulus_inverse = modulus.reverse().power_series_inverse(precision);
+        intermediate_remainder.reduce_with_reversed_inverse(modulus, &reversed_modulus_inverse)
     }
 
     /// Only marked `pub` for benchmarking purposes. Not considered part of the
@@ -1559,17 +1557,6 @@ where
         Polynomial::new(working_window)
     }
 
-    /// Given a polynomial f(X) of degree n >= 0, find a multiple of f(X) of the
-    /// form X^{3*n+1} + (something of degree at most 2*n).
-    ///
-    /// # Panics
-    ///
-    /// Panics if f(X) = 0.
-    fn structured_multiple(&self) -> Polynomial<'static, FF> {
-        let n = usize::try_from(self.degree()).expect("cannot compute multiple of zero");
-        self.structured_multiple_of_degree(3 * n + 1)
-    }
-
     /// Given a polynomial f(X) and an integer n, find a multiple of f(X) of the
     /// form X^n + (something of much smaller degree).
     ///
@@ -1594,74 +1581,13 @@ where
         // Without modular reduction, the degree of the product f(X) * g(X) is
         // deg(f) + arg -- even after coefficient reversal. So n = deg(f) + arg
         // and arg = n - deg(f).
-        let inverse_reverse = reverse.formal_power_series_inverse_minimal(n - degree);
+        let inverse_reverse = reverse.power_series_inverse((n - degree).max(1));
         let product_reverse = reverse.multiply(&inverse_reverse);
         let product = product_reverse.reverse();
 
         // Coefficient reversal drops trailing zero. Correct for that.
         let product_degree = product.degree() as usize;
         product.shift_coefficients(n - product_degree)
-    }
-
-    /// Reduces f(X) by a structured modulus, which is of the form
-    /// X^{m+n} + (something of degree less than m). When the modulus has this
-    /// form, polynomial modular reductions can be computed faster than in the
-    /// generic case.
-    ///
-    /// # Panics
-    ///
-    /// Panics if
-    ///  - multiple is a constant
-    ///  - multiple is not monic
-    fn reduce_by_structured_modulus(&self, multiple: &Self) -> Polynomial<'static, FF> {
-        assert_ne!(0, multiple.degree());
-        let multiple_degree = usize::try_from(multiple.degree()).expect("cannot reduce by zero");
-        assert_eq!(
-            Some(FF::ONE),
-            multiple.leading_coefficient(),
-            "multiple must be monic"
-        );
-        let leading_term = Polynomial::x_to_the(multiple_degree);
-        let shift_polynomial = multiple.clone() - leading_term.clone();
-        assert!(shift_polynomial.degree() < multiple.degree());
-
-        let tail_length = usize::try_from(shift_polynomial.degree())
-            .map(|unsigned_degree| unsigned_degree + 1)
-            .unwrap_or(0);
-        let window_length = multiple_degree;
-        let chunk_size = window_length - tail_length;
-        if self.coefficients.len() < chunk_size + tail_length {
-            return self.clone().into_owned();
-        }
-        let num_reducible_chunks =
-            (self.coefficients.len() - (tail_length + chunk_size)).div_ceil(chunk_size);
-
-        let window_stop = (tail_length + chunk_size) + num_reducible_chunks * chunk_size;
-        let mut window_start = window_stop - window_length;
-        let mut working_window = self.coefficients[window_start..].to_vec();
-        working_window.resize(chunk_size + tail_length, FF::ZERO);
-
-        for _ in (0..num_reducible_chunks).rev() {
-            let overflow = Polynomial::new(working_window[tail_length..].to_vec());
-            let product = overflow.multiply(&shift_polynomial);
-
-            window_start -= chunk_size;
-            working_window = [
-                self.coefficients[window_start..window_start + chunk_size].to_vec(),
-                working_window[0..tail_length].to_vec(),
-            ]
-            .concat();
-
-            for (i, wwi) in working_window
-                .iter_mut()
-                .enumerate()
-                .take(chunk_size + tail_length)
-            {
-                *wwi -= *product.coefficients.get(i).unwrap_or(&FF::ZERO);
-            }
-        }
-
-        Polynomial::new(working_window)
     }
 
     fn reduce_long_division(&self, modulus: &Polynomial<'_, FF>) -> Polynomial<'static, FF> {
@@ -2616,13 +2542,19 @@ where
         if degree >= num_points {
             // Reduce modulo the zerofier of all points first, so that the
             // scaled remainder tree starts from a polynomial of degree less
-            // than the number of points.
-            let quotient_degree = degree - num_points;
-            let reversed_zerofier_inverse =
-                reversed_zerofier.power_series_inverse(quotient_degree + 1);
-            return self
-                .reduce_with_reversed_inverse(&zerofier, &reversed_zerofier_inverse)
-                .par_divide_and_conquer_batch_evaluate(zerofier_tree);
+            // than the number of points. For a degree much larger than the
+            // number of points, chunk-wise reduction is the better fit;
+            // otherwise, fast division is.
+            let degree_ratio = Self::REDUCE_BEFORE_EVALUATE_THRESHOLD_RATIO as usize;
+            let reduced = if degree >= degree_ratio * num_points {
+                self.fast_reduce(&zerofier)
+            } else {
+                let quotient_degree = degree - num_points;
+                let reversed_zerofier_inverse =
+                    reversed_zerofier.power_series_inverse(quotient_degree + 1);
+                self.reduce_with_reversed_inverse(&zerofier, &reversed_zerofier_inverse)
+            };
+            return reduced.par_divide_and_conquer_batch_evaluate(zerofier_tree);
         }
 
         // With n the number of points and y = 1/x, the expansion of self / z
@@ -5158,95 +5090,6 @@ mod tests {
     }
 
     #[macro_rules_attr::apply(proptest)]
-    fn formal_power_series_inverse_minimal(
-        #[strategy(2usize..20)] precision: usize,
-        #[filter(!#f.coefficients.is_empty())]
-        #[filter(!#f.coefficients[0].is_zero())]
-        #[filter(#precision > 1 + #f.degree() as usize)]
-        f: BfePoly,
-    ) {
-        let g = f.formal_power_series_inverse_minimal(precision);
-        let mut coefficients = vec![BFieldElement::ZERO; precision + 1];
-        coefficients[precision] = BFieldElement::ONE;
-        let xn = Polynomial::new(coefficients);
-        let (_quotient, remainder) = g.multiply(&f).divide(&xn);
-
-        // inverse in formal power series ring
-        prop_assert!(remainder.is_one());
-
-        // minimal?
-        prop_assert!(g.degree() <= precision as isize);
-    }
-
-    #[macro_rules_attr::apply(proptest)]
-    fn structured_multiple_is_multiple(
-        #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
-        #[strategy(vec(arb(), 1..30))]
-        coefficients: Vec<BFieldElement>,
-    ) {
-        let polynomial = Polynomial::new(coefficients);
-        let multiple = polynomial.structured_multiple();
-        let remainder = multiple.reduce_long_division(&polynomial);
-        prop_assert!(remainder.is_zero());
-    }
-
-    #[macro_rules_attr::apply(proptest)]
-    fn structured_multiple_of_modulus_with_trailing_zeros_is_multiple(
-        #[filter(!#raw_modulus.is_zero())] raw_modulus: BfePoly,
-        #[strategy(0usize..100)] num_trailing_zeros: usize,
-    ) {
-        let modulus = raw_modulus.shift_coefficients(num_trailing_zeros);
-        let multiple = modulus.structured_multiple();
-        prop_assert!(multiple.reduce_long_division(&modulus).is_zero());
-    }
-
-    #[macro_rules_attr::apply(proptest)]
-    fn structured_multiple_generates_structure(
-        #[filter(#coefficients.iter().filter(|c|!c.is_zero()).count() >= 3)]
-        #[strategy(vec(arb(), 1..30))]
-        coefficients: Vec<BFieldElement>,
-    ) {
-        let polynomial = Polynomial::new(coefficients);
-        let n = polynomial.degree();
-        let structured_multiple = polynomial.structured_multiple();
-        assert!(structured_multiple.degree() <= 3 * n + 1);
-
-        let x3np1 = Polynomial::x_to_the((3 * n + 1) as usize);
-        let remainder = structured_multiple.reduce_long_division(&x3np1);
-        assert!(2 * n >= remainder.degree());
-
-        let structured_mul_minus_rem = structured_multiple - remainder;
-        assert_eq!(0, structured_mul_minus_rem.clone().reverse().degree());
-        assert_eq!(
-            BFieldElement::ONE,
-            *structured_mul_minus_rem.coefficients.last().unwrap(),
-        );
-    }
-
-    #[macro_rules_attr::apply(test)]
-    fn structured_multiple_generates_structure_concrete() {
-        let polynomial = Polynomial::new(
-            [884763262770, 0, 51539607540, 14563891882495327437]
-                .map(BFieldElement::new)
-                .to_vec(),
-        );
-        let n = polynomial.degree();
-        let structured_multiple = polynomial.structured_multiple();
-        assert_eq!(3 * n + 1, structured_multiple.degree());
-
-        let x3np1 = Polynomial::x_to_the((3 * n + 1) as usize);
-        let remainder = structured_multiple.reduce_long_division(&x3np1);
-        assert!(2 * n >= remainder.degree());
-
-        let structured_mul_minus_rem = structured_multiple - remainder;
-        assert_eq!(0, structured_mul_minus_rem.clone().reverse().degree());
-        assert_eq!(
-            BFieldElement::ONE,
-            *structured_mul_minus_rem.coefficients.last().unwrap(),
-        );
-    }
-
-    #[macro_rules_attr::apply(proptest)]
     fn structured_multiple_of_degree_is_multiple(
         #[strategy(2usize..100)] n: usize,
         #[filter(#coefficients.iter().any(|c|!c.is_zero()))]
@@ -5319,51 +5162,6 @@ mod tests {
         prop_assert_eq!(
             fx_plus_1.clone(),
             fx_plus_1.reverse().reverse().shift_coefficients(1)
-        );
-    }
-
-    #[macro_rules_attr::apply(proptest)]
-    fn reduce_by_structured_modulus_and_reduce_long_division_agree(
-        #[strategy(1usize..10)] n: usize,
-        #[strategy(1usize..10)] m: usize,
-        #[strategy(vec(arb(), #m))] b_coefficients: Vec<BFieldElement>,
-        #[strategy(1usize..100)] _deg_a: usize,
-        #[strategy(vec(arb(), #_deg_a + 1))] _a_coefficients: Vec<BFieldElement>,
-        #[strategy(Just(Polynomial::new(#_a_coefficients)))] a: BfePoly,
-    ) {
-        let mut full_modulus_coefficients = b_coefficients.clone();
-        full_modulus_coefficients.resize(m + n + 1, BFieldElement::from(0));
-        *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
-        let full_modulus = Polynomial::new(full_modulus_coefficients);
-
-        let long_remainder = a.reduce_long_division(&full_modulus);
-        let structured_remainder = a.reduce_by_structured_modulus(&full_modulus);
-
-        prop_assert_eq!(long_remainder, structured_remainder);
-    }
-
-    #[macro_rules_attr::apply(test)]
-    fn reduce_by_structured_modulus_and_reduce_agree_long_division_concrete() {
-        let a = Polynomial::new(
-            [1, 0, 0, 3, 4, 3, 1, 5, 1, 0, 1, 2, 9, 2, 0, 3, 1]
-                .into_iter()
-                .map(BFieldElement::new)
-                .collect_vec(),
-        );
-        let mut full_modulus_coefficients =
-            [5, 6, 3].into_iter().map(BFieldElement::new).collect_vec();
-        let m = full_modulus_coefficients.len();
-        let n = 2;
-        full_modulus_coefficients.resize(m + n + 1, BFieldElement::from(0));
-        *full_modulus_coefficients.last_mut().unwrap() = BFieldElement::from(1);
-        let full_modulus = Polynomial::new(full_modulus_coefficients);
-
-        let long_remainder = a.reduce_long_division(&full_modulus);
-        let structured_remainder = a.reduce_by_structured_modulus(&full_modulus);
-
-        assert_eq!(
-            long_remainder, structured_remainder,
-            "naive: {long_remainder}\nstructured: {structured_remainder}",
         );
     }
 
@@ -5687,6 +5485,27 @@ mod tests {
             polynomial.iterative_batch_evaluate(&points),
             polynomial.par_batch_evaluate(&points)
         );
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn formal_power_series_inverse_minimal(
+        #[strategy(2usize..20)] precision: usize,
+        #[filter(!#f.coefficients.is_empty())]
+        #[filter(!#f.coefficients[0].is_zero())]
+        #[filter(#precision > 1 + #f.degree() as usize)]
+        f: BfePoly,
+    ) {
+        let g = f.formal_power_series_inverse_minimal(precision);
+        let mut coefficients = vec![BFieldElement::ZERO; precision + 1];
+        coefficients[precision] = BFieldElement::ONE;
+        let xn = Polynomial::new(coefficients);
+        let (_quotient, remainder) = g.multiply(&f).divide(&xn);
+
+        // inverse in formal power series ring
+        prop_assert!(remainder.is_one());
+
+        // minimal?
+        prop_assert!(g.degree() <= precision as isize);
     }
 
     #[macro_rules_attr::apply(proptest)]
