@@ -281,7 +281,7 @@ impl Mmr for MmrAccumulator {
             for (digest, authentication_path_indices) in membership_proof
                 .authentication_path
                 .iter_mut()
-                .zip(ap_indices.into_iter())
+                .zip(ap_indices)
             {
                 // Any number of hashes can be updated in the authentication path, since
                 // we're modifying multiple leafs in the MMR
@@ -519,7 +519,7 @@ pub mod util {
             // Update all_ap_elements
             for (node_index, ap_element) in new_node_indices
                 .into_iter()
-                .zip_eq(new_mp.authentication_path.clone().into_iter())
+                .zip_eq(new_mp.authentication_path.clone())
             {
                 all_ap_elements.insert(node_index, ap_element);
             }

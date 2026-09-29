@@ -37,12 +37,13 @@ impl NaiveTip5 {
     }
 
     fn sbox_layer(&mut self) {
-        for i in 0..NUM_SPLIT_AND_LOOKUP {
-            Self::split_and_lookup(&mut self.state[i]);
+        let (lookup_elements, power_map_elements) = self.state.split_at_mut(NUM_SPLIT_AND_LOOKUP);
+        for element in lookup_elements {
+            Self::split_and_lookup(element);
         }
 
-        for i in NUM_SPLIT_AND_LOOKUP..STATE_SIZE {
-            self.state[i] = self.state[i].mod_pow(7);
+        for element in power_map_elements {
+            *element = element.mod_pow(7);
         }
     }
 
@@ -55,12 +56,12 @@ impl NaiveTip5 {
         let mut new_state = [BFieldElement::ZERO; STATE_SIZE];
 
         for (row_idx, new_elem) in new_state.iter_mut().enumerate() {
-            for col_idx in 0..STATE_SIZE {
+            for (col_idx, &state_elem) in self.state.iter().enumerate() {
                 // See <https://en.wikipedia.org/wiki/Circulant_matrix>
                 // The initial summand `STATE_SIZE` only prevents overflows.
                 let mds_matrix_idx = (STATE_SIZE + row_idx - col_idx) % STATE_SIZE;
                 let matrix_element = BFieldElement::from(MDS_MATRIX_FIRST_COLUMN[mds_matrix_idx]);
-                *new_elem += matrix_element * self.state[col_idx];
+                *new_elem += matrix_element * state_elem;
             }
         }
 

@@ -455,16 +455,16 @@ impl<const N: usize> ModuleElement<N> {
 
     pub fn ntt(&self) -> Self {
         let mut copy = *self;
-        for n in 0..N {
-            coset_ntt_noswap_64(&mut copy.elements[n].coefficients);
+        for element in &mut copy.elements {
+            coset_ntt_noswap_64(&mut element.coefficients);
         }
         copy
     }
 
     pub fn intt(&self) -> Self {
         let mut copy = *self;
-        for n in 0..N {
-            coset_intt_noswap_64(&mut copy.elements[n].coefficients);
+        for element in &mut copy.elements {
+            coset_intt_noswap_64(&mut element.coefficients);
         }
         copy
     }

@@ -1961,13 +1961,11 @@ where
     pub fn smart_zerofier(roots: &[FF]) -> Self {
         let mut zerofier = vec![FF::ZERO; roots.len() + 1];
         zerofier[0] = FF::ONE;
-        let mut num_coeffs = 1;
-        for &root in roots {
+        for (num_coeffs, &root) in (1..).zip(roots) {
             for k in (1..=num_coeffs).rev() {
                 zerofier[k] = zerofier[k - 1] - root * zerofier[k];
             }
             zerofier[0] = -root * zerofier[0];
-            num_coeffs += 1;
         }
         Self::new(zerofier)
     }

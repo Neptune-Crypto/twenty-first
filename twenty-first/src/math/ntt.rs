@@ -508,8 +508,8 @@ fn apply_layers<FF>(
     // 4th root of unity: only one multiplication per radix-4 butterfly.
     if layer == 0 && last_layer >= 2 {
         let fourth_root_of_unity = twiddle_factors[1][1];
-        for butterfly in x.chunks_exact_mut(4) {
-            let [t0, t1, t2, t3] = [butterfly[0], butterfly[1], butterfly[2], butterfly[3]];
+        for butterfly in x.as_chunks_mut::<4>().0 {
+            let [t0, t1, t2, t3] = *butterfly;
             let y0 = t0 + t1;
             let y1 = t0 - t1;
             let y2 = t2 + t3;
@@ -737,7 +737,7 @@ unsafe fn apply_cross_block_layers_to_columns<FF>(
     let len = x.len;
     let mut layer = first_layer;
     #[cfg(target_arch = "x86_64")]
-    let simd_limbs = simd_limbs::<FF>().filter(|_| columns.len() % avx512::LANES == 0);
+    let simd_limbs = simd_limbs::<FF>().filter(|_| columns.len().is_multiple_of(avx512::LANES));
 
     // SAFETY (for all accesses below): all accessed indices are of the form
     // k + block_start + j + c·m with k < len a multiple of 4m (or 2m),
@@ -1407,11 +1407,11 @@ mod avx512 {
         let w = expand_twiddles(twiddles, limbs);
         let a = x.add(i * limbs);
         let b = a.add(m * limbs);
-        for v in 0..limbs {
+        for (v, &twiddle) in w.iter().enumerate().take(limbs) {
             let offset = v * LANES;
             let (pa, pb) = (a.add(offset), b.add(offset));
             let u = _mm512_loadu_epi64(pa.cast());
-            let t = mul(_mm512_loadu_epi64(pb.cast()), w[v]);
+            let t = mul(_mm512_loadu_epi64(pb.cast()), twiddle);
             _mm512_storeu_epi64(pa.cast(), add(u, t));
             _mm512_storeu_epi64(pb.cast(), sub(u, t));
         }
@@ -1936,16 +1936,16 @@ mod tests {
             .map(|i| XFieldElement::from(BFieldElement::new(i.wrapping_mul(seed | 1))))
             .collect_vec();
 
-        let mut buffer = vec![MaybeUninit::<XFieldElement>::uninit(); len + 8];
-        let expected = cache_line_aligned(&mut buffer, len);
+        let mut expected_buffer = vec![MaybeUninit::<XFieldElement>::uninit(); len + 8];
+        let expected = cache_line_aligned(&mut expected_buffer, len);
         scaled_zero_padded_ntt(&coefficients, offset, expected);
         let expected = expected
             .iter()
             .map(|c| unsafe { c.assume_init() })
             .collect_vec();
 
-        let mut buffer = vec![MaybeUninit::<XFieldElement>::uninit(); len + 8];
-        let codeword = cache_line_aligned(&mut buffer, len);
+        let mut codeword_buffer = vec![MaybeUninit::<XFieldElement>::uninit(); len + 8];
+        let codeword = cache_line_aligned(&mut codeword_buffer, len);
         par_scaled_zero_padded_ntt(&coefficients, offset, codeword);
         let codeword = codeword
             .iter()

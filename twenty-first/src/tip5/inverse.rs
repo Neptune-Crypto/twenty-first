@@ -83,11 +83,11 @@ impl InverseTip5 {
         let mut new_state = [BFieldElement::ZERO; STATE_SIZE];
 
         for (row_idx, new_elem) in new_state.iter_mut().enumerate() {
-            for col_idx in 0..STATE_SIZE {
+            for (col_idx, &state_elem) in self.state.iter().enumerate() {
                 // see `NaiveTip5::mds_matrix_mul` for details
                 let mds_matrix_idx = (STATE_SIZE + row_idx - col_idx) % STATE_SIZE;
                 let matrix_element = INV_MDS_MATRIX_FIRST_COLUMN[mds_matrix_idx];
-                *new_elem += matrix_element * self.state[col_idx];
+                *new_elem += matrix_element * state_elem;
             }
         }
 
@@ -95,12 +95,13 @@ impl InverseTip5 {
     }
 
     pub fn inv_sbox_layer(&mut self) {
-        for i in 0..NUM_SPLIT_AND_LOOKUP {
-            Self::split_and_inv_lookup(&mut self.state[i]);
+        let (lookup_elements, power_map_elements) = self.state.split_at_mut(NUM_SPLIT_AND_LOOKUP);
+        for element in lookup_elements {
+            Self::split_and_inv_lookup(element);
         }
 
-        for i in NUM_SPLIT_AND_LOOKUP..STATE_SIZE {
-            self.state[i] = self.state[i].mod_pow(INV_POWER_MAP_EXPONENT);
+        for element in power_map_elements {
+            *element = element.mod_pow(INV_POWER_MAP_EXPONENT);
         }
     }
 

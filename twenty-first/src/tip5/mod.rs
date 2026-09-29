@@ -196,14 +196,15 @@ impl Tip5 {
 
     #[inline(always)]
     fn sbox_layer(&mut self) {
-        for i in 0..NUM_SPLIT_AND_LOOKUP {
-            Self::split_and_lookup(&mut self.state[i]);
+        let (lookup_elements, power_map_elements) = self.state.split_at_mut(NUM_SPLIT_AND_LOOKUP);
+        for element in lookup_elements {
+            Self::split_and_lookup(element);
         }
 
-        for i in NUM_SPLIT_AND_LOOKUP..STATE_SIZE {
-            let sq = self.state[i] * self.state[i];
+        for element in power_map_elements {
+            let sq = *element * *element;
             let qu = sq * sq;
-            self.state[i] *= sq * qu;
+            *element *= sq * qu;
         }
     }
 
@@ -1307,12 +1308,12 @@ pub(crate) mod tests {
             // SAFETY (all `unsafe` blocks): The required CPU features were
             // detected above.
             let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
-            for i in 0..STATE_SIZE {
-                unsafe { batch.set(i, [state[i]; avx512::BATCH_SIZE]) };
+            for (i, &element) in state.iter().enumerate() {
+                unsafe { batch.set(i, [element; avx512::BATCH_SIZE]) };
             }
             unsafe { batch.permutation() };
-            for (i, &expected) in expected.iter().enumerate() {
-                assert_eq!([expected; avx512::BATCH_SIZE], unsafe { batch.get(i) });
+            for (i, &element) in expected.iter().enumerate() {
+                assert_eq!([element; avx512::BATCH_SIZE], unsafe { batch.get(i) });
             }
         }
     }
@@ -1480,12 +1481,12 @@ pub(crate) mod tests {
             // SAFETY (all `unsafe` blocks): The required CPU features were
             // detected above.
             let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
-            for i in 0..STATE_SIZE {
-                unsafe { batch.set(i, [state[i]; avx512::BATCH_SIZE]) };
+            for (i, &element) in state.iter().enumerate() {
+                unsafe { batch.set(i, [element; avx512::BATCH_SIZE]) };
             }
             unsafe { batch.permutation() };
-            for (i, &expected) in expected.iter().enumerate() {
-                assert_eq!([expected; avx512::BATCH_SIZE], unsafe { batch.get(i) });
+            for (i, &element) in expected.iter().enumerate() {
+                assert_eq!([element; avx512::BATCH_SIZE], unsafe { batch.get(i) });
             }
         }
     }
@@ -1694,10 +1695,10 @@ pub(crate) mod tests {
         for (lane, state) in states.into_iter().enumerate() {
             let mut naive = naive::NaiveTip5 { state };
             naive.permutation();
-            for i in 0..STATE_SIZE {
+            for (i, &naive_element) in naive.state.iter().enumerate() {
                 let batched_element = unsafe { batch.get(i) }[lane];
                 prop_assert_eq!(
-                    naive.state[i],
+                    naive_element,
                     batched_element,
                     "lane {}, element {}",
                     lane,
@@ -1803,12 +1804,12 @@ pub(crate) mod tests {
             // SAFETY (all `unsafe` blocks): The required CPU features were
             // detected above.
             let mut batch = unsafe { avx512::Tip5Batch::new(Domain::VariableLength) };
-            for i in 0..STATE_SIZE {
-                unsafe { batch.set(i, [state[i]; avx512::BATCH_SIZE]) };
+            for (i, &element) in state.iter().enumerate() {
+                unsafe { batch.set(i, [element; avx512::BATCH_SIZE]) };
             }
             unsafe { batch.permutation() };
-            for (i, &expected) in expected.iter().enumerate() {
-                assert_eq!([expected; avx512::BATCH_SIZE], unsafe { batch.get(i) });
+            for (i, &element) in expected.iter().enumerate() {
+                assert_eq!([element; avx512::BATCH_SIZE], unsafe { batch.get(i) });
             }
         }
     }
