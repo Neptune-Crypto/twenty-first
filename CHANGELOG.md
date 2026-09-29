@@ -1,3 +1,45 @@
+
+## [3.0.0](https://github.com/Neptune-Crypto/twenty-first/compare/v2.0.2..v3.0.0) – 2026-09-29
+
+### ✨ Features
+
+- *(ntt)* Add parallel NTT for single large transforms ([cc41ddd4](https://github.com/Neptune-Crypto/twenty-first/commit/cc41ddd4))
+- *(polynomial)* Add parallel scaling and coset evaluation ([46546420](https://github.com/Neptune-Crypto/twenty-first/commit/46546420))
+- *(traits)* Add parallel batch inversion ([5e161fba](https://github.com/Neptune-Crypto/twenty-first/commit/5e161fba))
+- *(polynomial)* Interpolate with zerofier tree from Lagrange weights ([e329b84d](https://github.com/Neptune-Crypto/twenty-first/commit/e329b84d))
+- *(polynomial)* Parallel evaluation of long polynomials ([055f486d](https://github.com/Neptune-Crypto/twenty-first/commit/055f486d))
+
+### ⚡️ Performance
+
+- *(ntt)!* Reduce memory passes with cache-blocked radix-4 NTT ([e1d1b926](https://github.com/Neptune-Crypto/twenty-first/commit/e1d1b926))
+- *(tip5)* Select AVX-512 implementation at runtime ([5994b242](https://github.com/Neptune-Crypto/twenty-first/commit/5994b242))
+- *(XFieldElement)* Faster inverse ([cf5fedc6](https://github.com/Neptune-Crypto/twenty-first/commit/cf5fedc6))
+- Advise huge pages for large polynomial buffers ([bc54640f](https://github.com/Neptune-Crypto/twenty-first/commit/bc54640f))
+- *(polynomial)* Quasi-linear parallel interpolation and evaluation ([69f253d9](https://github.com/Neptune-Crypto/twenty-first/commit/69f253d9))
+- *(polynomial)* Evaluate along a scaled remainder tree ([3351452e](https://github.com/Neptune-Crypto/twenty-first/commit/3351452e))
+- *(polynomial)* Halve transform lengths in zerofier tree arithmetic ([4487ce7b](https://github.com/Neptune-Crypto/twenty-first/commit/4487ce7b))
+- *(polynomial)* Schedule zerofier tree arithmetic by level ([e3f30e89](https://github.com/Neptune-Crypto/twenty-first/commit/e3f30e89))
+- *(tip5)* Hash eight inputs at once with AVX-512 ([53d5e5b0](https://github.com/Neptune-Crypto/twenty-first/commit/53d5e5b0))
+- *(polynomial)* Scale coset interpolants in place ([e5401aaf](https://github.com/Neptune-Crypto/twenty-first/commit/e5401aaf))
+- *(ntt)* Fuse scaling and zero-padding into the transform ([31725be6](https://github.com/Neptune-Crypto/twenty-first/commit/31725be6))
+- *(ntt)* AVX-512 butterfly kernels ([0053cb87](https://github.com/Neptune-Crypto/twenty-first/commit/0053cb87))
+- *(ntt)* Tile the gather, stream its stores, and shrink blocks ([4d820796](https://github.com/Neptune-Crypto/twenty-first/commit/4d820796))
+- *(ntt)* Scale the parallel transform's minimum length with threads ([c8b5457b](https://github.com/Neptune-Crypto/twenty-first/commit/c8b5457b))
+- *(ntt)* Faster parallel transforms of single long polynomials ([5e650484](https://github.com/Neptune-Crypto/twenty-first/commit/5e650484))
+- *(tip5)* Use the fast MDS convolution in the batched permutation ([b4f5edc5](https://github.com/Neptune-Crypto/twenty-first/commit/b4f5edc5))
+- *(polynomial)* Quasi-linear chunk-wise reduction ([3d371f59](https://github.com/Neptune-Crypto/twenty-first/commit/3d371f59))
+- *(polynomial)* Use quadratic reduction for small moduli ([adfe0f6d](https://github.com/Neptune-Crypto/twenty-first/commit/adfe0f6d))
+
+### 📚 Documentation
+
+- Fix intra-doc links ([1f5684d1](https://github.com/Neptune-Crypto/twenty-first/commit/1f5684d1))
+
+### ⚙️ Miscellaneous
+
+- Make clippy happy ([2d554bf2](https://github.com/Neptune-Crypto/twenty-first/commit/2d554bf2))
+- Make clippy happy on targets other than x86-64 ([98ba0eff](https://github.com/Neptune-Crypto/twenty-first/commit/98ba0eff))
+- Cover parallel and in-place polynomial routines ([a63a872d](https://github.com/Neptune-Crypto/twenty-first/commit/a63a872d))
+
 # Changelog
 
 All notable changes are documented in this file.
