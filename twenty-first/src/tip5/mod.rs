@@ -151,6 +151,30 @@ pub const MDS_MATRIX_FIRST_COLUMN: [i64; STATE_SIZE] = [
     26798, 17845,
 ];
 
+/// The wrapping integer arithmetic of [`Tip5::generated_function`].
+pub(super) trait WrappingArithmetic: Copy {
+    fn wrapping_add(self, rhs: Self) -> Self;
+    fn wrapping_sub(self, rhs: Self) -> Self;
+    fn wrapping_mul(self, rhs: u64) -> Self;
+}
+
+impl WrappingArithmetic for u64 {
+    #[inline(always)]
+    fn wrapping_add(self, rhs: Self) -> Self {
+        u64::wrapping_add(self, rhs)
+    }
+
+    #[inline(always)]
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        u64::wrapping_sub(self, rhs)
+    }
+
+    #[inline(always)]
+    fn wrapping_mul(self, rhs: u64) -> Self {
+        u64::wrapping_mul(self, rhs)
+    }
+}
+
 #[derive(
     Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, GetSize, BFieldCodec, Arbitrary,
 )]
@@ -242,8 +266,17 @@ impl Tip5 {
         }
     }
 
+    /// The product of the MDS matrix with the input vector, scaled by 16, in
+    /// wrapping integer arithmetic. Since the matrix is circulant, the product
+    /// is a cyclic convolution, which is computed with a divide-and-conquer
+    /// approach that needs far fewer multiplications than the textbook method.
+    ///
+    /// Generic over the integer type so that the batched AVX-512 permutation
+    /// can use it for eight states at once.
     #[inline(always)]
-    fn generated_function(input: [u64; STATE_SIZE]) -> [u64; STATE_SIZE] {
+    pub(super) fn generated_function<T: WrappingArithmetic>(
+        input: [T; STATE_SIZE],
+    ) -> [T; STATE_SIZE] {
         let node_34 = input[0].wrapping_add(input[8]);
         let node_38 = input[4].wrapping_add(input[12]);
         let node_36 = input[2].wrapping_add(input[10]);

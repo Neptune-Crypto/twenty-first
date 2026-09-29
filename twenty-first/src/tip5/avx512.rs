@@ -17,6 +17,7 @@ use super::NUM_SPLIT_AND_LOOKUP;
 use super::RATE;
 use super::STATE_SIZE;
 use super::Tip5;
+use super::WrappingArithmetic;
 use crate::prelude::BFieldElement;
 use crate::util_types::sponge::Domain;
 
@@ -58,6 +59,7 @@ impl Tip5 {
     pub(super) fn avx512_is_available() -> bool {
         is_x86_feature_detected!("avx512f")
             && is_x86_feature_detected!("avx512bw")
+            && is_x86_feature_detected!("avx512dq")
             && is_x86_feature_detected!("avx512vbmi")
             && is_x86_feature_detected!("avx512ifma")
     }
@@ -66,9 +68,9 @@ impl Tip5 {
     ///
     /// # Safety
     ///
-    /// The CPU must support the AVX-512 extensions “f”, “bw”, “vbmi”, and
-    /// “ifma”; see [`Self::avx512_is_available`].
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    /// The CPU must support the AVX-512 extensions “f”, “bw”, “dq”, “vbmi”,
+    /// and “ifma”; see [`Self::avx512_is_available`].
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn permutation_avx512(&mut self) {
         for round_index in 0..NUM_ROUNDS {
             self.round_avx512(round_index);
@@ -81,14 +83,14 @@ impl Tip5 {
     ///
     /// See [`Self::permutation_avx512`].
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn round_avx512(&mut self, round_index: usize) {
         Self::sbox_layer_avx512(&mut self.state);
         Self::mds_rcs_avx512(&mut self.state, round_index);
     }
 
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn sbox_layer_avx512(state: &mut [BFieldElement; STATE_SIZE]) {
         let a = _mm512_load_epi64(state.as_mut_ptr().offset(0x00) as *mut i64);
         let b = _mm512_load_epi64(state.as_mut_ptr().offset(0x08) as *mut i64);
@@ -117,7 +119,7 @@ impl Tip5 {
 
     #[inline]
     #[expect(clippy::identity_op)]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn mds_rcs_avx512(state: &mut [BFieldElement; STATE_SIZE], round_index: usize) {
         const MDS_TRANS: [[u64; 8]; 16] = [
             [61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034],
@@ -199,7 +201,7 @@ impl Tip5 {
     }
 
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn reduce3x48(ain: __m512i, bin: __m512i, cin: __m512i) -> __m512i {
         /* Combine and reduce a * 2**0 + b * 2**48 + c * 2**96 to F_P */
 
@@ -286,7 +288,7 @@ impl Tip5 {
     // 52-bit element. A 32-bit limb of the round constant is added to get a
     // limb of the final result, which is at most 53 bits wide.
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn reduce2x32(lo: __m512i, hi: __m512i) -> __m512i {
         // input must be at most 53 bits
         #[cfg(debug_assertions)]
@@ -334,7 +336,7 @@ impl Tip5 {
     /// Apply the [lookup table](LOOKUP_TABLE) to every byte of the given
     /// vector.
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn lookup8(x: __m512i) -> __m512i {
         let c64s = _mm512_set1_epi8(0x40);
 
@@ -361,7 +363,7 @@ impl Tip5 {
     }
 
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn mul8(x: __m512i, y: __m512i) -> __m512i {
         let mask48 = _mm512_set1_epi64(0xffffffffffff);
 
@@ -397,7 +399,7 @@ impl Tip5 {
     }
 
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn square8(x: __m512i) -> __m512i {
         let mask48 = _mm512_set1_epi64(0xffffffffffff);
 
@@ -429,21 +431,34 @@ impl Tip5 {
     }
 }
 
-/// The (circulant) MDS matrix: `MDS_MATRIX[r][c]` is the entry in row `r`
-/// and column `c`.
-const MDS_MATRIX: [[u64; STATE_SIZE]; STATE_SIZE] = {
-    let mut matrix = [[0; STATE_SIZE]; STATE_SIZE];
-    let mut r = 0;
-    while r < STATE_SIZE {
-        let mut c = 0;
-        while c < STATE_SIZE {
-            matrix[r][c] = super::MDS_MATRIX_FIRST_COLUMN[(r + STATE_SIZE - c) % STATE_SIZE] as u64;
-            c += 1;
-        }
-        r += 1;
+/// Eight 64-bit integers, for use in [`Tip5::generated_function`].
+///
+/// The trait's functions can't have `#[target_feature]`s. Instead, they are
+/// inlined into their callers, all of which enable the required ones. Values of
+/// this private type are only created in such functions, which in turn may only
+/// be called if the CPU supports the features.
+#[derive(Debug, Copy, Clone)]
+struct Lanes(__m512i);
+
+impl WrappingArithmetic for Lanes {
+    #[inline(always)]
+    fn wrapping_add(self, rhs: Self) -> Self {
+        // SAFETY: see the type's documentation
+        Self(unsafe { _mm512_add_epi64(self.0, rhs.0) })
     }
-    matrix
-};
+
+    #[inline(always)]
+    fn wrapping_sub(self, rhs: Self) -> Self {
+        // SAFETY: see the type's documentation
+        Self(unsafe { _mm512_sub_epi64(self.0, rhs.0) })
+    }
+
+    #[inline(always)]
+    fn wrapping_mul(self, rhs: u64) -> Self {
+        // SAFETY: see the type's documentation
+        Self(unsafe { _mm512_mullo_epi64(self.0, _mm512_set1_epi64(rhs as i64)) })
+    }
+}
 
 /// The number of independent sponges processed side by side by the batched
 /// functions: one per 64-bit lane of a 512-bit vector.
@@ -471,7 +486,7 @@ impl Tip5Batch {
     ///
     /// See [`Tip5::permutation_avx512`].
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn new(domain: Domain) -> Self {
         let capacity = match domain {
             Domain::VariableLength => _mm512_setzero_si512(),
@@ -490,7 +505,7 @@ impl Tip5Batch {
     ///
     /// See [`Tip5::permutation_avx512`].
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn set(&mut self, index: usize, elements: [BFieldElement; BATCH_SIZE]) {
         let raw = elements.map(|e| e.raw_u64() as i64);
         self.state[index] = _mm512_loadu_epi64(raw.as_ptr());
@@ -502,7 +517,7 @@ impl Tip5Batch {
     ///
     /// See [`Tip5::permutation_avx512`].
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn get(&self, index: usize) -> [BFieldElement; BATCH_SIZE] {
         let mut raw = [0_i64; BATCH_SIZE];
         _mm512_storeu_epi64(raw.as_mut_ptr(), self.state[index]);
@@ -514,7 +529,7 @@ impl Tip5Batch {
     /// # Safety
     ///
     /// See [`Tip5::permutation_avx512`].
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn permutation(&mut self) {
         for round_index in 0..NUM_ROUNDS {
             self.sbox_layer();
@@ -523,7 +538,7 @@ impl Tip5Batch {
     }
 
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn sbox_layer(&mut self) {
         for element in self.state.iter_mut().take(NUM_SPLIT_AND_LOOKUP) {
             *element = Tip5::lookup8(*element);
@@ -538,42 +553,35 @@ impl Tip5Batch {
 
     /// Multiply the states by the MDS matrix and add the round constants.
     ///
-    /// Every state element is split into its two 32-bit limbs, and every
-    /// output limb accumulates the 16 products of an MDS row with the input
-    /// limbs, starting from the round constant's limb. The accumulation is
-    /// exact in 64 bits; see [`Tip5::reduce2x32`] for the reduction.
+    /// Every state element is split into its two 32-bit limbs. For each limb,
+    /// the product with the MDS matrix is computed exactly in 64 bits, using the
+    /// same fast cyclic convolution as the scalar permutation. The round
+    /// constant's limb is added; see [`Tip5::reduce2x32`] for the reduction.
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn mds_rcs(&mut self, round_index: usize) {
         let u32_max = _mm512_set1_epi64(u32::MAX as i64);
-        let mut lo = [_mm512_setzero_si512(); STATE_SIZE];
-        let mut hi = [_mm512_setzero_si512(); STATE_SIZE];
-        for c in 0..STATE_SIZE {
-            lo[c] = _mm512_and_epi64(self.state[c], u32_max);
-            hi[c] = _mm512_srli_epi64(self.state[c], 32);
+        let mut lo = [Lanes(_mm512_setzero_si512()); STATE_SIZE];
+        let mut hi = [Lanes(_mm512_setzero_si512()); STATE_SIZE];
+        for (c, &element) in self.state.iter().enumerate() {
+            lo[c] = Lanes(_mm512_and_epi64(element, u32_max));
+            hi[c] = Lanes(_mm512_srli_epi64(element, 32));
         }
 
-        // Half of the outputs at a time, to keep the accumulators in
-        // registers.
-        const HALF: usize = STATE_SIZE / 2;
-        for half in 0..2 {
-            let mut acc_lo = [_mm512_setzero_si512(); HALF];
-            let mut acc_hi = [_mm512_setzero_si512(); HALF];
-            for (i, r) in (half * HALF..(half + 1) * HALF).enumerate() {
-                let rc_index = round_index * STATE_SIZE + r;
-                acc_lo[i] = _mm512_set1_epi64(RCS_MONT_L[rc_index] as i64);
-                acc_hi[i] = _mm512_set1_epi64(RCS_MONT_U[rc_index] as i64);
-            }
-            for c in 0..STATE_SIZE {
-                for (i, r) in (half * HALF..(half + 1) * HALF).enumerate() {
-                    let m = _mm512_set1_epi64(MDS_MATRIX[r][c] as i64);
-                    acc_lo[i] = _mm512_madd52lo_epu64(acc_lo[i], m, lo[c]);
-                    acc_hi[i] = _mm512_madd52lo_epu64(acc_hi[i], m, hi[c]);
-                }
-            }
-            for (i, r) in (half * HALF..(half + 1) * HALF).enumerate() {
-                self.state[r] = Tip5::reduce2x32(acc_lo[i], acc_hi[i]);
-            }
+        // The convolution is scaled by 16. Every entry of the MDS matrix has
+        // at most 16 bits, making the unscaled limbs of the product at most 52
+        // bits wide. Scaled, they still fit into 64 bits, i.e., the wrapping
+        // arithmetic is exact.
+        let lo = Tip5::generated_function(lo);
+        let hi = Tip5::generated_function(hi);
+
+        for r in 0..STATE_SIZE {
+            let rc_index = round_index * STATE_SIZE + r;
+            let rc_lo = _mm512_set1_epi64(RCS_MONT_L[rc_index] as i64);
+            let rc_hi = _mm512_set1_epi64(RCS_MONT_U[rc_index] as i64);
+            let acc_lo = _mm512_add_epi64(_mm512_srli_epi64(lo[r].0, 4), rc_lo);
+            let acc_hi = _mm512_add_epi64(_mm512_srli_epi64(hi[r].0, 4), rc_hi);
+            self.state[r] = Tip5::reduce2x32(acc_lo, acc_hi);
         }
     }
 }
@@ -590,7 +598,7 @@ impl Tip5 {
     /// # Panics
     ///
     /// Panics if the inputs differ in length.
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn hash_varlen_batch(
         inputs: [&[BFieldElement]; BATCH_SIZE],
     ) -> [Digest; BATCH_SIZE] {
@@ -627,7 +635,7 @@ impl Tip5 {
     /// # Safety
     ///
     /// See [`Self::permutation_avx512`].
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn hash_pair_batch(
         pairs: &[[Digest; 2]; BATCH_SIZE],
     ) -> [Digest; BATCH_SIZE] {
@@ -643,7 +651,7 @@ impl Tip5 {
 
     /// The first [`Digest::LEN`] state elements of every sponge.
     #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512vbmi,avx512ifma")]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn digests(sponges: &Tip5Batch) -> [Digest; BATCH_SIZE] {
         let mut digests = [[BFieldElement::ZERO; Digest::LEN]; BATCH_SIZE];
         for i in 0..Digest::LEN {
