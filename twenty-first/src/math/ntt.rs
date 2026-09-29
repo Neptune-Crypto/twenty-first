@@ -188,8 +188,11 @@ fn slice_len<FF>(x: &[FF]) -> u32 {
 const LOG_2_BLOCK_LEN: u32 = 14;
 
 /// The binary logarithm of the tile side length used by the
-/// [bit-reversal permutation][bit_reverse_permutation].
-const LOG_2_TILE_LEN: u32 = 4;
+/// [bit-reversal permutation][bit_reverse_permutation]. A tile row of 32
+/// elements is 256 bytes for base field elements and 768 bytes for extension
+/// field elements: long enough for the DRAM to serve it efficiently, while a
+/// pair of tiles still fits the L1 cache.
+const LOG_2_TILE_LEN: u32 = 5;
 
 /// The number of adjacent “columns” processed together in the high
 /// (cross-block) layers of the NTT. See [`apply_cross_block_layers`].
@@ -323,6 +326,12 @@ impl<T: Copy> SharedSliceMut<T> {
             ptr: x.as_mut_ptr(),
             len: x.len(),
         }
+    }
+
+    /// The pointer to the slice's first element. Accessing memory through it
+    /// is subject to the same contract as the other methods.
+    fn as_mut_ptr(&self) -> *mut T {
+        self.ptr
     }
 
     /// # Safety
@@ -660,7 +669,7 @@ fn par_apply_cross_block_layers<FF>(
     FF: FiniteField + MulAssign<BFieldElement> + Send + Sync,
 {
     let block_len = 1_usize << first_layer;
-    let column_width = CROSS_BLOCK_COLUMN_WIDTH.min(block_len);
+    let column_width = par_cross_block_column_width::<FF>(x.len(), block_len);
     let shared_x = SharedSliceMut::new(x);
     (0..block_len)
         .into_par_iter()
@@ -681,6 +690,28 @@ fn par_apply_cross_block_layers<FF>(
                 )
             };
         });
+}
+
+/// The number of adjacent columns processed together by
+/// [`par_apply_cross_block_layers`].
+///
+/// A task's working set is its columns across all blocks; it should fit the
+/// L2 cache alongside a second thread's, since all layers are applied to it
+/// before moving on. Narrower columns also make more tasks, which balance
+/// better across many threads. Columns are at least [`avx512::LANES`] wide
+/// for the SIMD kernels and at most [`CROSS_BLOCK_COLUMN_WIDTH`].
+fn par_cross_block_column_width<FF>(len: usize, block_len: usize) -> usize {
+    const WORKING_SET_BUDGET: usize = 96 << 10;
+    const MIN_TASKS_PER_THREAD: usize = 2;
+
+    let num_blocks = len / block_len;
+    let fits_cache = WORKING_SET_BUDGET / (num_blocks * size_of::<FF>()).max(1);
+    let enough_tasks = block_len / (MIN_TASKS_PER_THREAD * rayon::current_num_threads().max(1));
+    let width = fits_cache
+        .min(enough_tasks)
+        .clamp(8, CROSS_BLOCK_COLUMN_WIDTH);
+    let width = 1 << width.ilog2(); // round down to a power of two
+    width.min(block_len)
 }
 
 /// Apply the cross-block layers to the sub-problems identified by `columns`.
@@ -853,6 +884,137 @@ pub fn scaled_zero_padded_ntt<FF>(
     FF: FiniteField + MulAssign<BFieldElement> + Mul<BFieldElement, Output = FF>,
 {
     scaled_zero_padded_ntt_with_block_len(coefficients, offset, codeword, LOG_2_BLOCK_LEN);
+}
+
+/// Parallel version of [`scaled_zero_padded_ntt`]: the gathers of the block
+/// groups, the blocks' layers, and the cross-block layers are each
+/// distributed across threads.
+///
+/// # Panics
+///
+/// See [`scaled_zero_padded_ntt`].
+pub fn par_scaled_zero_padded_ntt<FF>(
+    coefficients: &[FF],
+    offset: BFieldElement,
+    codeword: &mut [MaybeUninit<FF>],
+) where
+    FF: FiniteField + MulAssign<BFieldElement> + Mul<BFieldElement, Output = FF>,
+{
+    let len = codeword.len();
+    assert!(coefficients.len() <= len);
+    let Some(log_2_len) = len.checked_ilog2() else {
+        return;
+    };
+    assert!(len.is_power_of_two());
+    if log_2_len < par_min_log_2_len() {
+        return scaled_zero_padded_ntt(coefficients, offset, codeword);
+    }
+    let twiddle_factors = forward_twiddle_factors(u32::try_from(len).unwrap());
+
+    let padded_num_coefficients = coefficients.len().next_power_of_two();
+    let log_2_expansion = log_2_len - padded_num_coefficients.ilog2();
+    let expansion = 1_usize << log_2_expansion;
+    let log_2_block_len = log_2_len.min(LOG_2_BLOCK_LEN).max(log_2_expansion);
+    let block_len = 1_usize << log_2_block_len;
+    let log_2_num_blocks = log_2_len - log_2_block_len;
+    let num_blocks = 1_usize << log_2_num_blocks;
+    let log_2_num_rows = log_2_block_len - log_2_expansion;
+    let num_rows = 1_usize << log_2_num_rows;
+
+    let offset_to_the_num_blocks = offset.mod_pow(num_blocks as u64);
+    let mut row_powers = Vec::with_capacity(num_rows);
+    let mut power = BFieldElement::ONE;
+    for _ in 0..num_rows {
+        row_powers.push(power);
+        power *= offset_to_the_num_blocks;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    let stream_limbs = simd_limbs::<FF>().filter(|limbs| {
+        let line_len = avx512::CACHE_LINE_LEN / size_of::<u64>();
+        (expansion * limbs).is_multiple_of(line_len)
+            && codeword
+                .as_ptr()
+                .cast::<u8>()
+                .addr()
+                .is_multiple_of(avx512::CACHE_LINE_LEN)
+    });
+
+    let group_len = GATHER_GROUP_LEN.min(num_blocks);
+    let log_2_tile_len = log_2_num_rows.min(LOG_2_GATHER_TILE_LEN);
+    let tile_len = 1_usize << log_2_tile_len;
+    let num_tiles = num_rows >> log_2_tile_len;
+
+    // Phase 1: gather every group's blocks. The groups write disjoint sets of
+    // blocks, so they can run concurrently; the shared slice pointer hands
+    // each task its blocks.
+    let shared_codeword = SharedSliceMut::new(codeword);
+    (0..num_blocks)
+        .into_par_iter()
+        .step_by(group_len)
+        .for_each(|first_column| {
+            let columns = first_column..first_column + group_len;
+            let blocks = columns
+                .clone()
+                .map(|column| bit_reverse(column, log_2_num_blocks))
+                .collect::<Vec<_>>();
+            let column_powers = columns
+                .clone()
+                .map(|column| offset.mod_pow(column as u64))
+                .collect::<Vec<_>>();
+            let rows =
+                (0..num_tiles).flat_map(|tile| (0..tile_len).map(move |t| t * num_tiles + tile));
+            for row in rows {
+                let row_power = row_powers[row];
+                let position_in_block = bit_reverse(row, log_2_num_rows) * expansion;
+                for ((column, &block), &column_power) in
+                    columns.clone().zip(&blocks).zip(&column_powers)
+                {
+                    let index = row * num_blocks + column;
+                    let value = match coefficients.get(index) {
+                        Some(&coefficient) => coefficient * (row_power * column_power),
+                        None => FF::ZERO,
+                    };
+                    let start = block * block_len + position_in_block;
+                    // SAFETY: Different groups write disjoint blocks, and
+                    // within a group, every position is written exactly once
+                    // (see `scaled_zero_padded_ntt`).
+                    #[cfg(target_arch = "x86_64")]
+                    if let Some(limbs) = stream_limbs {
+                        unsafe {
+                            avx512::stream_repeated(
+                                shared_codeword.as_mut_ptr().add(start).cast(),
+                                (&raw const value).cast(),
+                                limbs,
+                                expansion,
+                            )
+                        };
+                        continue;
+                    }
+                    for i in 0..expansion {
+                        unsafe { shared_codeword.write(start + i, MaybeUninit::new(value)) };
+                    }
+                }
+            }
+            #[cfg(target_arch = "x86_64")]
+            if stream_limbs.is_some() {
+                // SAFETY: AVX-512 was detected.
+                unsafe { avx512::fence() };
+            }
+        });
+
+    // SAFETY: Every block was written to above, and the blocks partition
+    // the codeword. See also the safety argument in `scaled_zero_padded_ntt`.
+    let codeword =
+        unsafe { std::slice::from_raw_parts_mut(codeword.as_mut_ptr().cast::<FF>(), len) };
+
+    // Phases 2 and 3: the blocks' layers, then the cross-block layers.
+    codeword
+        .par_chunks_exact_mut(block_len)
+        .for_each(|block| apply_layers(block, twiddle_factors, log_2_expansion, log_2_block_len));
+    if log_2_block_len < log_2_len {
+        par_apply_cross_block_layers(codeword, twiddle_factors, log_2_block_len, log_2_len);
+    }
 }
 
 /// [`scaled_zero_padded_ntt`] with a configurable maximum block length, to
@@ -1759,6 +1921,37 @@ mod tests {
         let misalignment = buffer.as_ptr().cast::<u8>().addr() % 64;
         let skip = (64 - misalignment) % 64 / size_of::<T>().max(1);
         &mut buffer[skip..skip + len]
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 4))]
+    fn par_scaled_zero_padded_ntt_agrees_with_sequential_version(
+        #[strategy(17_u32..=19)] log_2_len: u32,
+        #[strategy(0_u32..=4)] log_2_expansion: u32,
+        #[filter(!#offset.is_zero())] offset: BFieldElement,
+        seed: u64,
+    ) {
+        let len = 1_usize << log_2_len;
+        let num_coefficients = len >> log_2_expansion;
+        let coefficients = (0..num_coefficients as u64)
+            .map(|i| XFieldElement::from(BFieldElement::new(i.wrapping_mul(seed | 1))))
+            .collect_vec();
+
+        let mut buffer = vec![MaybeUninit::<XFieldElement>::uninit(); len + 8];
+        let expected = cache_line_aligned(&mut buffer, len);
+        scaled_zero_padded_ntt(&coefficients, offset, expected);
+        let expected = expected
+            .iter()
+            .map(|c| unsafe { c.assume_init() })
+            .collect_vec();
+
+        let mut buffer = vec![MaybeUninit::<XFieldElement>::uninit(); len + 8];
+        let codeword = cache_line_aligned(&mut buffer, len);
+        par_scaled_zero_padded_ntt(&coefficients, offset, codeword);
+        let codeword = codeword
+            .iter()
+            .map(|c| unsafe { c.assume_init() })
+            .collect_vec();
+        prop_assert_eq!(expected, codeword);
     }
 
     #[macro_rules_attr::apply(proptest(cases = 4))]

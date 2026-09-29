@@ -34,6 +34,7 @@ use crate::math::ntt::intt;
 use crate::math::ntt::ntt;
 use crate::math::ntt::par_intt;
 use crate::math::ntt::par_ntt;
+use crate::math::ntt::par_scaled_zero_padded_ntt;
 use crate::math::ntt::scaled_zero_padded_ntt;
 use crate::math::traits::FiniteField;
 use crate::math::traits::ModPowU32;
@@ -1836,6 +1837,23 @@ where
         FF: Mul<BFieldElement, Output = FF>,
     {
         scaled_zero_padded_ntt(&self.coefficients, offset, codeword);
+    }
+
+    /// Parallel version of
+    /// [`fast_coset_evaluate_into`](Self::fast_coset_evaluate_into). Use this
+    /// for a single, large evaluation; see [`par_scaled_zero_padded_ntt`].
+    ///
+    /// # Panics
+    ///
+    /// See [`fast_coset_evaluate_into`](Self::fast_coset_evaluate_into).
+    pub fn par_fast_coset_evaluate_into(
+        &self,
+        offset: BFieldElement,
+        codeword: &mut [std::mem::MaybeUninit<FF>],
+    ) where
+        FF: Mul<BFieldElement, Output = FF>,
+    {
+        par_scaled_zero_padded_ntt(&self.coefficients, offset, codeword);
     }
 
     /// Parallel version of [`fast_coset_evaluate`](Self::fast_coset_evaluate).
