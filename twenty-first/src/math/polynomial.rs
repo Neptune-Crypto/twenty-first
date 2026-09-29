@@ -825,6 +825,13 @@ where
     /// size of the NTT.
     const FAST_REDUCE_CUTOFF_THRESHOLD: usize = 1 << 8;
 
+    /// Below this product of a modulus' degree and the precision of a
+    /// reduction, i.e., below roughly this many base field multiplications,
+    /// quadratic algorithms (long division, coefficient-wise power series
+    /// inversion) beat their quasi-linear counterparts, which have larger
+    /// constants.
+    const QUADRATIC_REDUCTION_CUTOFF: usize = 1 << 14;
+
     /// When doing batch evaluation, sometimes it makes sense to reduce the
     /// polynomial modulo the zerofier of the domain first. This const regulates
     /// when.
@@ -1448,7 +1455,9 @@ where
             self.reduce_by_ntt_friendly_modulus(&shift_factor_ntt, tail_size);
 
         // 2. Reduction of the intermediate remainder, which has degree at
-        // most a small multiple of the modulus' degree, by fast division.
+        // most a small multiple of the modulus' degree. Long division costs
+        // about (deg r - deg m) · deg m multiplications and has no overhead,
+        // which beats fast division for small moduli.
         let modulus_degree = usize::try_from(modulus.degree()).expect("modulus is non-zero");
         let Ok(remainder_degree) = usize::try_from(intermediate_remainder.degree()) else {
             return Polynomial::zero();
@@ -1457,6 +1466,9 @@ where
             return intermediate_remainder;
         }
         let precision = remainder_degree - modulus_degree + 1;
+        if modulus_degree * precision <= Self::QUADRATIC_REDUCTION_CUTOFF {
+            return intermediate_remainder.reduce_long_division(modulus);
+        }
         let reversed_modulus_inverse = modulus.reverse().power_series_inverse(precision);
         intermediate_remainder.reduce_with_reversed_inverse(modulus, &reversed_modulus_inverse)
     }
@@ -1581,7 +1593,14 @@ where
         // Without modular reduction, the degree of the product f(X) * g(X) is
         // deg(f) + arg -- even after coefficient reversal. So n = deg(f) + arg
         // and arg = n - deg(f).
-        let inverse_reverse = reverse.power_series_inverse((n - degree).max(1));
+        // For a modulus of small degree, the quadratic algorithm is cheaper
+        // than Newton iteration; see also `fast_reduce`.
+        let precision = (n - degree).max(1);
+        let inverse_reverse = if degree * precision <= Self::QUADRATIC_REDUCTION_CUTOFF {
+            reverse.formal_power_series_inverse_minimal(precision)
+        } else {
+            reverse.power_series_inverse(precision)
+        };
         let product_reverse = reverse.multiply(&inverse_reverse);
         let product = product_reverse.reverse();
 
