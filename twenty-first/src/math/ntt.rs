@@ -330,6 +330,7 @@ impl<T: Copy> SharedSliceMut<T> {
 
     /// The pointer to the slice's first element. Accessing memory through it
     /// is subject to the same contract as the other methods.
+    #[cfg(target_arch = "x86_64")]
     fn as_mut_ptr(&self) -> *mut T {
         self.ptr
     }
@@ -502,6 +503,7 @@ fn apply_layers<FF>(
     FF: FiniteField + MulAssign<BFieldElement>,
 {
     let mut layer = first_layer;
+    #[cfg(target_arch = "x86_64")]
     let simd_limbs = simd_limbs::<FF>();
 
     // The twiddle factors of the first two layers are 1, 1, and a primitive
@@ -606,18 +608,12 @@ fn apply_layers<FF>(
 
 /// The number of base field limbs of `FF` if the SIMD kernels can be used
 /// for it on this CPU, else `None`.
+#[cfg(target_arch = "x86_64")]
 #[inline]
 fn simd_limbs<FF: FiniteField>() -> Option<usize> {
-    #[cfg(target_arch = "x86_64")]
-    {
-        match FF::NUM_BFE_LIMBS {
-            Some(limbs @ (1 | 3)) if avx512::is_available() => Some(limbs),
-            _ => None,
-        }
-    }
-    #[cfg(not(target_arch = "x86_64"))]
-    {
-        None
+    match FF::NUM_BFE_LIMBS {
+        Some(limbs @ (1 | 3)) if avx512::is_available() => Some(limbs),
+        _ => None,
     }
 }
 
