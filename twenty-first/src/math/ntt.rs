@@ -694,7 +694,7 @@ fn par_apply_cross_block_layers<FF>(
 /// A task's working set is its columns across all blocks; it should fit the
 /// L2 cache alongside a second thread's, since all layers are applied to it
 /// before moving on. Narrower columns also make more tasks, which balance
-/// better across many threads. Columns are at least [`avx512::LANES`] wide
+/// better across many threads. Columns are at least `avx512::LANES` wide
 /// for the SIMD kernels and at most [`CROSS_BLOCK_COLUMN_WIDTH`].
 fn par_cross_block_column_width<FF>(len: usize, block_len: usize) -> usize {
     const WORKING_SET_BUDGET: usize = 96 << 10;
@@ -864,7 +864,7 @@ const LOG_2_GATHER_TILE_LEN: u32 = 6;
 /// permutation of the zero-padded input is nonzero only at every `E`-th
 /// index, and the first `log₂(E)` layers of the transform turn each of these
 /// values into `E` copies of itself. Hence, the input of every block (see
-/// [`ntt_unchecked`]) can be gathered directly from the coefficients,
+/// `ntt_unchecked`) can be gathered directly from the coefficients,
 /// scaled on the fly. The gather reads the coefficients like the columns of
 /// a matrix, so the blocks are processed in groups that share cache lines.
 ///
@@ -1164,7 +1164,7 @@ fn scaled_zero_padded_ntt_with_block_len<FF>(
 /// multiplications per element, exactly as in the scalar code.
 ///
 /// The functions in this module are compiled for every x86-64 target, but
-/// must only be called after checking [`is_available`] at runtime.
+/// must only be called after checking `is_available` at runtime.
 ///
 /// [`XFieldElement`]: crate::math::x_field_element::XFieldElement
 #[cfg(target_arch = "x86_64")]
