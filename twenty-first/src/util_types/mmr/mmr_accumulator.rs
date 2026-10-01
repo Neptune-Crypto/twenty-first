@@ -1041,25 +1041,25 @@ mod tests {
 
         let empty = MmrAccumulator::new_from_leafs(vec![]);
         assert_eq!(
-            "cd65052100640f0d27e5654f97c47e49899add2f265967ccbefee7264e9bc08f588542d9dc3d5ac5",
+            "c55a3dd9c3d98dece03cf0809e9b8488c7bd42935c86a955be835cb49e0fa266ef2d2f15a0736993",
             snapshot(empty),
         );
 
         let one_leaf = MmrAccumulator::new_from_leafs(vec![rng.random()]);
         assert_eq!(
-            "9cfb825709fd76de8c24daf437e1bd16a2ea512f2d2338ee417df51dae55905a49628d4f13a2f83e",
+            "3ef8a21253aad9fe921121463a4031e36757905584a466484d4e3af65354f9ea9161fe78e931ea54",
             snapshot(one_leaf),
         );
 
         let two_leafs = MmrAccumulator::new_from_leafs(rng.random::<[_; 2]>().to_vec());
         assert_eq!(
-            "20a22079d30e76c93215f54d986d414d657d4bd056fe8e9a38e87d432ce391cd1dab92f9b6d3442c",
+            "2c44d3b6487f5c43a1f77bd8d635b26e51719d7352b9339196d6faa5775d4b2f0bccbc8dd471c80c",
             snapshot(two_leafs),
         );
 
         let ten_peaks = MmrAccumulator::init(rng.random::<[_; 10]>().to_vec(), 0b11_1111_1111);
         assert_eq!(
-            "42dbf8fcf51d4d8134f719ad9a3a9c621a141b3bc8d7941e8baf5919bceea120e6ecf6314e939b87",
+            "879b934c13889fb2a4d9fc29315fef7a877081f3ed385adc87215805ca108e297382d0c2307e8301",
             snapshot(ten_peaks),
         );
     }
