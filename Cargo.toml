@@ -7,7 +7,7 @@ authors = ["Triton Software AG"]
 edition = "2024"
 rust-version = "1.89.0"
 
-license = "GPL-2.0"
+license = "MIT OR Apache-2.0"
 homepage = "https://github.com/Neptune-Crypto/twenty-first"
 documentation = "https://github.com/Neptune-Crypto/twenty-first"
 repository = "https://github.com/Neptune-Crypto/twenty-first"
