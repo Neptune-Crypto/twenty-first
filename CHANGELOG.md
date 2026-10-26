@@ -1,4 +1,12 @@
 
+## [3.0.1](https://github.com/Neptune-Crypto/twenty-first/compare/v3.0.0..v3.0.1) – 2026-10-26
+
+### ⚙️ Miscellaneous
+
+- Keep `proptest` dependency below 1.12 ([7df38b18](https://github.com/Neptune-Crypto/twenty-first/commit/7df38b18))
+- Bump rust-toolchain version to 1.99.1 ([e6e4f13a](https://github.com/Neptune-Crypto/twenty-first/commit/e6e4f13a))
+- Update license to MIT OR Apache-2.0 ([#280](https://github.com/Neptune-Crypto/twenty-first/issues/280)) ([3eb190df](https://github.com/Neptune-Crypto/twenty-first/commit/3eb190df))
+
 ## [3.0.0](https://github.com/Neptune-Crypto/twenty-first/compare/v2.0.2..v3.0.0) – 2026-09-29
 
 ### ✨ Features
