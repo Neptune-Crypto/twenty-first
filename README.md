@@ -1,5 +1,7 @@
 # twenty-first
 
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![GitHub CI](https://github.com/Neptune-Crypto/twenty-first/actions/workflows/main.yml/badge.svg)](https://github.com/Neptune-Crypto/twenty-first/actions)
 [![crates.io](https://img.shields.io/crates/v/twenty-first.svg)](https://crates.io/crates/twenty-first)
 [![Coverage Status](https://coveralls.io/repos/github/Neptune-Crypto/twenty-first/badge.svg?branch=master)](https://coveralls.io/github/Neptune-Crypto/twenty-first?branch=master)
@@ -33,3 +35,18 @@ This library contains primarily the following cryptographic primitives:
 
 The `twenty-first` library can be built for WebAssembly. See the [dedicated readme](twenty-first/README-wasm32.md) for
 further information.
+
+## License
+
+Licensed under either of
+
+- [Apache License, Version 2.0](LICENSE-APACHE)
+- [MIT license](LICENSE-MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the
+work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any
+additional terms or conditions.
