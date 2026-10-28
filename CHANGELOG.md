@@ -1,4 +1,23 @@
 
+## [3.1.0](https://github.com/Neptune-Crypto/twenty-first/compare/v3.0.1..v3.1.0) – 2026-10-28
+
+### ✨ Features
+
+- Batch-hashing of long inputs ([372b7c62](https://github.com/Neptune-Crypto/twenty-first/commit/372b7c62))
+
+### ⚡️ Performance
+
+- Add functions for batch-512 absorption ([bfe94398](https://github.com/Neptune-Crypto/twenty-first/commit/bfe94398))
+
+### ⚙️ Miscellaneous
+
+- Add missing AVX512 flag for CI ([d0407210](https://github.com/Neptune-Crypto/twenty-first/commit/d0407210))
+
+### ⏱️ Benchmark
+
+- Add benchmark for row/column hashing ([d89df8d0](https://github.com/Neptune-Crypto/twenty-first/commit/d89df8d0))
+- Parallel hashing of rows ([b923627a](https://github.com/Neptune-Crypto/twenty-first/commit/b923627a))
+
 ## [3.0.1](https://github.com/Neptune-Crypto/twenty-first/compare/v3.0.0..v3.0.1) – 2026-10-26
 
 ### ⚙️ Miscellaneous
