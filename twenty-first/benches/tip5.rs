@@ -21,6 +21,8 @@ criterion_group!(
         hash_parallel::<65_536>,
         absorb_many::<64>,
         absorb_individually::<64>,
+        hash_rows_of_bfe_columns::<400, 512>,
+        hash_rows_of_xfe_columns::<88, 512>,
 );
 
 fn hash_10(c: &mut Criterion) {
@@ -72,4 +74,28 @@ fn absorb_individually<const NUM_SPONGES: usize>(c: &mut Criterion) {
             })
         },
     );
+}
+
+fn hash_rows_of_bfe_columns<const NUM_COLUMNS: usize, const NUM_ROWS: usize>(c: &mut Criterion) {
+    let columns = (0..NUM_COLUMNS)
+        .map(|_| random_elements::<BFieldElement>(NUM_ROWS))
+        .collect::<Vec<_>>();
+    let columns = columns.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    c.benchmark_group("hash_rows_of_bfe_columns")
+        .bench_function(
+            BenchmarkId::new("columns_x_rows", format!("{NUM_COLUMNS}x{NUM_ROWS}")),
+            |b| b.iter(|| Tip5::hash_rows_of_columns(&columns)),
+        );
+}
+
+fn hash_rows_of_xfe_columns<const NUM_COLUMNS: usize, const NUM_ROWS: usize>(c: &mut Criterion) {
+    let columns = (0..NUM_COLUMNS)
+        .map(|_| random_elements::<XFieldElement>(NUM_ROWS))
+        .collect::<Vec<_>>();
+    let columns = columns.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    c.benchmark_group("hash_rows_of_xfe_columns")
+        .bench_function(
+            BenchmarkId::new("columns_x_rows", format!("{NUM_COLUMNS}x{NUM_ROWS}")),
+            |b| b.iter(|| Tip5::hash_rows_of_columns(&columns)),
+        );
 }
