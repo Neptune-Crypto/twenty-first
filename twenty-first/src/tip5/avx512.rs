@@ -73,9 +73,11 @@ impl Tip5 {
     /// and “ifma”; see [`Self::avx512_is_available`].
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn permutation_avx512(&mut self) {
+        let (mut a, mut b) = Self::load_state(&self.state);
         for round_index in 0..NUM_ROUNDS {
-            self.round_avx512(round_index);
+            (a, b) = Self::round_in_registers(a, b, round_index);
         }
+        Self::store_state(&mut self.state, a, b);
     }
 
     /// One round of the Tip5 permutation, using AVX-512.
@@ -86,42 +88,64 @@ impl Tip5 {
     #[inline]
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn round_avx512(&mut self, round_index: usize) {
-        Self::sbox_layer_avx512(&mut self.state);
-        Self::mds_rcs_avx512(&mut self.state, round_index);
+        let (a, b) = Self::load_state(&self.state);
+        let (a, b) = Self::round_in_registers(a, b, round_index);
+        Self::store_state(&mut self.state, a, b);
     }
 
+    /// The state's first and second half, as vectors.
     #[inline]
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
-    unsafe fn sbox_layer_avx512(state: &mut [BFieldElement; STATE_SIZE]) {
-        let a = _mm512_load_epi64(state.as_mut_ptr().offset(0x00) as *mut i64);
-        let b = _mm512_load_epi64(state.as_mut_ptr().offset(0x08) as *mut i64);
-
-        /* S-BOX */
-        let asbox = Self::lookup8(a);
-
-        /* 7-th power */
-        let a1 = a;
-        let b1 = b;
-
-        let a2 = Self::square8(a1);
-        let b2 = Self::square8(b1);
-
-        let a4 = Self::square8(a2);
-        let b4 = Self::square8(b2);
-
-        let a7 = Self::mul8(Self::mul8(a1, a2), a4);
-        let b7 = Self::mul8(Self::mul8(b1, b2), b4);
-
-        let amix = _mm512_mask_blend_epi64(0x0f, a7, asbox);
-
-        _mm512_store_epi64(state.as_mut_ptr().offset(0x00) as *mut i64, amix);
-        _mm512_store_epi64(state.as_mut_ptr().offset(0x08) as *mut i64, b7);
+    unsafe fn load_state(state: &[BFieldElement; STATE_SIZE]) -> (__m512i, __m512i) {
+        let a = _mm512_load_epi64(state.as_ptr().offset(0x00) as *const i64);
+        let b = _mm512_load_epi64(state.as_ptr().offset(0x08) as *const i64);
+        (a, b)
     }
 
+    /// The inverse of [`Self::load_state`].
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn store_state(state: &mut [BFieldElement; STATE_SIZE], a: __m512i, b: __m512i) {
+        _mm512_store_epi64(state.as_mut_ptr().offset(0x00) as *mut i64, a);
+        _mm512_store_epi64(state.as_mut_ptr().offset(0x08) as *mut i64, b);
+    }
+
+    /// One round on a state held in two vectors.
+    ///
+    /// A single permutation has little parallelism: the S-box's power maps
+    /// are two dependency chains, and the MDS matrix's rows are only a few
+    /// more. Hence, the code below cares about the lengths of those chains.
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn round_in_registers(a: __m512i, b: __m512i, round_index: usize) -> (__m512i, __m512i) {
+        let (a, b) = Self::sbox_layer_avx512(a, b);
+        Self::mds_rcs_avx512(a, b, round_index)
+    }
+
+    /// The S-box layer. The input must be canonical; the output is in
+    /// [limb form](Limbs32), which is what the MDS layer consumes.
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn sbox_layer_avx512(a: __m512i, b: __m512i) -> (Limbs32, Limbs32) {
+        /* S-BOX */
+        let asbox = Self::split32(Self::lookup8(a));
+
+        /* 7-th power */
+        let [a7, b7] = Self::pow7_many([a, b]);
+
+        let amix = Limbs32 {
+            lo: _mm512_mask_blend_epi64(0x0f, a7.lo, asbox.lo),
+            hi: _mm512_mask_blend_epi64(0x0f, a7.hi, asbox.hi),
+        };
+        (amix, b7)
+    }
+
+    /// Multiply the state, given in [limb form](Limbs32), by the MDS matrix
+    /// and add the round constants. The result is canonical.
     #[inline]
     #[expect(clippy::identity_op)]
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
-    unsafe fn mds_rcs_avx512(state: &mut [BFieldElement; STATE_SIZE], round_index: usize) {
+    unsafe fn mds_rcs_avx512(a: Limbs32, b: Limbs32, round_index: usize) -> (__m512i, __m512i) {
         const MDS_TRANS: [[u64; 8]; 16] = [
             [61402, 1108, 28750, 33823, 7454, 43244, 53865, 12034],
             [56951, 27521, 41351, 40901, 12021, 59689, 26798, 17845],
@@ -140,154 +164,115 @@ impl Tip5 {
             [27521, 41351, 40901, 12021, 59689, 26798, 17845, 61402],
             [1108, 28750, 33823, 7454, 43244, 53865, 12034, 56951],
         ];
-        union Vec512 {
-            vector: __m512i,
-            vals32: [u32; 16],
-        }
-
-        let a = _mm512_load_epi64(state.as_ptr().offset(0x00) as *const i64);
-        let b = _mm512_load_epi64(state.as_ptr().offset(0x08) as *const i64);
-
         /* Round Constants used to initialize 32-bit accumulators */
-        let mut r0lo = _mm512_loadu_epi64(
+        let rc0lo = _mm512_loadu_epi64(
             RCS_MONT_L
                 .as_ptr()
                 .offset((round_index * 16 + 0).try_into().unwrap()) as *const i64,
         );
-        let mut r1lo = _mm512_loadu_epi64(
+        let rc1lo = _mm512_loadu_epi64(
             RCS_MONT_L
                 .as_ptr()
                 .offset((round_index * 16 + 8).try_into().unwrap()) as *const i64,
         );
-        let mut r0hi = _mm512_loadu_epi64(
+        let rc0hi = _mm512_loadu_epi64(
             RCS_MONT_U
                 .as_ptr()
                 .offset((round_index * 16 + 0).try_into().unwrap()) as *const i64,
         );
-        let mut r1hi = _mm512_loadu_epi64(
+        let rc1hi = _mm512_loadu_epi64(
             RCS_MONT_U
                 .as_ptr()
                 .offset((round_index * 16 + 8).try_into().unwrap()) as *const i64,
         );
 
         /* Linear Diffusion */
+        // Every output limb is the sum of 16 products. A single permutation
+        // has little parallelism, so each sum is split over `NUM_ACCS`
+        // independent accumulators to shorten the multiply-add chains.
+        //
+        // The limbs are broadcast with in-register permutations. Extracting
+        // them one by one would go through general purpose registers, which
+        // is slow.
+        //
+        // Every product is at most 16 + 33 bits wide, so the multiply-adds
+        // are exact, and every output limb is at most 53 bits wide, as
+        // [`Self::reduce2x32`] requires: the sum of 16 products is less than
+        // 2^52 + 2^43, and the round constant's limb adds less than 2^32.
+        const NUM_ACCS: usize = 4;
+        let zero = _mm512_setzero_si512();
+        let mut acc0lo = [zero; NUM_ACCS];
+        let mut acc0hi = [zero; NUM_ACCS];
+        let mut acc1lo = [zero; NUM_ACCS];
+        let mut acc1hi = [zero; NUM_ACCS];
+        acc0lo[0] = rc0lo;
+        acc0hi[0] = rc0hi;
+        acc1lo[0] = rc1lo;
+        acc1hi[0] = rc1hi;
         for i in 0..8 {
-            let c0 = _mm512_loadu_epi64(MDS_TRANS.as_ptr().offset(2 * i + 0) as *const i64);
-            let c1 = _mm512_loadu_epi64(MDS_TRANS.as_ptr().offset(2 * i + 1) as *const i64);
+            let c0 =
+                _mm512_loadu_epi64(MDS_TRANS.as_ptr().offset(2 * i as isize + 0) as *const i64);
+            let c1 =
+                _mm512_loadu_epi64(MDS_TRANS.as_ptr().offset(2 * i as isize + 1) as *const i64);
 
-            let d0lo = _mm512_set1_epi64(Vec512 { vector: a }.vals32[(2 * i + 0) as usize].into());
-            let d0hi = _mm512_set1_epi64(Vec512 { vector: a }.vals32[(2 * i + 1) as usize].into());
-            let e0lo = _mm512_set1_epi64(Vec512 { vector: b }.vals32[(2 * i + 0) as usize].into());
-            let e0hi = _mm512_set1_epi64(Vec512 { vector: b }.vals32[(2 * i + 1) as usize].into());
+            let lane = _mm512_set1_epi64(i as i64);
+            let d0lo = _mm512_permutexvar_epi64(lane, a.lo);
+            let d0hi = _mm512_permutexvar_epi64(lane, a.hi);
+            let e0lo = _mm512_permutexvar_epi64(lane, b.lo);
+            let e0hi = _mm512_permutexvar_epi64(lane, b.hi);
 
-            r0lo = _mm512_madd52lo_epu64(r0lo, c0, d0lo);
-            r0hi = _mm512_madd52lo_epu64(r0hi, c0, d0hi);
-            r1lo = _mm512_madd52lo_epu64(r1lo, c1, d0lo);
-            r1hi = _mm512_madd52lo_epu64(r1hi, c1, d0hi);
+            let acc = i % NUM_ACCS;
+            acc0lo[acc] = _mm512_madd52lo_epu64(acc0lo[acc], c0, d0lo);
+            acc0hi[acc] = _mm512_madd52lo_epu64(acc0hi[acc], c0, d0hi);
+            acc1lo[acc] = _mm512_madd52lo_epu64(acc1lo[acc], c1, d0lo);
+            acc1hi[acc] = _mm512_madd52lo_epu64(acc1hi[acc], c1, d0hi);
 
-            r0lo = _mm512_madd52lo_epu64(r0lo, c1, e0lo);
-            r0hi = _mm512_madd52lo_epu64(r0hi, c1, e0hi);
-            r1lo = _mm512_madd52lo_epu64(r1lo, c0, e0lo);
-            r1hi = _mm512_madd52lo_epu64(r1hi, c0, e0hi);
+            acc0lo[acc] = _mm512_madd52lo_epu64(acc0lo[acc], c1, e0lo);
+            acc0hi[acc] = _mm512_madd52lo_epu64(acc0hi[acc], c1, e0hi);
+            acc1lo[acc] = _mm512_madd52lo_epu64(acc1lo[acc], c0, e0lo);
+            acc1hi[acc] = _mm512_madd52lo_epu64(acc1hi[acc], c0, e0hi);
         }
+        let sum = |accs: [__m512i; NUM_ACCS]| {
+            _mm512_add_epi64(
+                _mm512_add_epi64(accs[0], accs[1]),
+                _mm512_add_epi64(accs[2], accs[3]),
+            )
+        };
+        let r0lo = sum(acc0lo);
+        let r0hi = sum(acc0hi);
+        let r1lo = sum(acc1lo);
+        let r1hi = sum(acc1hi);
 
-        _mm512_store_epi64(
-            state.as_mut_ptr().offset(0x00) as *mut i64,
-            Self::reduce2x32(r0lo, r0hi),
-        );
-        _mm512_store_epi64(
-            state.as_mut_ptr().offset(0x08) as *mut i64,
-            Self::reduce2x32(r1lo, r1hi),
-        );
+        (Self::reduce2x32(r0lo, r0hi), Self::reduce2x32(r1lo, r1hi))
     }
 
-    #[inline]
-    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
-    unsafe fn reduce3x48(ain: __m512i, bin: __m512i, cin: __m512i) -> __m512i {
-        /* Combine and reduce a * 2**0 + b * 2**48 + c * 2**96 to F_P */
-
-        let mask32 = _mm512_set1_epi64(0xffffffff);
-        let mask48 = _mm512_set1_epi64(0xffffffffffff);
-
-        let mut a = ain;
-        let mut b = bin;
-        let mut c = cin;
-
-        /* Propagate carries */
-        let ova = _mm512_srli_epi64(a, 48); // 1c/1.0c
-        let ovb = _mm512_srli_epi64(b, 48); // 1c/1.0c
-
-        b = _mm512_add_epi64(b, ova); // 1c/1.0c
-        c = _mm512_add_epi64(c, ovb); // 1c/1.0c
-
-        a = _mm512_and_epi64(a, mask48); // 1c/0.5c
-        b = _mm512_and_epi64(b, mask48); // 1c/0.5c
-
-        /* mod reduce */
-        let abhi = _mm512_slli_epi64(b, 48); // 1c/1.0c
-        let ab = _mm512_or_epi64(a, abhi); // 1c/0.5c
-
-        let tmp0 = _mm512_sub_epi64(ab, c); // 1c/0.5c
-        let mut ov = _mm512_cmp_epu64_mask(ab, tmp0, 1 /* lt */); // 3c/1.0c
-
-        let mut tmp2 = _mm512_srli_epi64(b, 16); // 1c/1.0c
-        let tmp3 = tmp2; //_mm512_and_epi64(tmp2, mask32);      // 1c/0.5c
-
-        tmp2 = _mm512_slli_epi64(tmp2, 32); // 1c/1.0c
-        tmp2 = _mm512_sub_epi64(tmp2, tmp3); // 1c/0.5c
-
-        let tmp1 = _mm512_mask_sub_epi64(tmp0, ov, tmp0, mask32); // 1c/0.5c
-
-        let r = _mm512_add_epi64(tmp1, tmp2); // 1c/0.5c
-        ov = _mm512_cmp_epu64_mask(r, tmp1, 1 /* lt */); // 3c/1.0c
-
-        _mm512_mask_add_epi64(r, ov, r, mask32) // 1c/0.5c
-    }
-
-    /// Combine and reduce the two given limbs modulo [BFieldElement::P].
+    /// Combine the two given limbs and fully reduce them modulo
+    /// [`BFieldElement::P`]: the result is canonical, i.e., less than `P`.
     ///
     /// Each of the arguments must be at most 53 bits wide for this function to
     /// work correctly.
     //
-    // This function uses the following equality:
+    // The limbs are first combined into a single 64-bit value by
+    // [`Self::pack`]; see there for the arithmetic. That value is congruent to
+    // the input but might exceed `P`. Since it is smaller than 2^64 < 2·P,
+    // subtracting `P` at most once completes the reduction.
     //
-    //   x₂·2^64 + x₁·2^32 + x₀        | uses 2^64 == 2^32 - 1 (mod p)
-    // =    (x₁ + x₂)·2^32 + x₀ - x₂     (mod p)
-    //
-    // Any given lane in the input is interpreted as follows:
-    //
-    //        ╭╴ lo ╶╮
-    //  ╭╴ hi ╶╮
-    //  x₂    x₁    x₀
-    //
-    // That is:
-    // - The low 32 bits of the `lo` limb equal x₀.
-    // - The sum of the high 32 bits of the `lo` limb and the low 32 bits of
-    //   the `hi` limb equals x₁.
-    // - The high 32 bits of the `hi` limb plus the carry from the previous sum
-    //   equals x₂.
-    //
-    // This function uses the assumption that the input limbs are at most
-    // 53 bits wide. This means that adding the (at most) 32-bit wide x₁ to the
-    // (at most) 21-bit wide x₂, the result might be 33 bits wide. Therefore,
-    // left-shifting (x₁ + x₂) by 32 bits cannot generally be stored in a u64
-    // without loss. Under the current assumptions, this overflow is at most
-    // 1 bit and is handled explicitly. The same assumption also implies that
-    // the value (x₁ + x₂)·2^32 + x₀ - x₂ is strictly smaller than 2·p, i.e.,
-    // subtracting p at most once completes modular reduction.
-    //
-    // Should the assumption that `lo` and `hi` are at most 53 bits wide change,
-    // the above conclusions might not hold anymore, and the function must be
-    // changed accordingly.
+    // That subtraction is `min(r, r + ε)` with ε = 2^32 - 1: the sum r + ε
+    // wraps around exactly if r ≥ 2^64 - ε = P, in which case it equals
+    // r - P, which is smaller than r. Otherwise, r + ε > r and r stays. Note
+    // that a value equal to `P` wraps around, too, and becomes zero: `P` is
+    // the non-canonical representation of zero, and must not survive.
     //
     // The assumption that the arguments are at most 53 bits wide exists because
     // of the context this function is used in, in particular, it is (only) used
     // after MDS matrix multiplication and round constant addition. Each entry
-    // in the MDS matrix has at most 16 bits, and is multiplied with one 32-bit
-    // limb of a state element, resulting in a 48-bit intermediate result.
-    // STATE_SIZE == 16 such intermediate results are summed up, resulting in a
-    // 52-bit element. A 32-bit limb of the round constant is added to get a
-    // limb of the final result, which is at most 53 bits wide.
+    // in the MDS matrix has at most 16 bits, and is multiplied with one limb
+    // of a state element, which is at most 32 bits wide, or marginally wider
+    // (see [`Limbs32`]), resulting in a 48-bit intermediate result, or
+    // marginally more. STATE_SIZE == 16 such intermediate results are summed
+    // up, resulting in a 52-bit element, or marginally more. A 32-bit limb of
+    // the round constant is added to get a limb of the final result, which is
+    // at most 53 bits wide.
     #[inline]
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     unsafe fn reduce2x32(lo: __m512i, hi: __m512i) -> __m512i {
@@ -301,32 +286,13 @@ impl Tip5 {
             debug_assert_eq!(0xff, hi_lt_max);
         }
 
-        let u32_max = _mm512_set1_epi64(u32::MAX as i64);
-
-        let x0 = _mm512_and_epi64(lo, u32_max);
-
-        let lo_shr32 = _mm512_srli_epi64(lo, 32);
-        let x_tmp = _mm512_add_epi64(lo_shr32, hi);
-        let x1 = _mm512_and_epi64(x_tmp, u32_max);
-        let x2 = _mm512_srli_epi64(x_tmp, 32); // at most 21 bits (per lane)
-
-        // r = ((x₁ + x₂) << 32) + x0 - x2
-        let x1_plus_x2 = _mm512_add_epi64(x1, x2);
-        let x1_plus_x2_shl32 = _mm512_slli_epi64(x1_plus_x2, 32);
-        let x1_plus_x2_shl32_plus_x0 = _mm512_add_epi64(x1_plus_x2_shl32, x0);
-        let r = _mm512_sub_epi64(x1_plus_x2_shl32_plus_x0, x2);
-
-        // To guarantee a result that is less than p, subtract p if (any of):
-        // - r >= p
-        // - (x₁ + x₂) << 32 would overflow a u64, i.e., if (x₁ + x₂) > u32::MAX
-        let p = _mm512_set1_epi64(BFieldElement::P as i64);
-        let r_ge_p = _mm512_cmpge_epu64_mask(r, p);
-        let x1_p_x2_gt_u32 = _mm512_cmpgt_epu64_mask(x1_plus_x2, u32_max);
-        let ov_mask = r_ge_p | x1_p_x2_gt_u32;
-        let r = _mm512_mask_sub_epi64(r, ov_mask, r, p);
+        let epsilon = _mm512_set1_epi64(u32::MAX as i64);
+        let r = Self::pack(lo, hi);
+        let r = _mm512_min_epu64(r, _mm512_add_epi64(r, epsilon));
 
         #[cfg(debug_assertions)]
         {
+            let p = _mm512_set1_epi64(BFieldElement::P as i64);
             let r_lt_p = _mm512_cmplt_epu64_mask(r, p);
             debug_assert_eq!(0xff, r_lt_p);
         }
@@ -363,74 +329,282 @@ impl Tip5 {
         _mm512_mask_permutexvar_epi8(result, lt3, i3, s3)
     }
 
+    /// The 7th power of every lane of `N` vectors, modulo
+    /// [`BFieldElement::P`], in [limb form](Limbs32).
+    ///
+    /// The input lanes can be any 64-bit values; they are interpreted modulo
+    /// `P`. The `N` vectors are independent; their instructions are
+    /// interleaved to give the CPU independent work while it waits for the
+    /// multiplications' results.
+    //
+    // No intermediate result is reduced any further than the next
+    // multiplication requires; see [`Self::limbs`].
     #[inline]
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
-    unsafe fn mul8(x: __m512i, y: __m512i) -> __m512i {
-        let mask48 = _mm512_set1_epi64(0xffffffffffff);
-
-        let mut a_0 = _mm512_setzero_si512();
-        let mut b_0 = _mm512_setzero_si512();
-        let mut b_4 = _mm512_setzero_si512();
-        let mut c_0 = _mm512_setzero_si512();
-        let mut c_4 = _mm512_setzero_si512();
-
-        let xhi = _mm512_srli_epi64(x, 48);
-        let yhi = _mm512_srli_epi64(y, 48);
-
-        let xlo = _mm512_and_epi64(x, mask48);
-        let ylo = _mm512_and_epi64(y, mask48);
-
-        a_0 = _mm512_madd52lo_epu64(a_0, xlo, ylo);
-
-        b_0 = _mm512_madd52lo_epu64(b_0, xhi, ylo);
-        b_0 = _mm512_madd52lo_epu64(b_0, xlo, yhi);
-        b_4 = _mm512_madd52hi_epu64(b_4, xlo, ylo);
-
-        c_0 = _mm512_madd52lo_epu64(c_0, xhi, yhi);
-        c_4 = _mm512_madd52hi_epu64(c_4, xhi, ylo);
-        c_4 = _mm512_madd52hi_epu64(c_4, xlo, yhi);
-
-        b_4 = _mm512_slli_epi64(b_4, 4);
-        c_4 = _mm512_slli_epi64(c_4, 4);
-
-        b_0 = _mm512_add_epi64(b_0, b_4);
-        c_0 = _mm512_add_epi64(c_0, c_4);
-
-        Self::reduce3x48(a_0, b_0, c_0)
+    unsafe fn pow7_many<const N: usize>(xs: [__m512i; N]) -> [Limbs32; N] {
+        let x1 = xs.map(|x| Self::split32(x));
+        let x2 = x1.map(|x1| Self::square8(x1));
+        let x3: [_; N] = std::array::from_fn(|i| Self::mul8(x1[i], x2[i]));
+        let x4 = x2.map(|x2| Self::square8(x2));
+        std::array::from_fn(|i| Self::mul8(x3[i], x4[i]))
     }
 
+    /// Split every lane into its two 32-bit limbs; see [`Limbs32`].
     #[inline]
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
-    unsafe fn square8(x: __m512i) -> __m512i {
-        let mask48 = _mm512_set1_epi64(0xffffffffffff);
+    unsafe fn split32(x: __m512i) -> Limbs32 {
+        let u32_max = _mm512_set1_epi64(u32::MAX as i64);
+        Limbs32 {
+            lo: _mm512_and_epi64(x, u32_max),
+            hi: _mm512_srli_epi64(x, 32),
+        }
+    }
 
-        let mut a_0 = _mm512_setzero_si512();
-        let mut b_1 = _mm512_setzero_si512();
-        let mut b_4 = _mm512_setzero_si512();
-        let mut c_0 = _mm512_setzero_si512();
-        let mut c_5 = _mm512_setzero_si512();
+    /// Multiply the lanes of `x` and `y` modulo [`BFieldElement::P`]. See
+    /// [`Self::fold`] for the arithmetic.
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn mul8(x: Limbs32, y: Limbs32) -> Limbs32 {
+        x.debug_assert_in_range();
+        y.debug_assert_in_range();
 
-        let xhi = _mm512_srli_epi64(x, 48);
-        let xlo = _mm512_and_epi64(x, mask48);
+        let zero = _mm512_setzero_si512();
+        let bias_lo = _mm512_set1_epi64(BIAS_LO as i64);
+        let bias_hi = _mm512_set1_epi64(BIAS_HI as i64);
 
-        a_0 = _mm512_madd52lo_epu64(a_0, xlo, xlo);
+        let p00_lo = _mm512_madd52lo_epu64(bias_lo, x.lo, y.lo);
+        let p00_hi = _mm512_madd52hi_epu64(zero, x.lo, y.lo);
+        let p11_lo = _mm512_madd52lo_epu64(zero, x.hi, y.hi);
+        let p11_hi = _mm512_madd52hi_epu64(zero, x.hi, y.hi);
 
-        b_1 = _mm512_madd52lo_epu64(b_1, xhi, xlo);
-        b_4 = _mm512_madd52hi_epu64(b_4, xlo, xlo);
+        let mid_lo = _mm512_madd52lo_epu64(bias_hi, x.lo, y.hi);
+        let mid_lo = _mm512_madd52lo_epu64(mid_lo, x.hi, y.lo);
+        let mid_hi = _mm512_madd52hi_epu64(zero, x.lo, y.hi);
+        let mid_hi = _mm512_madd52hi_epu64(mid_hi, x.hi, y.lo);
 
-        c_0 = _mm512_madd52lo_epu64(c_0, xhi, xhi);
-        c_5 = _mm512_madd52hi_epu64(c_5, xhi, xlo);
+        let (l, h) = Self::fold(p00_lo, p00_hi, mid_lo, mid_hi, p11_lo, p11_hi);
+        Self::limbs(l, h)
+    }
 
-        b_1 = _mm512_slli_epi64(b_1, 1);
-        b_4 = _mm512_slli_epi64(b_4, 4);
-        c_5 = _mm512_slli_epi64(c_5, 5);
+    /// Square the lanes of `x` modulo [`BFieldElement::P`]. See
+    /// [`Self::fold`] for the arithmetic.
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn square8(x: Limbs32) -> Limbs32 {
+        x.debug_assert_in_range();
 
-        let b_0 = _mm512_add_epi64(b_1, b_4);
-        c_0 = _mm512_add_epi64(c_0, c_5);
+        let zero = _mm512_setzero_si512();
+        let bias_lo = _mm512_set1_epi64(BIAS_LO as i64);
+        let bias_hi = _mm512_set1_epi64(BIAS_HI as i64);
 
-        Self::reduce3x48(a_0, b_0, c_0)
+        // The two cross products are equal. Doubling one operand (34 bits,
+        // well within the multiplier's 52) computes their exact sum, split
+        // consistently into its low 52 bits and the rest.
+        let hi2 = _mm512_slli_epi64(x.hi, 1);
+
+        let p00_lo = _mm512_madd52lo_epu64(bias_lo, x.lo, x.lo);
+        let p00_hi = _mm512_madd52hi_epu64(zero, x.lo, x.lo);
+        let mid_lo = _mm512_madd52lo_epu64(bias_hi, x.lo, hi2);
+        let mid_hi = _mm512_madd52hi_epu64(zero, x.lo, hi2);
+        let p11_lo = _mm512_madd52lo_epu64(zero, x.hi, x.hi);
+        let p11_hi = _mm512_madd52hi_epu64(zero, x.hi, x.hi);
+
+        let (l, h) = Self::fold(p00_lo, p00_hi, mid_lo, mid_hi, p11_lo, p11_hi);
+        Self::limbs(l, h)
+    }
+
+    /// Reduce the partial products of a multiplication of two [`Limbs32`] to
+    /// a pair `(l, h)` of lanes, each smaller than 2^54, such that the product
+    /// is congruent to `l + h·2^32` modulo [`BFieldElement::P`].
+    ///
+    /// The pair is the input of [`Self::pack`] and [`Self::limbs`].
+    //
+    // With x = x_lo + x_hi·2^32 and y likewise, the product is
+    //
+    //   N = P00 + (P01 + P10)·2^32 + P11·2^64
+    //
+    // where P00 = x_lo·y_lo, P01 = x_lo·y_hi, P10 = x_hi·y_lo, P11 = x_hi·y_hi.
+    // Each of these is smaller than 2^66 (see [`Limbs32`] for the limbs'
+    // ranges); the multiplier splits them into their low 52 bits and the (at
+    // most 14-bit) rest. The arguments are:
+    //
+    //   p00_lo + p00_hi·2^52 = P00,
+    //   mid_lo + mid_hi·2^52 = P01 + P10 (sums of the split parts), and
+    //   p11_lo + p11_hi·2^52 = P11,
+    //
+    // where p00_lo and p11_lo are less than 2^52, mid_lo is less than 2^53,
+    // and p00_hi, p11_hi, and mid_hi are less than 2^14, 2^14, and 2^15,
+    // respectively. Moreover, p00_lo includes BIAS_LO and mid_lo includes
+    // BIAS_HI, see below.
+    //
+    // Using 2^52 = 2^20·2^32, 2^64 ≡ 2^32 - 1, 2^84 = 2^20·2^64, and
+    // 2^116 = 2^20·2^96 ≡ -2^20 (all mod P), the product is congruent to
+    // L + H·2^32 with
+    //
+    //   L = p00_lo - p11_lo - ((mid_hi + p11_hi) << 20)     and
+    //   H = mid_lo + p11_lo + ((p00_hi + mid_hi) << 20).
+    //
+    // Both are computed in plain 64-bit arithmetic without any overflow or
+    // borrow checks. This is sound because of the biases: the pair
+    // (BIAS_LO, BIAS_HI) satisfies BIAS_LO + BIAS_HI·2^32 = P ≡ 0, so adding
+    // them changes nothing modulo P, while BIAS_LO = 2^53 + 1 exceeds
+    // everything subtracted from L (less than 2^52 + 2^36), and
+    // BIAS_HI = 2^32 - 1 - 2^21 is positive. With all terms accounted for,
+    //
+    //   0 < L < 2^54      and      0 < H < 2^54.
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn fold(
+        p00_lo: __m512i,
+        p00_hi: __m512i,
+        mid_lo: __m512i,
+        mid_hi: __m512i,
+        p11_lo: __m512i,
+        p11_hi: __m512i,
+    ) -> (__m512i, __m512i) {
+        let hi_to_l = _mm512_slli_epi64(_mm512_add_epi64(mid_hi, p11_hi), 20);
+        let hi_to_h = _mm512_slli_epi64(_mm512_add_epi64(p00_hi, mid_hi), 20);
+        let l = _mm512_sub_epi64(_mm512_sub_epi64(p00_lo, p11_lo), hi_to_l);
+        let h = _mm512_add_epi64(_mm512_add_epi64(mid_lo, p11_lo), hi_to_h);
+
+        #[cfg(debug_assertions)]
+        {
+            let max = _mm512_set1_epi64((1_u64 << 54) as i64);
+            debug_assert_eq!(0xff, _mm512_cmplt_epu64_mask(l, max));
+            debug_assert_eq!(0xff, _mm512_cmplt_epu64_mask(h, max));
+        }
+
+        (l, h)
+    }
+
+    /// Combine the two given lanes, `lo + hi·2^32`, into [`Limbs32`] that are
+    /// congruent modulo [`BFieldElement::P`].
+    ///
+    /// Each of the arguments must be smaller than 2^54 for this function to
+    /// work correctly. This is the cheaper sibling of [`Self::pack`]: nothing
+    /// can overflow, so there is nothing to check or correct.
+    //
+    // With hi = hi_lo + hi_hi·2^32 and ε = 2^32 - 1 ≡ 2^64 (mod P):
+    //
+    //   lo + hi·2^32 ≡ lo + hi_hi·ε + hi_lo·2^32 = a + hi_lo·2^32
+    //
+    // where a = lo + hi_hi·ε < 2^55, see [`Self::pack`]. With
+    // a = a_lo + a_hi·2^32, the result's limbs are a_lo < 2^32 and
+    // a_hi + hi_lo < 2^23 + 2^32, within the ranges of [`Limbs32`].
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn limbs(lo: __m512i, hi: __m512i) -> Limbs32 {
+        #[cfg(debug_assertions)]
+        {
+            let max = _mm512_set1_epi64((1_u64 << 54) as i64);
+            debug_assert_eq!(0xff, _mm512_cmplt_epu64_mask(lo, max));
+            debug_assert_eq!(0xff, _mm512_cmplt_epu64_mask(hi, max));
+        }
+
+        let u32_max = _mm512_set1_epi64(u32::MAX as i64);
+        let epsilon = u32_max;
+
+        let hi_hi = _mm512_srli_epi64(hi, 32);
+        // `_mm512_mul_epu32` only reads the low 32 bits of each lane.
+        let hi_hi_epsilon = _mm512_mul_epu32(hi_hi, epsilon);
+        let a = _mm512_add_epi64(lo, hi_hi_epsilon);
+
+        let hi_lo = _mm512_and_epi64(hi, u32_max);
+        Limbs32 {
+            lo: _mm512_and_epi64(a, u32_max),
+            hi: _mm512_add_epi64(_mm512_srli_epi64(a, 32), hi_lo),
+        }
+    }
+
+    /// Combine the two given limbs, `lo + hi·2^32`, into a single 64-bit
+    /// value per lane that is congruent modulo [`BFieldElement::P`].
+    ///
+    /// Each of the arguments must be smaller than 2^54 for this function to
+    /// work correctly. The result is smaller than 2^64 but not necessarily
+    /// canonical.
+    //
+    // With hi = hi_lo + hi_hi·2^32 and ε = 2^32 - 1 ≡ 2^64 (mod P):
+    //
+    //   lo + hi·2^32 = lo + hi_lo·2^32 + hi_hi·2^64 ≡ lo + hi_hi·ε + hi_lo·2^32
+    //
+    // Since hi < 2^54, hi_hi < 2^22 and hi_hi·ε < 2^54, making
+    // a = lo + hi_hi·ε smaller than 2^55. Adding hi_lo·2^32 < 2^64 overflows
+    // at most once, by exactly 2^64 ≡ ε.
+    //
+    // The sum is computed, the overflow is detected by comparing with a
+    // summand, and ε is added back. The corrected value is smaller than
+    // 2^55 + ε, so that addition cannot overflow again.
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn pack(lo: __m512i, hi: __m512i) -> __m512i {
+        #[cfg(debug_assertions)]
+        {
+            let max = _mm512_set1_epi64((1_u64 << 54) as i64);
+            debug_assert_eq!(0xff, _mm512_cmplt_epu64_mask(lo, max));
+            debug_assert_eq!(0xff, _mm512_cmplt_epu64_mask(hi, max));
+        }
+
+        let epsilon = _mm512_set1_epi64(u32::MAX as i64);
+
+        let hi_hi = _mm512_srli_epi64(hi, 32);
+        // `_mm512_mul_epu32` only reads the low 32 bits of each lane.
+        let hi_hi_epsilon = _mm512_mul_epu32(hi_hi, epsilon);
+        let a = _mm512_add_epi64(lo, hi_hi_epsilon);
+
+        let hi_lo_shl32 = _mm512_slli_epi64(hi, 32);
+        let r = _mm512_add_epi64(a, hi_lo_shl32);
+        let overflowed = _mm512_cmplt_epu64_mask(r, a);
+        _mm512_mask_add_epi64(r, overflowed, r, epsilon)
     }
 }
+
+/// Eight field elements, each as a pair of limbs `lo + hi·2^32`, the operand
+/// and result form of [`Tip5::mul8`] and [`Tip5::square8`].
+///
+/// The limbs are not fully normalized: `lo` is at most 32 bits wide, but `hi`
+/// may be marginally wider, up to `2^32 + 2^23`. Everything that consumes
+/// limbs is designed for these ranges: the multiplier's partial products stay
+/// below 2^66, and the MDS layer's 64-bit accumulators keep enough headroom
+/// (see [`Tip5::reduce2x32`]). The lazy upper bound is what makes the limbs
+/// cheap to produce: see [`Tip5::limbs`].
+///
+/// [`Tip5::split32`] produces fully normalized limbs from any 64-bit lanes.
+#[derive(Debug, Copy, Clone)]
+struct Limbs32 {
+    lo: __m512i,
+    hi: __m512i,
+}
+
+/// The exclusive upper bound of [`Limbs32::hi`].
+const LIMB_HI_MAX: u64 = (1 << 32) + (1 << 23);
+
+// The analysis in `Tip5::fold` relies on all partial products being smaller
+// than 2^66, i.e., on both limbs being smaller than 2^33.
+const _: () = assert!(LIMB_HI_MAX <= 1 << 33);
+
+impl Limbs32 {
+    /// Check the limbs' ranges in debug builds.
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn debug_assert_in_range(self) {
+        #[cfg(debug_assertions)]
+        {
+            let lo_max = _mm512_set1_epi64(1 << 32);
+            let hi_max = _mm512_set1_epi64(LIMB_HI_MAX as i64);
+            debug_assert_eq!(0xff, _mm512_cmplt_epu64_mask(self.lo, lo_max));
+            debug_assert_eq!(0xff, _mm512_cmplt_epu64_mask(self.hi, hi_max));
+        }
+    }
+}
+
+/// The bias added to the low limb in [`Tip5::fold`]. Together with
+/// [`BIAS_HI`], it sums to [`BFieldElement::P`]: `BIAS_LO + BIAS_HI·2^32 == P`.
+const BIAS_LO: u64 = (1 << 53) + 1;
+
+/// The bias added to the high limb in [`Tip5::fold`]. See [`BIAS_LO`].
+const BIAS_HI: u64 = (1 << 32) - 1 - (1 << 21);
+
+const _: () = assert!(BIAS_LO as u128 + ((BIAS_HI as u128) << 32) == BFieldElement::P as u128);
 
 /// Eight 64-bit integers, for use in [`Tip5::generated_function`].
 ///
@@ -533,46 +707,55 @@ impl Tip5Batch {
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
     pub(super) unsafe fn permutation(&mut self) {
         for round_index in 0..NUM_ROUNDS {
-            self.sbox_layer();
-            self.mds_rcs(round_index);
+            let limbs = self.sbox_layer();
+            self.mds_rcs(limbs, round_index);
         }
     }
 
+    /// The S-box layer. The state must be canonical; the result is in
+    /// [limb form](Limbs32), which is what the MDS layer consumes.
     #[inline]
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
-    unsafe fn sbox_layer(&mut self) {
-        for element in self.state.iter_mut().take(NUM_SPLIT_AND_LOOKUP) {
-            *element = Tip5::lookup8(*element);
-        }
-        for element in self.state.iter_mut().skip(NUM_SPLIT_AND_LOOKUP) {
-            let x1 = *element;
-            let x2 = Tip5::square8(x1);
-            let x4 = Tip5::square8(x2);
-            *element = Tip5::mul8(Tip5::mul8(x1, x2), x4);
-        }
+    unsafe fn sbox_layer(&self) -> [Limbs32; STATE_SIZE] {
+        // The power maps are computed several elements at a time, with their
+        // instructions interleaved, so that the (long) dependency chains of
+        // the multiplications overlap even on CPUs with small schedulers.
+        // More interleaving than this exhausts the 32 vector registers.
+        const INTERLEAVE: usize = 4;
+        const NUM_POWER_MAPS: usize = STATE_SIZE - NUM_SPLIT_AND_LOOKUP;
+        const NUM_CHUNKS: usize = NUM_POWER_MAPS / INTERLEAVE;
+        const { assert!(NUM_CHUNKS * INTERLEAVE == NUM_POWER_MAPS) };
+
+        let lookups: [_; NUM_SPLIT_AND_LOOKUP] =
+            std::array::from_fn(|i| Tip5::split32(Tip5::lookup8(self.state[i])));
+        let powers: [[_; INTERLEAVE]; NUM_CHUNKS] = std::array::from_fn(|chunk| {
+            let first = NUM_SPLIT_AND_LOOKUP + chunk * INTERLEAVE;
+            Tip5::pow7_many(std::array::from_fn(|j| self.state[first + j]))
+        });
+        std::array::from_fn(|i| match i.checked_sub(NUM_SPLIT_AND_LOOKUP) {
+            None => lookups[i],
+            Some(k) => powers[k / INTERLEAVE][k % INTERLEAVE],
+        })
     }
 
-    /// Multiply the states by the MDS matrix and add the round constants.
+    /// Multiply the states, given in [limb form](Limbs32), by the MDS matrix
+    /// and add the round constants.
     ///
-    /// Every state element is split into its two 32-bit limbs. For each limb,
-    /// the product with the MDS matrix is computed exactly in 64 bits, using the
-    /// same fast cyclic convolution as the scalar permutation. The round
-    /// constant's limb is added; see [`Tip5::reduce2x32`] for the reduction.
+    /// For each limb, the product with the MDS matrix is computed exactly in
+    /// 64 bits, using the same fast cyclic convolution as the scalar
+    /// permutation. The round constant's limb is added; see
+    /// [`Tip5::reduce2x32`] for the reduction, which makes the state
+    /// canonical again.
     #[inline]
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
-    unsafe fn mds_rcs(&mut self, round_index: usize) {
-        let u32_max = _mm512_set1_epi64(u32::MAX as i64);
-        let mut lo = [Lanes(_mm512_setzero_si512()); STATE_SIZE];
-        let mut hi = [Lanes(_mm512_setzero_si512()); STATE_SIZE];
-        for (c, &element) in self.state.iter().enumerate() {
-            lo[c] = Lanes(_mm512_and_epi64(element, u32_max));
-            hi[c] = Lanes(_mm512_srli_epi64(element, 32));
-        }
+    unsafe fn mds_rcs(&mut self, limbs: [Limbs32; STATE_SIZE], round_index: usize) {
+        let lo = limbs.map(|limbs| Lanes(limbs.lo));
+        let hi = limbs.map(|limbs| Lanes(limbs.hi));
 
         // The convolution is scaled by 16. Every entry of the MDS matrix has
         // at most 16 bits, making the unscaled limbs of the product at most 52
-        // bits wide. Scaled, they still fit into 64 bits, i.e., the wrapping
-        // arithmetic is exact.
+        // bits wide, or marginally more for the wider high limbs. Scaled, they
+        // still fit into 64 bits, i.e., the wrapping arithmetic is exact.
         let lo = Tip5::generated_function(lo);
         let hi = Tip5::generated_function(hi);
 
@@ -815,6 +998,497 @@ impl Tip5 {
 
         for (batch_digests, sponge) in digest_batches.iter_mut().zip(sponges.iter()) {
             *batch_digests = Self::digests(sponge);
+        }
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+mod tests {
+    use super::super::naive::NaiveTip5;
+    use super::*;
+
+    const P: u64 = BFieldElement::P;
+
+    /// Values at or next to the boundaries of the ranges the kernel relies
+    /// on, including non-canonical representations (greater than or equal to
+    /// `P`) that the multiplication routines accept as inputs.
+    const BOUNDARY_VALUES: [u64; 23] = [
+        0,
+        1,
+        2,
+        3,
+        7,
+        (1 << 32) - 2,
+        (1 << 32) - 1,
+        1 << 32,
+        (1 << 32) + 1,
+        (1 << 48) - 1,
+        1 << 48,
+        (1 << 52) - 1,
+        1 << 52,
+        (1 << 53) - 1,
+        1 << 53,
+        (1 << 63) - 1,
+        1 << 63,
+        P - 2,
+        P - 1,
+        P,
+        P + 1,
+        u64::MAX - 1,
+        u64::MAX,
+    ];
+
+    /// The canonical boundary values, i.e., valid raw state elements.
+    fn canonical_boundary_values() -> Vec<u64> {
+        BOUNDARY_VALUES.into_iter().filter(|&v| v < P).collect()
+    }
+
+    /// Pad with the default (zero) to a multiple of the batch size, then
+    /// chunk into batches.
+    fn batches<T: Copy + Default>(mut items: Vec<T>) -> Vec<[T; BATCH_SIZE]> {
+        items.resize(items.len().next_multiple_of(BATCH_SIZE), T::default());
+        let (batches, remainder) = items.as_chunks::<BATCH_SIZE>();
+        assert!(remainder.is_empty());
+        batches.to_vec()
+    }
+
+    fn mul_mod_p(x: u64, y: u64) -> u64 {
+        ((u128::from(x) * u128::from(y)) % u128::from(P)) as u64
+    }
+
+    fn pow7_mod_p(x: u64) -> u64 {
+        let x2 = mul_mod_p(x, x);
+        let x4 = mul_mod_p(x2, x2);
+        mul_mod_p(mul_mod_p(x, x2), x4)
+    }
+
+    /// Every pair of boundary values, in lanes of eight (padded with zeros).
+    fn boundary_pairs() -> Vec<([u64; BATCH_SIZE], [u64; BATCH_SIZE])> {
+        let mut pairs = vec![];
+        for &x in &BOUNDARY_VALUES {
+            for ys in BOUNDARY_VALUES.chunks(BATCH_SIZE) {
+                let mut y = [0; BATCH_SIZE];
+                y[..ys.len()].copy_from_slice(ys);
+                pairs.push(([x; BATCH_SIZE], y));
+            }
+        }
+        pairs
+    }
+
+    #[target_feature(enable = "avx512f")]
+    unsafe fn vector(lanes: [u64; BATCH_SIZE]) -> __m512i {
+        unsafe { _mm512_loadu_epi64(lanes.map(|x| x as i64).as_ptr()) }
+    }
+
+    #[target_feature(enable = "avx512f")]
+    unsafe fn lanes(vector: __m512i) -> [u64; BATCH_SIZE] {
+        let mut raw = [0_i64; BATCH_SIZE];
+        unsafe { _mm512_storeu_epi64(raw.as_mut_ptr(), vector) };
+        raw.map(|x| x as u64)
+    }
+
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn mul_square_pow7_on_boundary_values() {
+        for (xs, ys) in boundary_pairs() {
+            let x = unsafe { Tip5::split32(vector(xs)) };
+            let y = unsafe { Tip5::split32(vector(ys)) };
+            let products = unsafe { values(Tip5::mul8(x, y)) };
+            let squares = unsafe { values(Tip5::square8(x)) };
+            let powers = unsafe { values(Tip5::pow7_many([vector(xs)])[0]) };
+            for lane in 0..BATCH_SIZE {
+                let (xl, yl) = (xs[lane], ys[lane]);
+                assert_eq!(mul_mod_p(xl, yl), products[lane], "{xl} * {yl}");
+                assert_eq!(mul_mod_p(xl, xl), squares[lane], "{xl}^2");
+                assert_eq!(pow7_mod_p(xl), powers[lane], "{xl}^7");
+            }
+        }
+    }
+
+    /// The limbs' values modulo `P`, after checking the limbs' ranges.
+    #[target_feature(enable = "avx512f")]
+    unsafe fn values(limbs: Limbs32) -> [u64; BATCH_SIZE] {
+        let lo = unsafe { lanes(limbs.lo) };
+        let hi = unsafe { lanes(limbs.hi) };
+        std::array::from_fn(|lane| {
+            assert!(lo[lane] <= u64::from(u32::MAX), "lo limb {}", lo[lane]);
+            assert!(hi[lane] < LIMB_HI_MAX, "hi limb {}", hi[lane]);
+            ((u128::from(lo[lane]) + (u128::from(hi[lane]) << 32)) % u128::from(P)) as u64
+        })
+    }
+
+    /// Limb pairs at the boundaries of what [`Limbs32`] allows, including
+    /// the lazy, wider-than-32-bit high limbs.
+    fn boundary_limbs() -> Vec<(u64, u64)> {
+        let los = [0, 1, (1 << 32) - 2, (1 << 32) - 1];
+        let his = [
+            0,
+            1,
+            (1 << 32) - 1,
+            1 << 32,
+            LIMB_HI_MAX - 2,
+            LIMB_HI_MAX - 1,
+        ];
+        let mut limbs = vec![];
+        for lo in los {
+            for hi in his {
+                limbs.push((lo, hi));
+            }
+        }
+        limbs
+    }
+
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn mul_and_square_on_boundary_limbs() {
+        let value = |(lo, hi): (u64, u64)| {
+            ((u128::from(lo) + (u128::from(hi) << 32)) % u128::from(P)) as u64
+        };
+        let to_limbs = |limbs: [(u64, u64); BATCH_SIZE]| unsafe {
+            Limbs32 {
+                lo: vector(limbs.map(|(lo, _)| lo)),
+                hi: vector(limbs.map(|(_, hi)| hi)),
+            }
+        };
+
+        let all_limbs = boundary_limbs();
+        for &x in &all_limbs {
+            let xs = to_limbs([x; BATCH_SIZE]);
+            let squares = unsafe { values(Tip5::square8(xs)) };
+            assert_eq!(mul_mod_p(value(x), value(x)), squares[0], "{x:?}^2");
+
+            for ys in batches(all_limbs.clone()) {
+                let products = unsafe { values(Tip5::mul8(xs, to_limbs(ys))) };
+                for (lane, &y) in ys.iter().enumerate() {
+                    assert_eq!(
+                        mul_mod_p(value(x), value(y)),
+                        products[lane],
+                        "{x:?} * {y:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn mul8_and_square8_are_correct_on_boundary_limbs() {
+        if !Tip5::avx512_is_available() {
+            return;
+        }
+        // SAFETY: The required CPU features were detected above.
+        unsafe { mul_and_square_on_boundary_limbs() };
+    }
+
+    #[test]
+    fn mul8_square8_and_pow7_are_correct_on_boundary_values() {
+        if !Tip5::avx512_is_available() {
+            return;
+        }
+        // SAFETY: The required CPU features were detected above.
+        unsafe { mul_square_pow7_on_boundary_values() };
+    }
+
+    /// Lane pairs at the boundaries of what [`Tip5::reduce2x32`] accepts, and
+    /// those whose combined value is a small multiple of `P`, or one off
+    /// from one: the cases where a reduction that is merely congruent (for
+    /// example, `P` instead of 0) would go unnoticed by arithmetic checks.
+    fn boundary_lane_pairs() -> Vec<(u64, u64)> {
+        const MAX_LIMB: u64 = (1 << 53) - 1;
+        const EPSILON: u64 = (1 << 32) - 1;
+        let limbs = [
+            0,
+            1,
+            2,
+            EPSILON - 1,
+            EPSILON,
+            EPSILON + 1,
+            MAX_LIMB - 1,
+            MAX_LIMB,
+        ];
+        let mut pairs = vec![];
+        for lo in limbs {
+            for hi in limbs {
+                pairs.push((lo, hi));
+            }
+        }
+
+        // k·P == k + k·ε·2^32, so (lo, hi) = (k, k·ε) combines to exactly k·P.
+        // The largest k for which k·ε fits in 53 bits is 2^21.
+        for k in [1, 2, 3, 2_u64.pow(20), 2_u64.pow(21) - 1, 2_u64.pow(21)] {
+            let hi = k * EPSILON;
+            pairs.push((k, hi)); // k·P
+            pairs.push((k - 1, hi)); // k·P - 1
+            pairs.push((k + 1, hi)); // k·P + 1
+        }
+        pairs
+    }
+
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn reduce2x32_is_canonical_on_boundary_limbs() {
+        for pairs in batches(boundary_lane_pairs()) {
+            let lo = unsafe { vector(pairs.map(|(lo, _)| lo)) };
+            let hi = unsafe { vector(pairs.map(|(_, hi)| hi)) };
+            let reduced = unsafe { lanes(Tip5::reduce2x32(lo, hi)) };
+            let packed = unsafe { lanes(Tip5::pack(lo, hi)) };
+            let limbs = unsafe { values(Tip5::limbs(lo, hi)) };
+            for (lane, &(lo_lane, hi_lane)) in pairs.iter().enumerate() {
+                let value = u128::from(lo_lane) + (u128::from(hi_lane) << 32);
+                let expected = (value % u128::from(P)) as u64;
+                assert_eq!(expected, reduced[lane], "reduce2x32({lo_lane}, {hi_lane})");
+                assert_eq!(expected, packed[lane] % P, "pack({lo_lane}, {hi_lane})");
+                assert_eq!(expected, limbs[lane], "limbs({lo_lane}, {hi_lane})");
+            }
+        }
+    }
+
+    #[test]
+    fn reduce2x32_pack_and_limbs_are_correct_on_boundary_lanes() {
+        if !Tip5::avx512_is_available() {
+            return;
+        }
+        // SAFETY: The required CPU features were detected above.
+        unsafe { reduce2x32_is_canonical_on_boundary_limbs() };
+    }
+
+    /// The MDS matrix's row `row`: the coefficient of every input element.
+    fn mds_row(row: usize) -> [u64; STATE_SIZE] {
+        use super::super::MDS_MATRIX_FIRST_COLUMN;
+        std::array::from_fn(|col| {
+            MDS_MATRIX_FIRST_COLUMN[(STATE_SIZE + row - col) % STATE_SIZE] as u64
+        })
+    }
+
+    /// The MDS layer and round constant addition in plain integer arithmetic,
+    /// on raw (Montgomery) values: for every row, the canonical result.
+    fn mds_rcs_reference(limbs: [(u64, u64); STATE_SIZE], round_index: usize) -> [u64; STATE_SIZE] {
+        std::array::from_fn(|row| {
+            let rc_index = round_index * STATE_SIZE + row;
+            let rc = u128::from(RCS_MONT_L[rc_index]) + (u128::from(RCS_MONT_U[rc_index]) << 32);
+            let sum = mds_row(row)
+                .iter()
+                .zip(limbs)
+                .map(|(&m, (lo, hi))| u128::from(m) * (u128::from(lo) + (u128::from(hi) << 32)))
+                .sum::<u128>();
+            ((sum + rc) % u128::from(P)) as u64
+        })
+    }
+
+    /// Input limbs (one per element, all at most 32 bits wide) such that the
+    /// MDS matrix's row `row` sums to exactly `target`, if the target is
+    /// large enough: at least about 2^24, and at most about 2^50.
+    ///
+    /// Two columns with coprime coefficients make the sum exact; the others
+    /// are filled greedily.
+    fn limbs_summing_to(row: usize, target: u64) -> Option<[u64; STATE_SIZE]> {
+        fn gcd(a: u64, b: u64) -> u64 {
+            if b == 0 { a } else { gcd(b, a % b) }
+        }
+        fn mod_inverse(a: u64, modulus: u64) -> u64 {
+            (1..modulus).find(|&x| (a * x) % modulus == 1).unwrap()
+        }
+
+        let coeffs = mds_row(row);
+        let (a, b) = (0..STATE_SIZE)
+            .flat_map(|a| (a + 1..STATE_SIZE).map(move |b| (a, b)))
+            .filter(|&(a, b)| gcd(coeffs[a], coeffs[b]) == 1)
+            .min_by_key(|&(a, b)| coeffs[a] * coeffs[b])
+            .expect("some pair of MDS entries is coprime");
+
+        // With the coefficients c_a and c_b coprime, every remainder of at
+        // least (c_a - 1)·(c_b - 1) is a non-negative combination of them.
+        let frobenius = (coeffs[a] - 1) * (coeffs[b] - 1);
+        if target < frobenius {
+            return None;
+        }
+        let mut remaining = target;
+        let mut limbs = [0; STATE_SIZE];
+        for col in (0..STATE_SIZE).filter(|&col| col != a && col != b) {
+            if remaining > frobenius {
+                limbs[col] = ((remaining - frobenius) / coeffs[col]).min(u64::from(u32::MAX));
+                remaining -= limbs[col] * coeffs[col];
+            }
+        }
+        assert!(
+            remaining >= frobenius,
+            "target {target} is too small for row {row}"
+        );
+        assert!(
+            remaining < frobenius + (1 << 16),
+            "target {target} is too large for row {row}"
+        );
+        limbs[a] = (remaining * mod_inverse(coeffs[a] % coeffs[b], coeffs[b])) % coeffs[b];
+        limbs[b] = (remaining - limbs[a] * coeffs[a]) / coeffs[b];
+
+        let sum = coeffs.iter().zip(limbs).map(|(&c, l)| c * l).sum::<u64>();
+        assert_eq!(target, sum);
+        assert!(limbs.iter().all(|&l| l <= u64::from(u32::MAX)));
+        Some(limbs)
+    }
+
+    /// MDS inputs, in limb form, that make row `row` of the MDS layer plus
+    /// round constants come out as exactly `value`, before reduction: both of
+    /// the row's limbs are controlled, so that the combined, unreduced result
+    /// is `value` itself, not merely congruent to it.
+    ///
+    /// Fails (rarely) if the required high limb is too small for the matrix
+    /// to produce.
+    fn mds_inputs_hitting(
+        row: usize,
+        round_index: usize,
+        value: u128,
+    ) -> Option<[(u64, u64); STATE_SIZE]> {
+        let rc_index = round_index * STATE_SIZE + row;
+        let (rc_lo, rc_hi) = (RCS_MONT_L[rc_index], RCS_MONT_U[rc_index]);
+
+        // Split the value into limbs. Moving one 2^32 from the high limb to
+        // the low one keeps the latter's share of the sum comfortably large.
+        let lo = (value & u128::from(u32::MAX)) as u64 + (1 << 32);
+        let hi = (value >> 32) as u64 - 1;
+        assert!(lo >= rc_lo && hi >= rc_hi);
+        let conv_lo = limbs_summing_to(row, lo - rc_lo)?;
+        let conv_hi = limbs_summing_to(row, hi - rc_hi)?;
+        Some(std::array::from_fn(|col| (conv_lo[col], conv_hi[col])))
+    }
+
+    /// The values the MDS layer is made to hit: small multiples of `P`, and
+    /// their neighbors. A multiple of `P` must come out as zero, not as `P`.
+    fn mds_target_values() -> Vec<u128> {
+        let mut values = vec![];
+        for k in [1, 2, 3, 1000, 1 << 18] {
+            let kp = k * u128::from(P);
+            values.extend([kp - 1, kp, kp + 1]);
+        }
+        values
+    }
+
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn mds_layers_reduce_multiples_of_p_to_zero() {
+        let mut num_traps = 0;
+        for round_index in 0..NUM_ROUNDS {
+            for row in [0, 5, 15] {
+                for value in mds_target_values() {
+                    let Some(inputs) = mds_inputs_hitting(row, round_index, value) else {
+                        continue;
+                    };
+                    let expected = mds_rcs_reference(inputs, round_index);
+                    assert_eq!((value % u128::from(P)) as u64, expected[row]);
+
+                    // Make sure the trap is really sprung: for a multiple of
+                    // `P`, the unreduced result must be `P` itself.
+                    let rc_index = round_index * STATE_SIZE + row;
+                    let unreduced = inputs
+                        .iter()
+                        .zip(mds_row(row))
+                        .map(|(&(lo, hi), m)| {
+                            (
+                                u128::from(m) * u128::from(lo),
+                                u128::from(m) * u128::from(hi),
+                            )
+                        })
+                        .fold((0, 0), |(l, h), (dl, dh)| (l + dl, h + dh));
+                    let lo = unsafe {
+                        vector([(unreduced.0 as u64) + RCS_MONT_L[rc_index]; BATCH_SIZE])
+                    };
+                    let hi = unsafe {
+                        vector([(unreduced.1 as u64) + RCS_MONT_U[rc_index]; BATCH_SIZE])
+                    };
+                    if value % u128::from(P) == 0 {
+                        assert_eq!([P; BATCH_SIZE], unsafe { lanes(Tip5::pack(lo, hi)) });
+                        num_traps += 1;
+                    }
+
+                    // The batched MDS layer.
+                    let limbs = inputs.map(|(lo_limb, hi_limb)| unsafe {
+                        Limbs32 {
+                            lo: vector([lo_limb; BATCH_SIZE]),
+                            hi: vector([hi_limb; BATCH_SIZE]),
+                        }
+                    });
+                    let mut batch = unsafe { Tip5Batch::new(Domain::VariableLength) };
+                    unsafe { batch.mds_rcs(limbs, round_index) };
+                    for (i, &e) in expected.iter().enumerate() {
+                        let raw = unsafe { batch.get(i) }.map(|x| x.raw_u64());
+                        assert_eq!(
+                            [e; BATCH_SIZE], raw,
+                            "batched, round {round_index}, element {i}"
+                        );
+                    }
+
+                    // The single permutation's MDS layer.
+                    let a = Limbs32 {
+                        lo: unsafe { vector(std::array::from_fn(|i| inputs[i].0)) },
+                        hi: unsafe { vector(std::array::from_fn(|i| inputs[i].1)) },
+                    };
+                    let b = Limbs32 {
+                        lo: unsafe { vector(std::array::from_fn(|i| inputs[BATCH_SIZE + i].0)) },
+                        hi: unsafe { vector(std::array::from_fn(|i| inputs[BATCH_SIZE + i].1)) },
+                    };
+                    let (a, b) = unsafe { Tip5::mds_rcs_avx512(a, b, round_index) };
+                    let single = [unsafe { lanes(a) }, unsafe { lanes(b) }].concat();
+                    assert_eq!(expected.to_vec(), single, "single, round {round_index}");
+                }
+            }
+        }
+        // Almost every case is constructible; make sure enough of them were.
+        assert!(
+            num_traps >= NUM_ROUNDS * 3 * 5 - 5,
+            "only {num_traps} traps sprung"
+        );
+    }
+
+    #[test]
+    fn mds_layers_are_canonical_on_multiples_of_p() {
+        if !Tip5::avx512_is_available() {
+            return;
+        }
+        // SAFETY: The required CPU features were detected above.
+        unsafe { mds_layers_reduce_multiples_of_p_to_zero() };
+    }
+
+    /// States made of boundary values: constant states, and every rotation
+    /// of the list of canonical boundary values, so that each one sits in
+    /// every position, i.e., goes through both kinds of S-box.
+    fn boundary_states() -> Vec<[BFieldElement; STATE_SIZE]> {
+        let values = canonical_boundary_values();
+        let mut states = values
+            .iter()
+            .map(|&v| [BFieldElement::from_raw_u64(v); STATE_SIZE])
+            .collect::<Vec<_>>();
+        for rotation in 0..values.len() {
+            states.push(std::array::from_fn(|i| {
+                BFieldElement::from_raw_u64(values[(i + rotation) % values.len()])
+            }));
+        }
+        states
+    }
+
+    #[test]
+    fn avx512_permutations_agree_with_naive_permutation_on_boundary_states() {
+        if !Tip5::avx512_is_available() {
+            return;
+        }
+
+        for states in batches(boundary_states()) {
+            // SAFETY (all `unsafe` blocks): The required CPU features were
+            // detected above.
+            let mut batch = unsafe { Tip5Batch::new(Domain::VariableLength) };
+            for i in 0..STATE_SIZE {
+                unsafe { batch.set(i, states.map(|state| state[i])) };
+            }
+            unsafe { batch.permutation() };
+
+            for (lane, &state) in states.iter().enumerate() {
+                let mut naive = NaiveTip5 { state };
+                naive.permutation();
+
+                let mut single = Tip5 { state };
+                unsafe { single.permutation_avx512() };
+                assert_eq!(naive.state, single.state, "single, lane {lane}");
+
+                for i in 0..STATE_SIZE {
+                    let batched = unsafe { batch.get(i) }[lane];
+                    assert_eq!(naive.state[i], batched, "batched, lane {lane}, element {i}");
+                }
+            }
         }
     }
 }
