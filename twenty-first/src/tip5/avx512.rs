@@ -649,6 +649,33 @@ impl Tip5 {
         Self::digests(&sponges)
     }
 
+    /// [`absorb`](crate::util_types::sponge::Sponge::absorb) on [`BATCH_SIZE`]
+    /// sponges at once, each its own input.
+    ///
+    /// # Safety
+    ///
+    /// See [`Self::permutation_avx512`].
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    pub(super) unsafe fn absorb_batch(
+        sponges: &mut [Self; BATCH_SIZE],
+        inputs: &[[BFieldElement; RATE]; BATCH_SIZE],
+    ) {
+        // Every state element is set below, so the domain does not matter.
+        let mut batch = Tip5Batch::new(Domain::VariableLength);
+        for i in 0..RATE {
+            batch.set(i, inputs.map(|input| input[i]));
+        }
+        for i in RATE..STATE_SIZE {
+            batch.set(i, std::array::from_fn(|j| sponges[j].state[i]));
+        }
+        batch.permutation();
+        for i in 0..STATE_SIZE {
+            for (sponge, element) in sponges.iter_mut().zip(batch.get(i)) {
+                sponge.state[i] = element;
+            }
+        }
+    }
+
     /// The first [`Digest::LEN`] state elements of every sponge.
     #[inline]
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]

@@ -736,6 +736,41 @@ impl Tip5 {
         pairs.iter().map(|&[l, r]| Self::hash_pair(l, r)).collect()
     }
 
+    /// [`absorb`](Sponge::absorb) on many sponges, each its own input, in
+    /// order.
+    ///
+    /// Equivalent to absorbing into every sponge on its own, but considerably
+    /// faster on CPUs with AVX-512, where groups of consecutive sponges are
+    /// permuted side by side, one sponge per SIMD lane.
+    ///
+    /// # Panics
+    ///
+    /// Panics if there are not as many inputs as sponges.
+    pub fn absorb_many(sponges: &mut [Self], inputs: &[[BFieldElement; RATE]]) {
+        assert_eq!(sponges.len(), inputs.len());
+
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            let (batches, remainder) = sponges.as_chunks_mut::<{ avx512::BATCH_SIZE }>();
+            let (input_batches, input_remainder) = inputs.as_chunks::<{ avx512::BATCH_SIZE }>();
+            for (batch, batch_inputs) in batches.iter_mut().zip(input_batches) {
+                // SAFETY: The required CPU features were detected above.
+                unsafe { Self::absorb_batch(batch, batch_inputs) };
+            }
+            Self::absorb_many_scalar(remainder, input_remainder);
+            return;
+        }
+
+        Self::absorb_many_scalar(sponges, inputs);
+    }
+
+    /// [`absorb_many`](Self::absorb_many), without any SIMD.
+    fn absorb_many_scalar(sponges: &mut [Self], inputs: &[[BFieldElement; RATE]]) {
+        for (sponge, &input) in sponges.iter_mut().zip(inputs) {
+            sponge.absorb(input);
+        }
+    }
+
     /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
     /// `upper_bound` must be a power of 2.
     ///
@@ -1760,6 +1795,81 @@ pub(crate) mod tests {
             .collect_vec();
         prop_assert_eq!(individually.clone(), Tip5::hash_pair_many_scalar(&pairs));
         prop_assert_eq!(individually, Tip5::hash_pair_many(&pairs));
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn absorb_many_agrees_with_absorb(
+        #[strategy(proptest::collection::vec(arb(), 0..30))] sponges: Vec<Tip5>,
+        #[strategy(proptest::collection::vec(arb(), #sponges.len()))] inputs: Vec<
+            [BFieldElement; RATE],
+        >,
+    ) {
+        let mut individually = sponges.clone();
+        for (sponge, &input) in individually.iter_mut().zip(&inputs) {
+            sponge.absorb(input);
+        }
+
+        let mut scalar = sponges.clone();
+        Tip5::absorb_many_scalar(&mut scalar, &inputs);
+        prop_assert_eq!(&individually, &scalar);
+
+        let mut many = sponges;
+        Tip5::absorb_many(&mut many, &inputs);
+        prop_assert_eq!(individually, many);
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn chained_absorb_many_agrees_with_naive_sponge(
+        #[strategy(proptest::collection::vec(arb(), 0..30))] sponges: Vec<Tip5>,
+        #[strategy(proptest::collection::vec(arb(), #sponges.len()))] inputs_0: Vec<
+            [BFieldElement; RATE],
+        >,
+        #[strategy(proptest::collection::vec(arb(), #sponges.len()))] inputs_1: Vec<
+            [BFieldElement; RATE],
+        >,
+        #[strategy(proptest::collection::vec(arb(), #sponges.len()))] inputs_2: Vec<
+            [BFieldElement; RATE],
+        >,
+    ) {
+        fn naive_absorb_many(naive: &mut [naive::NaiveTip5], inputs: &[[BFieldElement; RATE]]) {
+            for (sponge, input) in naive.iter_mut().zip_eq(inputs) {
+                sponge.state[..RATE].copy_from_slice(input);
+                sponge.permutation();
+            }
+        }
+
+        fn naive_squeeze(sponge: &mut naive::NaiveTip5) -> [BFieldElement; RATE] {
+            let produce = sponge.state[..RATE].try_into().unwrap();
+            sponge.permutation();
+            produce
+        }
+
+        let mut naive = sponges
+            .iter()
+            .map(|sponge| naive::NaiveTip5 {
+                state: sponge.state,
+            })
+            .collect_vec();
+        let mut sponges = sponges;
+
+        for (sponge, &input) in sponges.iter_mut().zip_eq(&inputs_0) {
+            sponge.absorb(input);
+        }
+        naive_absorb_many(&mut naive, &inputs_0);
+        prop_assert_eq!(&naive, &sponges);
+
+        Tip5::absorb_many(&mut sponges, &inputs_1);
+        naive_absorb_many(&mut naive, &inputs_1);
+        prop_assert_eq!(&naive, &sponges);
+
+        let squeezed = sponges.iter_mut().map(|s| s.squeeze()).collect_vec();
+        let naive_squeezed = naive.iter_mut().map(naive_squeeze).collect_vec();
+        prop_assert_eq!(naive_squeezed, squeezed);
+        prop_assert_eq!(&naive, &sponges);
+
+        Tip5::absorb_many(&mut sponges, &inputs_2);
+        naive_absorb_many(&mut naive, &inputs_2);
+        prop_assert_eq!(naive, sponges);
     }
 
     #[macro_rules_attr::apply(test)]
