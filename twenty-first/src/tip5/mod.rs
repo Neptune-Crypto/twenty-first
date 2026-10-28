@@ -183,6 +183,59 @@ pub struct Tip5 {
     pub state: [BFieldElement; STATE_SIZE],
 }
 
+/// A column of a table whose rows are to be hashed: element `row` is at
+/// `elements[offset + row * stride]`.
+///
+/// A column of [`XFieldElement`]s is three such columns over the same flat
+/// slice, with stride 3 and offsets 0, 1, and 2.
+#[derive(Debug, Clone, Copy)]
+struct Column<'a> {
+    elements: &'a [BFieldElement],
+    stride: usize,
+    offset: usize,
+}
+
+impl Column<'_> {
+    fn num_rows(&self) -> usize {
+        self.elements.len() / self.stride
+    }
+
+    fn get(&self, row: usize) -> BFieldElement {
+        self.elements[self.offset + row * self.stride]
+    }
+}
+
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for crate::prelude::BFieldElement {}
+    impl Sealed for crate::prelude::XFieldElement {}
+}
+
+/// The element type of a table whose rows can be hashed with
+/// [`Tip5::hash_rows_of_columns`].
+///
+/// This trait is sealed and implemented for [`BFieldElement`] and
+/// [`XFieldElement`].
+pub trait ColumnElement: sealed::Sealed + Copy {
+    /// The column as a flat slice of [`BFieldElement`]s, and the number of
+    /// such elements per element of the column.
+    #[doc(hidden)]
+    fn flatten(column: &[Self]) -> (&[BFieldElement], usize);
+}
+
+impl ColumnElement for BFieldElement {
+    fn flatten(column: &[Self]) -> (&[BFieldElement], usize) {
+        (column, 1)
+    }
+}
+
+impl ColumnElement for XFieldElement {
+    fn flatten(column: &[Self]) -> (&[BFieldElement], usize) {
+        let flat = crate::math::x_field_element::as_flat_slice(column);
+        (flat, crate::math::x_field_element::EXTENSION_DEGREE)
+    }
+}
+
 impl Tip5 {
     /// One round of the Tip5 permutation, without any SIMD.
     #[inline(always)]
@@ -769,6 +822,79 @@ impl Tip5 {
         for (sponge, &input) in sponges.iter_mut().zip(inputs) {
             sponge.absorb(input);
         }
+    }
+
+    /// [`hash_varlen`](Self::hash_varlen) of every row of a table that is
+    /// stored column by column.
+    ///
+    /// Row `r` is `[columns[0][r], columns[1][r], …]`. A row of
+    /// [`XFieldElement`]s is hashed as the concatenation of its elements'
+    /// coefficients, i.e., as [`hash_varlen`](Self::hash_varlen) of the row's
+    /// [flat slice](crate::math::x_field_element::as_flat_slice).
+    ///
+    /// Equivalent to transposing the table and hashing its rows with
+    /// [`hash_varlen_many`](Self::hash_varlen_many), but faster on CPUs with
+    /// AVX-512: there, eight consecutive rows of a column are hashed side by
+    /// side, and already lie in memory the way the SIMD lanes want them.
+    ///
+    /// Without any columns, the number of rows is unknown, and the result is
+    /// empty.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the columns differ in length.
+    pub fn hash_rows_of_columns<T: ColumnElement>(columns: &[&[T]]) -> Vec<Digest> {
+        let columns = columns
+            .iter()
+            .flat_map(|&column| {
+                let (elements, stride) = T::flatten(column);
+                (0..stride).map(move |offset| Column {
+                    elements,
+                    stride,
+                    offset,
+                })
+            })
+            .collect_vec();
+        Self::hash_rows_of_flat_columns(&columns)
+    }
+
+    fn hash_rows_of_flat_columns(columns: &[Column]) -> Vec<Digest> {
+        let Some(num_rows) = columns.first().map(Column::num_rows) else {
+            return vec![];
+        };
+        assert!(
+            columns.iter().all(|column| column.num_rows() == num_rows),
+            "all columns must have the same length"
+        );
+
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            const ROWS_PER_BLOCK: usize = avx512::BATCH_SIZE * avx512::ROW_BLOCK_BATCHES;
+            let num_batched_rows = num_rows - num_rows % avx512::BATCH_SIZE;
+            let mut digests = vec![Digest::default(); num_batched_rows];
+            for (block, block_digests) in digests.chunks_mut(ROWS_PER_BLOCK).enumerate() {
+                // SAFETY: The required CPU features were detected above, and
+                // every column has at least `first_row + block_digests.len()`
+                // rows.
+                unsafe { Self::hash_rows_block(columns, block * ROWS_PER_BLOCK, block_digests) };
+            }
+            digests.extend(Self::hash_rows_scalar(columns, num_batched_rows..num_rows));
+            return digests;
+        }
+
+        Self::hash_rows_scalar(columns, 0..num_rows)
+    }
+
+    /// [`hash_rows_of_columns`](Self::hash_rows_of_columns) for the given
+    /// rows, without any SIMD.
+    fn hash_rows_scalar(columns: &[Column], rows: std::ops::Range<usize>) -> Vec<Digest> {
+        let mut row = Vec::with_capacity(columns.len());
+        rows.map(|r| {
+            row.clear();
+            row.extend(columns.iter().map(|column| column.get(r)));
+            Self::hash_varlen(&row)
+        })
+        .collect()
     }
 
     /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
@@ -1870,6 +1996,57 @@ pub(crate) mod tests {
         Tip5::absorb_many(&mut sponges, &inputs_2);
         naive_absorb_many(&mut naive, &inputs_2);
         prop_assert_eq!(naive, sponges);
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn hash_rows_of_bfe_columns_agrees_with_hash_varlen(
+        #[strategy(1_usize..40)] _num_columns: usize,
+        #[strategy(0_usize..30)] num_rows: usize,
+        #[strategy(prop::collection::vec(prop::collection::vec(arb(), #num_rows), #_num_columns))]
+        columns: Vec<Vec<BFieldElement>>,
+    ) {
+        let rows = (0..num_rows)
+            .map(|r| columns.iter().map(|column| column[r]).collect_vec())
+            .collect_vec();
+        let expected = rows.iter().map(|row| Tip5::hash_varlen(row)).collect_vec();
+
+        let column_slices = columns.iter().map(Vec::as_slice).collect_vec();
+        prop_assert_eq!(expected, Tip5::hash_rows_of_columns(&column_slices));
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn hash_rows_of_xfe_columns_agrees_with_hash_varlen(
+        #[strategy(1_usize..20)] _num_columns: usize,
+        #[strategy(0_usize..30)] num_rows: usize,
+        #[strategy(prop::collection::vec(prop::collection::vec(arb(), #num_rows), #_num_columns))]
+        columns: Vec<Vec<XFieldElement>>,
+    ) {
+        let rows = (0..num_rows)
+            .map(|r| {
+                columns
+                    .iter()
+                    .flat_map(|column| column[r].coefficients)
+                    .collect_vec()
+            })
+            .collect_vec();
+        let expected = rows.iter().map(|row| Tip5::hash_varlen(row)).collect_vec();
+
+        let column_slices = columns.iter().map(Vec::as_slice).collect_vec();
+        prop_assert_eq!(expected, Tip5::hash_rows_of_columns(&column_slices));
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn hash_rows_of_no_columns_is_empty() {
+        let no_columns: [&[BFieldElement]; 0] = [];
+        assert!(Tip5::hash_rows_of_columns(&no_columns).is_empty());
+    }
+
+    #[macro_rules_attr::apply(test)]
+    #[should_panic(expected = "same length")]
+    fn hash_rows_of_ragged_columns_panics() {
+        let short = [BFieldElement::ONE; 3];
+        let long = [BFieldElement::ONE; 4];
+        Tip5::hash_rows_of_columns(&[&short[..], &long[..]]);
     }
 
     #[macro_rules_attr::apply(test)]
