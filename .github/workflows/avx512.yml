@@ -8,6 +8,15 @@ on:
     branches:
       - master
 
+env:
+  RUSTFLAGS: "-C target-feature=+avx512f,+avx512bw,+avx512dq,+avx512vbmi,+avx512ifma"
+
+  # This is necessary to pass the `RUSTFLAGS` only to the compiler
+  # invocation for the final artifact, but _not_ to previous compiler
+  # invocations, such as build scripts. See also:
+  # https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags
+  CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
+
 jobs:
   rust:
     name: Build with AVX-512 features
@@ -21,11 +30,24 @@ jobs:
 
       - name: Build
         run: cargo build
-        env:
-          RUSTFLAGS: "-C target-feature=+avx512ifma,+avx512f,+avx512bw,+avx512vbmi"
 
-          # This is necessary to pass the `RUSTFLAGS` only to the compiler
-          # invocation for the final artifact, but _not_ to previous compiler
-          # invocations, such as build scripts. See also:
-          # https://doc.rust-lang.org/cargo/reference/config.html#buildrustflags
-          CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
+      # GitHub's hosted runners are a mix of CPUs, and not all of them support
+      # AVX-512. With the features compiled in above, running the tests on a
+      # CPU without them would crash with an illegal instruction. Hence, only
+      # run the tests when the CPU supports every feature the code uses.
+      - name: Detect AVX-512 support
+        id: cpu
+        run: |
+          lscpu | grep 'Model name' || true
+          supported=true
+          for feature in avx512f avx512bw avx512dq avx512vbmi avx512ifma; do
+            if ! grep -qw "$feature" /proc/cpuinfo; then
+              echo "::notice::This runner's CPU lacks $feature; skipping the AVX-512 tests."
+              supported=false
+            fi
+          done
+          echo "supported=$supported" >> "$GITHUB_OUTPUT"
+
+      - name: Test the SIMD code paths
+        if: steps.cpu.outputs.supported == 'true'
+        run: cargo test --lib -- tip5 ntt

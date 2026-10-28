@@ -183,6 +183,59 @@ pub struct Tip5 {
     pub state: [BFieldElement; STATE_SIZE],
 }
 
+/// A column of a table whose rows are to be hashed: element `row` is at
+/// `elements[offset + row * stride]`.
+///
+/// A column of [`XFieldElement`]s is three such columns over the same flat
+/// slice, with stride 3 and offsets 0, 1, and 2.
+#[derive(Debug, Clone, Copy)]
+struct Column<'a> {
+    elements: &'a [BFieldElement],
+    stride: usize,
+    offset: usize,
+}
+
+impl Column<'_> {
+    fn num_rows(&self) -> usize {
+        self.elements.len() / self.stride
+    }
+
+    fn get(&self, row: usize) -> BFieldElement {
+        self.elements[self.offset + row * self.stride]
+    }
+}
+
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for crate::prelude::BFieldElement {}
+    impl Sealed for crate::prelude::XFieldElement {}
+}
+
+/// The element type of a table whose rows can be hashed with
+/// [`Tip5::hash_rows_of_columns`].
+///
+/// This trait is sealed and implemented for [`BFieldElement`] and
+/// [`XFieldElement`].
+pub trait ColumnElement: sealed::Sealed + Copy {
+    /// The column as a flat slice of [`BFieldElement`]s, and the number of
+    /// such elements per element of the column.
+    #[doc(hidden)]
+    fn flatten(column: &[Self]) -> (&[BFieldElement], usize);
+}
+
+impl ColumnElement for BFieldElement {
+    fn flatten(column: &[Self]) -> (&[BFieldElement], usize) {
+        (column, 1)
+    }
+}
+
+impl ColumnElement for XFieldElement {
+    fn flatten(column: &[Self]) -> (&[BFieldElement], usize) {
+        let flat = crate::math::x_field_element::as_flat_slice(column);
+        (flat, crate::math::x_field_element::EXTENSION_DEGREE)
+    }
+}
+
 impl Tip5 {
     /// One round of the Tip5 permutation, without any SIMD.
     #[inline(always)]
@@ -734,6 +787,114 @@ impl Tip5 {
     /// [`hash_pair_many`](Self::hash_pair_many), without any SIMD.
     fn hash_pair_many_scalar(pairs: &[[Digest; 2]]) -> Vec<Digest> {
         pairs.iter().map(|&[l, r]| Self::hash_pair(l, r)).collect()
+    }
+
+    /// [`absorb`](Sponge::absorb) on many sponges, each its own input, in
+    /// order.
+    ///
+    /// Equivalent to absorbing into every sponge on its own, but considerably
+    /// faster on CPUs with AVX-512, where groups of consecutive sponges are
+    /// permuted side by side, one sponge per SIMD lane.
+    ///
+    /// # Panics
+    ///
+    /// Panics if there are not as many inputs as sponges.
+    pub fn absorb_many(sponges: &mut [Self], inputs: &[[BFieldElement; RATE]]) {
+        assert_eq!(sponges.len(), inputs.len());
+
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            let (batches, remainder) = sponges.as_chunks_mut::<{ avx512::BATCH_SIZE }>();
+            let (input_batches, input_remainder) = inputs.as_chunks::<{ avx512::BATCH_SIZE }>();
+            for (batch, batch_inputs) in batches.iter_mut().zip(input_batches) {
+                // SAFETY: The required CPU features were detected above.
+                unsafe { Self::absorb_batch(batch, batch_inputs) };
+            }
+            Self::absorb_many_scalar(remainder, input_remainder);
+            return;
+        }
+
+        Self::absorb_many_scalar(sponges, inputs);
+    }
+
+    /// [`absorb_many`](Self::absorb_many), without any SIMD.
+    fn absorb_many_scalar(sponges: &mut [Self], inputs: &[[BFieldElement; RATE]]) {
+        for (sponge, &input) in sponges.iter_mut().zip(inputs) {
+            sponge.absorb(input);
+        }
+    }
+
+    /// [`hash_varlen`](Self::hash_varlen) of every row of a table that is
+    /// stored column by column.
+    ///
+    /// Row `r` is `[columns[0][r], columns[1][r], …]`. A row of
+    /// [`XFieldElement`]s is hashed as the concatenation of its elements'
+    /// coefficients, i.e., as [`hash_varlen`](Self::hash_varlen) of the row's
+    /// [flat slice](crate::math::x_field_element::as_flat_slice).
+    ///
+    /// Equivalent to transposing the table and hashing its rows with
+    /// [`hash_varlen_many`](Self::hash_varlen_many), but faster on CPUs with
+    /// AVX-512: there, eight consecutive rows of a column are hashed side by
+    /// side, and already lie in memory the way the SIMD lanes want them.
+    ///
+    /// Without any columns, the number of rows is unknown, and the result is
+    /// empty.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the columns differ in length.
+    pub fn hash_rows_of_columns<T: ColumnElement>(columns: &[&[T]]) -> Vec<Digest> {
+        let columns = columns
+            .iter()
+            .flat_map(|&column| {
+                let (elements, stride) = T::flatten(column);
+                (0..stride).map(move |offset| Column {
+                    elements,
+                    stride,
+                    offset,
+                })
+            })
+            .collect_vec();
+        Self::hash_rows_of_flat_columns(&columns)
+    }
+
+    fn hash_rows_of_flat_columns(columns: &[Column]) -> Vec<Digest> {
+        let Some(num_rows) = columns.first().map(Column::num_rows) else {
+            return vec![];
+        };
+        assert!(
+            columns.iter().all(|column| column.num_rows() == num_rows),
+            "all columns must have the same length"
+        );
+
+        #[cfg(target_arch = "x86_64")]
+        if Self::avx512_is_available() {
+            const ROWS_PER_BLOCK: usize = avx512::BATCH_SIZE * avx512::ROW_BLOCK_BATCHES;
+            let num_batched_rows = num_rows - num_rows % avx512::BATCH_SIZE;
+            let mut digests = vec![Digest::default(); num_batched_rows];
+            for (block, block_digests) in digests.chunks_mut(ROWS_PER_BLOCK).enumerate() {
+                // SAFETY: The required CPU features were detected above, and
+                // every column has at least `first_row + block_digests.len()`
+                // rows.
+                unsafe { Self::hash_rows_block(columns, block * ROWS_PER_BLOCK, block_digests) };
+            }
+            digests.extend(Self::hash_rows_scalar(columns, num_batched_rows..num_rows));
+            return digests;
+        }
+
+        Self::hash_rows_scalar(columns, 0..num_rows)
+    }
+
+    /// [`hash_rows_of_columns`](Self::hash_rows_of_columns) for the given
+    /// rows, without any SIMD.
+    fn hash_rows_scalar(columns: &[Column], rows: std::ops::Range<usize>) -> Vec<Digest> {
+        let mut row = Vec::with_capacity(columns.len());
+        rows.map(|r| {
+            row.clear();
+            row.extend(columns.iter().map(|column| column.get(r)));
+            Self::hash_varlen(&row)
+        })
+        .collect()
     }
 
     /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
@@ -1760,6 +1921,132 @@ pub(crate) mod tests {
             .collect_vec();
         prop_assert_eq!(individually.clone(), Tip5::hash_pair_many_scalar(&pairs));
         prop_assert_eq!(individually, Tip5::hash_pair_many(&pairs));
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn absorb_many_agrees_with_absorb(
+        #[strategy(proptest::collection::vec(arb(), 0..30))] sponges: Vec<Tip5>,
+        #[strategy(proptest::collection::vec(arb(), #sponges.len()))] inputs: Vec<
+            [BFieldElement; RATE],
+        >,
+    ) {
+        let mut individually = sponges.clone();
+        for (sponge, &input) in individually.iter_mut().zip(&inputs) {
+            sponge.absorb(input);
+        }
+
+        let mut scalar = sponges.clone();
+        Tip5::absorb_many_scalar(&mut scalar, &inputs);
+        prop_assert_eq!(&individually, &scalar);
+
+        let mut many = sponges;
+        Tip5::absorb_many(&mut many, &inputs);
+        prop_assert_eq!(individually, many);
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn chained_absorb_many_agrees_with_naive_sponge(
+        #[strategy(proptest::collection::vec(arb(), 0..30))] sponges: Vec<Tip5>,
+        #[strategy(proptest::collection::vec(arb(), #sponges.len()))] inputs_0: Vec<
+            [BFieldElement; RATE],
+        >,
+        #[strategy(proptest::collection::vec(arb(), #sponges.len()))] inputs_1: Vec<
+            [BFieldElement; RATE],
+        >,
+        #[strategy(proptest::collection::vec(arb(), #sponges.len()))] inputs_2: Vec<
+            [BFieldElement; RATE],
+        >,
+    ) {
+        fn naive_absorb_many(naive: &mut [naive::NaiveTip5], inputs: &[[BFieldElement; RATE]]) {
+            for (sponge, input) in naive.iter_mut().zip_eq(inputs) {
+                sponge.state[..RATE].copy_from_slice(input);
+                sponge.permutation();
+            }
+        }
+
+        fn naive_squeeze(sponge: &mut naive::NaiveTip5) -> [BFieldElement; RATE] {
+            let produce = sponge.state[..RATE].try_into().unwrap();
+            sponge.permutation();
+            produce
+        }
+
+        let mut naive = sponges
+            .iter()
+            .map(|sponge| naive::NaiveTip5 {
+                state: sponge.state,
+            })
+            .collect_vec();
+        let mut sponges = sponges;
+
+        for (sponge, &input) in sponges.iter_mut().zip_eq(&inputs_0) {
+            sponge.absorb(input);
+        }
+        naive_absorb_many(&mut naive, &inputs_0);
+        prop_assert_eq!(&naive, &sponges);
+
+        Tip5::absorb_many(&mut sponges, &inputs_1);
+        naive_absorb_many(&mut naive, &inputs_1);
+        prop_assert_eq!(&naive, &sponges);
+
+        let squeezed = sponges.iter_mut().map(|s| s.squeeze()).collect_vec();
+        let naive_squeezed = naive.iter_mut().map(naive_squeeze).collect_vec();
+        prop_assert_eq!(naive_squeezed, squeezed);
+        prop_assert_eq!(&naive, &sponges);
+
+        Tip5::absorb_many(&mut sponges, &inputs_2);
+        naive_absorb_many(&mut naive, &inputs_2);
+        prop_assert_eq!(naive, sponges);
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn hash_rows_of_bfe_columns_agrees_with_hash_varlen(
+        #[strategy(1_usize..40)] _num_columns: usize,
+        #[strategy(0_usize..30)] num_rows: usize,
+        #[strategy(prop::collection::vec(prop::collection::vec(arb(), #num_rows), #_num_columns))]
+        columns: Vec<Vec<BFieldElement>>,
+    ) {
+        let rows = (0..num_rows)
+            .map(|r| columns.iter().map(|column| column[r]).collect_vec())
+            .collect_vec();
+        let expected = rows.iter().map(|row| Tip5::hash_varlen(row)).collect_vec();
+
+        let column_slices = columns.iter().map(Vec::as_slice).collect_vec();
+        prop_assert_eq!(expected, Tip5::hash_rows_of_columns(&column_slices));
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn hash_rows_of_xfe_columns_agrees_with_hash_varlen(
+        #[strategy(1_usize..20)] _num_columns: usize,
+        #[strategy(0_usize..30)] num_rows: usize,
+        #[strategy(prop::collection::vec(prop::collection::vec(arb(), #num_rows), #_num_columns))]
+        columns: Vec<Vec<XFieldElement>>,
+    ) {
+        let rows = (0..num_rows)
+            .map(|r| {
+                columns
+                    .iter()
+                    .flat_map(|column| column[r].coefficients)
+                    .collect_vec()
+            })
+            .collect_vec();
+        let expected = rows.iter().map(|row| Tip5::hash_varlen(row)).collect_vec();
+
+        let column_slices = columns.iter().map(Vec::as_slice).collect_vec();
+        prop_assert_eq!(expected, Tip5::hash_rows_of_columns(&column_slices));
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn hash_rows_of_no_columns_is_empty() {
+        let no_columns: [&[BFieldElement]; 0] = [];
+        assert!(Tip5::hash_rows_of_columns(&no_columns).is_empty());
+    }
+
+    #[macro_rules_attr::apply(test)]
+    #[should_panic(expected = "same length")]
+    fn hash_rows_of_ragged_columns_panics() {
+        let short = [BFieldElement::ONE; 3];
+        let long = [BFieldElement::ONE; 4];
+        Tip5::hash_rows_of_columns(&[&short[..], &long[..]]);
     }
 
     #[macro_rules_attr::apply(test)]

@@ -10,6 +10,7 @@ use std::arch::x86_64::*;
 use num_traits::ConstOne;
 use num_traits::ConstZero;
 
+use super::Column;
 use super::Digest;
 use super::LOOKUP_TABLE;
 use super::NUM_ROUNDS;
@@ -649,6 +650,33 @@ impl Tip5 {
         Self::digests(&sponges)
     }
 
+    /// [`absorb`](crate::util_types::sponge::Sponge::absorb) on [`BATCH_SIZE`]
+    /// sponges at once, each its own input.
+    ///
+    /// # Safety
+    ///
+    /// See [`Self::permutation_avx512`].
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    pub(super) unsafe fn absorb_batch(
+        sponges: &mut [Self; BATCH_SIZE],
+        inputs: &[[BFieldElement; RATE]; BATCH_SIZE],
+    ) {
+        // Every state element is set below, so the domain does not matter.
+        let mut batch = Tip5Batch::new(Domain::VariableLength);
+        for i in 0..RATE {
+            batch.set(i, inputs.map(|input| input[i]));
+        }
+        for i in RATE..STATE_SIZE {
+            batch.set(i, std::array::from_fn(|j| sponges[j].state[i]));
+        }
+        batch.permutation();
+        for i in 0..STATE_SIZE {
+            for (sponge, element) in sponges.iter_mut().zip(batch.get(i)) {
+                sponge.state[i] = element;
+            }
+        }
+    }
+
     /// The first [`Digest::LEN`] state elements of every sponge.
     #[inline]
     #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
@@ -660,5 +688,133 @@ impl Tip5 {
             }
         }
         digests.map(Digest::new)
+    }
+}
+
+/// For every offset in `0..3`: the index vectors for two
+/// [`_mm512_permutex2var_epi64`] steps that pick every third element out of
+/// 24 contiguous ones (three vectors), starting at that offset.
+///
+/// The first step picks what it can from the first two vectors; the second
+/// step keeps those and fills the rest from the third vector.
+const EVERY_THIRD_INDICES: [([i64; BATCH_SIZE], [i64; BATCH_SIZE]); 3] = {
+    let mut indices = [([0; BATCH_SIZE], [0; BATCH_SIZE]); 3];
+    let mut offset = 0;
+    while offset < 3 {
+        let mut lane = 0;
+        while lane < BATCH_SIZE {
+            let source = offset + 3 * lane;
+            if source < 2 * BATCH_SIZE {
+                indices[offset].0[lane] = source as i64;
+                indices[offset].1[lane] = lane as i64;
+            } else {
+                indices[offset].1[lane] = (source - BATCH_SIZE) as i64;
+            }
+            lane += 1;
+        }
+        offset += 1;
+    }
+    indices
+};
+
+#[expect(unsafe_op_in_unsafe_fn)]
+impl Tip5Batch {
+    /// Rows `first_row..first_row + BATCH_SIZE` of the column, one per lane.
+    ///
+    /// # Safety
+    ///
+    /// See [`Tip5::permutation_avx512`]. Additionally, the column must have at
+    /// least `first_row + BATCH_SIZE` rows.
+    #[inline]
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    unsafe fn load_column(column: Column, first_row: usize) -> __m512i {
+        debug_assert!(first_row + BATCH_SIZE <= column.num_rows());
+        let rows = column.elements.as_ptr().add(first_row * column.stride) as *const i64;
+        match column.stride {
+            1 => _mm512_loadu_epi64(rows),
+            3 => {
+                // The eight rows' elements span three vectors.
+                let (indices_01, indices_2) = EVERY_THIRD_INDICES[column.offset];
+                let v0 = _mm512_loadu_epi64(rows);
+                let v1 = _mm512_loadu_epi64(rows.add(BATCH_SIZE));
+                let v2 = _mm512_loadu_epi64(rows.add(2 * BATCH_SIZE));
+                let v01 =
+                    _mm512_permutex2var_epi64(v0, _mm512_loadu_epi64(indices_01.as_ptr()), v1);
+                _mm512_permutex2var_epi64(v01, _mm512_loadu_epi64(indices_2.as_ptr()), v2)
+            }
+            _ => {
+                let raw: [i64; BATCH_SIZE] =
+                    std::array::from_fn(|lane| column.get(first_row + lane).raw_u64() as i64);
+                _mm512_loadu_epi64(raw.as_ptr())
+            }
+        }
+    }
+}
+
+/// The number of [batches](BATCH_SIZE) of rows that [`Tip5::hash_rows_block`]
+/// hashes at once, i.e., 128 rows. Larger blocks read longer contiguous
+/// pieces of every column, which helps the hardware prefetchers; the block's
+/// sponge states (16 KiB) should still fit into the L1 cache.
+pub(super) const ROW_BLOCK_BATCHES: usize = 16;
+
+#[expect(unsafe_op_in_unsafe_fn)]
+impl Tip5 {
+    /// [`hash_varlen`](Self::hash_varlen) of rows `first_row..first_row +
+    /// digests.len()` of a table given by its columns.
+    ///
+    /// The rows are hashed in batches of [`BATCH_SIZE`], all of which proceed
+    /// through the columns in lockstep. This way, every column is read in one
+    /// contiguous piece per block, which hardware prefetchers handle well.
+    ///
+    /// # Safety
+    ///
+    /// See [`Self::permutation_avx512`]. Additionally, every column must have
+    /// at least `first_row + digests.len()` rows.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of digests is not a multiple of [`BATCH_SIZE`] or
+    /// exceeds [`ROW_BLOCK_BATCHES`] batches.
+    #[target_feature(enable = "avx512f,avx512bw,avx512dq,avx512vbmi,avx512ifma")]
+    pub(super) unsafe fn hash_rows_block(
+        columns: &[Column],
+        first_row: usize,
+        digests: &mut [Digest],
+    ) {
+        let (digest_batches, no_remainder) = digests.as_chunks_mut::<BATCH_SIZE>();
+        assert!(no_remainder.is_empty());
+        assert!(digest_batches.len() <= ROW_BLOCK_BATCHES);
+
+        let mut sponges = [Tip5Batch::new(Domain::VariableLength); ROW_BLOCK_BATCHES];
+        let sponges = &mut sponges[..digest_batches.len()];
+        let batch_rows = |batch: usize| first_row + batch * BATCH_SIZE;
+
+        let (full_chunks, remainder) = columns.as_chunks::<RATE>();
+        for chunk in full_chunks {
+            for (batch, sponge) in sponges.iter_mut().enumerate() {
+                for (i, &column) in chunk.iter().enumerate() {
+                    sponge.state[i] = Tip5Batch::load_column(column, batch_rows(batch));
+                }
+                sponge.permutation();
+            }
+        }
+
+        // Pad input with [1, 0, 0, …] – padding is at least one element.
+        for (batch, sponge) in sponges.iter_mut().enumerate() {
+            for i in 0..RATE {
+                sponge.state[i] = match remainder.get(i) {
+                    Some(&column) => Tip5Batch::load_column(column, batch_rows(batch)),
+                    None if i == remainder.len() => {
+                        _mm512_set1_epi64(BFieldElement::ONE.raw_u64() as i64)
+                    }
+                    None => _mm512_setzero_si512(),
+                };
+            }
+            sponge.permutation();
+        }
+
+        for (batch_digests, sponge) in digest_batches.iter_mut().zip(sponges.iter()) {
+            *batch_digests = Self::digests(sponge);
+        }
     }
 }
