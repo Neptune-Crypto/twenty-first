@@ -44,8 +44,12 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      # Benchmarks are compiled but not run: running them is CodSpeed's job.
+      - name: Build benchmarks
+        run: cargo bench --no-run
+
       - name: Run tests
-        run: cargo nextest run --no-fail-fast --all-targets
+        run: cargo nextest run --no-fail-fast --lib --bins --tests
 
         # doctests are special [^1] but this step does not incur a performance penalty [^2]
         #

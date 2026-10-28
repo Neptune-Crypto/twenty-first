@@ -72,10 +72,13 @@ workspace = true
 name = "tip5"
 harness = false
 
-# Not run on CodSpeed: slow, and allocates on the order of a gigabyte.
+# Slow, and allocates on the order of a gigabyte. Hence, not run by default:
+# neither by `cargo bench`, nor by `cargo test --all-targets`, nor on CodSpeed.
+# Run it explicitly with `cargo bench --bench hash_rows_parallel`.
 [[bench]]
 name = "hash_rows_parallel"
 harness = false
+bench = false
 
 [[bench]]
 name = "ntt"
