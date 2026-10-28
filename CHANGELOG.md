@@ -1,4 +1,10 @@
 
+## [3.1.1](https://github.com/Neptune-Crypto/twenty-first/compare/v3.1.0..v3.1.1) – 2026-10-28
+
+### ⚡️ Performance
+
+- *(Tip5)* Faster AVX512 ([d38c2989](https://github.com/Neptune-Crypto/twenty-first/commit/d38c2989))
+
 ## [3.1.0](https://github.com/Neptune-Crypto/twenty-first/compare/v3.0.1..v3.1.0) – 2026-10-28
 
 ### ✨ Features
