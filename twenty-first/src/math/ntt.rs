@@ -139,6 +139,204 @@ where
     par_unscale(x);
 }
 
+/// The [NTT][self::ntt] of `values`, written to `output`, which may be
+/// uninitialized. On return, every element of `output` is initialized.
+///
+/// For large inputs, this is faster than copying the values and transforming
+/// the copy in place, since the passes over memory dominate the runtime of
+/// large transforms.
+///
+/// # Panics
+///
+/// Panics if the lengths of `values` and `output` differ, and under the
+/// conditions [`ntt`] panics.
+pub fn ntt_into<FF>(values: &[FF], output: &mut [MaybeUninit<FF>])
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let twiddle_factors = forward_twiddle_factors(slice_len(values));
+    ntt_into_unchecked(values, output, twiddle_factors, BFieldElement::ONE);
+}
+
+/// The [inverse NTT][self::intt] of `values`, written to `output`, which may
+/// be uninitialized. On return, every element of `output` is initialized.
+/// See also [`ntt_into`].
+///
+/// # Panics
+///
+/// Panics if the lengths of `values` and `output` differ, and under the
+/// conditions [`intt`] panics.
+pub fn intt_into<FF>(values: &[FF], output: &mut [MaybeUninit<FF>])
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let twiddle_factors = inverse_twiddle_factors(slice_len(values));
+    let len_inverse = BFieldElement::from(values.len()).inverse_or_zero();
+    ntt_into_unchecked(values, output, twiddle_factors, len_inverse);
+}
+
+/// The binary logarithm of the block length of [`ntt_into_unchecked`]'s
+/// two-pass algorithm. The blocks that are gathered together, i.e., 8 blocks
+/// of 32 KiB for base field elements or 4 blocks of 96 KiB for extension
+/// field elements, must fit the L2 cache.
+#[cfg(target_arch = "x86_64")]
+const LOG_2_GATHERED_BLOCK_LEN: u32 = 12;
+
+/// Internal helper function for [`ntt_into`] and [`intt_into`]. Makes the
+/// same assumptions as [`ntt_unchecked`]. Every element of the result is
+/// multiplied by `scale`.
+fn ntt_into_unchecked<FF>(
+    values: &[FF],
+    output: &mut [MaybeUninit<FF>],
+    twiddle_factors: &[Vec<BFieldElement>],
+    scale: BFieldElement,
+) where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    assert_eq!(values.len(), output.len());
+
+    #[cfg(target_arch = "x86_64")]
+    if ntt_into_in_two_passes(
+        values,
+        output,
+        twiddle_factors,
+        scale,
+        LOG_2_GATHERED_BLOCK_LEN,
+    ) {
+        return;
+    }
+
+    for (target, &value) in output.iter_mut().zip(values) {
+        target.write(value);
+    }
+    // SAFETY: Every element was just initialized, and `MaybeUninit<FF>` has
+    // the same layout as `FF`.
+    let output =
+        unsafe { std::slice::from_raw_parts_mut(output.as_mut_ptr().cast::<FF>(), output.len()) };
+    ntt_unchecked(output, twiddle_factors);
+    if scale != BFieldElement::ONE {
+        for element in output {
+            *element *= scale;
+        }
+    }
+}
+
+/// Try to perform [`ntt_into_unchecked`] in two passes over the output and
+/// one pass over the input. Returns `false`, without having done anything, if
+/// that is not possible: the SIMD kernels must be usable, and there must be
+/// more than one block of `2^log_2_block_len` elements.
+///
+/// The structure is the same as that of [`avx512::CosetEvaluation`], except
+/// that elements are not grouped into vector elements:
+///
+/// 1. The inputs of a few blocks are gathered from the values, in
+///    bit-reversed order, into scratch space. There, all layers whose
+///    butterflies stay within a block are applied. Then, element `i` of the
+///    block that holds the values with indices `≡ j` modulo the number of
+///    blocks is multiplied by `ω^(i·j)`, where `ω` is the primitive root of
+///    unity the twiddle factors are made of, and the block is written to
+///    the output.
+/// 2. After that, the remaining layers are transforms of the blocks as a
+///    whole, i.e., the same twiddle factor applies to all elements of a
+///    block. See [`avx512::transform_across_blocks`].
+#[cfg(target_arch = "x86_64")]
+fn ntt_into_in_two_passes<FF>(
+    values: &[FF],
+    output: &mut [MaybeUninit<FF>],
+    twiddle_factors: &[Vec<BFieldElement>],
+    scale: BFieldElement,
+    log_2_block_len: u32,
+) -> bool
+where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    /// `avx512::scale_by_powers` processes this many elements at once.
+    const MIN_LOG_2_BLOCK_LEN: u32 = 5;
+
+    let Some(limbs) = simd_limbs::<FF>() else {
+        return false;
+    };
+    let Some(log_2_len) = values.len().checked_ilog2() else {
+        return false;
+    };
+    let log_2_block_len = log_2_block_len
+        .max(log_2_len.saturating_sub(MAX_LOG_2_NUM_VECTOR_BLOCKS))
+        .max(MIN_LOG_2_BLOCK_LEN);
+    let Some(log_2_num_blocks) = log_2_len.checked_sub(log_2_block_len).filter(|&n| n > 0) else {
+        return false;
+    };
+    let block_len = 1_usize << log_2_block_len;
+    let num_blocks = 1_usize << log_2_num_blocks;
+    let lines_per_block = block_len * limbs / avx512::LANES;
+    let group_len = if limbs == 1 { 8 } else { 4 }.min(num_blocks);
+    let omega = twiddle_factors[twiddle_factors.len() - 1][1];
+
+    let scratch_len = (group_len * lines_per_block).max(num_blocks);
+    with_scratch_lines(scratch_len, |scratch| {
+        // SAFETY: A line is 8 base field elements, and `FF` is laid out as
+        // `limbs` of them (see `simd_limbs`), is `Copy`, and has no invalid
+        // bit patterns for initialized limbs. All elements that are read
+        // below are written first.
+        let blocks = unsafe {
+            std::slice::from_raw_parts_mut(scratch.as_mut_ptr().cast::<FF>(), group_len * block_len)
+        };
+
+        // Pass 1
+        for first_column in (0..num_blocks).step_by(group_len) {
+            for row in 0..block_len {
+                let position = bit_reverse(row, log_2_block_len);
+                let first_index = row * num_blocks + first_column;
+
+                // The values are read at a large stride, which hardware
+                // prefetchers do not follow.
+                let ahead = first_index + avx512::PREFETCH_DISTANCE * num_blocks;
+                if let Some(ahead) = values.get(ahead..ahead + group_len) {
+                    avx512::prefetch(ahead);
+                }
+                for g in 0..group_len {
+                    blocks[g * block_len + position] = values[first_index + g];
+                }
+            }
+            for (g, block) in blocks.chunks_exact_mut(block_len).enumerate() {
+                apply_layers(block, twiddle_factors, 0, log_2_block_len);
+
+                let column = first_column + g;
+                let block_index = bit_reverse(column, log_2_num_blocks);
+                let target = output[block_index * block_len..].as_mut_ptr();
+                // SAFETY: AVX-512 is available, see `simd_limbs`. The block
+                // has a multiple of 32 elements, starts at a cache line of
+                // the scratch space, and is a whole number of cache lines
+                // long. The target is one block of the output.
+                unsafe {
+                    if column != 0 || scale != BFieldElement::ONE {
+                        let base = omega.mod_pow(column as u64);
+                        let block = block.as_mut_ptr().cast();
+                        avx512::scale_by_powers(block, limbs, block_len, scale, base);
+                    }
+                    avx512::copy_lines(block.as_ptr().cast(), target.cast(), lines_per_block);
+                }
+            }
+        }
+
+        // Pass 2
+        // SAFETY: AVX-512 is available. Every block of the exclusively
+        // borrowed output was written to above. The scratch space has at
+        // least as many lines as there are blocks.
+        unsafe {
+            avx512::transform_across_blocks(
+                output.as_mut_ptr().cast(),
+                lines_per_block,
+                log_2_num_blocks,
+                0..lines_per_block,
+                twiddle_factors,
+                scratch,
+            )
+        };
+    });
+
+    true
+}
+
 /// The (cached) twiddle factors for the forward NTT of the given length.
 fn forward_twiddle_factors(slice_len: u32) -> &'static [Vec<BFieldElement>] {
     static ALL_TWIDDLE_FACTORS: [OnceLock<Vec<Vec<BFieldElement>>>; NUM_DOMAINS] =
@@ -1670,7 +1868,19 @@ mod avx512 {
     const LOG_2_CHUNK_LEN: u32 = 6;
 
     /// How many loads ahead of their use strided reads are prefetched.
-    const PREFETCH_DISTANCE: usize = 12;
+    pub(super) const PREFETCH_DISTANCE: usize = 12;
+
+    /// Prefetch the first and the last cache line of the slice.
+    #[inline(always)]
+    pub(super) fn prefetch<T>(slice: &[T]) {
+        let range = slice.as_ptr_range();
+        // SAFETY: Prefetching is supported by all x86-64 CPUs, and has no
+        // architectural effect, whatever the address.
+        unsafe {
+            _mm_prefetch::<_MM_HINT_T0>(range.start.cast());
+            _mm_prefetch::<_MM_HINT_T0>(range.end.cast::<i8>().wrapping_sub(1));
+        }
+    }
 
     #[inline]
     #[target_feature(enable = "avx512f")]
@@ -1799,6 +2009,127 @@ mod avx512 {
         broadcast_layers(x, lines, len, log_2_chunk_len, log_2_len, twiddle_factors);
     }
 
+    /// Multiply element `i` of the `len` elements at `x` by `scale · base^i`.
+    ///
+    /// # Safety
+    ///
+    /// `limbs` must be 1 or 3, and `x` must point to `len` elements with that
+    /// many limbs, which must not be concurrently accessed. `len` must be a
+    /// multiple of 32.
+    #[target_feature(enable = "avx512f")]
+    pub(super) unsafe fn scale_by_powers(
+        x: *mut u64,
+        limbs: usize,
+        len: usize,
+        scale: BFieldElement,
+        base: BFieldElement,
+    ) {
+        /// The number of independent chains of running powers, in order for
+        /// the multiplications that advance them to overlap.
+        const CHAINS: usize = 4;
+        const ELEMENTS_PER_STEP: usize = CHAINS * LANES;
+        debug_assert!(len.is_multiple_of(ELEMENTS_PER_STEP));
+
+        let mut powers = [scale; ELEMENTS_PER_STEP];
+        for i in 1..ELEMENTS_PER_STEP {
+            powers[i] = powers[i - 1] * base;
+        }
+        let step = broadcast(base.mod_pow(ELEMENTS_PER_STEP as u64));
+        let mut factors = [_mm512_setzero_si512(); CHAINS];
+        for (chain, factor) in factors.iter_mut().enumerate() {
+            *factor = _mm512_loadu_epi64(powers.as_ptr().add(chain * LANES).cast());
+        }
+        let expansion_3 = EXPANSION_3.map(|indices| _mm512_loadu_epi64(indices.as_ptr()));
+
+        for first_element in (0..len).step_by(ELEMENTS_PER_STEP) {
+            for (chain, factor) in factors.iter_mut().enumerate() {
+                let elements = x.add((first_element + chain * LANES) * limbs);
+                if limbs == 1 {
+                    let scaled = mul(_mm512_loadu_epi64(elements.cast()), *factor);
+                    _mm512_storeu_epi64(elements.cast(), scaled);
+                } else {
+                    for (v, &indices) in expansion_3.iter().enumerate() {
+                        let line = elements.add(v * LANES);
+                        let factor = _mm512_permutexvar_epi64(indices, *factor);
+                        let scaled = mul(_mm512_loadu_epi64(line.cast()), factor);
+                        _mm512_storeu_epi64(line.cast(), scaled);
+                    }
+                }
+                *factor = mul(*factor, step);
+            }
+        }
+    }
+
+    /// Copy `num_lines` cache lines from `source`, which must be aligned to
+    /// [`CACHE_LINE_LEN`], to `target`. If the target is aligned, too, the
+    /// copy uses streaming stores, which neither read the target's lines
+    /// before overwriting them nor leave them in the caches.
+    ///
+    /// # Safety
+    ///
+    /// The lines must be readable from `source` and writable to `target`.
+    #[target_feature(enable = "avx512f")]
+    pub(super) unsafe fn copy_lines(source: *const u64, target: *mut u64, num_lines: usize) {
+        let is_aligned = target.addr().is_multiple_of(CACHE_LINE_LEN);
+        for line in 0..num_lines {
+            let value = _mm512_load_epi64(source.add(line * LANES).cast());
+            if is_aligned {
+                _mm512_stream_si512(target.add(line * LANES).cast(), value);
+            } else {
+                _mm512_storeu_epi64(target.add(line * LANES).cast(), value);
+            }
+        }
+        _mm_sfence();
+    }
+
+    /// For each of the given positions of vectors in a block, transform the
+    /// vectors at that position in all `2^log_2_num_blocks` blocks, where a
+    /// block is made of `lines_per_block` vectors.
+    ///
+    /// The vectors are copied into scratch space, transformed there, and
+    /// written back. The copy matters: the vectors' addresses differ by a
+    /// large power of two, so they compete for very few sets of the caches,
+    /// and would evict each other long before the transform is done with
+    /// them.
+    ///
+    /// # Safety
+    ///
+    /// - The blocks at `x` must be readable and writable.
+    /// - No other thread may access the given positions of any block.
+    /// - `positions` must be a sub-range of `0..lines_per_block`.
+    /// - `scratch` must hold at least `2^log_2_num_blocks` lines.
+    /// - `twiddle_factors` must have at least `log_2_num_blocks` layers.
+    #[target_feature(enable = "avx512f")]
+    pub(super) unsafe fn transform_across_blocks(
+        x: *mut u64,
+        lines_per_block: usize,
+        log_2_num_blocks: u32,
+        positions: std::ops::Range<usize>,
+        twiddle_factors: &[Vec<BFieldElement>],
+        scratch: &mut [Line],
+    ) {
+        let num_blocks = 1_usize << log_2_num_blocks;
+        debug_assert!(scratch.len() >= num_blocks);
+        let block_stride = lines_per_block * LANES;
+        let scratch = scratch.as_mut_ptr().cast::<u64>();
+
+        for position in positions {
+            let column = x.add(position * LANES);
+            for block in 0..num_blocks {
+                // Hardware prefetchers do not follow the large stride.
+                let ahead = (block + PREFETCH_DISTANCE).min(num_blocks - 1);
+                _mm_prefetch::<_MM_HINT_T0>(column.add(ahead * block_stride).cast());
+                let value = _mm512_loadu_epi64(column.add(block * block_stride).cast());
+                _mm512_store_epi64(scratch.add(block * LANES).cast(), value);
+            }
+            blocked_broadcast_layers(scratch, 1, log_2_num_blocks, twiddle_factors);
+            for block in 0..num_blocks {
+                let value = _mm512_load_epi64(scratch.add(block * LANES).cast());
+                _mm512_storeu_epi64(column.add(block * block_stride).cast(), value);
+            }
+        }
+    }
+
     /// The evaluation of a polynomial on the coset `offset · <ω>`, where
     /// `ω` is the primitive root of unity whose order is the length of the
     /// codeword, which the twiddle factors are made of.
@@ -1827,10 +2158,7 @@ mod avx512 {
     /// 2. For each position in a block, the vectors at that position in all
     ///    `b` blocks are copied into scratch space, transformed there, and
     ///    written back. This reads and writes every cache line of the
-    ///    codeword once. The copy matters: the vectors' addresses differ by
-    ///    a large power of two, so they compete for very few sets of the
-    ///    caches, and would evict each other long before the transform is
-    ///    done with them. See [`Self::transform_across_blocks`].
+    ///    codeword once. See [`Self::transform_across_blocks`].
     ///
     /// This is the “four-step” structure of large transforms.
     #[derive(Debug)]
@@ -2147,24 +2475,14 @@ mod avx512 {
             scratch: &mut [Line],
         ) {
             debug_assert!(scratch.len() >= self.scratch_len());
-            let num_blocks = 1_usize << self.log_2_num_blocks;
-            let block_stride = self.lines_per_block() * LANES;
-            let scratch = scratch.as_mut_ptr().cast::<u64>();
-
-            for position in positions {
-                let column = self.codeword.add(position * LANES);
-                for block in 0..num_blocks {
-                    let ahead = (block + PREFETCH_DISTANCE).min(num_blocks - 1);
-                    _mm_prefetch::<_MM_HINT_T0>(column.add(ahead * block_stride).cast());
-                    let value = _mm512_loadu_epi64(column.add(block * block_stride).cast());
-                    _mm512_store_epi64(scratch.add(block * LANES).cast(), value);
-                }
-                blocked_broadcast_layers(scratch, 1, self.log_2_num_blocks, self.twiddle_factors);
-                for block in 0..num_blocks {
-                    let value = _mm512_load_epi64(scratch.add(block * LANES).cast());
-                    _mm512_storeu_epi64(column.add(block * block_stride).cast(), value);
-                }
-            }
+            transform_across_blocks(
+                self.codeword,
+                self.lines_per_block(),
+                self.log_2_num_blocks,
+                positions,
+                self.twiddle_factors,
+                scratch,
+            );
         }
     }
 }
@@ -2744,6 +3062,86 @@ mod tests {
             block_len,
             0,
         )?;
+    }
+
+    fn assert_transforms_into_agree_with_transforms_in_place<FF>(
+        values: &[FF],
+    ) -> std::result::Result<(), TestCaseError>
+    where
+        FF: FiniteField + MulAssign<BFieldElement>,
+    {
+        type Transform<FF> = fn(&mut [FF]);
+        type TransformInto<FF> = fn(&[FF], &mut [MaybeUninit<FF>]);
+        let transforms: [(Transform<FF>, TransformInto<FF>); 2] =
+            [(ntt, ntt_into), (intt, intt_into)];
+        for (transform, transform_into) in transforms {
+            let mut expected = values.to_vec();
+            transform(&mut expected);
+
+            for misalignment in [0, 1] {
+                let mut buffer = vec![MaybeUninit::<FF>::uninit(); values.len() + 9];
+                let output = cache_line_aligned(&mut buffer, values.len() + 1);
+                let output = &mut output[misalignment..misalignment + values.len()];
+                transform_into(values, output);
+                let output = output
+                    .iter()
+                    .map(|c| unsafe { c.assume_init() })
+                    .collect_vec();
+                prop_assert_eq!(&expected, &output);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[macro_rules_attr::apply(proptest(cases = 20))]
+    fn transforms_into_agree_with_transforms_in_place(
+        #[strategy(0_u32..=15)] log_2_len: u32,
+        seed: u64,
+    ) {
+        let mut element = BFieldElement::new(seed);
+        let mut next_element = || {
+            element = element * element + BFieldElement::new(7);
+            element
+        };
+        let b_values = (0..1 << log_2_len).map(|_| next_element()).collect_vec();
+        let x_values = (0..1 << log_2_len)
+            .map(|_| XFieldElement::new([(); EXTENSION_DEGREE].map(|()| next_element())))
+            .collect_vec();
+        assert_transforms_into_agree_with_transforms_in_place(&b_values)?;
+        assert_transforms_into_agree_with_transforms_in_place(&x_values)?;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[macro_rules_attr::apply(proptest(cases = 100))]
+    fn two_pass_transform_into_is_correct(
+        #[strategy(6_u32..=12)] log_2_len: u32,
+        #[strategy(vec(arb(), 1 << #log_2_len))] values: Vec<XFieldElement>,
+        #[strategy(0_u32..=7)] log_2_block_len: u32,
+        scale: BFieldElement,
+    ) {
+        let twiddle_factors = forward_twiddle_factors(values.len() as u32);
+        let mut expected = values.clone();
+        ntt(&mut expected);
+        expected.iter_mut().for_each(|e| *e *= scale);
+
+        let mut output = vec![MaybeUninit::<XFieldElement>::uninit(); values.len()];
+        let is_applicable = ntt_into_in_two_passes(
+            &values,
+            &mut output,
+            twiddle_factors,
+            scale,
+            log_2_block_len,
+        );
+        let has_many_blocks = log_2_len > log_2_block_len.max(5);
+        prop_assert_eq!(avx512::is_available() && has_many_blocks, is_applicable);
+        if is_applicable {
+            let output = output
+                .iter()
+                .map(|c| unsafe { c.assume_init() })
+                .collect_vec();
+            prop_assert_eq!(expected, output);
+        }
     }
 
     #[macro_rules_attr::apply(proptest(cases = 4))]
