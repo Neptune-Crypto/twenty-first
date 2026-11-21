@@ -1276,6 +1276,12 @@ where
 {
     const MAX_TASKS_PER_THREAD: usize = 4;
 
+    /// Every task allocates its own scratch space, and a pass takes little
+    /// time per unit of work: more tasks than this do not make a single
+    /// evaluation faster, not even with hundreds of threads, and slow down
+    /// evaluations that run in parallel to each other considerably.
+    const MAX_NUM_TASKS: usize = 64;
+
     let Some(evaluation) = coset_evaluation(
         coefficients,
         offset,
@@ -1286,7 +1292,8 @@ where
         return false;
     };
     let evaluation = &evaluation;
-    let max_num_tasks = MAX_TASKS_PER_THREAD * rayon::current_num_threads().max(1);
+    let max_num_tasks =
+        (MAX_TASKS_PER_THREAD * rayon::current_num_threads().max(1)).min(MAX_NUM_TASKS);
     let scratch_len = evaluation.scratch_len();
 
     // SAFETY: Like in `coset_evaluate_in_two_passes`. Additionally, the
