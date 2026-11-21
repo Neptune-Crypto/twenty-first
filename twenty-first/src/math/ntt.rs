@@ -188,7 +188,7 @@ const LOG_2_GATHERED_BLOCK_LEN: u32 = 12;
 fn ntt_into_unchecked<FF>(
     values: &[FF],
     output: &mut [MaybeUninit<FF>],
-    twiddle_factors: &[Vec<BFieldElement>],
+    twiddle_factors: TwiddleFactors,
     scale: BFieldElement,
 ) where
     FF: FiniteField + MulAssign<BFieldElement>,
@@ -243,7 +243,7 @@ fn ntt_into_unchecked<FF>(
 fn ntt_into_in_two_passes<FF>(
     values: &[FF],
     output: &mut [MaybeUninit<FF>],
-    twiddle_factors: &[Vec<BFieldElement>],
+    twiddle_factors: TwiddleFactors,
     scale: BFieldElement,
     log_2_block_len: u32,
 ) -> bool
@@ -269,7 +269,7 @@ where
     let num_blocks = 1_usize << log_2_num_blocks;
     let lines_per_block = block_len * limbs / avx512::LANES;
     let group_len = if limbs == 1 { 8 } else { 4 }.min(num_blocks);
-    let omega = twiddle_factors[twiddle_factors.len() - 1][1];
+    let omega = twiddle_factors.omega();
 
     let scratch_len = (group_len * lines_per_block).max(num_blocks);
     with_scratch_lines(scratch_len, |scratch| {
@@ -337,26 +337,87 @@ where
     true
 }
 
+/// The twiddle factors for a transform of some length, layer by layer.
+///
+/// The twiddle factors of layer `i` are the `2^i` first powers of the
+/// primitive root of unity of order `2^(i+1)`. In particular, they do not
+/// depend on the length of the transform, so that transforms of all lengths
+/// share them. A layer's twiddle factors are computed when they are first
+/// used. This matters because the top layers of long transforms are big,
+/// take a while to compute, and are not needed by all algorithms.
+#[derive(Debug, Clone, Copy)]
+struct TwiddleFactors {
+    layers: &'static [OnceLock<Vec<BFieldElement>>; NUM_DOMAINS],
+    num_layers: usize,
+    is_inverse: bool,
+}
+
+impl TwiddleFactors {
+    /// The number of layers of the transform.
+    fn len(self) -> usize {
+        self.num_layers
+    }
+
+    /// The primitive root of unity whose order is `2^log_2_order`, or its
+    /// inverse for the twiddle factors of the inverse transform.
+    fn root_of_unity(self, log_2_order: u32) -> BFieldElement {
+        let root = BFieldElement::primitive_root_of_unity(1 << log_2_order).unwrap();
+        if self.is_inverse {
+            root.inverse()
+        } else {
+            root
+        }
+    }
+
+    /// The primitive root of unity whose order is the length of the
+    /// transform; see also [`Self::root_of_unity`].
+    #[cfg(any(test, target_arch = "x86_64"))]
+    fn omega(self) -> BFieldElement {
+        self.root_of_unity(self.num_layers as u32)
+    }
+}
+
+impl std::ops::Index<usize> for TwiddleFactors {
+    type Output = Vec<BFieldElement>;
+
+    fn index(&self, layer: usize) -> &Self::Output {
+        assert!(layer < self.num_layers);
+
+        // For large layers, this computation could benefit from
+        // parallelization. See `twiddle_factors` for why it is sequential.
+        self.layers[layer].get_or_init(|| {
+            let root = self.root_of_unity(layer as u32 + 1);
+            let mut powers = vec![BFieldElement::ONE; 1 << layer];
+            for j in 1..powers.len() {
+                powers[j] = powers[j - 1] * root;
+            }
+            powers
+        })
+    }
+}
+
 /// The (cached) twiddle factors for the forward NTT of the given length.
-fn forward_twiddle_factors(slice_len: u32) -> &'static [Vec<BFieldElement>] {
-    static ALL_TWIDDLE_FACTORS: [OnceLock<Vec<Vec<BFieldElement>>>; NUM_DOMAINS] =
+fn forward_twiddle_factors(slice_len: u32) -> TwiddleFactors {
+    static LAYERS: [OnceLock<Vec<BFieldElement>>; NUM_DOMAINS] =
         [const { OnceLock::new() }; NUM_DOMAINS];
 
-    ALL_TWIDDLE_FACTORS[slice_len.checked_ilog2().unwrap_or(0) as usize].get_or_init(|| {
-        let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
-        twiddle_factors(slice_len, omega)
-    })
+    TwiddleFactors {
+        layers: &LAYERS,
+        num_layers: slice_len.checked_ilog2().unwrap_or(0) as usize,
+        is_inverse: false,
+    }
 }
 
 /// The (cached) twiddle factors for the inverse NTT of the given length.
-fn inverse_twiddle_factors(slice_len: u32) -> &'static [Vec<BFieldElement>] {
-    static ALL_TWIDDLE_FACTORS: [OnceLock<Vec<Vec<BFieldElement>>>; NUM_DOMAINS] =
+fn inverse_twiddle_factors(slice_len: u32) -> TwiddleFactors {
+    static LAYERS: [OnceLock<Vec<BFieldElement>>; NUM_DOMAINS] =
         [const { OnceLock::new() }; NUM_DOMAINS];
 
-    ALL_TWIDDLE_FACTORS[slice_len.checked_ilog2().unwrap_or(0) as usize].get_or_init(|| {
-        let omega = BFieldElement::primitive_root_of_unity(u64::from(slice_len)).unwrap();
-        twiddle_factors(slice_len, omega.inverse())
-    })
+    TwiddleFactors {
+        layers: &LAYERS,
+        num_layers: slice_len.checked_ilog2().unwrap_or(0) as usize,
+        is_inverse: true,
+    }
 }
 
 /// Internal helper function to assert that the slice for [NTT][self::ntt] or
@@ -447,7 +508,7 @@ pub(crate) fn par_min_log_2_len() -> u32 {
 /// consider that step 3 is the NTT of the “rows” of the input interpreted as
 /// a matrix, and step 2 is the NTT of the “columns”.
 #[inline]
-fn ntt_unchecked<FF>(x: &mut [FF], twiddle_factors: &[Vec<BFieldElement>])
+fn ntt_unchecked<FF>(x: &mut [FF], twiddle_factors: TwiddleFactors)
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
@@ -474,7 +535,7 @@ where
 /// work – tile pairs, blocks, and column groups, respectively – that are
 /// distributed across threads. The block length is reduced for shorter
 /// inputs so that there are enough blocks to keep all threads busy.
-fn par_ntt_unchecked<FF>(x: &mut [FF], twiddle_factors: &[Vec<BFieldElement>])
+fn par_ntt_unchecked<FF>(x: &mut [FF], twiddle_factors: TwiddleFactors)
 where
     FF: FiniteField + MulAssign<BFieldElement> + Send + Sync,
 {
@@ -694,7 +755,7 @@ unsafe fn bit_reverse_tile_pair<T: Copy>(
 #[inline]
 fn apply_layers<FF>(
     x: &mut [FF],
-    twiddle_factors: &[Vec<BFieldElement>],
+    twiddle_factors: TwiddleFactors,
     first_layer: u32,
     last_layer: u32,
 ) where
@@ -828,7 +889,7 @@ fn simd_limbs<FF: FiniteField>() -> Option<usize> {
 #[inline]
 fn apply_cross_block_layers<FF>(
     x: &mut [FF],
-    twiddle_factors: &[Vec<BFieldElement>],
+    twiddle_factors: TwiddleFactors,
     first_layer: u32,
     last_layer: u32,
 ) where
@@ -856,7 +917,7 @@ fn apply_cross_block_layers<FF>(
 /// Parallel version of [`apply_cross_block_layers`].
 fn par_apply_cross_block_layers<FF>(
     x: &mut [FF],
-    twiddle_factors: &[Vec<BFieldElement>],
+    twiddle_factors: TwiddleFactors,
     first_layer: u32,
     last_layer: u32,
 ) where
@@ -920,7 +981,7 @@ fn par_cross_block_column_width<FF>(len: usize, block_len: usize) -> usize {
 #[inline]
 unsafe fn apply_cross_block_layers_to_columns<FF>(
     x: SharedSliceMut<FF>,
-    twiddle_factors: &[Vec<BFieldElement>],
+    twiddle_factors: TwiddleFactors,
     first_layer: u32,
     last_layer: u32,
     columns: std::ops::Range<usize>,
@@ -1130,7 +1191,7 @@ fn coset_evaluation<FF>(
     codeword: &mut [MaybeUninit<FF>],
     log_2_block_len: u32,
     min_log_2_len: u32,
-) -> Option<avx512::CosetEvaluation<'static>>
+) -> Option<avx512::CosetEvaluation>
 where
     FF: FiniteField,
 {
@@ -1561,6 +1622,7 @@ mod avx512 {
     use num_traits::ConstOne;
 
     use super::BFieldElement;
+    use super::TwiddleFactors;
 
     /// The number of 64-bit lanes in a vector.
     pub(super) const LANES: usize = 8;
@@ -1905,7 +1967,7 @@ mod avx512 {
         len: usize,
         first_layer: u32,
         last_layer: u32,
-        twiddle_factors: &[Vec<BFieldElement>],
+        twiddle_factors: TwiddleFactors,
     ) {
         let stride = lines * LANES;
         let mut layer = first_layer;
@@ -1997,7 +2059,7 @@ mod avx512 {
         x: *mut u64,
         lines: usize,
         log_2_len: u32,
-        twiddle_factors: &[Vec<BFieldElement>],
+        twiddle_factors: TwiddleFactors,
     ) {
         let len = 1_usize << log_2_len;
         let log_2_chunk_len = log_2_len.min(LOG_2_CHUNK_LEN);
@@ -2105,7 +2167,7 @@ mod avx512 {
         lines_per_block: usize,
         log_2_num_blocks: u32,
         positions: std::ops::Range<usize>,
-        twiddle_factors: &[Vec<BFieldElement>],
+        twiddle_factors: TwiddleFactors,
         scratch: &mut [Line],
     ) {
         let num_blocks = 1_usize << log_2_num_blocks;
@@ -2162,14 +2224,14 @@ mod avx512 {
     ///
     /// This is the “four-step” structure of large transforms.
     #[derive(Debug)]
-    pub(super) struct CosetEvaluation<'a> {
+    pub(super) struct CosetEvaluation {
         /// The number of limbs per element, which is also the number of
         /// vectors per vector element.
         limbs: usize,
         coefficients: *const u64,
         num_coefficients: usize,
         codeword: *mut u64,
-        twiddle_factors: &'a [Vec<BFieldElement>],
+        twiddle_factors: TwiddleFactors,
 
         /// The binary logarithm of the number of vector elements.
         log_2_len: u32,
@@ -2198,10 +2260,10 @@ mod avx512 {
 
     // SAFETY: The pointers are only dereferenced in `unsafe` methods, whose
     // contracts regulate concurrent access.
-    unsafe impl Send for CosetEvaluation<'_> {}
-    unsafe impl Sync for CosetEvaluation<'_> {}
+    unsafe impl Send for CosetEvaluation {}
+    unsafe impl Sync for CosetEvaluation {}
 
-    impl<'a> CosetEvaluation<'a> {
+    impl CosetEvaluation {
         /// Prepare the evaluation of the polynomial with the given
         /// coefficients into the codeword of `2^log_2_codeword_len ≥ 8`
         /// elements, with blocks of (at most) `2^log_2_block_len` vector
@@ -2218,7 +2280,7 @@ mod avx512 {
             codeword: *mut u64,
             log_2_codeword_len: u32,
             log_2_block_len: u32,
-            twiddle_factors: &'a [Vec<BFieldElement>],
+            twiddle_factors: TwiddleFactors,
         ) -> Self {
             assert!(log_2_codeword_len >= LOG_2_LANES);
             assert_eq!(log_2_codeword_len as usize, twiddle_factors.len());
@@ -2228,7 +2290,7 @@ mod avx512 {
             let max_group_len = if limbs == 1 { 8 } else { 4 };
             let group_len = max_group_len.min(1 << log_2_num_blocks);
 
-            let omega = twiddle_factors[log_2_codeword_len as usize - 1][1];
+            let omega = twiddle_factors.omega();
             let mut lane_offsets = [offset; LANES];
             for r in 1..LANES {
                 lane_offsets[r] = lane_offsets[r - 1] * omega;
@@ -2337,7 +2399,7 @@ mod avx512 {
             let is_aligned = codeword.addr().is_multiple_of(CACHE_LINE_LEN);
 
             // The primitive root of unity for the vector elements: `ω^8`.
-            let omega = twiddle_factors[twiddle_factors.len() - 1][1];
+            let omega = twiddle_factors.omega();
             let vector_omega = omega.mod_pow(LANES as u64);
             let lane_offsets = _mm512_load_epi64(self.lane_offsets.0.as_ptr().cast());
             let wrap_scale = _mm512_load_epi64(self.wrap_scale.0.as_ptr().cast());
@@ -3205,6 +3267,36 @@ mod tests {
             .map(|c| unsafe { c.assume_init() })
             .collect_vec();
         prop_assert_eq!(expected, codeword);
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn shared_twiddle_factors_equal_twiddle_factors_for_specific_length() {
+        for log_2_len in 0..=12 {
+            let len = 1 << log_2_len;
+            let root = BFieldElement::primitive_root_of_unity(u64::from(len)).unwrap();
+            for (shared, omega) in [
+                (forward_twiddle_factors(len), root),
+                (inverse_twiddle_factors(len), root.inverse()),
+            ] {
+                let expected = twiddle_factors(len, omega);
+                assert_eq!(expected.len(), shared.len());
+                for (layer, expected_layer) in expected.iter().enumerate() {
+                    assert_eq!(expected_layer, &shared[layer]);
+                }
+                if log_2_len > 0 {
+                    assert_eq!(omega, shared.omega());
+                }
+            }
+        }
+    }
+
+    #[macro_rules_attr::apply(test)]
+    fn primitive_roots_of_unity_of_powers_of_two_are_consistent() {
+        for log_2_order in 1..=32 {
+            let root = BFieldElement::primitive_root_of_unity(1 << log_2_order).unwrap();
+            let smaller_root = BFieldElement::primitive_root_of_unity(1 << (log_2_order - 1));
+            assert_eq!(smaller_root.unwrap(), root * root);
+        }
     }
 
     #[macro_rules_attr::apply(test)]
