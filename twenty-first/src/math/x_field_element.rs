@@ -962,12 +962,14 @@ mod tests {
         assert_eq!(poly_diff, poly10 - poly9);
     }
 
+    /// Values at the boundaries of the base field.
+    const BOUNDARY_VALUES: [u64; 5] = [0, 1, 2, BFieldElement::MAX - 1, BFieldElement::MAX];
+
     #[macro_rules_attr::apply(proptest(cases = 10_000))]
     fn multiplication_agrees_with_schoolbook_multiplication(
         #[strategy(arb())] lhs: XFieldElement,
         #[strategy(arb())] rhs: XFieldElement,
-        #[strategy(proptest::sample::select(&[0, 1, 2, BFieldElement::MAX - 1, BFieldElement::MAX]))]
-        special: u64,
+        #[strategy(proptest::sample::select(&BOUNDARY_VALUES))] special: u64,
         #[strategy(0_usize..64)] special_positions: usize,
     ) {
         // steer some coefficients to the boundaries of the field
