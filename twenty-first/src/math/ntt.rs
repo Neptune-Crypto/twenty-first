@@ -250,7 +250,7 @@ fn ntt_into_in_two_passes<FF>(
 where
     FF: FiniteField + MulAssign<BFieldElement>,
 {
-    /// `avx512::scale_by_powers` processes this many elements at once.
+    /// `avx512::scale_by_powers` processes 2^5 elements at once.
     const MIN_LOG_2_BLOCK_LEN: u32 = 5;
 
     let Some(limbs) = simd_limbs::<FF>() else {
@@ -1928,12 +1928,13 @@ mod avx512 {
     pub(super) struct Line(pub(super) [u64; LANES]);
 
     /// The binary logarithm of the number of cosets evaluated side by side by
-    /// [`coset_evaluate`]: one per lane.
+    /// [`CosetEvaluation`]: one per lane.
     pub(super) const LOG_2_LANES: u32 = 3;
 
     /// The binary logarithm of the number of vector elements that
     /// [`blocked_broadcast_layers`] finishes the low layers of before moving
-    /// on: 2^6 lines are 4 KiB, a fraction of the L1 cache.
+    /// on: 2^6 vector elements are 4 KiB for base field elements, 12 KiB for
+    /// extension field elements, a fraction of the L1 cache.
     const LOG_2_CHUNK_LEN: u32 = 6;
 
     /// How many loads ahead of their use strided reads are prefetched.
@@ -2584,19 +2585,13 @@ where
 ///
 /// Assumes that the given root of unity and the slice length match.
 //
-// The runtime of this function, especially when seen in the larger context,
-// could potentially still be improved. Since this function is run at most twice
-// per slice length (once for NTT, once for iNTT), any runtime savings are
-// amortized pretty quickly. Saving RAM might be more interesting.
+// The transforms themselves do not use this function: they use
+// `TwiddleFactors`, which computes each layer on first use and shares the
+// layers between all slice lengths. This function computes the same layers for
+// one specific slice length, all at once.
 //
 // One difference to the Longa+Naehrig paper [0] is the return value of
 // Vec<Vec<_>> instead of a single Vec<_>.
-// Also note that the twiddle factors for smaller domains are a subset of those
-// for larger domains. In order to save both space and time, what can be shared,
-// should be shared. I think the engineering work to get this working with the
-// current OnceLock-based lazy-initialization is non-trivial, considering that
-// OnceLocks must not be re-entrantly initialized. I could be wrong and it's
-// actually easy.
 //
 // [0] <https://eprint.iacr.org/2016/504.pdf>
 //
