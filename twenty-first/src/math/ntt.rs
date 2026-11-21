@@ -879,7 +879,185 @@ pub fn scaled_zero_padded_ntt<FF>(
 ) where
     FF: FiniteField + MulAssign<BFieldElement> + Mul<BFieldElement, Output = FF>,
 {
+    #[cfg(target_arch = "x86_64")]
+    if coset_evaluate_in_two_passes(
+        coefficients,
+        offset,
+        codeword,
+        LOG_2_VECTOR_BLOCK_LEN,
+        MIN_LOG_2_LEN_FOR_TWO_PASSES,
+    ) {
+        return;
+    }
     scaled_zero_padded_ntt_with_block_len(coefficients, offset, codeword, LOG_2_BLOCK_LEN);
+}
+
+/// The binary logarithm of the block length, in vector elements, of
+/// [`coset_evaluate_in_two_passes`]. A block of 2^9 vector elements is
+/// 32 KiB for base field elements, 96 KiB for extension field elements.
+#[cfg(target_arch = "x86_64")]
+const LOG_2_VECTOR_BLOCK_LEN: u32 = 9;
+
+/// The binary logarithm of the maximum number of blocks: the vectors of one
+/// position of all blocks, 256 KiB, must fit the L2 cache.
+#[cfg(target_arch = "x86_64")]
+const MAX_LOG_2_NUM_VECTOR_BLOCKS: u32 = 12;
+
+/// The binary logarithm of the codeword length from which on
+/// [`scaled_zero_padded_ntt`] uses [`coset_evaluate_in_two_passes`].
+#[cfg(target_arch = "x86_64")]
+const MIN_LOG_2_LEN_FOR_TWO_PASSES: u32 = 12;
+
+/// Run the given function with scratch space of the given number of cache
+/// lines.
+///
+/// The scratch space is allocated for the duration of the call only. Keeping
+/// it around per thread would be a little faster for short transforms, but
+/// would also permanently occupy memory on every thread of the pool.
+#[cfg(target_arch = "x86_64")]
+fn with_scratch_lines<T>(len: usize, f: impl FnOnce(&mut [avx512::Line]) -> T) -> T {
+    let mut scratch = vec![avx512::Line([0; avx512::LANES]); len];
+    f(&mut scratch)
+}
+
+/// The vectorized two-pass algorithm for [`scaled_zero_padded_ntt`], if it
+/// is applicable. See [`avx512::CosetEvaluation`].
+///
+/// Blocks are `2^log_2_block_len` vector elements long, or longer if that is
+/// needed to keep their number at most 2^[`MAX_LOG_2_NUM_VECTOR_BLOCKS`].
+#[cfg(target_arch = "x86_64")]
+fn coset_evaluation<FF>(
+    coefficients: &[FF],
+    offset: BFieldElement,
+    codeword: &mut [MaybeUninit<FF>],
+    log_2_block_len: u32,
+    min_log_2_len: u32,
+) -> Option<avx512::CosetEvaluation<'static>>
+where
+    FF: FiniteField,
+{
+    let limbs = simd_limbs::<FF>()?;
+    let len = codeword.len();
+    if !len.is_power_of_two() || coefficients.len() > len / 4 {
+        return None;
+    }
+    let log_2_len = len.ilog2();
+    if log_2_len < min_log_2_len.max(avx512::LOG_2_LANES) {
+        return None;
+    }
+
+    let log_2_num_vector_elements = log_2_len - avx512::LOG_2_LANES;
+    let min_log_2_block_len = log_2_num_vector_elements.saturating_sub(MAX_LOG_2_NUM_VECTOR_BLOCKS);
+    let evaluation = avx512::CosetEvaluation::new(
+        limbs,
+        coefficients.as_ptr().cast(),
+        coefficients.len(),
+        offset,
+        codeword.as_mut_ptr().cast(),
+        log_2_len,
+        log_2_block_len.max(min_log_2_block_len),
+        forward_twiddle_factors(u32::try_from(len).unwrap()),
+    );
+
+    Some(evaluation)
+}
+
+/// Try to perform [`scaled_zero_padded_ntt`] with the vectorized two-pass
+/// algorithm, see [`avx512::CosetEvaluation`]. Returns `false`, without
+/// having done anything, if that algorithm is not applicable.
+#[cfg(target_arch = "x86_64")]
+fn coset_evaluate_in_two_passes<FF>(
+    coefficients: &[FF],
+    offset: BFieldElement,
+    codeword: &mut [MaybeUninit<FF>],
+    log_2_block_len: u32,
+    min_log_2_len: u32,
+) -> bool
+where
+    FF: FiniteField,
+{
+    let Some(evaluation) = coset_evaluation(
+        coefficients,
+        offset,
+        codeword,
+        log_2_block_len,
+        min_log_2_len,
+    ) else {
+        return false;
+    };
+
+    // SAFETY:
+    // - AVX-512 is available and `FF` is laid out as 1 or 3 base field
+    //   elements, see `simd_limbs`.
+    // - The evaluation was set up with the pointers and lengths of the
+    //   slices, of which the codeword is exclusively borrowed, and the
+    //   number of coefficients is small enough; see `coset_evaluation`.
+    // - The ranges are the entire ranges, in the required order.
+    // - The scratch space has the required length.
+    with_scratch_lines(evaluation.scratch_len(), |scratch| unsafe {
+        evaluation.transform_blocks(0..evaluation.num_groups(), scratch);
+        evaluation.transform_across_blocks(0..evaluation.num_positions(), scratch);
+    });
+
+    true
+}
+
+/// Parallel version of [`coset_evaluate_in_two_passes`]: both passes consist
+/// of independent units of work.
+#[cfg(target_arch = "x86_64")]
+fn par_coset_evaluate_in_two_passes<FF>(
+    coefficients: &[FF],
+    offset: BFieldElement,
+    codeword: &mut [MaybeUninit<FF>],
+    log_2_block_len: u32,
+    min_log_2_len: u32,
+) -> bool
+where
+    FF: FiniteField,
+{
+    const MAX_TASKS_PER_THREAD: usize = 4;
+
+    let Some(evaluation) = coset_evaluation(
+        coefficients,
+        offset,
+        codeword,
+        log_2_block_len,
+        min_log_2_len,
+    ) else {
+        return false;
+    };
+    let evaluation = &evaluation;
+    let max_num_tasks = MAX_TASKS_PER_THREAD * rayon::current_num_threads().max(1);
+    let scratch_len = evaluation.scratch_len();
+
+    // SAFETY: Like in `coset_evaluate_in_two_passes`. Additionally, the
+    // tasks of a pass work on disjoint ranges, and the second pass only
+    // starts once the first pass has completed.
+    let num_groups = evaluation.num_groups();
+    let groups_per_task = num_groups.div_ceil(max_num_tasks).max(1);
+    (0..num_groups)
+        .into_par_iter()
+        .step_by(groups_per_task)
+        .for_each(|start| {
+            let groups = start..(start + groups_per_task).min(num_groups);
+            with_scratch_lines(scratch_len, |scratch| unsafe {
+                evaluation.transform_blocks(groups, scratch)
+            });
+        });
+
+    let num_positions = evaluation.num_positions();
+    let positions_per_task = num_positions.div_ceil(max_num_tasks).max(1);
+    (0..num_positions)
+        .into_par_iter()
+        .step_by(positions_per_task)
+        .for_each(|start| {
+            let positions = start..(start + positions_per_task).min(num_positions);
+            with_scratch_lines(scratch_len, |scratch| unsafe {
+                evaluation.transform_across_blocks(positions, scratch)
+            });
+        });
+
+    true
 }
 
 /// Parallel version of [`scaled_zero_padded_ntt`]: the gathers of the block
@@ -904,6 +1082,16 @@ pub fn par_scaled_zero_padded_ntt<FF>(
     assert!(len.is_power_of_two());
     if log_2_len < par_min_log_2_len() {
         return scaled_zero_padded_ntt(coefficients, offset, codeword);
+    }
+    #[cfg(target_arch = "x86_64")]
+    if par_coset_evaluate_in_two_passes(
+        coefficients,
+        offset,
+        codeword,
+        LOG_2_VECTOR_BLOCK_LEN,
+        MIN_LOG_2_LEN_FOR_TWO_PASSES,
+    ) {
+        return;
     }
     let twiddle_factors = forward_twiddle_factors(u32::try_from(len).unwrap());
 
@@ -1171,6 +1359,8 @@ fn scaled_zero_padded_ntt_with_block_len<FF>(
 #[expect(unsafe_op_in_unsafe_fn)]
 mod avx512 {
     use std::arch::x86_64::*;
+
+    use num_traits::ConstOne;
 
     use super::BFieldElement;
 
@@ -1462,6 +1652,519 @@ mod avx512 {
         debug_assert_eq!(m, twiddles.len());
         for j in (0..m).step_by(LANES) {
             radix_2_butterflies_at(x, limbs, k + j, m, twiddles.as_ptr().add(j));
+        }
+    }
+
+    /// One cache line of limbs.
+    #[repr(C, align(64))]
+    #[derive(Debug, Clone, Copy)]
+    pub(super) struct Line(pub(super) [u64; LANES]);
+
+    /// The binary logarithm of the number of cosets evaluated side by side by
+    /// [`coset_evaluate`]: one per lane.
+    pub(super) const LOG_2_LANES: u32 = 3;
+
+    /// The binary logarithm of the number of vector elements that
+    /// [`blocked_broadcast_layers`] finishes the low layers of before moving
+    /// on: 2^6 lines are 4 KiB, a fraction of the L1 cache.
+    const LOG_2_CHUNK_LEN: u32 = 6;
+
+    /// How many loads ahead of their use strided reads are prefetched.
+    const PREFETCH_DISTANCE: usize = 12;
+
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    unsafe fn broadcast(x: BFieldElement) -> __m512i {
+        _mm512_set1_epi64((&raw const x).cast::<i64>().read())
+    }
+
+    /// The decimation-in-time layers `first_layer..last_layer` of the NTT of
+    /// `len` “vector elements”, each consisting of `lines` vectors. A twiddle
+    /// factor multiplies all lanes of all vectors of a vector element.
+    ///
+    /// # Safety
+    ///
+    /// `len · lines` vectors must be readable and writable at `x`, `len` must
+    /// be a multiple of `2^last_layer`, and `twiddle_factors` must have at
+    /// least `last_layer` layers.
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    unsafe fn broadcast_layers(
+        x: *mut u64,
+        lines: usize,
+        len: usize,
+        first_layer: u32,
+        last_layer: u32,
+        twiddle_factors: &[Vec<BFieldElement>],
+    ) {
+        let stride = lines * LANES;
+        let mut layer = first_layer;
+
+        if layer == 0 && last_layer >= 2 {
+            let fourth_root_of_unity = broadcast(twiddle_factors[1][1]);
+            for k in (0..len).step_by(4) {
+                for v in 0..lines {
+                    let pa = x.add(k * stride + v * LANES);
+                    let (pb, pc, pd) = (pa.add(stride), pa.add(2 * stride), pa.add(3 * stride));
+                    let t0 = _mm512_loadu_epi64(pa.cast());
+                    let t1 = _mm512_loadu_epi64(pb.cast());
+                    let t2 = _mm512_loadu_epi64(pc.cast());
+                    let t3 = _mm512_loadu_epi64(pd.cast());
+                    let y0 = add(t0, t1);
+                    let y1 = sub(t0, t1);
+                    let y2 = add(t2, t3);
+                    let y3 = mul(sub(t2, t3), fourth_root_of_unity);
+                    _mm512_storeu_epi64(pa.cast(), add(y0, y2));
+                    _mm512_storeu_epi64(pb.cast(), add(y1, y3));
+                    _mm512_storeu_epi64(pc.cast(), sub(y0, y2));
+                    _mm512_storeu_epi64(pd.cast(), sub(y1, y3));
+                }
+            }
+            layer = 2;
+        }
+
+        while layer + 1 < last_layer {
+            let m = 1_usize << layer;
+            let twiddles_1 = &twiddle_factors[layer as usize][..m];
+            let twiddles_2 = &twiddle_factors[layer as usize + 1][..2 * m];
+            for k in (0..len).step_by(4 * m) {
+                for j in 0..m {
+                    let w1 = broadcast(twiddles_1[j]);
+                    let w2 = broadcast(twiddles_2[j]);
+                    let w2_shifted = broadcast(twiddles_2[j + m]);
+                    for v in 0..lines {
+                        let pa = x.add((k + j) * stride + v * LANES);
+                        let pb = pa.add(m * stride);
+                        let pc = pb.add(m * stride);
+                        let pd = pc.add(m * stride);
+                        let t0 = _mm512_loadu_epi64(pa.cast());
+                        let t1 = mul(_mm512_loadu_epi64(pb.cast()), w1);
+                        let t2 = _mm512_loadu_epi64(pc.cast());
+                        let t3 = mul(_mm512_loadu_epi64(pd.cast()), w1);
+                        let y0 = add(t0, t1);
+                        let y1 = sub(t0, t1);
+                        let y2 = mul(add(t2, t3), w2);
+                        let y3 = mul(sub(t2, t3), w2_shifted);
+                        _mm512_storeu_epi64(pa.cast(), add(y0, y2));
+                        _mm512_storeu_epi64(pb.cast(), add(y1, y3));
+                        _mm512_storeu_epi64(pc.cast(), sub(y0, y2));
+                        _mm512_storeu_epi64(pd.cast(), sub(y1, y3));
+                    }
+                }
+            }
+            layer += 2;
+        }
+
+        if layer < last_layer {
+            let m = 1_usize << layer;
+            let twiddles = &twiddle_factors[layer as usize][..m];
+            for k in (0..len).step_by(2 * m) {
+                for (j, &twiddle) in twiddles.iter().enumerate() {
+                    let w = broadcast(twiddle);
+                    for v in 0..lines {
+                        let pa = x.add((k + j) * stride + v * LANES);
+                        let pb = pa.add(m * stride);
+                        let u = _mm512_loadu_epi64(pa.cast());
+                        let t = mul(_mm512_loadu_epi64(pb.cast()), w);
+                        _mm512_storeu_epi64(pa.cast(), add(u, t));
+                        _mm512_storeu_epi64(pb.cast(), sub(u, t));
+                    }
+                }
+            }
+        }
+    }
+
+    /// All `log_2_len` layers of the NTT of `2^log_2_len` vector elements,
+    /// see [`broadcast_layers`]. The low layers are applied chunk by chunk,
+    /// so that they run in the L1 cache.
+    ///
+    /// # Safety
+    ///
+    /// See [`broadcast_layers`].
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    unsafe fn blocked_broadcast_layers(
+        x: *mut u64,
+        lines: usize,
+        log_2_len: u32,
+        twiddle_factors: &[Vec<BFieldElement>],
+    ) {
+        let len = 1_usize << log_2_len;
+        let log_2_chunk_len = log_2_len.min(LOG_2_CHUNK_LEN);
+        let chunk_len = 1_usize << log_2_chunk_len;
+        for chunk in (0..len).step_by(chunk_len) {
+            let chunk = x.add(chunk * lines * LANES);
+            broadcast_layers(chunk, lines, chunk_len, 0, log_2_chunk_len, twiddle_factors);
+        }
+        broadcast_layers(x, lines, len, log_2_chunk_len, log_2_len, twiddle_factors);
+    }
+
+    /// The evaluation of a polynomial on the coset `offset · <ω>`, where
+    /// `ω` is the primitive root of unity whose order is the length of the
+    /// codeword, which the twiddle factors are made of.
+    ///
+    /// The codeword is treated as a sequence of “vector elements” of eight
+    /// consecutive elements each. Vector element `q` holds the evaluations in
+    /// `offset · ω^(8q + r)` for the lanes `r ∈ 0..8`; put differently, lane
+    /// `r` of all the vector elements is the evaluation of the polynomial on
+    /// the smaller coset `offset · ω^r · <ω^8>`. These eight evaluations are
+    /// transforms of an eighth of the length that only differ in the scaling
+    /// of their inputs, so they are performed side by side: every twiddle
+    /// factor is the same for all lanes of a vector element.
+    ///
+    /// The transform of the vector elements needs only two passes over the
+    /// codeword, which is what matters for transforms that exceed the caches,
+    /// especially when many of them compete for memory bandwidth. With the
+    /// number of vector elements `n = c·b`:
+    ///
+    /// 1. The inputs of a few blocks of `c` vector elements each are gathered
+    ///    from the (scaled) coefficients into scratch space, transformed
+    ///    there, multiplied by the factors that glue the blocks together
+    ///    (vector element `i` of the block holding the coefficients with
+    ///    indices `≡ j mod b` is multiplied by `ω_n^(i·j)`), and written to
+    ///    the codeword. This writes every cache line of the codeword once,
+    ///    without reading it. See [`Self::transform_blocks`].
+    /// 2. For each position in a block, the vectors at that position in all
+    ///    `b` blocks are copied into scratch space, transformed there, and
+    ///    written back. This reads and writes every cache line of the
+    ///    codeword once. The copy matters: the vectors' addresses differ by
+    ///    a large power of two, so they compete for very few sets of the
+    ///    caches, and would evict each other long before the transform is
+    ///    done with them. See [`Self::transform_across_blocks`].
+    ///
+    /// This is the “four-step” structure of large transforms.
+    #[derive(Debug)]
+    pub(super) struct CosetEvaluation<'a> {
+        /// The number of limbs per element, which is also the number of
+        /// vectors per vector element.
+        limbs: usize,
+        coefficients: *const u64,
+        num_coefficients: usize,
+        codeword: *mut u64,
+        twiddle_factors: &'a [Vec<BFieldElement>],
+
+        /// The binary logarithm of the number of vector elements.
+        log_2_len: u32,
+
+        /// The binary logarithm of the number of vector elements per block.
+        log_2_block_len: u32,
+
+        /// The binary logarithm of the number of blocks.
+        log_2_num_blocks: u32,
+
+        /// The number of blocks whose inputs are gathered together.
+        group_len: usize,
+
+        /// The offset of every lane's coset.
+        lane_offsets: Line,
+
+        /// For every “row” of coefficients, i.e., the coefficients whose
+        /// index is `row · num_blocks + column`, the lanes' scaling factors
+        /// `lane_offset^(row · num_blocks)`.
+        row_scales: Vec<Line>,
+
+        /// The lanes' factors for coefficients that wrap around: on the
+        /// coset of a lane, `x^len` is the constant `lane_offset^len`.
+        wrap_scale: Line,
+    }
+
+    // SAFETY: The pointers are only dereferenced in `unsafe` methods, whose
+    // contracts regulate concurrent access.
+    unsafe impl Send for CosetEvaluation<'_> {}
+    unsafe impl Sync for CosetEvaluation<'_> {}
+
+    impl<'a> CosetEvaluation<'a> {
+        /// Prepare the evaluation of the polynomial with the given
+        /// coefficients into the codeword of `2^log_2_codeword_len ≥ 8`
+        /// elements, with blocks of (at most) `2^log_2_block_len` vector
+        /// elements. All elements have `limbs` limbs.
+        ///
+        /// `twiddle_factors` must be the forward twiddle factors for the
+        /// codeword's length.
+        #[expect(clippy::too_many_arguments)]
+        pub(super) fn new(
+            limbs: usize,
+            coefficients: *const u64,
+            num_coefficients: usize,
+            offset: BFieldElement,
+            codeword: *mut u64,
+            log_2_codeword_len: u32,
+            log_2_block_len: u32,
+            twiddle_factors: &'a [Vec<BFieldElement>],
+        ) -> Self {
+            assert!(log_2_codeword_len >= LOG_2_LANES);
+            assert_eq!(log_2_codeword_len as usize, twiddle_factors.len());
+            let log_2_len = log_2_codeword_len - LOG_2_LANES;
+            let log_2_block_len = log_2_block_len.min(log_2_len);
+            let log_2_num_blocks = log_2_len - log_2_block_len;
+            let max_group_len = if limbs == 1 { 8 } else { 4 };
+            let group_len = max_group_len.min(1 << log_2_num_blocks);
+
+            let omega = twiddle_factors[log_2_codeword_len as usize - 1][1];
+            let mut lane_offsets = [offset; LANES];
+            for r in 1..LANES {
+                lane_offsets[r] = lane_offsets[r - 1] * omega;
+            }
+            let lane_powers =
+                |exponent: u64| Line(lane_offsets.map(|x| x.mod_pow(exponent).raw_u64()));
+
+            let row_step = lane_offsets.map(|x| x.mod_pow(1 << log_2_num_blocks));
+            let mut row_scale = [BFieldElement::ONE; LANES];
+            let mut row_scales = Vec::with_capacity(1 << log_2_block_len);
+            for _ in 0..1 << log_2_block_len {
+                row_scales.push(Line(row_scale.map(|x| x.raw_u64())));
+                for (scale, step) in row_scale.iter_mut().zip(row_step) {
+                    *scale *= step;
+                }
+            }
+
+            Self {
+                limbs,
+                coefficients,
+                num_coefficients,
+                codeword,
+                twiddle_factors,
+                log_2_len,
+                log_2_block_len,
+                log_2_num_blocks,
+                group_len,
+                lane_offsets: lane_powers(1),
+                row_scales,
+                wrap_scale: lane_powers(1 << log_2_len),
+            }
+        }
+
+        /// The number of lines of scratch space the transforms require.
+        pub(super) fn scratch_len(&self) -> usize {
+            (self.group_len * self.lines_per_block()).max(1 << self.log_2_num_blocks)
+        }
+
+        /// The number of vectors per block.
+        fn lines_per_block(&self) -> usize {
+            self.limbs << self.log_2_block_len
+        }
+
+        /// The number of independent units of work of
+        /// [`Self::transform_blocks`].
+        pub(super) fn num_groups(&self) -> usize {
+            (1 << self.log_2_num_blocks) / self.group_len
+        }
+
+        /// The number of independent units of work of
+        /// [`Self::transform_across_blocks`].
+        pub(super) fn num_positions(&self) -> usize {
+            match self.log_2_num_blocks {
+                0 => 0,
+                _ => self.lines_per_block(),
+            }
+        }
+
+        /// The lanes' scaling factors `lane_offset^exponent`.
+        fn lane_powers(&self, exponent: usize) -> Line {
+            Line(self.lane_offsets.0.map(|x| {
+                BFieldElement::from_raw_u64(x)
+                    .mod_pow(exponent as u64)
+                    .raw_u64()
+            }))
+        }
+
+        /// The first pass over the codeword, for the given groups of blocks.
+        /// See [`Self`].
+        ///
+        /// # Safety
+        ///
+        /// - The CPU must support AVX-512.
+        /// - `limbs` must be 1 or 3.
+        /// - `num_coefficients` elements must be readable from
+        ///   `coefficients`, and their number must not exceed a quarter of
+        ///   the codeword's length.
+        /// - The codeword must be writable, and no other thread may access
+        ///   the blocks of the given groups.
+        /// - `groups` must be a sub-range of `0..self.num_groups()`.
+        /// - `scratch` must hold at least `self.scratch_len()` lines.
+        #[target_feature(enable = "avx512f")]
+        pub(super) unsafe fn transform_blocks(
+            &self,
+            groups: std::ops::Range<usize>,
+            scratch: &mut [Line],
+        ) {
+            debug_assert!(scratch.len() >= self.scratch_len());
+            let &Self {
+                limbs,
+                coefficients,
+                num_coefficients,
+                codeword,
+                twiddle_factors,
+                log_2_len,
+                log_2_block_len,
+                log_2_num_blocks,
+                group_len,
+                ..
+            } = self;
+            let len = 1_usize << log_2_len;
+            let block_len = 1_usize << log_2_block_len;
+            let num_blocks = 1_usize << log_2_num_blocks;
+            let lines_per_block = self.lines_per_block();
+            let scratch = scratch.as_mut_ptr().cast::<u64>();
+            let is_aligned = codeword.addr().is_multiple_of(CACHE_LINE_LEN);
+
+            // The primitive root of unity for the vector elements: `ω^8`.
+            let omega = twiddle_factors[twiddle_factors.len() - 1][1];
+            let vector_omega = omega.mod_pow(LANES as u64);
+            let lane_offsets = _mm512_load_epi64(self.lane_offsets.0.as_ptr().cast());
+            let wrap_scale = _mm512_load_epi64(self.wrap_scale.0.as_ptr().cast());
+            let repetition_3 = REPETITION_3.map(|indices| _mm512_loadu_epi64(indices.as_ptr()));
+            let expansion_3 = EXPANSION_3.map(|indices| _mm512_loadu_epi64(indices.as_ptr()));
+            let wrap_scale_3 = expansion_3.map(|i| _mm512_permutexvar_epi64(i, wrap_scale));
+
+            for group in groups {
+                let first_column = group * group_len;
+
+                // Coefficient `row · num_blocks + column` is scaled by
+                // `lane_offset^(row · num_blocks) · lane_offset^column`.
+                let mut column_scales = [_mm512_setzero_si512(); LANES];
+                let column_scale = self.lane_powers(first_column);
+                let mut column_scale = _mm512_load_epi64(column_scale.0.as_ptr().cast());
+                for scale in column_scales.iter_mut().take(group_len) {
+                    *scale = column_scale;
+                    column_scale = mul(column_scale, lane_offsets);
+                }
+
+                // The blocks' inputs, in bit-reversed order.
+                debug_assert_eq!(block_len, self.row_scales.len());
+                for (row, row_scale) in self.row_scales.iter().enumerate() {
+                    let position = super::bit_reverse(row, log_2_block_len);
+                    let row_scale = _mm512_load_epi64(row_scale.0.as_ptr().cast());
+                    let first_index = row * num_blocks + first_column;
+
+                    // The coefficients are read at a large stride, which
+                    // hardware prefetchers do not follow.
+                    let ahead = first_index + PREFETCH_DISTANCE * num_blocks;
+                    if ahead < num_coefficients {
+                        let ahead = coefficients.add(ahead * limbs);
+                        _mm_prefetch::<_MM_HINT_T0>(ahead.cast());
+                        _mm_prefetch::<_MM_HINT_T0>(ahead.add(group_len * limbs - 1).cast());
+                    }
+
+                    for (g, &scale_of_column) in column_scales.iter().enumerate().take(group_len) {
+                        let index = first_index + g;
+                        let target = scratch.add((g * block_len + position) * limbs * LANES);
+                        if index >= num_coefficients {
+                            for v in 0..limbs {
+                                let target = target.add(v * LANES);
+                                _mm512_store_epi64(target.cast(), _mm512_setzero_si512());
+                            }
+                            continue;
+                        }
+                        let scale = mul(row_scale, scale_of_column);
+                        let wrapped_index = index + len;
+                        let wraps = wrapped_index < num_coefficients;
+
+                        if limbs == 1 {
+                            let value = coefficients.add(index).read();
+                            let mut value = _mm512_set1_epi64(value as i64);
+                            if wraps {
+                                let wrapped = coefficients.add(wrapped_index).read();
+                                let wrapped = _mm512_set1_epi64(wrapped as i64);
+                                value = add(value, mul(wrapped, wrap_scale));
+                            }
+                            _mm512_store_epi64(target.cast(), mul(value, scale));
+                            continue;
+                        }
+
+                        let value = coefficients.add(index * limbs);
+                        let value = _mm512_maskz_loadu_epi64(0b111, value.cast());
+                        let wrapped = if wraps {
+                            let wrapped = coefficients.add(wrapped_index * limbs);
+                            _mm512_maskz_loadu_epi64(0b111, wrapped.cast())
+                        } else {
+                            _mm512_setzero_si512()
+                        };
+                        for v in 0..3 {
+                            let mut value = _mm512_permutexvar_epi64(repetition_3[v], value);
+                            if wraps {
+                                let wrapped = _mm512_permutexvar_epi64(repetition_3[v], wrapped);
+                                value = add(value, mul(wrapped, wrap_scale_3[v]));
+                            }
+                            let scale = _mm512_permutexvar_epi64(expansion_3[v], scale);
+                            let target = target.add(v * LANES);
+                            _mm512_store_epi64(target.cast(), mul(value, scale));
+                        }
+                    }
+                }
+
+                for g in 0..group_len {
+                    let block = scratch.add(g * lines_per_block * LANES);
+                    blocked_broadcast_layers(block, limbs, log_2_block_len, twiddle_factors);
+
+                    // The block of column `j` holds the coefficients with
+                    // indices `≡ j mod num_blocks`.
+                    let column = first_column + g;
+                    let block_index = super::bit_reverse(column, log_2_num_blocks);
+                    let target = codeword.add(block_index * lines_per_block * LANES);
+                    let glue = vector_omega.mod_pow(column as u64);
+                    let mut glue_power = BFieldElement::ONE;
+                    for i in 0..block_len {
+                        let factor = broadcast(glue_power);
+                        for v in 0..limbs {
+                            let line = (i * limbs + v) * LANES;
+                            let mut value = _mm512_load_epi64(block.add(line).cast());
+                            if column != 0 {
+                                value = mul(value, factor);
+                            }
+
+                            // Streaming stores avoid the read-for-ownership
+                            // of every line, and keep the lines out of the
+                            // caches, where they would only evict the scratch
+                            // space.
+                            if is_aligned {
+                                _mm512_stream_si512(target.add(line).cast(), value);
+                            } else {
+                                _mm512_storeu_epi64(target.add(line).cast(), value);
+                            }
+                        }
+                        glue_power *= glue;
+                    }
+                }
+            }
+            _mm_sfence();
+        }
+
+        /// The second pass over the codeword, for the given positions in the
+        /// blocks. See [`Self`].
+        ///
+        /// # Safety
+        ///
+        /// - The CPU must support AVX-512.
+        /// - [`Self::transform_blocks`] must have completed for all groups.
+        /// - No other thread may access the given positions of any block.
+        /// - `positions` must be a sub-range of `0..self.num_positions()`.
+        /// - `scratch` must hold at least `self.scratch_len()` lines.
+        #[target_feature(enable = "avx512f")]
+        pub(super) unsafe fn transform_across_blocks(
+            &self,
+            positions: std::ops::Range<usize>,
+            scratch: &mut [Line],
+        ) {
+            debug_assert!(scratch.len() >= self.scratch_len());
+            let num_blocks = 1_usize << self.log_2_num_blocks;
+            let block_stride = self.lines_per_block() * LANES;
+            let scratch = scratch.as_mut_ptr().cast::<u64>();
+
+            for position in positions {
+                let column = self.codeword.add(position * LANES);
+                for block in 0..num_blocks {
+                    let ahead = (block + PREFETCH_DISTANCE).min(num_blocks - 1);
+                    _mm_prefetch::<_MM_HINT_T0>(column.add(ahead * block_stride).cast());
+                    let value = _mm512_loadu_epi64(column.add(block * block_stride).cast());
+                    _mm512_store_epi64(scratch.add(block * LANES).cast(), value);
+                }
+                blocked_broadcast_layers(scratch, 1, self.log_2_num_blocks, self.twiddle_factors);
+                for block in 0..num_blocks {
+                    let value = _mm512_load_epi64(scratch.add(block * LANES).cast());
+                    _mm512_storeu_epi64(column.add(block * block_stride).cast(), value);
+                }
+            }
         }
     }
 }
@@ -1917,6 +2620,130 @@ mod tests {
         let misalignment = buffer.as_ptr().cast::<u8>().addr() % 64;
         let skip = (64 - misalignment) % 64 / size_of::<T>().max(1);
         &mut buffer[skip..skip + len]
+    }
+
+    /// Compare both the sequential and the parallel two-pass coset
+    /// evaluation to scaling, zero-padding, and transforming.
+    #[cfg(target_arch = "x86_64")]
+    fn assert_two_pass_coset_evaluation_is_correct<FF>(
+        coefficients: &[FF],
+        offset: BFieldElement,
+        log_2_len: u32,
+        log_2_block_len: u32,
+        misalignment: usize,
+    ) -> std::result::Result<(), TestCaseError>
+    where
+        FF: FiniteField + MulAssign<BFieldElement> + Mul<BFieldElement, Output = FF>,
+    {
+        let len = 1_usize << log_2_len;
+        let mut expected = coefficients
+            .iter()
+            .zip(std::iter::successors(Some(BFieldElement::ONE), |&p| {
+                Some(p * offset)
+            }))
+            .map(|(&c, p)| c * p)
+            .collect_vec();
+        expected.resize(len, FF::ZERO);
+        ntt(&mut expected);
+
+        type Evaluate<FF> = fn(&[FF], BFieldElement, &mut [MaybeUninit<FF>], u32, u32) -> bool;
+        let evaluators: [Evaluate<FF>; 2] = [
+            coset_evaluate_in_two_passes,
+            par_coset_evaluate_in_two_passes,
+        ];
+        for evaluate in evaluators {
+            let mut buffer = vec![MaybeUninit::<FF>::uninit(); len + 9];
+            let codeword = cache_line_aligned(&mut buffer, len + 1);
+            let codeword = &mut codeword[misalignment..misalignment + len];
+            let is_applicable = evaluate(coefficients, offset, codeword, log_2_block_len, 0);
+            prop_assert_eq!(avx512::is_available(), is_applicable);
+            if !is_applicable {
+                continue;
+            }
+            let codeword = codeword
+                .iter()
+                .map(|c| unsafe { c.assume_init() })
+                .collect_vec();
+            prop_assert_eq!(&expected, &codeword);
+        }
+
+        Ok(())
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[macro_rules_attr::apply(proptest(cases = 200))]
+    fn two_pass_coset_evaluation_of_base_field_polynomial_is_correct(
+        #[strategy(3_u32..=13)] log_2_len: u32,
+        #[strategy(0_usize..=(1 << (#log_2_len - 2)))] _num_coefficients: usize,
+        #[strategy(vec(arb(), #_num_coefficients))] coefficients: Vec<BFieldElement>,
+        #[filter(!#offset.is_zero())] offset: BFieldElement,
+        #[strategy(0_u32..=6)] log_2_block_len: u32,
+        #[strategy(0_usize..=1)] misalignment: usize,
+    ) {
+        assert_two_pass_coset_evaluation_is_correct(
+            &coefficients,
+            offset,
+            log_2_len,
+            log_2_block_len,
+            misalignment,
+        )?;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[macro_rules_attr::apply(proptest(cases = 200))]
+    fn two_pass_coset_evaluation_of_extension_field_polynomial_is_correct(
+        #[strategy(3_u32..=13)] log_2_len: u32,
+        #[strategy(0_usize..=(1 << (#log_2_len - 2)))] _num_coefficients: usize,
+        #[strategy(vec(arb(), #_num_coefficients))] coefficients: Vec<XFieldElement>,
+        #[filter(!#offset.is_zero())] offset: BFieldElement,
+        #[strategy(0_u32..=6)] log_2_block_len: u32,
+        #[strategy(0_usize..=1)] misalignment: usize,
+    ) {
+        assert_two_pass_coset_evaluation_is_correct(
+            &coefficients,
+            offset,
+            log_2_len,
+            log_2_block_len,
+            misalignment,
+        )?;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[macro_rules_attr::apply(proptest(cases = 6))]
+    fn two_pass_coset_evaluation_with_default_geometry_is_correct(
+        #[strategy(14_u32..=19)] log_2_len: u32,
+        #[strategy(0_usize..500)] num_wrapping_coefficients: usize,
+        #[filter(!#offset.is_zero())] offset: BFieldElement,
+        seed: u64,
+    ) {
+        let num_coefficients = (1 << (log_2_len - 3)) + num_wrapping_coefficients;
+        let mut coefficient = BFieldElement::new(seed);
+        let mut next_coefficient = || {
+            coefficient = coefficient * coefficient + BFieldElement::new(7);
+            coefficient
+        };
+        let b_coefficients = (0..num_coefficients)
+            .map(|_| next_coefficient())
+            .collect_vec();
+        let x_coefficients = (0..num_coefficients)
+            .map(|_| XFieldElement::new([(); EXTENSION_DEGREE].map(|()| next_coefficient())))
+            .collect_vec();
+
+        let block_len = LOG_2_VECTOR_BLOCK_LEN;
+        assert_two_pass_coset_evaluation_is_correct(
+            &b_coefficients,
+            offset,
+            log_2_len,
+            block_len,
+            0,
+        )?;
+        assert_two_pass_coset_evaluation_is_correct(
+            &x_coefficients,
+            offset,
+            log_2_len,
+            block_len,
+            0,
+        )?;
     }
 
     #[macro_rules_attr::apply(proptest(cases = 4))]
