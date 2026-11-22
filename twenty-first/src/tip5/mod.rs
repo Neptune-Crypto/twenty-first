@@ -254,10 +254,33 @@ impl Tip5 {
             Self::split_and_lookup(element);
         }
 
-        for element in power_map_elements {
-            let sq = *element * *element;
-            let qu = sq * sq;
-            *element *= sq * qu;
+        // The power map x ↦ x^7 takes four multiplications that depend on each
+        // other. Performing each of the four multiplications for a group of
+        // elements before moving on to the next multiplication interleaves
+        // the elements' chains in the machine code. CPUs find independent
+        // work only within a limited number of upcoming instructions, and
+        // one chain after the other leaves them with little to do in
+        // parallel. The group size is the fastest one in benchmarks on both
+        // x86-64 and AArch64; it has to divide the number of elements.
+        const GROUP_SIZE: usize = 6;
+        const _: () = assert!((STATE_SIZE - NUM_SPLIT_AND_LOOKUP).is_multiple_of(GROUP_SIZE));
+
+        let (groups, _) = power_map_elements.as_chunks_mut::<GROUP_SIZE>();
+        for x in groups {
+            let mut sq = *x;
+            for i in 0..GROUP_SIZE {
+                sq[i] = x[i] * x[i];
+            }
+            let mut qu = sq;
+            for i in 0..GROUP_SIZE {
+                qu[i] = sq[i] * sq[i];
+            }
+            for i in 0..GROUP_SIZE {
+                sq[i] *= qu[i];
+            }
+            for i in 0..GROUP_SIZE {
+                x[i] *= sq[i];
+            }
         }
     }
 
