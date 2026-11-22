@@ -811,6 +811,17 @@ fn apply_layers<FF>(
             layer += 2;
             continue;
         }
+        let group_len = radix_4_group_len::<FF>();
+        if group_len > 1 && m >= group_len {
+            let twiddles = (&twiddles_1[..m], &twiddles_2[..2 * m]);
+            match group_len {
+                4 => radix_4_butterfly_groups::<FF, 4>(x, m, twiddles),
+                8 => radix_4_butterfly_groups::<FF, 8>(x, m, twiddles),
+                _ => unreachable!(),
+            }
+            layer += 2;
+            continue;
+        }
         for butterflies in x.chunks_exact_mut(4 * m) {
             let (ab, cd) = butterflies.split_at_mut(2 * m);
             let (a, b) = ab.split_at_mut(m);
@@ -860,6 +871,99 @@ fn apply_layers<FF>(
                 v *= twiddles[j];
                 a[j] = u + v;
                 b[j] = u - v;
+            }
+        }
+    }
+}
+
+/// The number of radix-4 butterflies that [`radix_4_butterfly_groups`]
+/// processes together when transforming elements of type `FF` without SIMD, or
+/// 1 if the butterflies are better processed one after the other.
+///
+/// The numbers are the fastest ones in benchmarks. An extension field
+/// element's butterfly already consists of three independent base field
+/// butterflies; processing several of them together only pays off on AArch64.
+#[inline]
+const fn radix_4_group_len<FF: FiniteField>() -> usize {
+    match FF::NUM_BFE_LIMBS {
+        Some(1) => 4,
+        Some(3) if cfg!(target_arch = "aarch64") => 8,
+        _ => 1,
+    }
+}
+
+/// The radix-4 butterflies of two consecutive layers of a decimation-in-time
+/// NTT, where the first layer's butterflies have distance `m`, processed `G`
+/// butterflies at a time. The slice's length must be a multiple of `4m`, and
+/// `m` a multiple of `G`. The twiddle factors are those of the first layer
+/// (`m` of them) and of the second layer (`2m` of them).
+///
+/// Each step of a butterfly is performed for all `G` butterflies of a group
+/// before moving on to the next step. A butterfly is a chain of operations
+/// that depend on each other, among them two multiplications. One butterfly
+/// after the other gives the CPU little to do in parallel, as it only finds
+/// independent work within a limited number of upcoming instructions.
+/// Interleaving the butterflies' instructions provides that work.
+//
+// Not inlined: the machine code of this loop is sensitive to its
+// surroundings.
+#[inline(never)]
+fn radix_4_butterfly_groups<FF, const G: usize>(
+    x: &mut [FF],
+    m: usize,
+    (twiddles_1, twiddles_2): (&[BFieldElement], &[BFieldElement]),
+) where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    let (twiddles_1, _) = twiddles_1[..m].as_chunks::<G>();
+    let (twiddles_2_lo, twiddles_2_hi) = twiddles_2[..2 * m].split_at(m);
+    let (twiddles_2_lo, _) = twiddles_2_lo.as_chunks::<G>();
+    let (twiddles_2_hi, _) = twiddles_2_hi.as_chunks::<G>();
+
+    for butterflies in x.chunks_exact_mut(4 * m) {
+        let (ab, cd) = butterflies.split_at_mut(2 * m);
+        let (a, b) = ab.split_at_mut(m);
+        let (c, d) = cd.split_at_mut(m);
+        let (a, _) = a.as_chunks_mut::<G>();
+        let (b, _) = b.as_chunks_mut::<G>();
+        let (c, _) = c.as_chunks_mut::<G>();
+        let (d, _) = d.as_chunks_mut::<G>();
+
+        for g in 0..twiddles_1.len() {
+            let (a, b, c, d) = (&mut a[g], &mut b[g], &mut c[g], &mut d[g]);
+            let (twiddles_1, twiddles_2_lo, twiddles_2_hi) =
+                (&twiddles_1[g], &twiddles_2_lo[g], &twiddles_2_hi[g]);
+            let mut t1 = *b;
+            let mut t3 = *d;
+            for i in 0..G {
+                t1[i] *= twiddles_1[i];
+            }
+            for i in 0..G {
+                t3[i] *= twiddles_1[i];
+            }
+            let mut y0 = *a;
+            let mut y1 = *a;
+            let mut y2 = *c;
+            let mut y3 = *c;
+            for i in 0..G {
+                y0[i] = a[i] + t1[i];
+                y1[i] = a[i] - t1[i];
+            }
+            for i in 0..G {
+                y2[i] = c[i] + t3[i];
+                y3[i] = c[i] - t3[i];
+            }
+            for i in 0..G {
+                y2[i] *= twiddles_2_lo[i];
+            }
+            for i in 0..G {
+                y3[i] *= twiddles_2_hi[i];
+            }
+            for i in 0..G {
+                a[i] = y0[i] + y2[i];
+                b[i] = y1[i] + y3[i];
+                c[i] = y0[i] - y2[i];
+                d[i] = y1[i] - y3[i];
             }
         }
     }
