@@ -2080,6 +2080,41 @@ pub(crate) mod tests {
         prop_assert_eq!(expected, Tip5::hash_rows_of_columns(&column_slices));
     }
 
+    /// With SIMD, [`Tip5::hash_rows_of_columns`] leaves only a few rows to
+    /// the scalar code, never enough for more than one block of rows.
+    #[macro_rules_attr::apply(proptest(cases = 20))]
+    fn scalar_row_hashing_agrees_with_hash_varlen(
+        #[strategy(1_usize..15)] _num_columns: usize,
+        #[strategy(0_usize..100)] _num_rows: usize,
+        #[strategy(prop::collection::vec(prop::collection::vec(arb(), #_num_rows), #_num_columns))]
+        columns: Vec<Vec<XFieldElement>>,
+        #[strategy(0..=#_num_rows)] first_row: usize,
+        #[strategy(#first_row..=#_num_rows)] last_row: usize,
+    ) {
+        let row = |r: usize| {
+            columns
+                .iter()
+                .flat_map(move |column| column[r].coefficients)
+        };
+        let expected = (first_row..last_row)
+            .map(|r| Tip5::hash_varlen(&row(r).collect_vec()))
+            .collect_vec();
+
+        let flat_columns = columns
+            .iter()
+            .flat_map(|column| {
+                let (elements, stride) = XFieldElement::flatten(column);
+                (0..stride).map(move |offset| Column {
+                    elements,
+                    stride,
+                    offset,
+                })
+            })
+            .collect_vec();
+        let digests = Tip5::hash_rows_scalar(&flat_columns, first_row..last_row);
+        prop_assert_eq!(expected, digests);
+    }
+
     #[macro_rules_attr::apply(test)]
     fn hash_rows_of_no_columns_is_empty() {
         let no_columns: [&[BFieldElement]; 0] = [];

@@ -2741,6 +2741,8 @@ mod tests {
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest_arbitrary_adapter::arb;
+    use rand::distr::Distribution;
+    use rand::distr::StandardUniform;
 
     use super::*;
     use crate::math::other::random_elements;
@@ -3403,5 +3405,66 @@ mod tests {
             let root = BFieldElement::primitive_root_of_unity(size.into()).unwrap();
             twiddle_factors(size, root);
         }
+    }
+
+    /// The radix-4 butterflies of two consecutive layers, one after the
+    /// other; see [`radix_4_butterfly_groups`].
+    fn radix_4_butterflies_one_by_one<FF>(
+        x: &mut [FF],
+        m: usize,
+        (twiddles_1, twiddles_2): (&[BFieldElement], &[BFieldElement]),
+    ) where
+        FF: FiniteField + MulAssign<BFieldElement>,
+    {
+        for butterflies in x.chunks_exact_mut(4 * m) {
+            for j in 0..m {
+                let t0 = butterflies[j];
+                let mut t1 = butterflies[j + m];
+                let t2 = butterflies[j + 2 * m];
+                let mut t3 = butterflies[j + 3 * m];
+                t1 *= twiddles_1[j];
+                t3 *= twiddles_1[j];
+                let y0 = t0 + t1;
+                let y1 = t0 - t1;
+                let mut y2 = t2 + t3;
+                let mut y3 = t2 - t3;
+                y2 *= twiddles_2[j];
+                y3 *= twiddles_2[j + m];
+                butterflies[j] = y0 + y2;
+                butterflies[j + m] = y1 + y3;
+                butterflies[j + 2 * m] = y0 - y2;
+                butterflies[j + 3 * m] = y1 - y3;
+            }
+        }
+    }
+
+    fn radix_4_butterfly_groups_agree_with_single_butterflies<FF, const G: usize>()
+    where
+        FF: FiniteField + MulAssign<BFieldElement>,
+        StandardUniform: Distribution<FF>,
+    {
+        for m in [G, 2 * G, 4 * G] {
+            for num_butterfly_blocks in 1..=3 {
+                let twiddles_1 = random_elements::<BFieldElement>(m);
+                let twiddles_2 = random_elements::<BFieldElement>(2 * m);
+                let twiddles = (&twiddles_1[..], &twiddles_2[..]);
+                let mut grouped = random_elements::<FF>(4 * m * num_butterfly_blocks);
+                let mut one_by_one = grouped.clone();
+
+                radix_4_butterfly_groups::<FF, G>(&mut grouped, m, twiddles);
+                radix_4_butterflies_one_by_one(&mut one_by_one, m, twiddles);
+                assert_eq!(one_by_one, grouped);
+            }
+        }
+    }
+
+    /// The group lengths that are in use depend on the architecture. This
+    /// test covers all of them on every architecture.
+    #[macro_rules_attr::apply(test)]
+    fn grouped_radix_4_butterflies_agree_with_single_butterflies() {
+        radix_4_butterfly_groups_agree_with_single_butterflies::<BFieldElement, 4>();
+        radix_4_butterfly_groups_agree_with_single_butterflies::<BFieldElement, 8>();
+        radix_4_butterfly_groups_agree_with_single_butterflies::<XFieldElement, 4>();
+        radix_4_butterfly_groups_agree_with_single_butterflies::<XFieldElement, 8>();
     }
 }
