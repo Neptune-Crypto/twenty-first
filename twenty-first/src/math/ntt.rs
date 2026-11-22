@@ -811,14 +811,20 @@ fn apply_layers<FF>(
             layer += 2;
             continue;
         }
-        let group_len = radix_4_group_len::<FF>();
-        if group_len > 1 && m >= group_len {
-            let twiddles = (&twiddles_1[..m], &twiddles_2[..2 * m]);
-            match group_len {
-                4 => radix_4_butterfly_groups::<FF, 4>(x, m, twiddles),
-                8 => radix_4_butterfly_groups::<FF, 8>(x, m, twiddles),
-                _ => unreachable!(),
-            }
+        // Without SIMD, several butterflies are processed together; see
+        // `radix_4_butterfly_groups`. The group lengths are the fastest ones
+        // in benchmarks. An extension field element's butterfly already
+        // consists of three independent base field butterflies; processing
+        // several of them together only pays off on AArch64.
+        let twiddles = (&twiddles_1[..m], &twiddles_2[..2 * m]);
+        if FF::NUM_BFE_LIMBS == Some(1) && m >= 4 {
+            radix_4_butterfly_groups::<FF, 4>(x, m, twiddles);
+            layer += 2;
+            continue;
+        }
+        #[cfg(target_arch = "aarch64")]
+        if FF::NUM_BFE_LIMBS == Some(3) && m >= 8 {
+            radix_4_butterfly_groups::<FF, 8>(x, m, twiddles);
             layer += 2;
             continue;
         }
@@ -873,22 +879,6 @@ fn apply_layers<FF>(
                 b[j] = u - v;
             }
         }
-    }
-}
-
-/// The number of radix-4 butterflies that [`radix_4_butterfly_groups`]
-/// processes together when transforming elements of type `FF` without SIMD, or
-/// 1 if the butterflies are better processed one after the other.
-///
-/// The numbers are the fastest ones in benchmarks. An extension field
-/// element's butterfly already consists of three independent base field
-/// butterflies; processing several of them together only pays off on AArch64.
-#[inline]
-const fn radix_4_group_len<FF: FiniteField>() -> usize {
-    match FF::NUM_BFE_LIMBS {
-        Some(1) => 4,
-        Some(3) if cfg!(target_arch = "aarch64") => 8,
-        _ => 1,
     }
 }
 
