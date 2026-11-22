@@ -888,13 +888,35 @@ impl Tip5 {
     /// [`hash_rows_of_columns`](Self::hash_rows_of_columns) for the given
     /// rows, without any SIMD.
     fn hash_rows_scalar(columns: &[Column], rows: std::ops::Range<usize>) -> Vec<Digest> {
-        let mut row = Vec::with_capacity(columns.len());
-        rows.map(|r| {
-            row.clear();
-            row.extend(columns.iter().map(|column| column.get(r)));
-            Self::hash_varlen(&row)
-        })
-        .collect()
+        // Rows are gathered a few at a time, column by column. This way, the
+        // consecutive elements of a column that share a cache line are read
+        // together. Gathering row by row instead revisits every column's
+        // cache line once per row, and by then, the line is usually gone: the
+        // columns of a table with a power-of-two number of rows are a power
+        // of two apart in memory and compete for the same few cache slots.
+        //
+        // The block of gathered rows should fit into the L2 cache.
+        const ROWS_PER_BLOCK: usize = 32;
+
+        let num_columns = columns.len();
+        let rows_per_block = ROWS_PER_BLOCK.min(rows.len());
+        let mut block = vec![BFieldElement::ZERO; rows_per_block * num_columns];
+        let mut digests = Vec::with_capacity(rows.len());
+        let mut first_row = rows.start;
+        while first_row < rows.end {
+            let num_rows = rows_per_block.min(rows.end - first_row);
+            for (c, column) in columns.iter().enumerate() {
+                for r in 0..num_rows {
+                    block[r * num_columns + c] = column.get(first_row + r);
+                }
+            }
+            for row in block.chunks_exact(num_columns).take(num_rows) {
+                digests.push(Self::hash_varlen(row));
+            }
+            first_row += num_rows;
+        }
+
+        digests
     }
 
     /// Produce `num_indices` random integer values in the range `[0, upper_bound)`. The
@@ -2001,7 +2023,7 @@ pub(crate) mod tests {
     #[macro_rules_attr::apply(proptest)]
     fn hash_rows_of_bfe_columns_agrees_with_hash_varlen(
         #[strategy(1_usize..40)] _num_columns: usize,
-        #[strategy(0_usize..30)] num_rows: usize,
+        #[strategy(0_usize..100)] num_rows: usize,
         #[strategy(prop::collection::vec(prop::collection::vec(arb(), #num_rows), #_num_columns))]
         columns: Vec<Vec<BFieldElement>>,
     ) {
@@ -2017,7 +2039,7 @@ pub(crate) mod tests {
     #[macro_rules_attr::apply(proptest)]
     fn hash_rows_of_xfe_columns_agrees_with_hash_varlen(
         #[strategy(1_usize..20)] _num_columns: usize,
-        #[strategy(0_usize..30)] num_rows: usize,
+        #[strategy(0_usize..100)] num_rows: usize,
         #[strategy(prop::collection::vec(prop::collection::vec(arb(), #num_rows), #_num_columns))]
         columns: Vec<Vec<XFieldElement>>,
     ) {
