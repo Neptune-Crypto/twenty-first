@@ -1,4 +1,36 @@
 
+## [3.2.0](https://github.com/Neptune-Crypto/twenty-first/compare/v3.1.1..v3.2.0) – 2026-11-25
+
+### ✨ Features
+
+- *(ntt)* Add `ntt_into` and `intt_into` ([c9f7b43a](https://github.com/Neptune-Crypto/twenty-first/commit/c9f7b43a))
+
+### ⚡️ Performance
+
+- *(ntt)* Evaluate on a coset in two passes over memory ([5a4b8193](https://github.com/Neptune-Crypto/twenty-first/commit/5a4b8193))
+- *(ntt)* Compute twiddle factors per layer, on first use ([96656ee6](https://github.com/Neptune-Crypto/twenty-first/commit/96656ee6))
+- *(MerkleTree)* Build trees in parallel from small subtrees ([127ec0e2](https://github.com/Neptune-Crypto/twenty-first/commit/127ec0e2))
+- *(XFieldElement)* Subtract directly ([bf24a3ee](https://github.com/Neptune-Crypto/twenty-first/commit/bf24a3ee))
+- *(ntt)* Cap the number of tasks of the parallel coset evaluation ([3c084af2](https://github.com/Neptune-Crypto/twenty-first/commit/3c084af2))
+- *(polynomial)* Give parallel passes over coefficients a minimum task size ([3c24507a](https://github.com/Neptune-Crypto/twenty-first/commit/3c24507a))
+- *(tip5)* Gather rows in blocks when hashing them without SIMD ([17c3e57f](https://github.com/Neptune-Crypto/twenty-first/commit/17c3e57f))
+- *(tip5)* Interleave the power maps of the scalar S-box ([95daedbd](https://github.com/Neptune-Crypto/twenty-first/commit/95daedbd))
+- *(ntt)* Interleave the radix-4 butterflies of the scalar NTT ([6f4d0285](https://github.com/Neptune-Crypto/twenty-first/commit/6f4d0285))
+- *(BFieldElement)* Faster sub with compiler hint ([cf5661a3](https://github.com/Neptune-Crypto/twenty-first/commit/cf5661a3))
+- *(ntt)* Evaluate a polynomial on a coset in two passes over memory ([c1caeaf3](https://github.com/Neptune-Crypto/twenty-first/commit/c1caeaf3))
+- *(ntt)* Add the addend of `coset_ntt_into` while gathering ([4e6118d9](https://github.com/Neptune-Crypto/twenty-first/commit/4e6118d9))
+
+
+### ⚙️ Miscellaneous
+
+- Pin CodSpeed job to ubuntu-24.04 ([0902ebaa](https://github.com/Neptune-Crypto/twenty-first/commit/0902ebaa))
+- Only upload coverage from runners with AVX-512 ([17ff11c2](https://github.com/Neptune-Crypto/twenty-first/commit/17ff11c2))
+
+### ✅ Testing
+
+- Cover grouped butterflies and scalar row hashing on every CPU ([d4e81b41](https://github.com/Neptune-Crypto/twenty-first/commit/d4e81b41))
+
+
 ## [3.1.1](https://github.com/Neptune-Crypto/twenty-first/compare/v3.1.0..v3.1.1) – 2026-10-28
 
 ### ⚡️ Performance
