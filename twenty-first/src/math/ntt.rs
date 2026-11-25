@@ -338,7 +338,7 @@ where
     // Value `row · num_blocks + column` is scaled by `offset^(row ·
     // num_blocks)` when it is gathered, and by `offset^column` together with
     // the rest of its block.
-    let scales_inputs = offset != BFieldElement::ONE;
+    let scales_inputs = offset != BFieldElement::ONE || !addend.is_empty();
     let row_step = offset.mod_pow(num_blocks as u64);
     assert!(addend.len() <= values.len());
 
@@ -366,8 +366,15 @@ where
                     avx512::prefetch(ahead);
                 }
                 if scales_inputs {
+                    // The addend covers a prefix of the values, which need
+                    // not be short: every value is checked, which is cheap
+                    // next to the multiplication.
                     for g in 0..group_len {
-                        let mut value = values[first_index + g];
+                        let index = first_index + g;
+                        let mut value = values[index];
+                        if let Some(&summand) = addend.get(index) {
+                            value += summand;
+                        }
                         value *= row_scale;
                         blocks[g * block_len + position] = value;
                     }
@@ -377,17 +384,6 @@ where
                         blocks[g * block_len + position] = values[first_index + g];
                     }
                 }
-            }
-            for (index, &summand) in addend.iter().enumerate() {
-                let column = index % num_blocks;
-                if !(first_column..first_column + group_len).contains(&column) {
-                    continue;
-                }
-                let row = index / num_blocks;
-                let position = bit_reverse(row, log_2_block_len);
-                let mut summand = summand;
-                summand *= row_step.mod_pow(row as u64);
-                blocks[(column - first_column) * block_len + position] += summand;
             }
             for (g, block) in blocks.chunks_exact_mut(block_len).enumerate() {
                 apply_layers(block, twiddle_factors, 0, log_2_block_len);
@@ -3006,9 +3002,10 @@ mod tests {
         }
 
         // Lengths on both sides of the threshold for the two-pass transform,
-        // and addends that are absent, short, and longer than a block.
+        // and addends that are absent, short, longer than a block, and as
+        // long as the coefficients.
         for log_2_len in [0, 1, 5, 11, 12, 13, 14, 16, 18] {
-            for addend_len in [0, 1, 166, 5000] {
+            for addend_len in [0, 1, 166, 5000, usize::MAX] {
                 check::<BFieldElement>(log_2_len, addend_len);
                 check::<XFieldElement>(log_2_len, addend_len);
             }
