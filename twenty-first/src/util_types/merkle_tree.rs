@@ -163,10 +163,49 @@ impl MerkleTree {
     /// - If the number of leafs is zero.
     /// - If the number of leafs is not a power of two.
     pub fn par_new(leafs: &[Digest]) -> Result<Self> {
-        let mut nodes = Self::initialize_merkle_tree_nodes(leafs)?;
+        /// The binary logarithm of the maximum number of leafs of a subtree
+        /// that is computed by one thread in one go. A subtree with 2^11
+        /// leafs has 160 KiB worth of nodes, which fits the L2 cache of
+        /// common CPUs.
+        const LOG_2_MAX_NUM_SUBTREE_LEAFS: u32 = 11;
 
-        // parallel
-        let mut num_remaining_nodes = leafs.len();
+        /// The number of leafs that one task copies into the tree.
+        const NUM_LEAFS_PER_COPY: usize = 1 << 12;
+
+        if leafs.is_empty() {
+            return Err(MerkleTreeError::TooFewLeafs);
+        }
+        let num_leafs = leafs.len();
+        if !num_leafs.is_power_of_two() {
+            return Err(MerkleTreeError::IncorrectNumberOfLeafs);
+        }
+
+        // The nodes are deliberately not initialized up front: for tall
+        // trees, that is a pass over a lot of memory, all of which is
+        // overwritten anyway. Use `try_reserve_exact` to get an error, not a
+        // panic, if allocation fails.
+        let num_nodes = 2 * num_leafs;
+        let mut nodes = Vec::<MaybeUninit<Digest>>::new();
+        nodes
+            .try_reserve_exact(num_nodes)
+            .map_err(|_| MerkleTreeError::TreeTooHigh)?;
+        crate::memory::advise_huge_pages(nodes.spare_capacity_mut());
+        // SAFETY: The capacity is sufficient, and uninitialized memory is a
+        // valid `MaybeUninit`.
+        unsafe { nodes.set_len(num_nodes) };
+
+        nodes[num_leafs..]
+            .par_chunks_mut(NUM_LEAFS_PER_COPY)
+            .zip(leafs.par_chunks(NUM_LEAFS_PER_COPY))
+            .for_each(|(nodes, leafs)| {
+                for (node, &leaf) in nodes.iter_mut().zip(leafs) {
+                    node.write(leaf);
+                }
+            });
+
+        // Invariant: all nodes with index `num_remaining_nodes` or greater
+        // are initialized.
+        let mut num_remaining_nodes = num_leafs;
         let mut num_threads = Self::num_threads();
         while num_remaining_nodes >= crate::config::merkle_tree_parallelization_cutoff() {
             // If the number of threads is so large that the chunk size is 1
@@ -182,19 +221,35 @@ impl MerkleTree {
                 num_threads /= 2;
             }
 
+            // Many small subtrees, each of which stays in cache while it is
+            // computed, also distribute evenly across any number of threads.
+            let num_subtrees = num_threads.max(num_remaining_nodes >> LOG_2_MAX_NUM_SUBTREE_LEAFS);
+
             // re-slice to only include
             // 1. the nodes that need to be computed and
             // 2. exactly those nodes required to compute them.
             let nodes = &mut nodes[..2 * num_remaining_nodes];
-            let subtrees = Self::subtrees_mut(nodes, num_threads);
+            let subtrees = Self::subtrees_mut(nodes, num_subtrees);
             subtrees.into_par_iter().for_each(|mut tree_layers| {
                 debug_assert!(tree_layers.len() > 1, "internal error: infinite iteration");
                 let mut previous_layer = tree_layers.pop().unwrap();
                 for next_layer in tree_layers.into_iter().rev() {
-                    let (pairs, []) = previous_layer.as_chunks::<2>() else {
+                    // SAFETY: The lowest layer is initialized by the loop's
+                    // invariant, any other layer by the previous iteration.
+                    // `MaybeUninit<Digest>` has the same layout as `Digest`.
+                    let previous_digests = unsafe {
+                        std::slice::from_raw_parts(
+                            previous_layer.as_ptr().cast::<Digest>(),
+                            previous_layer.len(),
+                        )
+                    };
+                    let (pairs, []) = previous_digests.as_chunks::<2>() else {
                         unreachable!("layers have even length");
                     };
-                    next_layer.copy_from_slice(&Tip5::hash_pair_many(pairs));
+                    let digests = Tip5::hash_pair_many(pairs);
+                    for (node, digest) in next_layer.iter_mut().zip_eq(digests) {
+                        node.write(digest);
+                    }
                     previous_layer = next_layer;
                 }
             });
@@ -203,9 +258,26 @@ impl MerkleTree {
             // freshly computed nodes. Equivalently, record that the tree has
             // grown by subtree_height many layers.
             let current_tree_height = num_remaining_nodes.ilog2();
-            let subtree_height = current_tree_height - num_threads.ilog2();
+            let subtree_height = current_tree_height - num_subtrees.ilog2();
             num_remaining_nodes >>= subtree_height;
         }
+
+        // The few remaining nodes, and the unused node at index 0, are
+        // overwritten below.
+        for node in &mut nodes[..num_remaining_nodes] {
+            node.write(Digest::ALL_ZERO);
+        }
+        // SAFETY: By the loop's invariant and the initialization just above,
+        // all nodes are initialized. `MaybeUninit<Digest>` has the same
+        // layout as `Digest`. The vector is not dropped twice.
+        let nodes = unsafe {
+            let mut nodes = std::mem::ManuallyDrop::new(nodes);
+            Vec::from_raw_parts(
+                nodes.as_mut_ptr().cast::<Digest>(),
+                nodes.len(),
+                nodes.capacity(),
+            )
+        };
 
         Self::sequentially_fill_tree(nodes, num_remaining_nodes)
     }

@@ -30,7 +30,27 @@ jobs:
       - name: Collect coverage data
         run: cargo +nightly llvm-cov nextest --all-targets --lcov --output-path lcov.info
 
+      # Which code the tests exercise depends on the CPU: without AVX-512, the
+      # SIMD code paths are never taken and count as not covered, while the
+      # code they replace counts as covered. GitHub's runners come with either
+      # kind of CPU. To keep the reported coverage comparable from run to run,
+      # only upload it when the CPU supports every feature the code uses, as
+      # in the AVX-512 workflow. The results are archived either way.
+      - name: Detect AVX-512 support
+        id: cpu
+        run: |
+          lscpu | grep 'Model name' || true
+          supported=true
+          for feature in avx512f avx512bw avx512dq avx512vbmi avx512ifma; do
+            if ! grep -qw "$feature" /proc/cpuinfo; then
+              echo "::notice::This runner's CPU lacks $feature; not uploading coverage."
+              supported=false
+            fi
+          done
+          echo "supported=$supported" >> "$GITHUB_OUTPUT"
+
       - name: Upload coverage to coveralls.io
+        if: steps.cpu.outputs.supported == 'true'
         uses: coverallsapp/github-action@v2
 
       - name: Archive coverage results

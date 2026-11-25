@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::Formatter;
 use std::hash::Hash;
+use std::hint::select_unpredictable;
 use std::iter::Sum;
 use std::num::TryFromIntError;
 use std::ops::Add;
@@ -780,20 +781,10 @@ impl Sub for BFieldElement {
     fn sub(self, rhs: Self) -> Self {
         let (x1, c1) = self.0.overflowing_sub(rhs.0);
 
-        // The following code is equivalent to the commented-out code below
-        // but they were determined to have near-equiavalent running times. Maybe because
-        // subtraction is not used very often.
-        // See: https://github.com/Neptune-Crypto/twenty-first/pull/70
-        // 1st alternative:
-        // if c1 {
-        //     Self(x1.wrapping_add(Self::P))
-        // } else {
-        //     Self(x1)
-        // }
-        // 2nd alternative:
-        // let adj = 0u32.wrapping_sub(c1 as u32);
-        // Self(x1.wrapping_sub(adj as u64))
-        Self(x1.wrapping_sub((1 + !Self::P) * c1 as u64))
+        // Ensure that conditional moves are used here, and not a branch with
+        // a branch predictor, since it will in the general case suck here.
+        // "You know nothing, Branch Predictor."
+        Self(select_unpredictable(c1, x1.wrapping_add(Self::P), x1))
     }
 }
 

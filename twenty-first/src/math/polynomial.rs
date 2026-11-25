@@ -715,6 +715,11 @@ pub(crate) fn should_par_ntt(len: usize, num_concurrent: usize) -> bool {
     len >= 1 << crate::math::ntt::par_min_log_2_len() && num_concurrent <= MAX_CONCURRENT_PAR_NTTS
 }
 
+/// The smallest number of elements a task of a parallel, linear pass over
+/// memory works on. Such passes are cheap per element; with smaller tasks,
+/// distributing the work costs more than the work itself.
+const MIN_PAR_PASS_LEN: usize = 1 << 14;
+
 /// The [NTT](ntt), [in parallel](par_ntt) if requested.
 pub(crate) fn ntt_maybe_par<FF: FiniteField + MulAssign<BFieldElement>>(x: &mut [FF], par: bool) {
     if par { par_ntt(x) } else { ntt(x) }
@@ -730,7 +735,12 @@ pub(crate) fn init_maybe_par<FF: FiniteField>(
 ) -> Vec<FF> {
     let mut vec = crate::memory::vec_with_capacity(len);
     if par {
-        vec.par_extend((0..len).into_par_iter().map(f));
+        vec.par_extend(
+            (0..len)
+                .into_par_iter()
+                .with_min_len(MIN_PAR_PASS_LEN)
+                .map(f),
+        );
     } else {
         vec.extend((0..len).map(f));
     }
@@ -758,7 +768,10 @@ pub(crate) fn zero_padded_maybe_par<FF: FiniteField>(
 /// Element-wise `lhs[i] *= rhs[i]`, in parallel if requested.
 pub(crate) fn hadamard_product_maybe_par<FF: FiniteField>(lhs: &mut [FF], rhs: &[FF], par: bool) {
     if par {
-        lhs.par_iter_mut().zip(rhs).for_each(|(l, r)| *l *= *r);
+        lhs.par_iter_mut()
+            .zip(rhs)
+            .with_min_len(MIN_PAR_PASS_LEN)
+            .for_each(|(l, r)| *l *= *r);
     } else {
         for (l, r) in lhs.iter_mut().zip(rhs) {
             *l *= *r;
@@ -1111,6 +1124,7 @@ where
         let mut hadamard_product = lhs_coefficients
             .into_par_iter()
             .zip(rhs_coefficients)
+            .with_min_len(MIN_PAR_PASS_LEN)
             .map(|(l, r)| l * r)
             .collect::<Vec<_>>();
 
@@ -1290,7 +1304,7 @@ where
 
             update.truncate(current_precision);
             if par {
-                inverse.par_extend(update);
+                inverse.par_extend(update.into_par_iter().with_min_len(MIN_PAR_PASS_LEN));
             } else {
                 inverse.extend(update);
             }
@@ -2342,6 +2356,7 @@ where
                 .zip(&right_zerofier)
                 .zip(&right)
                 .zip(&left_zerofier)
+                .with_min_len(MIN_PAR_PASS_LEN)
                 .for_each(combine);
         } else {
             left.iter_mut()
@@ -3387,6 +3402,7 @@ impl Polynomial<'_, BFieldElement> {
         let mut quotient_codeword = scaled_dividend
             .into_par_iter()
             .zip(divisor_inverses)
+            .with_min_len(MIN_PAR_PASS_LEN)
             .map(|(l, r)| l * r)
             .collect::<Vec<_>>();
 
@@ -3400,6 +3416,7 @@ impl Polynomial<'_, BFieldElement> {
         Polynomial::new(
             coeffs
                 .into_par_iter()
+                .with_min_len(MIN_PAR_PASS_LEN)
                 .map(|c| c.unlift().unwrap())
                 .collect(),
         )

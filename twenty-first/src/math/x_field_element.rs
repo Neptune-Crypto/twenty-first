@@ -555,6 +555,12 @@ impl Mul<XFieldElement> for XFieldElement {
         //   + cdx^2 + cex   + cf
         //
         // = adx^4 + (ae + bd)x^3 + (af + be + cd)x^2 + (bf + ce)x + cf   (mod x^3 - x + 1)
+        //
+        // With x^3 = x - 1 and x^4 = x^2 - x, the result's coefficients are
+        //
+        // r0 = cf - ae - bd
+        // r1 = bf + ce - ad + ae + bd
+        // r2 = af + be + cd + ad
 
         let [c, b, a] = self.coefficients;
         let [f, e, d] = other.coefficients;
@@ -604,7 +610,10 @@ impl Sub<XFieldElement> for XFieldElement {
 
     #[inline]
     fn sub(self, other: Self) -> Self {
-        self + (-other)
+        let [s0, s1, s2] = self.coefficients;
+        let [o0, o1, o2] = other.coefficients;
+        let coefficients = [s0 - o0, s1 - o1, s2 - o2];
+        Self { coefficients }
     }
 }
 
@@ -612,8 +621,9 @@ impl Sub<BFieldElement> for XFieldElement {
     type Output = Self;
 
     #[inline]
-    fn sub(self, other: BFieldElement) -> Self {
-        self + (-other)
+    fn sub(mut self, other: BFieldElement) -> Self {
+        self.coefficients[0] -= other;
+        self
     }
 }
 
@@ -950,6 +960,46 @@ mod tests {
 
         poly_diff = XFieldElement::new([5, 44988, BFieldElement::MAX - 7].map(BFieldElement::new));
         assert_eq!(poly_diff, poly10 - poly9);
+    }
+
+    /// Values at the boundaries of the base field.
+    const BOUNDARY_VALUES: [u64; 5] = [0, 1, 2, BFieldElement::MAX - 1, BFieldElement::MAX];
+
+    #[macro_rules_attr::apply(proptest(cases = 10_000))]
+    fn multiplication_agrees_with_schoolbook_multiplication(
+        #[strategy(arb())] lhs: XFieldElement,
+        #[strategy(arb())] rhs: XFieldElement,
+        #[strategy(proptest::sample::select(&BOUNDARY_VALUES))] special: u64,
+        #[strategy(0_usize..64)] special_positions: usize,
+    ) {
+        // steer some coefficients to the boundaries of the field
+        let special = BFieldElement::new(special);
+        let mut coefficients = [lhs.coefficients, rhs.coefficients].concat();
+        for (i, coefficient) in coefficients.iter_mut().enumerate() {
+            if special_positions & (1 << i) != 0 {
+                *coefficient = special;
+            }
+        }
+        let [c, b, a, f, e, d] = coefficients[..] else {
+            unreachable!()
+        };
+        let product = XFieldElement::new([c, b, a]) * XFieldElement::new([f, e, d]);
+
+        let r0 = c * f - a * e - b * d;
+        let r1 = b * f + c * e - a * d + a * e + b * d;
+        let r2 = a * f + b * e + c * d + a * d;
+        prop_assert_eq!(XFieldElement::new([r0, r1, r2]), product);
+    }
+
+    #[macro_rules_attr::apply(proptest)]
+    fn subtraction_is_addition_of_the_negation(
+        #[strategy(arb())] lhs: XFieldElement,
+        #[strategy(arb())] rhs: XFieldElement,
+        #[strategy(arb())] scalar: BFieldElement,
+    ) {
+        prop_assert_eq!(lhs + (-rhs), lhs - rhs);
+        prop_assert_eq!(lhs + (-scalar), lhs - scalar);
+        prop_assert_eq!(scalar + (-rhs), scalar - rhs);
     }
 
     #[macro_rules_attr::apply(test)]
