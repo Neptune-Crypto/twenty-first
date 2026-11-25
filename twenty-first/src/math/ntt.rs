@@ -175,6 +175,62 @@ where
     ntt_into_unchecked(values, output, twiddle_factors, len_inverse);
 }
 
+/// The evaluations of a polynomial on the coset `offset · <ω>`, where `ω` is
+/// the primitive root of unity of the order of `output`'s length. The
+/// polynomial has as many coefficients as the output is long; coefficient `i`
+/// is `coefficients[i] + addend[i]`, where the addend may be shorter than the
+/// coefficients. The output may be uninitialized; on return, every element is
+/// initialized.
+///
+/// Equivalent to scaling coefficient `i` by `offset^i` and transforming the
+/// result with [`ntt`], but with fewer passes over memory.
+///
+/// # Panics
+///
+/// Panics if the lengths of `coefficients` and `output` differ, if the addend
+/// is longer than the coefficients, and under the conditions [`ntt`] panics.
+pub fn coset_ntt_into<FF>(
+    coefficients: &[FF],
+    addend: &[FF],
+    offset: BFieldElement,
+    output: &mut [MaybeUninit<FF>],
+) where
+    FF: FiniteField + MulAssign<BFieldElement>,
+{
+    assert_eq!(coefficients.len(), output.len());
+    assert!(addend.len() <= coefficients.len());
+    let twiddle_factors = forward_twiddle_factors(slice_len(coefficients));
+
+    #[cfg(target_arch = "x86_64")]
+    if ntt_into_in_two_passes(
+        coefficients,
+        output,
+        twiddle_factors,
+        BFieldElement::ONE,
+        LOG_2_GATHERED_BLOCK_LEN,
+        offset,
+        addend,
+    ) {
+        return;
+    }
+
+    let mut power = BFieldElement::ONE;
+    for (i, (target, &coefficient)) in output.iter_mut().zip(coefficients).enumerate() {
+        let mut value = coefficient;
+        if let Some(&summand) = addend.get(i) {
+            value += summand;
+        }
+        value *= power;
+        target.write(value);
+        power *= offset;
+    }
+    // SAFETY: Every element was just initialized, and `MaybeUninit<FF>` has
+    // the same layout as `FF`.
+    let output =
+        unsafe { std::slice::from_raw_parts_mut(output.as_mut_ptr().cast::<FF>(), output.len()) };
+    ntt_unchecked(output, twiddle_factors);
+}
+
 /// The binary logarithm of the block length of [`ntt_into_unchecked`]'s
 /// two-pass algorithm. The blocks that are gathered together, i.e., 8 blocks
 /// of 32 KiB for base field elements or 4 blocks of 96 KiB for extension
@@ -202,6 +258,8 @@ fn ntt_into_unchecked<FF>(
         twiddle_factors,
         scale,
         LOG_2_GATHERED_BLOCK_LEN,
+        BFieldElement::ONE,
+        &[],
     ) {
         return;
     }
@@ -226,6 +284,10 @@ fn ntt_into_unchecked<FF>(
 /// that is not possible: the SIMD kernels must be usable, and there must be
 /// more than one block of `2^log_2_block_len` elements.
 ///
+/// The transform's input is not `values` itself: value `i` is first added to
+/// `addend[i]`, if the addend is that long, and then multiplied by
+/// `offset^i`. See also [`coset_ntt_into`].
+///
 /// The structure is the same as that of [`avx512::CosetEvaluation`], except
 /// that elements are not grouped into vector elements:
 ///
@@ -246,6 +308,8 @@ fn ntt_into_in_two_passes<FF>(
     twiddle_factors: TwiddleFactors,
     scale: BFieldElement,
     log_2_block_len: u32,
+    offset: BFieldElement,
+    addend: &[FF],
 ) -> bool
 where
     FF: FiniteField + MulAssign<BFieldElement>,
@@ -271,6 +335,13 @@ where
     let group_len = if limbs == 1 { 8 } else { 4 }.min(num_blocks);
     let omega = twiddle_factors.omega();
 
+    // Value `row · num_blocks + column` is scaled by `offset^(row ·
+    // num_blocks)` when it is gathered, and by `offset^column` together with
+    // the rest of its block.
+    let scales_inputs = offset != BFieldElement::ONE;
+    let row_step = offset.mod_pow(num_blocks as u64);
+    assert!(addend.len() <= values.len());
+
     let scratch_len = (group_len * lines_per_block).max(num_blocks);
     with_scratch_lines(scratch_len, |scratch| {
         // SAFETY: A line is 8 base field elements, and `FF` is laid out as
@@ -283,6 +354,7 @@ where
 
         // Pass 1
         for first_column in (0..num_blocks).step_by(group_len) {
+            let mut row_scale = BFieldElement::ONE;
             for row in 0..block_len {
                 let position = bit_reverse(row, log_2_block_len);
                 let first_index = row * num_blocks + first_column;
@@ -293,9 +365,29 @@ where
                 if let Some(ahead) = values.get(ahead..ahead + group_len) {
                     avx512::prefetch(ahead);
                 }
-                for g in 0..group_len {
-                    blocks[g * block_len + position] = values[first_index + g];
+                if scales_inputs {
+                    for g in 0..group_len {
+                        let mut value = values[first_index + g];
+                        value *= row_scale;
+                        blocks[g * block_len + position] = value;
+                    }
+                    row_scale *= row_step;
+                } else {
+                    for g in 0..group_len {
+                        blocks[g * block_len + position] = values[first_index + g];
+                    }
                 }
+            }
+            for (index, &summand) in addend.iter().enumerate() {
+                let column = index % num_blocks;
+                if !(first_column..first_column + group_len).contains(&column) {
+                    continue;
+                }
+                let row = index / num_blocks;
+                let position = bit_reverse(row, log_2_block_len);
+                let mut summand = summand;
+                summand *= row_step.mod_pow(row as u64);
+                blocks[(column - first_column) * block_len + position] += summand;
             }
             for (g, block) in blocks.chunks_exact_mut(block_len).enumerate() {
                 apply_layers(block, twiddle_factors, 0, log_2_block_len);
@@ -310,6 +402,7 @@ where
                 unsafe {
                     if column != 0 || scale != BFieldElement::ONE {
                         let base = omega.mod_pow(column as u64);
+                        let scale = scale * offset.mod_pow(column as u64);
                         let block = block.as_mut_ptr().cast();
                         avx512::scale_by_powers(block, limbs, block_len, scale, base);
                     }
@@ -2880,6 +2973,49 @@ mod tests {
     }
 
     #[macro_rules_attr::apply(test)]
+    fn coset_ntt_into_agrees_with_scaling_and_ntt() {
+        fn check<FF>(log_2_len: u32, addend_len: usize)
+        where
+            FF: FiniteField + MulAssign<BFieldElement>,
+            StandardUniform: Distribution<FF>,
+        {
+            let len = 1_usize << log_2_len;
+            let coefficients: Vec<FF> = random_elements(len);
+            let addend: Vec<FF> = random_elements(addend_len.min(len));
+            let offset = BFieldElement::new(rand::random::<u64>());
+
+            let mut expected = coefficients.clone();
+            for (cell, &summand) in expected.iter_mut().zip(&addend) {
+                *cell += summand;
+            }
+            let mut power = BFieldElement::ONE;
+            for cell in &mut expected {
+                *cell *= power;
+                power *= offset;
+            }
+            ntt(&mut expected);
+
+            let mut output = vec![MaybeUninit::uninit(); len];
+            coset_ntt_into(&coefficients, &addend, offset, &mut output);
+            // SAFETY: `coset_ntt_into` initializes every element.
+            let output = output
+                .into_iter()
+                .map(|x| unsafe { x.assume_init() })
+                .collect::<Vec<FF>>();
+            assert!(expected == output, "log_2_len = {log_2_len}");
+        }
+
+        // Lengths on both sides of the threshold for the two-pass transform,
+        // and addends that are absent, short, and longer than a block.
+        for log_2_len in [0, 1, 5, 11, 12, 13, 14, 16, 18] {
+            for addend_len in [0, 1, 166, 5000] {
+                check::<BFieldElement>(log_2_len, addend_len);
+                check::<XFieldElement>(log_2_len, addend_len);
+            }
+        }
+    }
+
+    #[macro_rules_attr::apply(test)]
     fn ntt_on_empty_input() {
         let mut input_output = vec![];
         let original_input = input_output.clone();
@@ -3292,6 +3428,8 @@ mod tests {
             twiddle_factors,
             scale,
             log_2_block_len,
+            BFieldElement::ONE,
+            &[],
         );
         let has_many_blocks = log_2_len > log_2_block_len.max(5);
         prop_assert_eq!(avx512::is_available() && has_many_blocks, is_applicable);
